@@ -1,0 +1,590 @@
+import {
+  getLocationById,
+  type Location,
+  type LocationActivity,
+  type LocationFile,
+  type LocationFileFolder,
+  type LocationShiftCell,
+  type LocationShiftEmployee,
+  type LocationShiftRow,
+  type LocationShiftTone,
+  type LocationStatus,
+} from "@/lib/locations";
+import {
+  ArrowLeft,
+  FileText,
+  Folder,
+  FolderPlus,
+  Lock,
+  Pencil,
+  Plus,
+  Upload,
+} from "lucide-react";
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import type { ReactNode } from "react";
+
+function LocationStatusBadge({ status }: { status: LocationStatus }) {
+  if (status === "active") {
+    return (
+      <span className="inline-flex items-center rounded-[7px] bg-success/10 px-[9px] py-[3px] font-mono text-[11px] tracking-[0.3px] text-success">
+        Aktiv
+      </span>
+    );
+  }
+
+  return (
+    <span className="inline-flex items-center rounded-[7px] bg-[#B9B9B4]/20 px-[9px] py-[3px] font-mono text-[11px] tracking-[0.3px] text-muted-2">
+      Inaktiv
+    </span>
+  );
+}
+
+function DetailMetricCard({
+  label,
+  value,
+  caption,
+  tone = "muted",
+}: {
+  label: string;
+  value: ReactNode;
+  caption: ReactNode;
+  tone?: "muted" | "success" | "danger";
+}) {
+  const captionColor = {
+    danger: "text-danger",
+    muted: "text-muted",
+    success: "text-success",
+  }[tone];
+
+  return (
+    <div className="rounded-[14px] border border-border bg-white px-5 pt-5 pb-4">
+      <div className="font-mono text-[10px] uppercase tracking-[0.6px] text-muted">
+        {label}
+      </div>
+      <div className="my-[14px] mb-[9px] font-display text-[38px] font-semibold leading-none tracking-[-1.2px] text-ink">
+        {value}
+      </div>
+      <div className={`text-[12px] ${captionColor}`}>{caption}</div>
+    </div>
+  );
+}
+
+function DetailPanel({
+  title,
+  eyebrow,
+  children,
+}: {
+  title: ReactNode;
+  eyebrow?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <section className="rounded-card border border-border bg-white px-6 py-[22px]">
+      <div className="mb-[18px] flex items-center justify-between gap-3">
+        <h2 className="font-display text-[17px] font-semibold tracking-[-0.3px] text-ink">
+          {title}
+        </h2>
+        {eyebrow}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function TeamChip({ member }: { member: Location["team"][number] }) {
+  return (
+    <span className="inline-flex items-center gap-2 rounded-full border border-border bg-bg px-3 py-2">
+      <span className="flex size-6 items-center justify-center rounded-full bg-white font-mono text-[9px] font-semibold text-muted-2">
+        {member.initials}
+      </span>
+      <span className="text-[12.5px] font-medium text-ink">{member.name}</span>
+    </span>
+  );
+}
+
+function ActivityDot({ tone }: { tone: LocationActivity["tone"] }) {
+  const color = {
+    blue: "bg-[#2A6FDB]",
+    danger: "bg-danger",
+    ink: "bg-ink",
+    success: "bg-success",
+  }[tone];
+
+  return <span className={`size-2 rounded-full ${color}`} />;
+}
+
+function ActivityItem({
+  item,
+  isLast,
+}: {
+  item: LocationActivity;
+  isLast: boolean;
+}) {
+  return (
+    <div className="flex gap-[13px] pb-3.5">
+      <div className="flex shrink-0 flex-col items-center pt-[5px]">
+        <ActivityDot tone={item.tone} />
+        {!isLast && <span className="mt-[6px] w-px flex-1 bg-border" />}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="text-[13px] leading-[1.45] text-ink">
+          <span className="font-semibold">{item.actor}</span> {item.text}
+        </div>
+        <div className="mt-[3px] font-mono text-[10.5px] text-muted">
+          {item.time}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FileFolderCard({ folder }: { folder: LocationFileFolder }) {
+  return (
+    <button
+      type="button"
+      className="flex w-full cursor-pointer items-center gap-[13px] rounded-xl border border-border bg-white p-[15px] text-left font-sans transition-colors hover:bg-bg"
+    >
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-border-soft text-muted-2">
+        <Folder size={19} />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[13.5px] font-semibold text-ink">
+          {folder.name}
+        </span>
+        <span className="mt-[3px] block font-mono text-[10.5px] text-muted">
+          {folder.fileCount} Dateien
+        </span>
+      </span>
+      {folder.locked && <Lock size={13} className="shrink-0 text-muted" />}
+    </button>
+  );
+}
+
+function FileRow({ file }: { file: LocationFile }) {
+  return (
+    <button
+      type="button"
+      className="flex w-full cursor-pointer items-center gap-3.5 border-t border-border-soft py-3 text-left font-sans transition-colors hover:bg-bg"
+    >
+      <span className="flex size-[30px] shrink-0 items-center justify-center rounded-lg bg-border-soft text-muted-2">
+        <FileText size={14} />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[13.5px] font-medium text-ink">
+          {file.name}
+        </span>
+        <span className="mt-0.5 block truncate font-mono text-[10.5px] text-muted">
+          {file.folder} {"\u00b7"} {file.updatedAt}
+        </span>
+      </span>
+      <span className="hidden font-mono text-[10.5px] text-muted md:block">
+        {file.size}
+      </span>
+      <span className="rounded-[7px] border border-border-light px-2 py-[3px] font-mono text-[10px] text-muted-2">
+        {file.type}
+      </span>
+      {file.locked && <Lock size={13} className="shrink-0 text-muted" />}
+    </button>
+  );
+}
+
+function FilesTab({ location }: { location: Location }) {
+  return (
+    <DetailPanel
+      title={
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-border-soft text-muted-2">
+            <Folder size={18} />
+          </span>
+          <span className="min-w-0">
+            <span className="block truncate">Dateiablage</span>
+            <span className="mt-[3px] block font-mono text-[10.5px] font-normal tracking-normal text-muted">
+              Ordner und Dateien
+            </span>
+          </span>
+        </div>
+      }
+    >
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <span className="font-mono text-[10.5px] text-muted">
+          {location.fileFolders.length} Ordner {"\u00b7"} {location.files.length}{" "}
+          Dateien
+        </span>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className="btn btn-secondary btn-sm">
+            <FolderPlus size={14} />
+            Ordner erstellen
+          </button>
+          <button type="button" className="btn btn-primary btn-sm">
+            <Upload size={14} />
+            Datei hochladen
+          </button>
+        </div>
+      </div>
+
+      <div className="grid gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(210px,1fr))]">
+        {location.fileFolders.map((folder) => (
+          <FileFolderCard key={folder.name} folder={folder} />
+        ))}
+      </div>
+
+      <div className="mt-5">
+        <div className="mb-2 font-mono text-[9.5px] uppercase tracking-[0.6px] text-muted">
+          Dateien
+        </div>
+        {location.files.map((file) => (
+          <FileRow key={`${file.folder}-${file.name}`} file={file} />
+        ))}
+      </div>
+    </DetailPanel>
+  );
+}
+
+function ShiftToneMark({ tone }: { tone: LocationShiftTone }) {
+  const color = {
+    blue: "bg-[#2A6FDB]",
+    muted: "bg-muted-2",
+    success: "bg-success",
+  }[tone];
+
+  return <span className={`size-[9px] shrink-0 rounded-[2px] ${color}`} />;
+}
+
+function ShiftCell({ cell }: { cell: LocationShiftCell }) {
+  if (cell.state === "empty") {
+    return (
+      <div className="flex min-h-[54px] items-center justify-center rounded-[9px] bg-border-soft" />
+    );
+  }
+
+  const isWarning = cell.state === "warning";
+
+  return (
+    <button
+      type="button"
+      className={`flex min-h-[54px] cursor-pointer flex-col items-center justify-center rounded-[9px] px-1 py-2 font-mono transition-colors ${
+        isWarning
+          ? "border border-danger/35 bg-danger/15 text-danger hover:bg-danger/20"
+          : "bg-ink text-white hover:bg-muted-2"
+      }`}
+    >
+      <span className="text-[11px] font-semibold">{cell.staffing}</span>
+      <span
+        className={`mt-0.5 text-[9px] ${
+          isWarning ? "text-danger/80" : "text-white/60"
+        }`}
+      >
+        {cell.time}
+      </span>
+    </button>
+  );
+}
+
+function ShiftRow({ row }: { row: LocationShiftRow }) {
+  return (
+    <div className="mb-[7px] grid items-center gap-1.5 [grid-template-columns:130px_repeat(7,1fr)]">
+      <div className="flex items-center gap-[7px] px-1 py-0.5">
+        <ShiftToneMark tone={row.tone} />
+        <span className="text-[12.5px] font-semibold text-ink">{row.label}</span>
+      </div>
+      {row.cells.map((cell, index) => (
+        <ShiftCell key={`${row.label}-${index}`} cell={cell} />
+      ))}
+    </div>
+  );
+}
+
+function EmployeeShiftMark({
+  value,
+}: {
+  value: LocationShiftEmployee["days"][number];
+}) {
+  if (!value) {
+    return (
+      <div className="flex h-[26px] items-center justify-center rounded-md bg-border-soft" />
+    );
+  }
+
+  const color: Record<NonNullable<LocationShiftEmployee["days"][number]>, string> = {
+    F: "bg-[#2A6FDB] text-white",
+    N: "bg-muted-2 text-white",
+    S: "bg-success text-white",
+  };
+
+  return (
+    <div
+      className={`flex h-[26px] items-center justify-center rounded-md font-mono text-[10px] font-semibold ${color[value]}`}
+    >
+      {value}
+    </div>
+  );
+}
+
+function EmployeeShiftRow({ employee }: { employee: LocationShiftEmployee }) {
+  return (
+    <div className="grid items-center gap-1.5 border-t border-border-soft py-[7px] [grid-template-columns:180px_repeat(7,1fr)]">
+      <div className="flex min-w-0 items-center gap-2">
+        <span className="flex size-[26px] shrink-0 items-center justify-center rounded-full bg-ink text-[9.5px] font-semibold text-white">
+          {employee.initials}
+        </span>
+        <span className="truncate text-[12.5px] font-semibold text-ink">
+          {employee.name}
+        </span>
+      </div>
+      {employee.days.map((day, index) => (
+        <EmployeeShiftMark key={`${employee.initials}-${index}`} value={day} />
+      ))}
+    </div>
+  );
+}
+
+function ShiftsTab({ location }: { location: Location }) {
+  const { shiftPlan } = location;
+
+  return (
+    <section className="overflow-hidden rounded-card border border-border bg-white">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-[22px] pt-5 pb-4">
+        <div>
+          <h2 className="m-0 font-display text-[17px] font-semibold tracking-[-0.3px] text-ink">
+            Schichtplan {"\u00b7"} {shiftPlan.week}
+          </h2>
+          <div className="mt-1 text-[12.5px] text-muted">{location.name}</div>
+        </div>
+        <button type="button" className="btn btn-secondary btn-sm">
+          <Plus size={14} />
+          Schicht planen
+        </button>
+      </div>
+
+      <div className="overflow-x-auto px-[22px] pt-4 pb-[22px]">
+        <div className="min-w-[680px]">
+          <div className="mb-2 grid gap-1.5 [grid-template-columns:130px_repeat(7,1fr)]">
+            <div />
+            {shiftPlan.days.map((day) => (
+              <div
+                key={day.label}
+                className={`text-center font-mono text-[11px] font-medium ${
+                  day.weekend ? "text-danger" : "text-ink"
+                }`}
+              >
+                <div>{day.label}</div>
+                <div className="mt-0.5 text-[9px] text-[#B0B0AB]">
+                  {day.date}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {shiftPlan.rows.map((row) => (
+            <ShiftRow key={row.label} row={row} />
+          ))}
+        </div>
+      </div>
+
+      <div className="border-t border-border px-[22px] py-[18px]">
+        <div className="mb-3.5 font-mono text-[9px] uppercase tracking-[0.5px] text-muted">
+          Eingeplante Mitarbeiter
+        </div>
+        <div className="overflow-x-auto">
+          <div className="min-w-[760px]">
+            {shiftPlan.employees.map((employee) => (
+              <EmployeeShiftRow key={employee.initials} employee={employee} />
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+export default async function LocationDetailPage({
+  params,
+  searchParams,
+}: PageProps<"/u/[tenant]/standorte/[locationId]">) {
+  const { tenant, locationId } = await params;
+  const { tab } = await searchParams;
+  const location = getLocationById(locationId);
+
+  if (!location) {
+    notFound();
+  }
+
+  const isFilesTab = tab === "files";
+  const isShiftsTab = tab === "shifts";
+  const isHomeTab = !isFilesTab && !isShiftsTab;
+
+  return (
+    <>
+      <div className="mb-[18px]">
+        <Link
+          href={`/u/${tenant}/standorte`}
+          className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.5px] text-muted transition-colors hover:text-ink"
+        >
+          <ArrowLeft size={13} />
+          Alle Standorte
+        </Link>
+      </div>
+
+      <section className="mb-5 overflow-hidden rounded-card border border-border bg-white">
+        <div className={`h-1 w-full ${location.accentClassName}`} />
+        <div className="flex flex-wrap items-start gap-6 px-7 py-7">
+          <div className="min-w-[240px] flex-1">
+            <div className="mb-3 flex flex-wrap items-center gap-2.5">
+              <span className="font-mono text-[10.5px] uppercase tracking-[0.6px] text-muted">
+                {location.kind}
+              </span>
+              <LocationStatusBadge status={location.status} />
+            </div>
+            <h1 className="m-0 font-display text-[clamp(30px,3.6vw,44px)] font-semibold leading-[1.02] tracking-[-1.2px] text-ink">
+              {location.name}
+            </h1>
+            <div className="mt-[9px] text-[13.5px] text-muted-2">
+              {location.address}
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2.5">
+            <button type="button" className="btn btn-secondary btn-sm">
+              <Pencil size={14} />
+              Bearbeiten
+            </button>
+            <button type="button" className="btn btn-primary btn-sm">
+              <Plus size={14} />
+              Mitarbeiter
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <div className="mb-5 flex gap-[26px] border-b border-border">
+        <Link
+          href={`/u/${tenant}/standorte/${location.id}`}
+          className={`mb-[-1px] inline-flex items-center gap-2 border-b-2 px-0.5 py-3 text-[14px] ${
+            isHomeTab
+              ? "border-ink font-semibold text-ink"
+              : "border-transparent font-medium text-muted"
+          }`}
+        >
+          Home
+        </Link>
+        <Link
+          href={`/u/${tenant}/standorte/${location.id}?tab=files`}
+          className={`mb-[-1px] inline-flex items-center gap-2 border-b-2 px-0.5 py-3 text-[14px] ${
+            isFilesTab
+              ? "border-ink font-semibold text-ink"
+              : "border-transparent font-medium text-muted"
+          }`}
+        >
+          Dateien
+          <span className="font-mono text-[11px] text-muted">
+            {location.files.length + location.fileFolders.length}
+          </span>
+        </Link>
+        <Link
+          href={`/u/${tenant}/standorte/${location.id}?tab=shifts`}
+          className={`mb-[-1px] inline-flex items-center gap-2 border-b-2 px-0.5 py-3 text-[14px] ${
+            isShiftsTab
+              ? "border-ink font-semibold text-ink"
+              : "border-transparent font-medium text-muted"
+          }`}
+        >
+          Schichten
+        </Link>
+      </div>
+
+      {isFilesTab ? (
+        <FilesTab location={location} />
+      ) : isShiftsTab ? (
+        <ShiftsTab location={location} />
+      ) : (
+        <>
+          <section className="mb-4 grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(190px,1fr))]">
+            <DetailMetricCard
+              label="Mitarbeiter"
+              value={location.employeeCount}
+              caption={`${location.activeToday} aktiv heute`}
+            />
+            <DetailMetricCard
+              label="Schichten aktiv"
+              value={location.shiftCount}
+              caption="diese Woche"
+            />
+            <DetailMetricCard
+              label="Offene Stellen"
+              value={location.openPositions}
+              caption={"Fr\u00fchschicht Do."}
+              tone="danger"
+            />
+            <DetailMetricCard
+              label="Auslastung"
+              value={location.utilization}
+              caption={location.utilizationCaption}
+              tone="success"
+            />
+          </section>
+
+          <div className="grid items-start gap-4 [grid-template-columns:repeat(auto-fit,minmax(320px,1fr))]">
+            <DetailPanel title="Leitung & Team">
+              <div className="mb-5 flex items-center gap-3.5 rounded-[12px] border border-border-soft bg-bg px-4 py-3.5">
+                <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-ink text-[13px] font-semibold text-white">
+                  {location.lead.initials}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[14px] font-semibold text-ink">
+                    {location.lead.name}
+                  </div>
+                  <div className="mt-[3px] font-mono text-[10.5px] text-muted">
+                    Standortleitung
+                  </div>
+                </div>
+                <div className="hidden text-right md:block">
+                  <div className="font-mono text-[10.5px] text-muted-2">
+                    {location.lead.phone}
+                  </div>
+                  <div className="mt-[3px] font-mono text-[10.5px] text-muted">
+                    {location.lead.email}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mb-2 font-mono text-[9.5px] uppercase tracking-[0.6px] text-muted">
+                Team
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {location.team.map((member) => (
+                  <TeamChip
+                    key={`${member.initials}-${member.name}`}
+                    member={member}
+                  />
+                ))}
+              </div>
+            </DetailPanel>
+
+            <DetailPanel
+              title={"Aktivit\u00e4t"}
+              eyebrow={
+                <span className="rounded-[7px] bg-success/10 px-2 py-[3px] font-mono text-[9.5px] font-semibold tracking-[0.5px] text-success">
+                  LIVE
+                </span>
+              }
+            >
+              {location.activity.map((item, index) => (
+                <ActivityItem
+                  key={`${item.actor}-${item.time}`}
+                  item={item}
+                  isLast={index === location.activity.length - 1}
+                />
+              ))}
+            </DetailPanel>
+          </div>
+        </>
+      )}
+
+      <div className="mt-8 text-center font-mono text-[10px] tracking-[0.4px] text-[#B0B0AB]">
+        Ployo {"\u00b7"} Personalakte-System {"\u00b7"} Alle Zugriffe
+        protokolliert {"\u00b7"} Server in Frankfurt
+      </div>
+    </>
+  );
+}

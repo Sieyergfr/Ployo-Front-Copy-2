@@ -1,26 +1,523 @@
 @import "tailwindcss";
+@config "../tailwind.config.js";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #FAFAF8;
+  --foreground: #0E0E0E;
+  --brand: #0D0D0D;
+}
+
+@theme {
+  /* Colors */
+  --color-ink: #0E0E0E;
+  --color-ink-hover: #262624;
+  --color-muted: #9A9A96;
+  --color-muted-2: #6E6E6B;
+  --color-border: #ECEBE7;
+  --color-border-light: #E4E3DF;
+  --color-border-soft: #F2F1ED;
+  --color-bg: #FAFAF8;
+  --color-success: #357A52;
+  --color-danger: #B4332A;
+  --color-warning: #E07B00;
+
+  /* Fonts */
+  --font-display: var(--font-space-grotesk);
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-jetbrains-mono);
+
+  /* Border Radius */  
+  --radius-card: 16px;
+  --radius-btn: 10px;
+  --radius-chip: 6px;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
+} 
+/* 
 @media (prefers-color-scheme: dark) {
   :root {
     --background: #0a0a0a;
     --foreground: #ededed;
   }
-}
+} */
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
 }
+
+.text-logo {
+  @apply font-display font-black text-2xl 
+} 
+
+@utility eyebrow {
+  @apply font-mono text-[9px] uppercase tracking-[0.2em] text-muted;
+}
+
+@utility segmented {
+  @apply flex gap-1 rounded-xl bg-border-soft p-1;
+}
+
+@utility segmented-item {
+  @apply flex-1 rounded-[9px] px-3.5 py-[9px] text-[13.5px] leading-tight transition-all cursor-pointer;
+}
+
+@utility segmented-link {
+  @apply inline-flex items-center justify-center appearance-none no-underline;
+}
+
+@utility segmented-item-active {
+  @apply bg-white font-semibold text-ink shadow-sm;
+}
+
+@utility segmented-item-inactive {
+  @apply font-medium text-muted hover:text-ink;
+}
+
+@utility card {
+  @apply rounded-[18px] border border-border bg-white p-8 shadow-[0_4px_24px_rgba(0,0,0,0.05)];
+}
+
+@utility card-heading {
+  @apply font-display text-[22px] font-semibold tracking-[-0.5px] text-ink;
+}
+
+@utility card-text-muted {
+  @apply text-[13.5px] text-muted;
+}
+
+@utility metric-card {
+  @apply rounded-card border border-border bg-white px-[22px] pt-6 pb-5;
+}
+
+@utility metric-card-label {
+  @apply font-mono text-[10.5px] uppercase tracking-[0.6px] text-muted;
+}
+
+@utility metric-card-value {
+  @apply my-0 mt-5 mb-[14px] font-display text-[42px] font-semibold leading-none tracking-[-1.5px] text-ink;
+}
+
+@utility metric-card-footer {
+  @apply flex items-center gap-2;
+}
+
+@utility metric-card-change {
+  @apply inline-flex items-center gap-1 font-mono text-[12px] font-medium text-muted;
+}
+
+@utility metric-card-change-icon {
+  @apply shrink-0;
+}
+
+@utility metric-card-caption {
+  @apply text-[12px] text-muted;
+}
+
+@utility card-form {
+  @apply flex flex-col gap-[14px];
+}
+
+@utility card-form-grid { 
+  @apply grid grid-cols-2 gap-3;
+}
+
+@utility field {
+  @apply flex flex-col gap-1.5;
+}
+
+@utility label {
+  @apply font-mono text-[9px] uppercase tracking-[0.06em] text-muted;
+}
+
+@utility section-label {
+  @apply mb-3 font-mono text-[11px] uppercase tracking-[0.6px] text-muted;
+}
+
+@utility page-title {
+  @apply m-0 font-display text-[clamp(30px,3.6vw,44px)] font-semibold leading-[1.02] tracking-[-1.2px] text-ink;
+}
+
+@utility input {
+  @apply w-full rounded-btn border border-border-light bg-bg px-[13px] py-[11px] text-[13.5px] text-ink outline-none transition-colors placeholder:text-muted;
+}
+
+@utility input-mono {
+  @apply font-mono text-[14px] tracking-[0.05em];
+}
+
+@utility input-with-icon-left {
+  @apply pl-[36px];
+}
+
+@utility input-with-icon-right {
+  @apply pr-[42px];
+} 
+
+@utility input-with-icons {
+  @apply pl-[36px] pr-[42px];
+}
+
+@utility input-wrapper {
+  @apply relative;
+}
+
+@utility input-icon-left {
+  @apply pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted;
+}
+
+@utility input-icon-right {
+  @apply cursor-pointer absolute right-[11px] top-1/2 flex -translate-y-1/2 items-center justify-center p-1 text-muted transition-colors hover:text-ink;
+}
+
+@utility password-strength {
+  @apply mt-1 flex gap-1;
+}
+
+@utility password-strength-bar {
+  @apply h-[3px] flex-1 rounded-full bg-border transition-colors duration-200;
+}
+
+@utility password-strength-text {
+  @apply mt-1 font-mono text-[10px] text-muted;
+}
+
+@utility password-strength-danger {
+  @apply bg-danger;
+}
+
+@utility password-strength-warning {
+  @apply bg-warning;
+}
+
+@utility password-strength-success {
+  @apply bg-success;
+} 
+
+.input:focus {
+  @apply border-ink;
+}
+
+@utility text-link {
+  @apply text-[12px] text-muted-2 underline underline-offset-2 transition-colors hover:text-ink;
+}
+
+@utility checkbox-row {
+  @apply flex items-center gap-[9px];
+}
+
+@utility checkbox {
+  @apply flex size-[18px] shrink-0 items-center justify-center rounded-[5px] border border-border-light bg-white text-white transition-all text-white;
+} 
+
+@utility checkbox-label {
+  @apply select-none text-[13px] text-muted-2;
+}
+
+.peer:checked + .checkbox {
+  @apply border-ink bg-ink;
+}
+
+.peer:focus-visible + .checkbox {
+  @apply ring-2 ring-ink/20;
+}
+
+.peer:hover + .checkbox {
+  @apply border-muted;
+}
+
+@utility btn {
+  @apply inline-flex cursor-pointer items-center justify-center gap-2 rounded-btn px-[18px] py-[10px] text-[14px] font-semibold transition-all duration-150 active:scale-[0.98];
+}
+
+@utility btn-sm {
+  @apply gap-[7px] px-[18px] py-[9px] text-[13px] font-medium;
+}
+
+@utility btn-block {
+  @apply w-full;
+}
+
+@utility btn-primary {
+  @apply bg-ink text-white hover:bg-ink-hover;
+}
+
+@utility btn-secondary {
+  @apply border border-border bg-border-soft text-ink hover:bg-border;
+}
+
+@utility footer {
+  @apply mt-[22px] text-center;
+}
+
+@utility footer-text {
+  @apply text-[12px] text-[#B0B0AB];
+}
+
+@utility footer-link {
+  @apply text-[12px] text-muted no-underline transition-colors hover:text-ink;
+}
+
+@utility list-wrapper {
+  @apply mb-5 flex max-h-[340px] flex-col gap-2 overflow-y-auto pr-[2px];
+}
+
+@utility list-card {
+  @apply flex cursor-pointer items-center gap-[14px] rounded-xl border border-border-light bg-bg px-[14px] py-[13px] transition-colors duration-150 hover:border-muted;
+}
+
+@utility list-card-active {
+  @apply border-[1.5px] border-ink;
+}
+
+@utility avatar {
+  @apply flex size-[42px] shrink-0 items-center justify-center rounded-xl bg-ink;
+}
+
+@utility avatar-text {
+  @apply font-display text-[15px] font-bold tracking-[-0.3px] text-white;
+}
+
+@utility list-card-content {
+  @apply min-w-0 flex-1;
+} 
+
+@utility list-card-title {
+  @apply truncate font-display text-[14.5px] font-semibold tracking-[-0.2px] text-ink;
+}
+
+@utility list-card-meta {
+  @apply mt-[3px] flex items-center gap-[10px];
+}
+
+@utility list-card-meta-text {
+  @apply font-mono text-[10px] tracking-[0.03em] text-muted;
+}
+
+@utility floating-circle {
+  @apply flex size-[72px] items-center justify-center rounded-full bg-border-soft;
+}
+
+@utility animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+@utility description {
+  @apply text-[14px] leading-[1.6] text-muted-2;
+}
+
+@utility pill {
+  @apply mb-2 inline-flex items-center gap-[7px] rounded-lg bg-border-soft px-[14px] py-[7px];
+}
+
+@utility pill-label {
+  @apply font-mono text-[12px] font-medium text-ink;
+}
+
+@utility divider {
+  @apply my-6 h-px w-full bg-border;
+}
+
+@utility sidebar {
+  @apply sticky top-0 flex h-screen min-w-[236px] flex-[0_0_236px] flex-col overflow-hidden bg-[#0D0D0D] text-[#EDEDEA];
+  transition:
+    flex-basis 220ms cubic-bezier(0.4, 0, 0.2, 1),
+    min-width 220ms cubic-bezier(0.4, 0, 0.2, 1);
+  align-self: flex-start;
+}
+
+@utility sidebar-collapsed {
+  @apply min-w-[68px] flex-[0_0_68px];
+}
+
+@utility sidebar-header {
+  @apply flex h-[76px] items-center justify-between gap-2 px-4;
+}
+
+@utility sidebar-brand {
+  @apply flex min-w-0 items-center gap-3 overflow-hidden no-underline;
+}
+
+@utility sidebar-logo {
+  @apply size-8 shrink-0;
+}
+
+@utility sidebar-brand-copy {
+  @apply min-w-0 leading-none;
+}
+
+@utility sidebar-brand-title {
+  @apply block font-display text-[19px] font-semibold tracking-[-0.4px] text-white;
+}
+
+@utility sidebar-brand-subtitle {
+  @apply mt-[5px] block font-mono text-[9px] uppercase tracking-[1.5px] text-muted-2;
+}
+
+@utility sidebar-toggle {
+  @apply flex size-[26px] shrink-0 cursor-pointer items-center justify-center rounded-[7px] border border-white/10 bg-transparent text-muted-2 transition-colors hover:border-white/20 hover:text-white;
+}
+
+@utility sidebar-nav {
+  @apply flex flex-1 flex-col gap-1 overflow-y-auto px-[14px] py-1.5;
+}
+
+@utility sidebar-link {
+  @apply flex h-10 cursor-pointer items-center gap-2.5 rounded-[9px] px-3 text-[13.5px] font-medium text-muted no-underline transition-colors hover:bg-white/[0.05] hover:text-white;
+}
+
+@utility sidebar-link-active {
+  @apply bg-white/[0.08] font-semibold text-white hover:bg-white/[0.08];
+}
+
+@utility sidebar-link-code {
+  @apply shrink-0 font-mono text-[10px] font-semibold tracking-[0.5px] text-muted-2;
+}
+
+@utility sidebar-link-code-active {
+  @apply text-white;
+}
+
+@utility sidebar-link-label {
+  @apply min-w-0 flex-1 truncate;
+}
+
+@utility sidebar-link-count {
+  @apply shrink-0 font-mono text-[11px] text-muted-2;
+}
+
+@utility sidebar-link-count-danger {
+  @apply text-[#E0857C];
+}
+
+@utility sidebar-footer {
+  @apply mx-2.5 mb-3 flex h-[140px] shrink-0 flex-col gap-1 border-t border-white/[0.08] pt-1.5;
+}
+
+@utility sidebar-tenant {
+  @apply relative;
+}
+
+@utility sidebar-tenant-trigger {
+  @apply w-full appearance-none border-0 bg-transparent text-left;
+}
+
+@utility sidebar-tenant-menu {
+  @apply absolute right-0 bottom-[calc(100%+6px)] left-0 z-[200] flex flex-col gap-1 rounded-xl border border-white/10 bg-[#1C1C1A] p-1.5 shadow-[0_8px_24px_rgba(0,0,0,0.4)];
+}
+
+@utility sidebar-tenant-menu-header {
+  @apply mb-1 border-b border-white/[0.07] px-2.5 pt-[5px] pb-[7px];
+}
+
+@utility sidebar-tenant-menu-title {
+  @apply font-mono text-[9px] uppercase tracking-[1px] text-[#5E5E5B];
+}
+
+@utility sidebar-tenant-option {
+  @apply flex items-center gap-2.5 rounded-lg px-2.5 py-[9px] no-underline transition-colors hover:bg-white/[0.04];
+}
+
+@utility sidebar-tenant-option-active {
+  @apply bg-white/[0.06] hover:bg-white/[0.06];
+}
+
+@utility sidebar-tenant-mark {
+  @apply w-5 shrink-0 text-center font-mono text-[10px] font-bold tracking-[0.5px];
+}
+
+@utility sidebar-tenant-mark-blue {
+  @apply text-[#2A6FDB];
+}
+
+@utility sidebar-tenant-mark-green {
+  @apply text-success;
+}
+
+@utility sidebar-tenant-mark-purple {
+  @apply text-[#8B6ED4];
+}
+
+@utility sidebar-tenant-name {
+  @apply min-w-0 flex-1 truncate;
+}
+
+@utility sidebar-tenant-option-copy {
+  @apply min-w-0 flex-1;
+}
+
+@utility sidebar-tenant-option-name {
+  @apply block truncate text-[12.5px] font-medium text-[#E8E8E5];
+}
+
+@utility sidebar-tenant-option-role {
+  @apply mt-px block text-[10.5px] text-muted-2;
+}
+
+@utility sidebar-tenant-icon {
+  @apply shrink-0 text-muted-2;
+}
+
+@utility sidebar-tenant-check {
+  @apply shrink-0 text-muted;
+}
+
+@utility sidebar-user {
+  @apply flex h-[50px] items-center justify-start gap-[11px] rounded-[9px] px-2.5;
+}
+
+@utility sidebar-user-avatar {
+  @apply flex size-8 shrink-0 items-center justify-center rounded-full bg-white/[0.12] text-[12px] font-semibold text-white;
+}
+
+@utility sidebar-user-copy {
+  @apply min-w-0 flex-1;
+}
+
+@utility sidebar-user-name {
+  @apply truncate text-[13px] font-medium text-white;
+}
+
+@utility sidebar-user-role {
+  @apply text-[11px] text-[#7E7E7B];
+}
+
+.sidebar-collapsed .sidebar-header {
+  @apply justify-center px-3;
+}
+
+.sidebar-collapsed .sidebar-brand,
+.sidebar-collapsed .sidebar-link,
+.sidebar-collapsed .sidebar-user {
+  @apply justify-center;
+}
+
+.sidebar-nav::-webkit-scrollbar {
+  width: 0;
+}
+
+.sidebar-nav {
+  scrollbar-width: none;
+}
+
+@utility main-content {
+  @apply h-screen min-w-0 flex-1 overflow-y-auto;
+}
+
+@utility container {
+  @apply mx-auto max-w-[1200px] px-[clamp(24px,4vw,60px)] pt-10 pb-16;
+} 
