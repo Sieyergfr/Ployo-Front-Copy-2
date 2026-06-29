@@ -5,6 +5,7 @@ import DataTable, {
   DataTableStatus,
   type DataTableColumn,
 } from "@/components/DataTable";
+import InviteEmployeeButton from "@/components/InviteEmployeeButton";
 import PageHeader from "@/components/PageHeader";
 import SearchInput from "@/components/inputs/SearchInput";
 import {
@@ -12,7 +13,7 @@ import {
   employees,
   type Employee,
 } from "@/lib/employees";
-import { ChevronDown, Plus } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 
 const columns: Array<DataTableColumn<Employee>> = [
   {
@@ -105,10 +106,7 @@ export default async function EmployeesPage({
           />
         </div>
 
-        <button type="button" className="btn btn-primary">
-          <Plus size={15} strokeWidth={2} />
-          Einladen
-        </button>
+        <InviteEmployeeButton />
       </PageHeader>
 
       <DataTable

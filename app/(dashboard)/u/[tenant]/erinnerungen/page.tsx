@@ -1,0 +1,128 @@
+import CreateReminderButton from "@/components/CreateReminderButton";
+import { ReminderRowButton } from "@/components/ActionDrawers";
+import PageHeader from "@/components/PageHeader";
+import {
+  reminderFilters,
+  reminderMetrics,
+  reminderPriorityConfig,
+  reminders,
+  type Reminder,
+  type ReminderMetric,
+} from "@/lib/reminders";
+import { Check } from "lucide-react";
+
+function ReminderMetricCard({ label, value, caption, tone }: ReminderMetric) {
+  const valueClassName =
+    tone === "danger"
+      ? "text-danger"
+      : tone === "success"
+        ? "text-success"
+        : "text-ink";
+
+  return (
+    <div className="rounded-[14px] border border-border bg-white px-[22px] pt-5 pb-4">
+      <div className="font-mono text-[10.5px] uppercase tracking-[0.6px] text-muted">
+        {label}
+      </div>
+      <div
+        className={`mt-4 mb-2 font-display text-[38px] font-semibold leading-none tracking-[-1.2px] ${valueClassName}`}
+      >
+        {value}
+      </div>
+      <div className="text-[12px] text-muted">{caption}</div>
+    </div>
+  );
+}
+
+function ReminderRow({ reminder }: { reminder: Reminder }) {
+  const priority = reminderPriorityConfig[reminder.priority];
+
+  return (
+    <ReminderRowButton
+      reminder={reminder}
+      className={`flex w-full cursor-pointer flex-wrap items-center gap-4 rounded-[14px] border bg-white px-5 py-4 text-left transition-colors hover:bg-bg ${priority.rowClassName}`}
+    >
+      <div className="w-[54px] shrink-0 text-center">
+        <span
+          className={`font-display text-[26px] font-semibold leading-none tracking-[-1px] ${priority.daysClassName}`}
+        >
+          {reminder.daysLeft}
+        </span>
+        <div className="mt-0.5 font-mono text-[8px] uppercase tracking-[0.5px] text-muted">
+          Tage
+        </div>
+      </div>
+
+      <div className="min-w-0 flex-1">
+        <div className="mb-1 flex flex-wrap items-center gap-2">
+          <span className="text-[14px] font-semibold text-ink">
+            {reminder.title}
+          </span>
+          <span
+            className={`rounded-md px-[7px] py-0.5 font-mono text-[10px] ${priority.badgeClassName}`}
+          >
+            {priority.label}
+          </span>
+        </div>
+        <div className="text-[12.5px] text-muted-2">{reminder.subject}</div>
+      </div>
+
+      <div className="shrink-0">
+        <span className="inline-flex rounded-[7px] border border-border px-[9px] py-[3px] font-mono text-[10px] text-muted">
+          {reminder.category}
+        </span>
+      </div>
+
+      <span
+        title="Als erledigt markieren"
+        aria-label={`${reminder.title} als erledigt markieren`}
+        className="flex size-[34px] shrink-0 items-center justify-center rounded-[9px] border border-border bg-white text-muted"
+      >
+        <Check size={14} strokeWidth={2} />
+      </span>
+    </ReminderRowButton>
+  );
+}
+
+export default function RemindersPage() {
+  return (
+    <>
+      <PageHeader eyebrow="Aufgaben & Fristen" title="Erinnerungen">
+        <CreateReminderButton />
+      </PageHeader>
+
+      <section className="mb-7 grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]">
+        {reminderMetrics.map((metric) => (
+          <ReminderMetricCard key={metric.label} {...metric} />
+        ))}
+      </section>
+
+      <div className="mb-5 flex w-fit flex-wrap gap-1 rounded-xl border border-border bg-white p-[5px]">
+        {reminderFilters.map((filter, index) => (
+          <button
+            key={filter}
+            type="button"
+            className={`cursor-pointer whitespace-nowrap rounded-lg px-3.5 py-[7px] text-[13px] transition-colors ${
+              index === 0
+                ? "bg-border-soft font-semibold text-ink"
+                : "bg-transparent font-normal text-muted hover:text-ink"
+            }`}
+          >
+            {filter}
+          </button>
+        ))}
+      </div>
+
+      <section className="flex flex-col gap-2.5">
+        {reminders.map((reminder) => (
+          <ReminderRow key={reminder.id} reminder={reminder} />
+        ))}
+      </section>
+
+      <div className="mt-8 text-center font-mono text-[10px] tracking-[0.4px] text-[#B0B0AB]">
+        Ployo {"·"} Personalakte-System {"·"} Alle Zugriffe protokolliert{" "}
+        {"·"} Server in Frankfurt
+      </div>
+    </>
+  );
+}

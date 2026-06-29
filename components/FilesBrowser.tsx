@@ -1,5 +1,7 @@
 import type { FileFolder, FileItem } from "@/lib/files";
-import { ArrowLeft, FileText, Folder, FolderPlus, Lock, Upload } from "lucide-react";
+import { FileReminderButton } from "@/components/ActionDrawers";
+import { CreateFolderButton, UploadFileButton } from "@/components/FileActionButtons";
+import { ArrowLeft, FileText, Folder, Lock } from "lucide-react";
 import Link from "next/link";
 
 function FolderCard({
@@ -10,33 +12,39 @@ function FolderCard({
   baseHref: string;
 }) {
   return (
-    <Link
-      href={`${baseHref}/${folder.slug}`}
-      className="flex w-full cursor-pointer items-center gap-[13px] rounded-xl border border-border bg-white p-[15px] text-left font-sans no-underline transition-colors hover:bg-bg"
-    >
-      <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-border-soft text-muted-2">
-        <Folder size={19} />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-[13.5px] font-semibold text-ink">
-          {folder.name}
+    <div className="flex w-full items-center gap-[13px] rounded-xl border border-border bg-white p-[15px] transition-colors hover:bg-bg">
+      <Link
+        href={`${baseHref}/${folder.slug}`}
+        className="flex min-w-0 flex-1 cursor-pointer items-center gap-[13px] text-left font-sans no-underline"
+      >
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-border-soft text-muted-2">
+          <Folder size={19} />
         </span>
-        <span className="mt-[3px] block truncate font-mono text-[10.5px] text-muted">
-          {folder.fileCount} Dateien {"\u00b7"} {folder.owner}
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[13.5px] font-semibold text-ink">
+            {folder.name}
+          </span>
+          <span className="mt-[3px] block truncate font-mono text-[10.5px] text-muted">
+            {folder.fileCount} Dateien {"\u00b7"} {folder.owner}
+          </span>
         </span>
-      </span>
+      </Link>
       <span className="hidden font-mono text-[10.5px] text-muted md:block">
         {folder.updatedAt}
       </span>
       {folder.locked && <Lock size={13} className="shrink-0 text-muted" />}
-    </Link>
+      <FileReminderButton
+        compact
+        name={folder.name}
+        context={`Ordner \u00b7 ${folder.owner}`}
+      />
+    </div>
   );
 }
 
 function FileRow({ file }: { file: FileItem }) {
   return (
-    <button
-      type="button"
+    <div
       className="flex w-full cursor-pointer items-center gap-3.5 border-t border-border-soft py-3 text-left font-sans transition-colors hover:bg-bg"
     >
       <span className="flex size-[30px] shrink-0 items-center justify-center rounded-lg bg-border-soft text-muted-2">
@@ -57,7 +65,12 @@ function FileRow({ file }: { file: FileItem }) {
         {file.type}
       </span>
       {file.locked && <Lock size={13} className="shrink-0 text-muted" />}
-    </button>
+      <FileReminderButton
+        compact
+        name={file.name}
+        context={`${file.folder} \u00b7 ${file.owner}`}
+      />
+    </div>
   );
 }
 
@@ -97,14 +110,8 @@ export default function FilesBrowser({
               Alle Ordner
             </Link>
           )}
-          <button type="button" className="btn btn-secondary btn-sm">
-            <FolderPlus size={14} />
-            Ordner erstellen
-          </button>
-          <button type="button" className="btn btn-primary btn-sm">
-            <Upload size={14} />
-            Datei hochladen
-          </button>
+          <CreateFolderButton />
+          <UploadFileButton />
         </div>
       </div>
 
@@ -134,6 +141,11 @@ export default function FilesBrowser({
             {activeFolder.locked && (
               <Lock size={14} className="shrink-0 text-muted" />
             )}
+            <FileReminderButton
+              compact
+              name={activeFolder.name}
+              context={`Ordner \u00b7 ${activeFolder.owner}`}
+            />
           </div>
         </div>
       )}

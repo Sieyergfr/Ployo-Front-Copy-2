@@ -1,3 +1,4 @@
+import { FileReminderButton } from "@/components/ActionDrawers";
 import {
   getLocationById,
   type Location,
@@ -18,7 +19,9 @@ import {
   Lock,
   Pencil,
   Plus,
+  Save,
   Upload,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -92,6 +95,69 @@ function DetailPanel({
   );
 }
 
+function EditableTextField({
+  id,
+  label,
+  name,
+  value,
+  type = "text",
+}: {
+  id: string;
+  label: string;
+  name: string;
+  value: string | number;
+  type?: "text" | "email" | "tel" | "number";
+}) {
+  return (
+    <div className="field">
+      <label htmlFor={id} className="label">
+        {label}
+      </label>
+      <input
+        id={id}
+        name={name}
+        type={type}
+        className="input bg-white"
+        defaultValue={value}
+      />
+    </div>
+  );
+}
+
+function EditableSelectField({
+  id,
+  label,
+  name,
+  value,
+  options,
+}: {
+  id: string;
+  label: string;
+  name: string;
+  value: string;
+  options: string[];
+}) {
+  return (
+    <div className="field">
+      <label htmlFor={id} className="label">
+        {label}
+      </label>
+      <select
+        id={id}
+        name={name}
+        className="input cursor-pointer bg-white"
+        defaultValue={value}
+      >
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 function TeamChip({ member }: { member: Location["team"][number] }) {
   return (
     <span className="inline-flex items-center gap-2 rounded-full border border-border bg-bg px-3 py-2">
@@ -141,10 +207,7 @@ function ActivityItem({
 
 function FileFolderCard({ folder }: { folder: LocationFileFolder }) {
   return (
-    <button
-      type="button"
-      className="flex w-full cursor-pointer items-center gap-[13px] rounded-xl border border-border bg-white p-[15px] text-left font-sans transition-colors hover:bg-bg"
-    >
+    <div className="flex w-full cursor-pointer items-center gap-[13px] rounded-xl border border-border bg-white p-[15px] text-left font-sans transition-colors hover:bg-bg">
       <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-border-soft text-muted-2">
         <Folder size={19} />
       </span>
@@ -157,16 +220,18 @@ function FileFolderCard({ folder }: { folder: LocationFileFolder }) {
         </span>
       </span>
       {folder.locked && <Lock size={13} className="shrink-0 text-muted" />}
-    </button>
+      <FileReminderButton
+        compact
+        name={folder.name}
+        context={`Standortordner \u00b7 ${folder.name}`}
+      />
+    </div>
   );
 }
 
 function FileRow({ file }: { file: LocationFile }) {
   return (
-    <button
-      type="button"
-      className="flex w-full cursor-pointer items-center gap-3.5 border-t border-border-soft py-3 text-left font-sans transition-colors hover:bg-bg"
-    >
+    <div className="flex w-full cursor-pointer items-center gap-3.5 border-t border-border-soft py-3 text-left font-sans transition-colors hover:bg-bg">
       <span className="flex size-[30px] shrink-0 items-center justify-center rounded-lg bg-border-soft text-muted-2">
         <FileText size={14} />
       </span>
@@ -185,7 +250,12 @@ function FileRow({ file }: { file: LocationFile }) {
         {file.type}
       </span>
       {file.locked && <Lock size={13} className="shrink-0 text-muted" />}
-    </button>
+      <FileReminderButton
+        compact
+        name={file.name}
+        context={`${file.folder} \u00b7 Standortdatei`}
+      />
+    </div>
   );
 }
 
@@ -403,7 +473,7 @@ export default async function LocationDetailPage({
   searchParams,
 }: PageProps<"/u/[tenant]/standorte/[locationId]">) {
   const { tenant, locationId } = await params;
-  const { tab } = await searchParams;
+  const { tab, edit } = await searchParams;
   const location = getLocationById(locationId);
 
   if (!location) {
@@ -413,6 +483,9 @@ export default async function LocationDetailPage({
   const isFilesTab = tab === "files";
   const isShiftsTab = tab === "shifts";
   const isHomeTab = !isFilesTab && !isShiftsTab;
+  const isEditing = edit === "1" && isHomeTab;
+  const locationHref = `/u/${tenant}/standorte/${location.id}`;
+  const locationEditHref = `${locationHref}?edit=1`;
 
   return (
     <>
@@ -430,36 +503,86 @@ export default async function LocationDetailPage({
         <div className={`h-1 w-full ${location.accentClassName}`} />
         <div className="flex flex-wrap items-start gap-6 px-7 py-7">
           <div className="min-w-[240px] flex-1">
-            <div className="mb-3 flex flex-wrap items-center gap-2.5">
-              <span className="font-mono text-[10.5px] uppercase tracking-[0.6px] text-muted">
-                {location.kind}
-              </span>
-              <LocationStatusBadge status={location.status} />
-            </div>
-            <h1 className="m-0 font-display text-[clamp(30px,3.6vw,44px)] font-semibold leading-[1.02] tracking-[-1.2px] text-ink">
-              {location.name}
-            </h1>
-            <div className="mt-[9px] text-[13.5px] text-muted-2">
-              {location.address}
-            </div>
+            {isEditing ? (
+              <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]">
+                <EditableTextField
+                  id="location-name"
+                  label="Standortname"
+                  name="name"
+                  value={location.name}
+                />
+                <EditableSelectField
+                  id="location-kind"
+                  label="Typ"
+                  name="kind"
+                  value={location.kind}
+                  options={["Filiale", "Lager", "Verwaltung"]}
+                />
+                <div className="sm:col-span-2">
+                  <EditableTextField
+                    id="location-address"
+                    label="Adresse"
+                    name="address"
+                    value={location.address}
+                  />
+                </div>
+                <EditableSelectField
+                  id="location-status"
+                  label="Status"
+                  name="status"
+                  value={location.status}
+                  options={["active", "inactive"]}
+                />
+              </div>
+            ) : (
+              <>
+                <div className="mb-3 flex flex-wrap items-center gap-2.5">
+                  <span className="font-mono text-[10.5px] uppercase tracking-[0.6px] text-muted">
+                    {location.kind}
+                  </span>
+                  <LocationStatusBadge status={location.status} />
+                </div>
+                <h1 className="m-0 font-display text-[clamp(30px,3.6vw,44px)] font-semibold leading-[1.02] tracking-[-1.2px] text-ink">
+                  {location.name}
+                </h1>
+                <div className="mt-[9px] text-[13.5px] text-muted-2">
+                  {location.address}
+                </div>
+              </>
+            )}
           </div>
 
           <div className="flex flex-wrap gap-2.5">
-            <button type="button" className="btn btn-secondary btn-sm">
-              <Pencil size={14} />
-              Bearbeiten
-            </button>
-            <button type="button" className="btn btn-primary btn-sm">
-              <Plus size={14} />
-              Mitarbeiter
-            </button>
+            {isEditing ? (
+              <>
+                <Link href={locationHref} className="btn btn-secondary btn-sm">
+                  <X size={14} />
+                  Abbrechen
+                </Link>
+                <Link href={locationHref} className="btn btn-primary btn-sm">
+                  <Save size={14} />
+                  Speichern
+                </Link>
+              </>
+            ) : (
+              <>
+                <Link href={locationEditHref} className="btn btn-secondary btn-sm">
+                  <Pencil size={14} />
+                  Bearbeiten
+                </Link>
+                <button type="button" className="btn btn-primary btn-sm">
+                  <Plus size={14} />
+                  Mitarbeiter
+                </button>
+              </>
+            )}
           </div>
         </div>
       </section>
 
       <div className="mb-5 flex gap-[26px] border-b border-border">
         <Link
-          href={`/u/${tenant}/standorte/${location.id}`}
+          href={locationHref}
           className={`mb-[-1px] inline-flex items-center gap-2 border-b-2 px-0.5 py-3 text-[14px] ${
             isHomeTab
               ? "border-ink font-semibold text-ink"
@@ -469,7 +592,7 @@ export default async function LocationDetailPage({
           Home
         </Link>
         <Link
-          href={`/u/${tenant}/standorte/${location.id}?tab=files`}
+          href={`${locationHref}?tab=files`}
           className={`mb-[-1px] inline-flex items-center gap-2 border-b-2 px-0.5 py-3 text-[14px] ${
             isFilesTab
               ? "border-ink font-semibold text-ink"
@@ -482,7 +605,7 @@ export default async function LocationDetailPage({
           </span>
         </Link>
         <Link
-          href={`/u/${tenant}/standorte/${location.id}?tab=shifts`}
+          href={`${locationHref}?tab=shifts`}
           className={`mb-[-1px] inline-flex items-center gap-2 border-b-2 px-0.5 py-3 text-[14px] ${
             isShiftsTab
               ? "border-ink font-semibold text-ink"
@@ -500,53 +623,135 @@ export default async function LocationDetailPage({
       ) : (
         <>
           <section className="mb-4 grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(190px,1fr))]">
-            <DetailMetricCard
-              label="Mitarbeiter"
-              value={location.employeeCount}
-              caption={`${location.activeToday} aktiv heute`}
-            />
-            <DetailMetricCard
-              label="Schichten aktiv"
-              value={location.shiftCount}
-              caption="diese Woche"
-            />
-            <DetailMetricCard
-              label="Offene Stellen"
-              value={location.openPositions}
-              caption={"Fr\u00fchschicht Do."}
-              tone="danger"
-            />
-            <DetailMetricCard
-              label="Auslastung"
-              value={location.utilization}
-              caption={location.utilizationCaption}
-              tone="success"
-            />
+            {isEditing ? (
+              <>
+                <DetailPanel title="Kennzahlen">
+                  <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
+                    <EditableTextField
+                      id="location-employee-count"
+                      label="Mitarbeiter"
+                      name="employeeCount"
+                      type="number"
+                      value={location.employeeCount}
+                    />
+                    <EditableTextField
+                      id="location-active-today"
+                      label="Aktiv heute"
+                      name="activeToday"
+                      type="number"
+                      value={location.activeToday}
+                    />
+                    <EditableTextField
+                      id="location-shift-count"
+                      label="Schichten"
+                      name="shiftCount"
+                      type="number"
+                      value={location.shiftCount}
+                    />
+                    <EditableTextField
+                      id="location-open-positions"
+                      label="Offene Stellen"
+                      name="openPositions"
+                      type="number"
+                      value={location.openPositions}
+                    />
+                    <EditableTextField
+                      id="location-utilization"
+                      label="Auslastung"
+                      name="utilization"
+                      value={location.utilization}
+                    />
+                    <EditableTextField
+                      id="location-utilization-caption"
+                      label="Auslastung Notiz"
+                      name="utilizationCaption"
+                      value={location.utilizationCaption}
+                    />
+                  </div>
+                </DetailPanel>
+              </>
+            ) : (
+              <>
+                <DetailMetricCard
+                  label="Mitarbeiter"
+                  value={location.employeeCount}
+                  caption={`${location.activeToday} aktiv heute`}
+                />
+                <DetailMetricCard
+                  label="Schichten aktiv"
+                  value={location.shiftCount}
+                  caption="diese Woche"
+                />
+                <DetailMetricCard
+                  label="Offene Stellen"
+                  value={location.openPositions}
+                  caption={"Fr\u00fchschicht Do."}
+                  tone="danger"
+                />
+                <DetailMetricCard
+                  label="Auslastung"
+                  value={location.utilization}
+                  caption={location.utilizationCaption}
+                  tone="success"
+                />
+              </>
+            )}
           </section>
 
           <div className="grid items-start gap-4 [grid-template-columns:repeat(auto-fit,minmax(320px,1fr))]">
             <DetailPanel title="Leitung & Team">
-              <div className="mb-5 flex items-center gap-3.5 rounded-[12px] border border-border-soft bg-bg px-4 py-3.5">
-                <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-ink text-[13px] font-semibold text-white">
-                  {location.lead.initials}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="text-[14px] font-semibold text-ink">
-                    {location.lead.name}
+              {isEditing ? (
+                <div className="mb-5 grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]">
+                  <EditableTextField
+                    id="location-lead-name"
+                    label="Leitung"
+                    name="leadName"
+                    value={location.lead.name}
+                  />
+                  <EditableTextField
+                    id="location-lead-initials"
+                    label="Initialen"
+                    name="leadInitials"
+                    value={location.lead.initials}
+                  />
+                  <EditableTextField
+                    id="location-lead-phone"
+                    label="Telefon"
+                    name="leadPhone"
+                    type="tel"
+                    value={location.lead.phone}
+                  />
+                  <EditableTextField
+                    id="location-lead-email"
+                    label="E-Mail"
+                    name="leadEmail"
+                    type="email"
+                    value={location.lead.email}
+                  />
+                </div>
+              ) : (
+                <div className="mb-5 flex items-center gap-3.5 rounded-[12px] border border-border-soft bg-bg px-4 py-3.5">
+                  <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-ink text-[13px] font-semibold text-white">
+                    {location.lead.initials}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[14px] font-semibold text-ink">
+                      {location.lead.name}
+                    </div>
+                    <div className="mt-[3px] font-mono text-[10.5px] text-muted">
+                      Standortleitung
+                    </div>
                   </div>
-                  <div className="mt-[3px] font-mono text-[10.5px] text-muted">
-                    Standortleitung
+                  <div className="hidden text-right md:block">
+                    <div className="font-mono text-[10.5px] text-muted-2">
+                      {location.lead.phone}
+                    </div>
+                    <div className="mt-[3px] font-mono text-[10.5px] text-muted">
+                      {location.lead.email}
+                    </div>
                   </div>
                 </div>
-                <div className="hidden text-right md:block">
-                  <div className="font-mono text-[10.5px] text-muted-2">
-                    {location.lead.phone}
-                  </div>
-                  <div className="mt-[3px] font-mono text-[10.5px] text-muted">
-                    {location.lead.email}
-                  </div>
-                </div>
-              </div>
+              )}
 
               <div className="mb-2 font-mono text-[9.5px] uppercase tracking-[0.6px] text-muted">
                 Team

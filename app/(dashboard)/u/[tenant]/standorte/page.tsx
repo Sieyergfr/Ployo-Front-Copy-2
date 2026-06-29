@@ -1,3 +1,4 @@
+import CreateLocationButton from "@/components/CreateLocationButton";
 import PageHeader from "@/components/PageHeader";
 import {
   locationMetrics,
@@ -6,7 +7,6 @@ import {
   type LocationMetric,
   type LocationStatus,
 } from "@/lib/locations";
-import { Plus } from "lucide-react";
 import Link from "next/link";
 
 function LocationMetricCard({
@@ -122,10 +122,7 @@ export default async function LocationsPage({
   return (
     <>
       <PageHeader eyebrow="Unternehmensstruktur" title="Standorte">
-        <button type="button" className="btn btn-primary">
-          <Plus size={15} strokeWidth={2} />
-          Standort anlegen
-        </button>
+        <CreateLocationButton />
       </PageHeader>
 
       <section className="mb-7 grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(190px,1fr))]">

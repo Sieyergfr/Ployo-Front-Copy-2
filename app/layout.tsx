@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { UniversalPopupProvider } from "@/components/UniversalPopup";
 import "./globals.css";
 import { inter, jetbrainsMono, spaceGrotesk } from "./fonts";
 
@@ -28,7 +29,9 @@ export default function RootLayout({
       lang="en"
       className={`${spaceGrotesk.variable} ${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <UniversalPopupProvider>{children}</UniversalPopupProvider>
+      </body>
     </html>
   );
 }

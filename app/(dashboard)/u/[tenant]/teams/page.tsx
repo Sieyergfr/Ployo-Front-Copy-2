@@ -1,6 +1,7 @@
+import CreateTeamButton from "@/components/CreateTeamButton";
 import PageHeader from "@/components/PageHeader";
 import { teamMetrics, teams, type Team, type TeamMember } from "@/lib/teams";
-import { ArrowRight, Plus } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 
 function TeamMetricCard({
@@ -99,10 +100,7 @@ export default async function TeamsPage({
   return (
     <>
       <PageHeader eyebrow="Organisationsstruktur" title="Teams">
-        <button type="button" className="btn btn-primary">
-          <Plus size={15} strokeWidth={2} />
-          Team erstellen
-        </button>
+        <CreateTeamButton />
       </PageHeader>
 
       <section className="mb-7 grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]">

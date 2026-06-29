@@ -1,7 +1,9 @@
 import { DataTableStatus } from "@/components/DataTable";
+import { FileReminderButton } from "@/components/ActionDrawers";
 import {
   employeeStatusConfig,
   getEmployeeById,
+  type EmployeeStatus,
   type Employee,
   type EmployeeFile,
   type EmployeeFileFolder,
@@ -15,6 +17,8 @@ import {
   Lock,
   MessageSquare,
   Pencil,
+  Save,
+  X,
   Upload,
 } from "lucide-react";
 import Link from "next/link";
@@ -67,6 +71,71 @@ function FieldValue({
   );
 }
 
+function EditableTextField({
+  id,
+  label,
+  name,
+  value,
+  type = "text",
+  mono = false,
+}: {
+  id: string;
+  label: string;
+  name: string;
+  value: string | number;
+  type?: "text" | "email" | "tel" | "number";
+  mono?: boolean;
+}) {
+  return (
+    <div className="field">
+      <label htmlFor={id} className="label">
+        {label}
+      </label>
+      <input
+        id={id}
+        name={name}
+        type={type}
+        className={`input bg-white ${mono ? "input-mono" : ""}`}
+        defaultValue={value}
+      />
+    </div>
+  );
+}
+
+function EditableSelectField({
+  id,
+  label,
+  name,
+  value,
+  options,
+}: {
+  id: string;
+  label: string;
+  name: string;
+  value: string;
+  options: string[];
+}) {
+  return (
+    <div className="field">
+      <label htmlFor={id} className="label">
+        {label}
+      </label>
+      <select
+        id={id}
+        name={name}
+        className="input cursor-pointer bg-white"
+        defaultValue={value}
+      >
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 function DocumentRow({ document }: { document: Employee["documents"][number] }) {
   return (
     <div className="flex items-center gap-3.5 border-t border-border-soft py-3">
@@ -90,10 +159,7 @@ function DocumentRow({ document }: { document: Employee["documents"][number] }) 
 
 function FileFolderCard({ folder }: { folder: EmployeeFileFolder }) {
   return (
-    <button
-      type="button"
-      className="flex w-full cursor-pointer items-center gap-[13px] rounded-xl border border-border bg-white p-[15px] text-left font-sans transition-colors hover:bg-bg"
-    >
+    <div className="flex w-full cursor-pointer items-center gap-[13px] rounded-xl border border-border bg-white p-[15px] text-left font-sans transition-colors hover:bg-bg">
       <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-border-soft text-muted-2">
         <Folder size={19} />
       </span>
@@ -106,16 +172,18 @@ function FileFolderCard({ folder }: { folder: EmployeeFileFolder }) {
         </span>
       </span>
       {folder.locked && <Lock size={13} className="shrink-0 text-muted" />}
-    </button>
+      <FileReminderButton
+        compact
+        name={folder.name}
+        context={`Mitarbeiterordner \u00b7 ${folder.name}`}
+      />
+    </div>
   );
 }
 
 function FileRow({ file }: { file: EmployeeFile }) {
   return (
-    <button
-      type="button"
-      className="flex w-full cursor-pointer items-center gap-3.5 border-t border-border-soft py-3 text-left font-sans transition-colors hover:bg-bg"
-    >
+    <div className="flex w-full cursor-pointer items-center gap-3.5 border-t border-border-soft py-3 text-left font-sans transition-colors hover:bg-bg">
       <span className="flex size-[30px] shrink-0 items-center justify-center rounded-lg bg-border-soft text-muted-2">
         <FileText size={14} />
       </span>
@@ -134,7 +202,12 @@ function FileRow({ file }: { file: EmployeeFile }) {
         {file.type}
       </span>
       {file.locked && <Lock size={13} className="shrink-0 text-muted" />}
-    </button>
+      <FileReminderButton
+        compact
+        name={file.name}
+        context={`${file.folder} \u00b7 Mitarbeiterdatei`}
+      />
+    </div>
   );
 }
 
@@ -244,7 +317,7 @@ export default async function EmployeeDetailPage({
   searchParams,
 }: PageProps<"/u/[tenant]/employees/[employeeId]">) {
   const { tenant, employeeId } = await params;
-  const { tab } = await searchParams;
+  const { tab, edit } = await searchParams;
   const employee = getEmployeeById(employeeId);
 
   if (!employee) {
@@ -253,9 +326,13 @@ export default async function EmployeeDetailPage({
 
   const status = employeeStatusConfig[employee.status];
   const isFilesTab = tab === "files";
+  const isEditing = edit === "1" && !isFilesTab;
+  const employeeHref = `/u/${tenant}/employees/${employee.id}`;
+  const employeeEditHref = `${employeeHref}?edit=1`;
   const vacationPercent = Math.round(
     (employee.vacationTaken / employee.vacationTotal) * 100,
   );
+  const statusOptions: EmployeeStatus[] = ["active", "vacation", "absent"];
 
   return (
     <>
@@ -291,20 +368,35 @@ export default async function EmployeeDetailPage({
         </div>
 
         <div className="flex flex-wrap gap-[9px]">
-          <button type="button" className="btn btn-primary btn-sm">
-            <MessageSquare size={14} />
-            Nachricht senden
-          </button>
-          <button type="button" className="btn btn-secondary btn-sm">
-            <Pencil size={14} />
-            Bearbeiten
-          </button>
+          {isEditing ? (
+            <>
+              <Link href={employeeHref} className="btn btn-secondary btn-sm">
+                <X size={14} />
+                Abbrechen
+              </Link>
+              <Link href={employeeHref} className="btn btn-primary btn-sm">
+                <Save size={14} />
+                Speichern
+              </Link>
+            </>
+          ) : (
+            <>
+              <button type="button" className="btn btn-primary btn-sm">
+                <MessageSquare size={14} />
+                Nachricht senden
+              </button>
+              <Link href={employeeEditHref} className="btn btn-secondary btn-sm">
+                <Pencil size={14} />
+                Bearbeiten
+              </Link>
+            </>
+          )}
         </div>
       </section>
 
       <div className="mb-5 flex gap-[26px] border-b border-border">
         <Link
-          href={`/u/${tenant}/employees/${employee.id}`}
+          href={employeeHref}
           className={`mb-[-1px] inline-flex items-center gap-2 border-b-2 px-0.5 py-3 text-[14px] ${
             !isFilesTab
               ? "border-ink font-semibold text-ink"
@@ -314,7 +406,7 @@ export default async function EmployeeDetailPage({
           Home
         </Link>
         <Link
-          href={`/u/${tenant}/employees/${employee.id}?tab=files`}
+          href={`${employeeHref}?tab=files`}
           className={`mb-[-1px] inline-flex items-center gap-2 border-b-2 px-0.5 py-3 text-[14px] ${
             isFilesTab
               ? "border-ink font-semibold text-ink"
@@ -334,42 +426,126 @@ export default async function EmployeeDetailPage({
         <div className="grid items-start gap-4 [grid-template-columns:repeat(auto-fit,minmax(320px,1fr))]">
           <div className="flex flex-col gap-4">
             <DetailCard title={"Besch\u00e4ftigung"}>
-              <div className="grid gap-y-[18px] gap-x-[22px] [grid-template-columns:repeat(auto-fit,minmax(130px,1fr))]">
-                <FieldValue label="Vertragsart" value={employee.contract} />
-                <FieldValue label="Wochenstunden" value={employee.weeklyHours} />
-                <FieldValue
-                  label="Eintrittsdatum"
-                  value={employee.startDate}
-                  mono
-                />
-                <FieldValue
-                  label={"Besch\u00e4ftigt seit"}
-                  value={employee.tenure}
-                />
-                <FieldValue label="Team" value={employee.team} />
-                <FieldValue label="Rolle" value={employee.role} />
-              </div>
+              {isEditing ? (
+                <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]">
+                  <EditableSelectField
+                    id="employee-contract"
+                    label="Vertragsart"
+                    name="contract"
+                    value={employee.contract}
+                    options={[
+                      "Unbefristet",
+                      "Teilzeit",
+                      "Befristet",
+                      "Werkstudentin",
+                    ]}
+                  />
+                  <EditableTextField
+                    id="employee-weekly-hours"
+                    label="Wochenstunden"
+                    name="weeklyHours"
+                    value={employee.weeklyHours}
+                  />
+                  <EditableTextField
+                    id="employee-start-date"
+                    label="Eintrittsdatum"
+                    name="startDate"
+                    value={employee.startDate}
+                    mono
+                  />
+                  <EditableTextField
+                    id="employee-tenure"
+                    label="Beschäftigt seit"
+                    name="tenure"
+                    value={employee.tenure}
+                  />
+                  <EditableSelectField
+                    id="employee-team"
+                    label="Team"
+                    name="team"
+                    value={employee.team}
+                    options={["Verkauf", "Logistik", "Service", "Empfang"]}
+                  />
+                  <EditableTextField
+                    id="employee-role"
+                    label="Rolle"
+                    name="role"
+                    value={employee.role}
+                  />
+                  <EditableSelectField
+                    id="employee-status"
+                    label="Status"
+                    name="status"
+                    value={employee.status}
+                    options={statusOptions}
+                  />
+                </div>
+              ) : (
+                <div className="grid gap-y-[18px] gap-x-[22px] [grid-template-columns:repeat(auto-fit,minmax(130px,1fr))]">
+                  <FieldValue label="Vertragsart" value={employee.contract} />
+                  <FieldValue label="Wochenstunden" value={employee.weeklyHours} />
+                  <FieldValue
+                    label="Eintrittsdatum"
+                    value={employee.startDate}
+                    mono
+                  />
+                  <FieldValue
+                    label={"Besch\u00e4ftigt seit"}
+                    value={employee.tenure}
+                  />
+                  <FieldValue label="Team" value={employee.team} />
+                  <FieldValue label="Rolle" value={employee.role} />
+                </div>
+              )}
             </DetailCard>
 
             <DetailCard title="Abwesenheit & Urlaub">
-              <div className="flex items-end gap-2">
-                <span className="font-display text-[38px] font-semibold leading-none tracking-[-1.5px] text-ink">
-                  {employee.vacationRemaining}
-                </span>
-                <span className="mb-[5px] text-[13px] text-muted">
-                  von {employee.vacationTotal} Tagen Resturlaub
-                </span>
-              </div>
-              <div className="my-4 h-2 overflow-hidden rounded-full bg-border-soft">
-                <div
-                  className="h-full rounded-full bg-ink"
-                  style={{ width: `${vacationPercent}%` }}
-                />
-              </div>
-              <div className="flex justify-between font-mono text-[11px] text-muted">
-                <span>{employee.vacationTaken} Tage genommen</span>
-                <span>{vacationPercent}%</span>
-              </div>
+              {isEditing ? (
+                <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(160px,1fr))]">
+                  <EditableTextField
+                    id="employee-vacation-remaining"
+                    label="Resturlaub"
+                    name="vacationRemaining"
+                    type="number"
+                    value={employee.vacationRemaining}
+                  />
+                  <EditableTextField
+                    id="employee-vacation-total"
+                    label="Urlaub gesamt"
+                    name="vacationTotal"
+                    type="number"
+                    value={employee.vacationTotal}
+                  />
+                  <EditableTextField
+                    id="employee-vacation-taken"
+                    label="Genommen"
+                    name="vacationTaken"
+                    type="number"
+                    value={employee.vacationTaken}
+                  />
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-end gap-2">
+                    <span className="font-display text-[38px] font-semibold leading-none tracking-[-1.5px] text-ink">
+                      {employee.vacationRemaining}
+                    </span>
+                    <span className="mb-[5px] text-[13px] text-muted">
+                      von {employee.vacationTotal} Tagen Resturlaub
+                    </span>
+                  </div>
+                  <div className="my-4 h-2 overflow-hidden rounded-full bg-border-soft">
+                    <div
+                      className="h-full rounded-full bg-ink"
+                      style={{ width: `${vacationPercent}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between font-mono text-[11px] text-muted">
+                    <span>{employee.vacationTaken} Tage genommen</span>
+                    <span>{vacationPercent}%</span>
+                  </div>
+                </>
+              )}
             </DetailCard>
 
             <DetailCard title="Dokumente" className="[&>h2]:mb-3.5">
@@ -389,11 +565,45 @@ export default async function EmployeeDetailPage({
 
           <div className="flex flex-col gap-4">
             <DetailCard title="Kontakt">
-              <div className="flex flex-col gap-4">
-                <FieldValue label="E-Mail" value={employee.email} mono />
-                <FieldValue label="Telefon" value={employee.phone} mono />
-                <FieldValue label="Standort-Adresse" value={employee.address} />
-              </div>
+              {isEditing ? (
+                <div className="grid gap-3">
+                  <EditableTextField
+                    id="employee-email"
+                    label="E-Mail"
+                    name="email"
+                    type="email"
+                    value={employee.email}
+                    mono
+                  />
+                  <EditableTextField
+                    id="employee-phone"
+                    label="Telefon"
+                    name="phone"
+                    type="tel"
+                    value={employee.phone}
+                    mono
+                  />
+                  <EditableTextField
+                    id="employee-address"
+                    label="Standort-Adresse"
+                    name="address"
+                    value={employee.address}
+                  />
+                  <EditableSelectField
+                    id="employee-location"
+                    label="Standort"
+                    name="location"
+                    value={employee.location}
+                    options={["München", "Berlin", "Hamburg"]}
+                  />
+                </div>
+              ) : (
+                <div className="flex flex-col gap-4">
+                  <FieldValue label="E-Mail" value={employee.email} mono />
+                  <FieldValue label="Telefon" value={employee.phone} mono />
+                  <FieldValue label="Standort-Adresse" value={employee.address} />
+                </div>
+              )}
             </DetailCard>
 
             <DetailCard title="Verlauf" className="[&>h2]:mb-4">
