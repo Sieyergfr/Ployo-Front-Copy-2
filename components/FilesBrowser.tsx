@@ -96,7 +96,7 @@ export default function FilesBrowser({
             {activeFolder ? (
               <>
                 Dateien / {activeFolder.name}
-                {activeFolder.locked && " / gesch\u00fctzt"}
+                {activeFolder.locked && " / geschützt"}
               </>
             ) : (
               "Ordner und Dateien"

@@ -40,7 +40,7 @@ function ReminderRow({ reminder }: { reminder: Reminder }) {
   return (
     <ReminderRowButton
       reminder={reminder}
-      className={`flex w-full cursor-pointer flex-wrap items-center gap-4 rounded-[14px] border bg-white px-5 py-4 text-left transition-colors hover:bg-bg ${priority.rowClassName}`}
+      className={`group flex w-full cursor-pointer flex-wrap items-center gap-4 rounded-[14px] border bg-white px-5 py-4 text-left transition-all duration-150 hover:-translate-y-0.5 hover:border-muted hover:bg-bg hover:shadow-[0_10px_28px_rgba(0,0,0,0.06)] ${priority.rowClassName}`}
     >
       <div className="w-[54px] shrink-0 text-center">
         <span
@@ -76,7 +76,7 @@ function ReminderRow({ reminder }: { reminder: Reminder }) {
       <span
         title="Als erledigt markieren"
         aria-label={`${reminder.title} als erledigt markieren`}
-        className="flex size-[34px] shrink-0 items-center justify-center rounded-[9px] border border-border bg-white text-muted"
+        className="flex size-[34px] shrink-0 items-center justify-center rounded-[9px] border border-border bg-white text-muted transition-colors group-hover:border-ink/20 group-hover:text-ink"
       >
         <Check size={14} strokeWidth={2} />
       </span>

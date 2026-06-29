@@ -96,7 +96,7 @@ export default async function EmployeesPage({
             defaultValue="Alle Standorte"
           >
             <option value="Alle Standorte">Alle Standorte</option>
-            <option value={"M\u00fcnchen"}>{"M\u00fcnchen"}</option>
+            <option value={"München"}>{"München"}</option>
             <option value="Berlin">Berlin</option>
             <option value="Hamburg">Hamburg</option>
           </select>

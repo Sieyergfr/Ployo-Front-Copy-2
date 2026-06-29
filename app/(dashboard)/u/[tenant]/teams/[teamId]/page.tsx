@@ -294,7 +294,7 @@ function TeamMemberAssignment({ team }: { team: Team }) {
             htmlFor="team-member-add"
             className="mb-2 block font-mono text-[9.5px] uppercase tracking-[0.6px] text-muted"
           >
-            Mitarbeiter zum Team hinzuf\u00fcgen
+            Mitarbeiter zum Team hinzufügen
           </label>
           <select
             id="team-member-add"
@@ -328,7 +328,7 @@ function TeamMemberAssignment({ team }: { team: Team }) {
 
         <button type="button" className="btn btn-primary">
           <Plus size={15} />
-          Hinzuf\u00fcgen
+          Hinzufügen
         </button>
       </div>
     </div>

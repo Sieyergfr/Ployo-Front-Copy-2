@@ -33,11 +33,41 @@ export type EmployeeTimelineItem = {
   tone: "ink" | "success" | "muted";
 };
 
+export type EmployeeContractDetails = {
+  linkedFileName: string;
+  linkedFileMeta: string;
+  contractType: string;
+  entryDate: string;
+  exitDate: string;
+  fixedTerm: string;
+  probation: string;
+  position: string;
+  department: string;
+  supervisor: string;
+  workLocation: string;
+  parties: string;
+  compensation: string;
+  workingTime: string;
+  vacation: string;
+  noticePeriod: string;
+  collectiveAgreement: string;
+  clauses: string[];
+};
+
 export type Employee = {
   id: string;
   initials: string;
   name: string;
   employeeNumber: string;
+  birthDate: string;
+  birthPlace: string;
+  nationality: string;
+  maritalStatus: string;
+  privateAddress: string;
+  taxId: string;
+  socialSecurityNumber: string;
+  healthInsurance: string;
+  iban: string;
   location: string;
   team: string;
   role: string;
@@ -57,23 +87,24 @@ export type Employee = {
   files: EmployeeFile[];
   shifts: EmployeeShift[];
   timeline: EmployeeTimelineItem[];
+  contractDetails: EmployeeContractDetails;
 };
 
 const defaultDocuments: EmployeeDocument[] = [
   {
     title: "Arbeitsvertrag",
     meta: "Hinterlegt \u00b7 01.03.2021",
-    state: "G\u00fcltig",
+    state: "Gültig",
   },
   {
     title: "Personalausweis (Kopie)",
     meta: "Verifiziert",
-    state: "G\u00fcltig",
+    state: "Gültig",
   },
   {
     title: "Sozialversicherungsnachweis",
     meta: "Hinterlegt",
-    state: "G\u00fcltig",
+    state: "Gültig",
   },
 ];
 
@@ -133,17 +164,17 @@ const defaultFiles: EmployeeFile[] = [
 ];
 
 const defaultShifts: EmployeeShift[] = [
-  { day: "Mo", label: "Fr\u00fchschicht", time: "06:00-14:00" },
-  { day: "Di", label: "Fr\u00fchschicht", time: "06:00-14:00" },
-  { day: "Mi", label: "Fr\u00fchschicht", time: "06:00-14:00" },
-  { day: "Do", label: "Fr\u00fchschicht", time: "06:00-14:00" },
-  { day: "Fr", label: "Fr\u00fchschicht", time: "06:00-14:00" },
-  { day: "Sa", label: "Fr\u00fchschicht", time: "06:00-14:00" },
+  { day: "Mo", label: "Frühschicht", time: "06:00-14:00" },
+  { day: "Di", label: "Frühschicht", time: "06:00-14:00" },
+  { day: "Mi", label: "Frühschicht", time: "06:00-14:00" },
+  { day: "Do", label: "Frühschicht", time: "06:00-14:00" },
+  { day: "Fr", label: "Frühschicht", time: "06:00-14:00" },
+  { day: "Sa", label: "Frühschicht", time: "06:00-14:00" },
 ];
 
 const defaultTimeline: EmployeeTimelineItem[] = [
   {
-    title: "Stammdaten zuletzt gepr\u00fcft",
+    title: "Stammdaten zuletzt geprüft",
     date: "12.06.2026 \u00b7 09:14",
     tone: "ink",
   },
@@ -159,9 +190,54 @@ const defaultTimeline: EmployeeTimelineItem[] = [
   },
 ];
 
+const defaultContractDetails: EmployeeContractDetails = {
+  linkedFileName: "Arbeitsvertrag.pdf",
+  linkedFileMeta: "Verträge & Vereinbarungen · PDF · 428 KB",
+  contractType: "Unbefristeter Arbeitsvertrag",
+  entryDate: "01.03.2021",
+  exitDate: "Nicht vereinbart",
+  fixedTerm: "Keine Befristung",
+  probation: "6 Monate, beendet am 31.08.2021",
+  position: "Kassiererin",
+  department: "Verkauf",
+  supervisor: "Filialleitung München",
+  workLocation: "München Hauptbahnhof",
+  parties: "Müller & Partner GmbH / Sophie Wagner",
+  compensation: "2.980,00 EUR brutto monatlich",
+  workingTime: "38 Std/Woche, Schichtmodell laut Dienstplan",
+  vacation: "30 Arbeitstage pro Kalenderjahr",
+  noticePeriod: "4 Wochen zum 15. oder Monatsende",
+  collectiveAgreement: "Keine Tarifbindung vermerkt",
+  clauses: [
+    "Verschwiegenheit und Datenschutz",
+    "Nebentätigkeiten nur nach vorheriger Anzeige",
+    "Arbeitszeitkonto mit monatlichem Ausgleich",
+  ],
+};
+
+function getContractTitle(contract: string) {
+  const labels: Record<string, string> = {
+    Unbefristet: "Unbefristeter Arbeitsvertrag",
+    Befristet: "Befristeter Arbeitsvertrag",
+    Teilzeit: "Teilzeit-Arbeitsvertrag",
+    Werkstudentin: "Werkstudentenvertrag",
+  };
+
+  return labels[contract] ?? contract;
+}
+
 function makeEmployee(
   employee: Omit<
     Employee,
+    | "birthDate"
+    | "birthPlace"
+    | "nationality"
+    | "maritalStatus"
+    | "privateAddress"
+    | "taxId"
+    | "socialSecurityNumber"
+    | "healthInsurance"
+    | "iban"
     | "weeklyHours"
     | "tenure"
     | "email"
@@ -175,10 +251,20 @@ function makeEmployee(
     | "files"
     | "shifts"
     | "timeline"
+    | "contractDetails"
   > &
     Partial<
       Pick<
         Employee,
+        | "birthDate"
+        | "birthPlace"
+        | "nationality"
+        | "maritalStatus"
+        | "privateAddress"
+        | "taxId"
+        | "socialSecurityNumber"
+        | "healthInsurance"
+        | "iban"
         | "weeklyHours"
         | "tenure"
         | "email"
@@ -192,15 +278,25 @@ function makeEmployee(
         | "files"
         | "shifts"
         | "timeline"
+        | "contractDetails"
       >
     >,
 ): Employee {
   return {
+    birthDate: "14.09.1992",
+    birthPlace: "München",
+    nationality: "Deutsch",
+    maritalStatus: "Ledig",
+    privateAddress: "Isarstrasse 18, 80469 München",
+    taxId: "12 345 678 901",
+    socialSecurityNumber: "12 140992 W 123",
+    healthInsurance: "Techniker Krankenkasse",
+    iban: "DE89 3704 0044 0532 0130 00",
     weeklyHours: "38 Std/Woche",
     tenure: "5 J. 3 Mon.",
     email: `${employee.initials.toLowerCase()}@ployo.de`,
     phone: "+49 89 1200-41",
-    address: "Leopoldstrasse 12 \u00b7 80802 M\u00fcnchen",
+    address: "Leopoldstrasse 12 \u00b7 80802 München",
     vacationRemaining: 12,
     vacationTotal: 30,
     vacationTaken: 18,
@@ -209,6 +305,15 @@ function makeEmployee(
     files: defaultFiles,
     shifts: defaultShifts,
     timeline: defaultTimeline,
+    contractDetails: {
+      ...defaultContractDetails,
+      contractType: getContractTitle(employee.contract),
+      entryDate: employee.startDate,
+      position: employee.role,
+      department: employee.team,
+      parties: `Müller & Partner GmbH / ${employee.name}`,
+      workingTime: `${employee.weeklyHours ?? "38 Std/Woche"}, Schichtmodell laut Dienstplan`,
+    },
     ...employee,
   };
 }
@@ -219,7 +324,7 @@ export const employees: Employee[] = [
     initials: "SW",
     name: "Sophie Wagner",
     employeeNumber: "MA-2041",
-    location: "M\u00fcnchen",
+    location: "München",
     team: "Verkauf",
     role: "Kassiererin",
     startDate: "01.03.2021",
@@ -232,7 +337,7 @@ export const employees: Employee[] = [
     initials: "JB",
     name: "Jonas Becker",
     employeeNumber: "MA-2044",
-    location: "M\u00fcnchen",
+    location: "München",
     team: "Logistik",
     role: "Lagerist",
     startDate: "15.08.2022",
@@ -244,7 +349,7 @@ export const employees: Employee[] = [
     initials: "MK",
     name: "Mara Klein",
     employeeNumber: "MA-2050",
-    location: "M\u00fcnchen",
+    location: "München",
     team: "Verkauf",
     role: "Kassiererin",
     startDate: "02.01.2023",
@@ -258,7 +363,7 @@ export const employees: Employee[] = [
     initials: "MY",
     name: "Mehmet Yildiz",
     employeeNumber: "MA-2052",
-    location: "M\u00fcnchen",
+    location: "München",
     team: "Service",
     role: "Servicekraft",
     startDate: "10.06.2024",
@@ -271,7 +376,7 @@ export const employees: Employee[] = [
     initials: "LF",
     name: "Lena Fischer",
     employeeNumber: "MA-2057",
-    location: "M\u00fcnchen",
+    location: "München",
     team: "Verkauf",
     role: "Aushilfe",
     startDate: "05.04.2025",
@@ -285,7 +390,7 @@ export const employees: Employee[] = [
     initials: "PS",
     name: "Paul Sch\u00e4fer",
     employeeNumber: "MA-2031",
-    location: "M\u00fcnchen",
+    location: "München",
     team: "Logistik",
     role: "Lagerist",
     startDate: "20.09.2019",

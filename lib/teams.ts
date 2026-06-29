@@ -21,13 +21,13 @@ export const teams: Team[] = [
   {
     id: "verkauf",
     name: "Verkauf",
-    locations: "M\u00fcnchen, Berlin, Hamburg",
+    locations: "München, Berlin, Hamburg",
     colorClassName: "bg-[#C9622A]",
     members: [
       {
         initials: "SW",
         name: "Sophie Wagner",
-        location: "M\u00fcnchen",
+        location: "München",
         role: "Kassiererin",
         contract: "Unbefristet",
         status: "on-duty",
@@ -36,7 +36,7 @@ export const teams: Team[] = [
       {
         initials: "MK",
         name: "Mara Klein",
-        location: "M\u00fcnchen",
+        location: "München",
         role: "Kassiererin",
         contract: "Teilzeit",
         status: "on-duty",
@@ -44,7 +44,7 @@ export const teams: Team[] = [
       {
         initials: "LF",
         name: "Lena Fischer",
-        location: "M\u00fcnchen",
+        location: "München",
         role: "Aushilfe",
         contract: "Werkstudentin",
         status: "vacation",
@@ -69,7 +69,7 @@ export const teams: Team[] = [
     lead: {
       initials: "SW",
       name: "Sophie Wagner",
-      location: "M\u00fcnchen",
+      location: "München",
       role: "Kassiererin",
       contract: "Unbefristet",
       status: "on-duty",
@@ -79,7 +79,7 @@ export const teams: Team[] = [
   {
     id: "service",
     name: "Service",
-    locations: "M\u00fcnchen, Berlin, Hamburg",
+    locations: "München, Berlin, Hamburg",
     colorClassName: "bg-[#2A5BC9]",
     members: [
       {
@@ -102,7 +102,7 @@ export const teams: Team[] = [
       {
         initials: "ED",
         name: "Elif Demir",
-        location: "M\u00fcnchen",
+        location: "München",
         role: "Servicekraft",
         contract: "Unbefristet",
         status: "vacation",
@@ -129,7 +129,7 @@ export const teams: Team[] = [
   {
     id: "logistik",
     name: "Logistik",
-    locations: "M\u00fcnchen, Hamburg",
+    locations: "München, Hamburg",
     colorClassName: "bg-[#1D8A65]",
     members: [
       {
@@ -144,7 +144,7 @@ export const teams: Team[] = [
       {
         initials: "PS",
         name: "Paul Sch\u00e4fer",
-        location: "M\u00fcnchen",
+        location: "München",
         role: "Lagerist",
         contract: "Vollzeit",
         status: "on-duty",
@@ -228,7 +228,7 @@ export const teamMetrics = [
   {
     label: "Vakante Stellen",
     value: "2",
-    caption: "M\u00fcnchen \u00b7 Fr\u00fchschicht",
+    caption: "München \u00b7 Frühschicht",
     tone: "danger",
   },
 ] satisfies Array<{
@@ -242,7 +242,7 @@ export const teamAssignableEmployees: TeamMember[] = [
   {
     initials: "CB",
     name: "Carla Brandt",
-    location: "M\u00fcnchen",
+    location: "München",
     role: "HR-Leitung",
     contract: "Unbefristet",
     status: "on-duty",
@@ -257,7 +257,7 @@ export const teamAssignableEmployees: TeamMember[] = [
   },
   {
     initials: "LK",
-    name: "Lea Kr\u00fcger",
+    name: "Lea Krüger",
     location: "Hamburg",
     role: "Aushilfe",
     contract: "Minijob",

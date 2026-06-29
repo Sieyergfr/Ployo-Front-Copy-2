@@ -577,7 +577,7 @@ export function ShiftSettingsDrawerButton() {
   const [shiftPresets, setShiftPresets] = useState<ShiftPreset[]>([
     {
       id: "early",
-      label: "Fr\u00fch",
+      label: "Früh",
       start: "06:00",
       end: "14:00",
       pause: "30m",
@@ -601,7 +601,7 @@ export function ShiftSettingsDrawerButton() {
     {
       id: "store-week",
       name: "Wochenplan Filiale",
-      description: "Mo-Sa mit Fr\u00fch-, Tag- und Sp\u00e4tschicht",
+      description: "Mo-Sa mit Früh-, Tag- und Sp\u00e4tschicht",
     },
     {
       id: "holiday",
@@ -611,7 +611,7 @@ export function ShiftSettingsDrawerButton() {
     {
       id: "inventory",
       name: "Inventurwoche",
-      description: "Zusatzschichten f\u00fcr Abend- und Lagerteam",
+      description: "Zusatzschichten für Abend- und Lagerteam",
     },
   ]);
 
@@ -726,7 +726,7 @@ export function ShiftSettingsDrawerButton() {
                   onClick={addShiftPreset}
                 >
                   <Plus size={14} />
-                  Hinzuf\u00fcgen
+                  {"Hinzufügen"}
                 </button>
               </div>
               <div className="grid gap-2">
@@ -853,7 +853,7 @@ export function ShiftSettingsDrawerButton() {
                   onClick={addTemplate}
                 >
                   <Plus size={14} />
-                  Hinzuf\u00fcgen
+                  {"Hinzufügen"}
                 </button>
               </div>
               <div className="grid gap-2">

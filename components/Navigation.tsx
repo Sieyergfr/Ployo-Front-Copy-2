@@ -51,7 +51,7 @@ const navigationItems: NavItem[] = [
 
 const tenantItems: TenantItem[] = [
   {
-    name: "M\u00fcller & Partner GmbH",
+    name: "Müller & Partner GmbH",
     role: "HR-Leitung",
     mark: "M",
     href: "/u/mueller-partner",

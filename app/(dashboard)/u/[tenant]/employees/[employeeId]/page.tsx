@@ -11,9 +11,11 @@ import {
 } from "@/lib/employees";
 import {
   ArrowLeft,
+  BriefcaseBusiness,
   FileText,
   Folder,
   FolderPlus,
+  Link2,
   Lock,
   MessageSquare,
   Pencil,
@@ -264,6 +266,105 @@ function FilesTab({ employee }: { employee: Employee }) {
   );
 }
 
+function ContractFileLink({ employee }: { employee: Employee }) {
+  const contract = employee.contractDetails;
+
+  return (
+    <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-bg p-3">
+      <span className="flex size-10 shrink-0 items-center justify-center rounded-[10px] bg-white text-muted-2">
+        <FileText size={17} />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[13.5px] font-semibold text-ink">
+          {contract.linkedFileName}
+        </span>
+        <span className="mt-0.5 block truncate font-mono text-[10.5px] text-muted">
+          {contract.linkedFileMeta}
+        </span>
+      </span>
+      <button type="button" className="btn btn-secondary btn-sm">
+        <Link2 size={14} />
+        Datei verlinken
+      </button>
+    </div>
+  );
+}
+
+function ContractTab({ employee }: { employee: Employee }) {
+  const contract = employee.contractDetails;
+
+  return (
+    <div className="grid items-start gap-4 lg:grid-cols-[1.35fr_0.9fr]">
+      <div className="flex flex-col gap-4">
+        <DetailCard
+          title={
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-border-soft text-muted-2">
+                <BriefcaseBusiness size={18} />
+              </span>
+              <span className="min-w-0">
+                <span className="block truncate">Vertragsdetails</span>
+                <span className="mt-[3px] block font-mono text-[10.5px] font-normal tracking-normal text-muted">
+                  Arbeitsvertrag und Eckdaten
+                </span>
+              </span>
+            </div>
+          }
+          className="[&>h2]:mb-4"
+        >
+          <ContractFileLink employee={employee} />
+
+          <div className="mt-5 grid gap-y-[18px] gap-x-[22px] [grid-template-columns:repeat(auto-fit,minmax(170px,1fr))]">
+            <FieldValue label="Vertragsart" value={contract.contractType} />
+            <FieldValue label="Eintritt" value={contract.entryDate} mono />
+            <FieldValue label="Austritt" value={contract.exitDate} mono />
+            <FieldValue label="Befristung" value={contract.fixedTerm} />
+            <FieldValue label="Probezeit" value={contract.probation} />
+            <FieldValue label="Kündigungsfrist" value={contract.noticePeriod} />
+          </div>
+        </DetailCard>
+
+        <DetailCard title="Position & Organisation">
+          <div className="grid gap-y-[18px] gap-x-[22px] [grid-template-columns:repeat(auto-fit,minmax(170px,1fr))]">
+            <FieldValue label="Position / Stelle" value={contract.position} />
+            <FieldValue label="Abteilung" value={contract.department} />
+            <FieldValue label="Vorgesetzter" value={contract.supervisor} />
+            <FieldValue label="Ort" value={contract.workLocation} />
+            <FieldValue label="Parteien" value={contract.parties} />
+            <FieldValue
+              label="Tarif / Regelwerk"
+              value={contract.collectiveAgreement}
+            />
+          </div>
+        </DetailCard>
+      </div>
+
+      <div className="flex flex-col gap-4">
+        <DetailCard title="Konditionen">
+          <div className="flex flex-col gap-4">
+            <FieldValue label="Vergütung" value={contract.compensation} />
+            <FieldValue label="Arbeitszeit" value={contract.workingTime} />
+            <FieldValue label="Urlaub" value={contract.vacation} />
+          </div>
+        </DetailCard>
+
+        <DetailCard title="Klauseln" className="[&>h2]:mb-3.5">
+          <div className="flex flex-col gap-2">
+            {contract.clauses.map((clause) => (
+              <div
+                key={clause}
+                className="rounded-[10px] border border-border-light bg-bg px-3 py-2.5 text-[13px] text-ink"
+              >
+                {clause}
+              </div>
+            ))}
+          </div>
+        </DetailCard>
+      </div>
+    </div>
+  );
+}
+
 function ShiftRow({ shift }: { shift: Employee["shifts"][number] }) {
   return (
     <div className="flex items-center gap-3 border-t border-border-soft py-2">
@@ -326,7 +427,9 @@ export default async function EmployeeDetailPage({
 
   const status = employeeStatusConfig[employee.status];
   const isFilesTab = tab === "files";
-  const isEditing = edit === "1" && !isFilesTab;
+  const isContractTab = tab === "contract";
+  const isHomeTab = !isFilesTab && !isContractTab;
+  const isEditing = edit === "1" && isHomeTab;
   const employeeHref = `/u/${tenant}/employees/${employee.id}`;
   const employeeEditHref = `${employeeHref}?edit=1`;
   const vacationPercent = Math.round(
@@ -398,12 +501,23 @@ export default async function EmployeeDetailPage({
         <Link
           href={employeeHref}
           className={`mb-[-1px] inline-flex items-center gap-2 border-b-2 px-0.5 py-3 text-[14px] ${
-            !isFilesTab
+            isHomeTab
               ? "border-ink font-semibold text-ink"
               : "border-transparent font-medium text-muted"
           }`}
         >
           Home
+        </Link>
+        <Link
+          href={`${employeeHref}?tab=contract`}
+          className={`mb-[-1px] inline-flex items-center gap-2 border-b-2 px-0.5 py-3 text-[14px] ${
+            isContractTab
+              ? "border-ink font-semibold text-ink"
+              : "border-transparent font-medium text-muted"
+          }`}
+        >
+          Vertrag
+          <span className="font-mono text-[11px] text-muted">1</span>
         </Link>
         <Link
           href={`${employeeHref}?tab=files`}
@@ -422,9 +536,129 @@ export default async function EmployeeDetailPage({
 
       {isFilesTab ? (
         <FilesTab employee={employee} />
+      ) : isContractTab ? (
+        <ContractTab employee={employee} />
       ) : (
         <div className="grid items-start gap-4 [grid-template-columns:repeat(auto-fit,minmax(320px,1fr))]">
           <div className="flex flex-col gap-4">
+            <DetailCard title="Stamminformationen">
+              {isEditing ? (
+                <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]">
+                  <EditableTextField
+                    id="employee-number"
+                    label="Personalnummer"
+                    name="employeeNumber"
+                    value={employee.employeeNumber}
+                    mono
+                  />
+                  <EditableTextField
+                    id="employee-birth-date"
+                    label="Geburtsdatum"
+                    name="birthDate"
+                    value={employee.birthDate}
+                    mono
+                  />
+                  <EditableTextField
+                    id="employee-birth-place"
+                    label="Geburtsort"
+                    name="birthPlace"
+                    value={employee.birthPlace}
+                  />
+                  <EditableTextField
+                    id="employee-nationality"
+                    label="Nationalität"
+                    name="nationality"
+                    value={employee.nationality}
+                  />
+                  <EditableTextField
+                    id="employee-marital-status"
+                    label="Familienstand"
+                    name="maritalStatus"
+                    value={employee.maritalStatus}
+                  />
+                  <EditableTextField
+                    id="employee-private-address"
+                    label="Anschrift"
+                    name="privateAddress"
+                    value={employee.privateAddress}
+                  />
+                  <EditableTextField
+                    id="employee-master-email"
+                    label="E-Mail"
+                    name="email"
+                    type="email"
+                    value={employee.email}
+                    mono
+                  />
+                  <EditableTextField
+                    id="employee-master-phone"
+                    label="Telefon"
+                    name="phone"
+                    type="tel"
+                    value={employee.phone}
+                    mono
+                  />
+                  <EditableTextField
+                    id="employee-tax-id"
+                    label="Steuer-ID"
+                    name="taxId"
+                    value={employee.taxId}
+                    mono
+                  />
+                  <EditableTextField
+                    id="employee-social-security-number"
+                    label="Sozialversicherungsnummer"
+                    name="socialSecurityNumber"
+                    value={employee.socialSecurityNumber}
+                    mono
+                  />
+                  <EditableTextField
+                    id="employee-health-insurance"
+                    label="Krankenkasse"
+                    name="healthInsurance"
+                    value={employee.healthInsurance}
+                  />
+                  <EditableTextField
+                    id="employee-iban"
+                    label="IBAN"
+                    name="iban"
+                    value={employee.iban}
+                    mono
+                  />
+                </div>
+              ) : (
+                <div className="grid gap-y-[18px] gap-x-[22px] [grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
+                  <FieldValue
+                    label="Personalnummer"
+                    value={employee.employeeNumber}
+                    mono
+                  />
+                  <FieldValue
+                    label="Geburtsdatum"
+                    value={employee.birthDate}
+                    mono
+                  />
+                  <FieldValue label="Geburtsort" value={employee.birthPlace} />
+                  <FieldValue label="Nationalität" value={employee.nationality} />
+                  <FieldValue label="Familienstand" value={employee.maritalStatus} />
+                  <FieldValue label="Anschrift" value={employee.privateAddress} />
+                  <FieldValue label="E-Mail" value={employee.email} mono />
+                  <FieldValue label="Telefon" value={employee.phone} mono />
+                  <FieldValue label="Steuer-ID" value={employee.taxId} mono />
+                  <FieldValue
+                    label="Sozialversicherungsnummer"
+                    value={employee.socialSecurityNumber}
+                    mono
+                  />
+                  <FieldValue
+                    label="Krankenkasse"
+                    value={employee.healthInsurance}
+                  />
+                  <FieldValue label="IBAN" value={employee.iban} mono />
+                </div>
+              )}
+            </DetailCard>
+
             <DetailCard title={"Besch\u00e4ftigung"}>
               {isEditing ? (
                 <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]">

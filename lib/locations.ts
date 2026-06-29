@@ -110,7 +110,7 @@ const defaultActivity: LocationActivity[] = [
   },
   {
     actor: "Anna Weber",
-    text: "wurde der Fr\u00fchschicht Mi. zugewiesen",
+    text: "wurde der Frühschicht Mi. zugewiesen",
     time: "heute \u00b7 08:50",
     tone: "ink",
   },
@@ -187,7 +187,7 @@ const defaultShiftPlan: LocationShiftPlan = {
   ],
   rows: [
     {
-      label: "Fr\u00fchschicht",
+      label: "Frühschicht",
       tone: "blue",
       cells: [
         { staffing: "3/3", time: "06-14", state: "filled" },
@@ -239,8 +239,8 @@ export const locations: Location[] = [
   {
     id: "muenchen-hauptbahnhof",
     kind: "Filiale",
-    name: "M\u00fcnchen Hauptbahnhof",
-    address: "Bahnhofplatz 1, 80335 M\u00fcnchen",
+    name: "München Hauptbahnhof",
+    address: "Bahnhofplatz 1, 80335 München",
     employeeCount: 24,
     activeToday: 21,
     shiftCount: 3,
@@ -301,7 +301,7 @@ export const locations: Location[] = [
     accentClassName: "bg-[#2A6FDB]",
     lead: {
       initials: "SM",
-      name: "Sarah M\u00fcller",
+      name: "Sarah Müller",
       phone: "+49 30 1010-31",
       email: "berlin@ployo.de",
     },

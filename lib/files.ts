@@ -95,7 +95,7 @@ export const files: FileItem[] = [
     type: "DOCX",
   },
   {
-    name: "Brandschutzordnung M\u00fcnchen.pdf",
+    name: "Brandschutzordnung München.pdf",
     folder: "Standorte",
     folderSlug: "standorte",
     owner: "Thomas Berger",
@@ -136,7 +136,7 @@ export const fileMetrics = [
     caption: "zuletzt synchronisiert",
   },
   {
-    label: "Gesch\u00fctzt",
+    label: "Geschützt",
     value: files.filter((file) => file.locked).length.toString(),
     caption: "eingeschr\u00e4nkte Zugriffe",
   },

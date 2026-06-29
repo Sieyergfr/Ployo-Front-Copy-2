@@ -685,7 +685,7 @@ export default async function LocationDetailPage({
                 <DetailMetricCard
                   label="Offene Stellen"
                   value={location.openPositions}
-                  caption={"Fr\u00fchschicht Do."}
+                  caption={"Frühschicht Do."}
                   tone="danger"
                 />
                 <DetailMetricCard
