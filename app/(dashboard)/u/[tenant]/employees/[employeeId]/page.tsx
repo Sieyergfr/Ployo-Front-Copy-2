@@ -12,10 +12,10 @@ import {
 import {
   ArrowLeft,
   BriefcaseBusiness,
+  Eye,
   FileText,
   Folder,
   FolderPlus,
-  Link2,
   Lock,
   MessageSquare,
   Pencil,
@@ -266,31 +266,57 @@ function FilesTab({ employee }: { employee: Employee }) {
   );
 }
 
-function ContractFileLink({ employee }: { employee: Employee }) {
+function ContractDocumentCard({
+  employee,
+  fileHref,
+}: {
+  employee: Employee;
+  fileHref: string;
+}) {
   const contract = employee.contractDetails;
 
   return (
-    <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-bg p-3">
-      <span className="flex size-10 shrink-0 items-center justify-center rounded-[10px] bg-white text-muted-2">
-        <FileText size={17} />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-[13.5px] font-semibold text-ink">
-          {contract.linkedFileName}
-        </span>
-        <span className="mt-0.5 block truncate font-mono text-[10.5px] text-muted">
-          {contract.linkedFileMeta}
-        </span>
-      </span>
-      <button type="button" className="btn btn-secondary btn-sm">
-        <Link2 size={14} />
-        Datei verlinken
-      </button>
-    </div>
+    <DetailCard title="Vertragsdatei" className="[&>h2]:mb-3.5">
+      <div className="rounded-xl border border-border bg-bg p-4">
+        <div className="flex items-start gap-3.5">
+          <span className="flex size-11 shrink-0 items-center justify-center rounded-[10px] bg-white text-muted-2">
+            <FileText size={19} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-[14px] font-semibold text-ink">
+              {contract.linkedFileName}
+            </div>
+            <div className="mt-1 block truncate font-mono text-[10.5px] text-muted">
+              {contract.linkedFileMeta}
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2 font-mono text-[10px] uppercase tracking-[0.5px] text-muted">
+              <span className="rounded-[7px] border border-border-light bg-white px-2 py-[5px]">
+                PDF
+              </span>
+              <span className="rounded-[7px] border border-border-light bg-white px-2 py-[5px]">
+                Verknüpft
+              </span>
+            </div>
+          </div>
+        </div>
+        <Link href={fileHref} className="btn btn-primary btn-sm mt-4 w-full justify-center">
+          <Eye size={14} />
+          Öffnen
+        </Link>
+      </div>
+    </DetailCard>
   );
 }
 
-function ContractTab({ employee }: { employee: Employee }) {
+function ContractTab({
+  employee,
+  isEditing,
+  fileHref,
+}: {
+  employee: Employee;
+  isEditing: boolean;
+  fileHref: string;
+}) {
   const contract = employee.contractDetails;
 
   return (
@@ -312,54 +338,148 @@ function ContractTab({ employee }: { employee: Employee }) {
           }
           className="[&>h2]:mb-4"
         >
-          <ContractFileLink employee={employee} />
-
-          <div className="mt-5 grid gap-y-[18px] gap-x-[22px] [grid-template-columns:repeat(auto-fit,minmax(170px,1fr))]">
-            <FieldValue label="Vertragsart" value={contract.contractType} />
-            <FieldValue label="Eintritt" value={contract.entryDate} mono />
-            <FieldValue label="Austritt" value={contract.exitDate} mono />
-            <FieldValue label="Befristung" value={contract.fixedTerm} />
-            <FieldValue label="Probezeit" value={contract.probation} />
-            <FieldValue label="Kündigungsfrist" value={contract.noticePeriod} />
-          </div>
+          {isEditing ? (
+            <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]">
+              <EditableTextField
+                id="contract-type"
+                label="Vertragsart"
+                name="contractType"
+                value={contract.contractType}
+              />
+              <EditableTextField
+                id="contract-entry-date"
+                label="Eintritt"
+                name="entryDate"
+                value={contract.entryDate}
+                mono
+              />
+              <EditableTextField
+                id="contract-exit-date"
+                label="Austritt"
+                name="exitDate"
+                value={contract.exitDate}
+                mono
+              />
+              <EditableTextField
+                id="contract-fixed-term"
+                label="Befristung"
+                name="fixedTerm"
+                value={contract.fixedTerm}
+              />
+              <EditableTextField
+                id="contract-probation"
+                label="Probezeit"
+                name="probation"
+                value={contract.probation}
+              />
+              <EditableTextField
+                id="contract-notice-period"
+                label="Kündigungsfrist"
+                name="noticePeriod"
+                value={contract.noticePeriod}
+              />
+            </div>
+          ) : (
+            <div className="grid gap-y-[18px] gap-x-[22px] [grid-template-columns:repeat(auto-fit,minmax(170px,1fr))]">
+              <FieldValue label="Vertragsart" value={contract.contractType} />
+              <FieldValue label="Eintritt" value={contract.entryDate} mono />
+              <FieldValue label="Austritt" value={contract.exitDate} mono />
+              <FieldValue label="Befristung" value={contract.fixedTerm} />
+              <FieldValue label="Probezeit" value={contract.probation} />
+              <FieldValue label="Kündigungsfrist" value={contract.noticePeriod} />
+            </div>
+          )}
         </DetailCard>
 
         <DetailCard title="Position & Organisation">
-          <div className="grid gap-y-[18px] gap-x-[22px] [grid-template-columns:repeat(auto-fit,minmax(170px,1fr))]">
-            <FieldValue label="Position / Stelle" value={contract.position} />
-            <FieldValue label="Abteilung" value={contract.department} />
-            <FieldValue label="Vorgesetzter" value={contract.supervisor} />
-            <FieldValue label="Ort" value={contract.workLocation} />
-            <FieldValue label="Parteien" value={contract.parties} />
-            <FieldValue
-              label="Tarif / Regelwerk"
-              value={contract.collectiveAgreement}
-            />
-          </div>
+          {isEditing ? (
+            <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]">
+              <EditableTextField
+                id="contract-position"
+                label="Position / Stelle"
+                name="position"
+                value={contract.position}
+              />
+              <EditableTextField
+                id="contract-department"
+                label="Abteilung"
+                name="department"
+                value={contract.department}
+              />
+              <EditableTextField
+                id="contract-supervisor"
+                label="Vorgesetzter"
+                name="supervisor"
+                value={contract.supervisor}
+              />
+              <EditableTextField
+                id="contract-work-location"
+                label="Ort"
+                name="workLocation"
+                value={contract.workLocation}
+              />
+              <EditableTextField
+                id="contract-parties"
+                label="Parteien"
+                name="parties"
+                value={contract.parties}
+              />
+              <EditableTextField
+                id="contract-collective-agreement"
+                label="Tarif / Regelwerk"
+                name="collectiveAgreement"
+                value={contract.collectiveAgreement}
+              />
+            </div>
+          ) : (
+            <div className="grid gap-y-[18px] gap-x-[22px] [grid-template-columns:repeat(auto-fit,minmax(170px,1fr))]">
+              <FieldValue label="Position / Stelle" value={contract.position} />
+              <FieldValue label="Abteilung" value={contract.department} />
+              <FieldValue label="Vorgesetzter" value={contract.supervisor} />
+              <FieldValue label="Ort" value={contract.workLocation} />
+              <FieldValue label="Parteien" value={contract.parties} />
+              <FieldValue
+                label="Tarif / Regelwerk"
+                value={contract.collectiveAgreement}
+              />
+            </div>
+          )}
         </DetailCard>
       </div>
 
       <div className="flex flex-col gap-4">
         <DetailCard title="Konditionen">
-          <div className="flex flex-col gap-4">
-            <FieldValue label="Vergütung" value={contract.compensation} />
-            <FieldValue label="Arbeitszeit" value={contract.workingTime} />
-            <FieldValue label="Urlaub" value={contract.vacation} />
-          </div>
+          {isEditing ? (
+            <div className="grid gap-3">
+              <EditableTextField
+                id="contract-compensation"
+                label="Vergütung"
+                name="compensation"
+                value={contract.compensation}
+              />
+              <EditableTextField
+                id="contract-working-time"
+                label="Arbeitszeit"
+                name="workingTime"
+                value={contract.workingTime}
+              />
+              <EditableTextField
+                id="contract-vacation"
+                label="Urlaub"
+                name="vacation"
+                value={contract.vacation}
+              />
+            </div>
+          ) : (
+            <div className="flex flex-col gap-4">
+              <FieldValue label="Vergütung" value={contract.compensation} />
+              <FieldValue label="Arbeitszeit" value={contract.workingTime} />
+              <FieldValue label="Urlaub" value={contract.vacation} />
+            </div>
+          )}
         </DetailCard>
 
-        <DetailCard title="Klauseln" className="[&>h2]:mb-3.5">
-          <div className="flex flex-col gap-2">
-            {contract.clauses.map((clause) => (
-              <div
-                key={clause}
-                className="rounded-[10px] border border-border-light bg-bg px-3 py-2.5 text-[13px] text-ink"
-              >
-                {clause}
-              </div>
-            ))}
-          </div>
-        </DetailCard>
+        <ContractDocumentCard employee={employee} fileHref={fileHref} />
       </div>
     </div>
   );
@@ -429,9 +549,14 @@ export default async function EmployeeDetailPage({
   const isFilesTab = tab === "files";
   const isContractTab = tab === "contract";
   const isHomeTab = !isFilesTab && !isContractTab;
-  const isEditing = edit === "1" && isHomeTab;
+  const isEditableTab = isHomeTab || isContractTab;
+  const isEditing = edit === "1" && isEditableTab;
   const employeeHref = `/u/${tenant}/employees/${employee.id}`;
-  const employeeEditHref = `${employeeHref}?edit=1`;
+  const activeTabHref = isContractTab ? `${employeeHref}?tab=contract` : employeeHref;
+  const employeeFilesHref = `${employeeHref}?tab=files`;
+  const employeeEditHref = isContractTab
+    ? `${employeeHref}?tab=contract&edit=1`
+    : `${employeeHref}?edit=1`;
   const vacationPercent = Math.round(
     (employee.vacationTaken / employee.vacationTotal) * 100,
   );
@@ -473,11 +598,11 @@ export default async function EmployeeDetailPage({
         <div className="flex flex-wrap gap-[9px]">
           {isEditing ? (
             <>
-              <Link href={employeeHref} className="btn btn-secondary btn-sm">
+              <Link href={activeTabHref} className="btn btn-secondary btn-sm">
                 <X size={14} />
                 Abbrechen
               </Link>
-              <Link href={employeeHref} className="btn btn-primary btn-sm">
+              <Link href={activeTabHref} className="btn btn-primary btn-sm">
                 <Save size={14} />
                 Speichern
               </Link>
@@ -537,7 +662,11 @@ export default async function EmployeeDetailPage({
       {isFilesTab ? (
         <FilesTab employee={employee} />
       ) : isContractTab ? (
-        <ContractTab employee={employee} />
+        <ContractTab
+          employee={employee}
+          isEditing={isEditing}
+          fileHref={employeeFilesHref}
+        />
       ) : (
         <div className="grid items-start gap-4 [grid-template-columns:repeat(auto-fit,minmax(320px,1fr))]">
           <div className="flex flex-col gap-4">

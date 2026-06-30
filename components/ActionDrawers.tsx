@@ -726,7 +726,7 @@ export function ShiftSettingsDrawerButton() {
                   onClick={addShiftPreset}
                 >
                   <Plus size={14} />
-                  {"Hinzufügen"}
+                  Hinzuf&uuml;gen
                 </button>
               </div>
               <div className="grid gap-2">
@@ -853,7 +853,7 @@ export function ShiftSettingsDrawerButton() {
                   onClick={addTemplate}
                 >
                   <Plus size={14} />
-                  {"Hinzufügen"}
+                  Hinzuf&uuml;gen
                 </button>
               </div>
               <div className="grid gap-2">
