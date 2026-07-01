@@ -469,37 +469,47 @@ export function SicknessDrawerButton({
                 {item.location} · {isCurrent ? `seit ${item.since}` : `${item.startDate}-${item.endDate}`}
               </div>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Voraussichtlich bis">
-                <input type="date" className="input" defaultValue="2026-06-30" />
-              </Field>
-              <Field label="Arbeitsunfähig seit">
-                <input type="date" className="input" defaultValue="2026-06-24" />
-              </Field>
-            </div>
-            <Field label="Hinweise">
-              <textarea className="input min-h-24 resize-none" />
-            </Field>
-            <div className="flex flex-wrap gap-2">
-              <button type="button" className="btn btn-secondary btn-sm">
-                <CalendarClock size={15} />
-                Verlängern
-              </button>
-              <button type="button" className="btn btn-primary btn-sm">
-                <Check size={15} />
-                Krankheit beenden
-              </button>
-              <button type="button" className="btn btn-secondary btn-sm">
-                <Upload size={15} />
-                Attest hochladen
-              </button>
-            </div>
-            <LinkedFileBrowser
-              selectedIds={linkedFiles}
-              setSelectedIds={setLinkedFiles}
-            />
+            {isCurrent ? (
+              <>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field label="Voraussichtlich bis">
+                    <input type="date" className="input" defaultValue="2026-06-30" />
+                  </Field>
+                  <Field label="Arbeitsunfähig seit">
+                    <input type="date" className="input" defaultValue="2026-06-24" />
+                  </Field>
+                </div>
+                <Field label="Hinweise">
+                  <textarea className="input min-h-24 resize-none" />
+                </Field>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" className="btn btn-secondary btn-sm">
+                    <CalendarClock size={15} />
+                    Verlängern
+                  </button>
+                  <button type="button" className="btn btn-primary btn-sm">
+                    <Check size={15} />
+                    Krankheit beenden
+                  </button>
+                  <button type="button" className="btn btn-secondary btn-sm">
+                    <Upload size={15} />
+                    Attest hochladen
+                  </button>
+                </div>
+                <LinkedFileBrowser
+                  selectedIds={linkedFiles}
+                  setSelectedIds={setLinkedFiles}
+                />
+              </>
+            ) : (
+              <div className="rounded-xl border border-border bg-bg p-4 text-[13px] leading-[1.55] text-muted-2">
+                Diese Krankmeldung ist abgeschlossen und kann nicht mehr bearbeitet
+                werden. Neue Dokumente oder Korrekturen müssen als neuer Vorgang
+                erfasst werden.
+              </div>
+            )}
           </div>
-          <DrawerFooter onClose={() => setIsOpen(false)} />
+          {isCurrent && <DrawerFooter onClose={() => setIsOpen(false)} />}
         </RightDrawer>
       )}
     </>

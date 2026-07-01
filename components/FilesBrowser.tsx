@@ -1,7 +1,7 @@
 import type { FileFolder, FileItem } from "@/lib/files";
 import { FileReminderButton } from "@/components/ActionDrawers";
 import { CreateFolderButton, UploadFileButton } from "@/components/FileActionButtons";
-import { ArrowLeft, FileText, Folder, Lock } from "lucide-react";
+import { ArrowLeft, FileText, Folder, Lock, Upload } from "lucide-react";
 import Link from "next/link";
 
 function FolderCard({
@@ -21,7 +21,7 @@ function FolderCard({
           <Folder size={19} />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[13.5px] font-semibold text-ink">
+          <span className="block text-[13.5px] font-semibold leading-snug text-ink">
             {folder.name}
           </span>
           <span className="mt-[3px] block truncate font-mono text-[10.5px] text-muted">
@@ -29,9 +29,6 @@ function FolderCard({
           </span>
         </span>
       </Link>
-      <span className="hidden font-mono text-[10.5px] text-muted md:block">
-        {folder.updatedAt}
-      </span>
       {folder.locked && <Lock size={13} className="shrink-0 text-muted" />}
       <FileReminderButton
         compact
@@ -42,28 +39,39 @@ function FolderCard({
   );
 }
 
-function FileRow({ file }: { file: FileItem }) {
+function FileRow({ file, baseHref }: { file: FileItem; baseHref: string }) {
   return (
-    <div
-      className="flex w-full cursor-pointer items-center gap-3.5 border-t border-border-soft py-3 text-left font-sans transition-colors hover:bg-bg"
-    >
-      <span className="flex size-[30px] shrink-0 items-center justify-center rounded-lg bg-border-soft text-muted-2">
-        <FileText size={14} />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-[13.5px] font-medium text-ink">
-          {file.name}
+    <div className="flex w-full items-center gap-3.5 border-t border-border-soft py-3 text-left font-sans transition-colors hover:bg-bg">
+      <Link
+        href={`${baseHref}/${file.folderSlug}/${file.slug}`}
+        className="flex min-w-0 flex-1 cursor-pointer items-center gap-3.5"
+      >
+        <span className="flex size-[30px] shrink-0 items-center justify-center rounded-lg bg-border-soft text-muted-2">
+          <FileText size={14} />
         </span>
-        <span className="mt-0.5 block truncate font-mono text-[10.5px] text-muted">
-          {file.folder} {"\u00b7"} {file.owner} {"\u00b7"} {file.updatedAt}
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[13.5px] font-medium text-ink">
+            {file.name}
+          </span>
+          <span className="mt-0.5 block truncate font-mono text-[10.5px] text-muted">
+            {file.folder} {"\u00b7"} {file.owner} {"\u00b7"} {file.updatedAt}
+          </span>
         </span>
-      </span>
+      </Link>
       <span className="hidden font-mono text-[10.5px] text-muted md:block">
         {file.size}
       </span>
       <span className="rounded-[7px] border border-border-light px-2 py-[3px] font-mono text-[10px] text-muted-2">
-        {file.type}
+        v{file.version}
       </span>
+      <button
+        type="button"
+        className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-[8px] border border-border bg-white text-muted transition-colors hover:border-muted hover:text-ink"
+        title="Neue Version hochladen"
+        aria-label={`Neue Version für ${file.name} hochladen`}
+      >
+        <Upload size={14} />
+      </button>
       {file.locked && <Lock size={13} className="shrink-0 text-muted" />}
       <FileReminderButton
         compact
@@ -134,8 +142,7 @@ export default function FilesBrowser({
                 {activeFolder.name}
               </div>
               <div className="mt-[3px] font-mono text-[10.5px] text-muted">
-                {activeFolder.fileCount} Dateien {"\u00b7"} {activeFolder.owner}{" "}
-                {"\u00b7"} {activeFolder.updatedAt}
+                {activeFolder.fileCount} Dateien {"\u00b7"} {activeFolder.owner}
               </div>
             </div>
             {activeFolder.locked && (
@@ -156,7 +163,7 @@ export default function FilesBrowser({
         </div>
         {files.length > 0 ? (
           files.map((file) => (
-            <FileRow key={`${file.folderSlug}-${file.name}`} file={file} />
+            <FileRow key={`${file.folderSlug}-${file.name}`} file={file} baseHref={baseHref} />
           ))
         ) : (
           <div className="rounded-xl border border-dashed border-border bg-bg px-4 py-8 text-center text-[13px] text-muted">

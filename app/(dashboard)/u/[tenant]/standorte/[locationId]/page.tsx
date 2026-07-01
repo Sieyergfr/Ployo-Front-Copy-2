@@ -1,4 +1,8 @@
 import { FileReminderButton } from "@/components/ActionDrawers";
+import AuditLogPanel from "@/components/AuditLogPanel";
+import { ConfirmedSaveLink, UnsavedChangesGuard } from "@/components/EditSafety";
+import LocationShiftPlanner from "@/components/LocationShiftPlanner";
+import { makeAuditLogs } from "@/lib/audit";
 import {
   getLocationById,
   type Location,
@@ -13,13 +17,14 @@ import {
 } from "@/lib/locations";
 import {
   ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
   FileText,
   Folder,
   FolderPlus,
   Lock,
   Pencil,
   Plus,
-  Save,
   Upload,
   X,
 } from "lucide-react";
@@ -376,18 +381,14 @@ function EmployeeShiftMark({
     );
   }
 
-  const color: Record<NonNullable<LocationShiftEmployee["days"][number]>, string> = {
-    F: "bg-[#2A6FDB] text-white",
-    N: "bg-muted-2 text-white",
-    S: "bg-success text-white",
-  };
-
   return (
-    <div
-      className={`flex h-[26px] items-center justify-center rounded-md font-mono text-[10px] font-semibold ${color[value]}`}
+    <button
+      type="button"
+      className="flex h-[30px] w-full cursor-pointer items-center justify-center rounded-md bg-ink px-1 font-mono text-[10px] font-semibold text-white transition-colors hover:bg-muted-2"
+      title="Schicht bearbeiten"
     >
       {value}
-    </div>
+    </button>
   );
 }
 
@@ -453,11 +454,37 @@ function ShiftsTab({ location }: { location: Location }) {
       </div>
 
       <div className="border-t border-border px-[22px] py-[18px]">
-        <div className="mb-3.5 font-mono text-[9px] uppercase tracking-[0.5px] text-muted">
-          Eingeplante Mitarbeiter
+        <div className="mb-3.5 flex flex-wrap items-center justify-between gap-3">
+          <div className="font-mono text-[9px] uppercase tracking-[0.5px] text-muted">
+            Eingeplante Mitarbeiter
+          </div>
+          <div className="flex items-center gap-1 rounded-[10px] border border-border bg-bg p-1">
+            <button type="button" className="flex size-7 items-center justify-center rounded-[8px] bg-white text-muted">
+              <ChevronLeft size={14} />
+            </button>
+            <span className="px-2 font-mono text-[11px] font-semibold text-ink">
+              {shiftPlan.week}
+            </span>
+            <button type="button" className="flex size-7 items-center justify-center rounded-[8px] bg-white text-muted">
+              <ChevronRight size={14} />
+            </button>
+          </div>
         </div>
         <div className="overflow-x-auto">
           <div className="min-w-[760px]">
+            <div className="grid items-center gap-1.5 pb-2 [grid-template-columns:180px_repeat(7,1fr)]">
+              <div />
+              {shiftPlan.days.map((day) => (
+                <div
+                  key={`employee-head-${day.label}`}
+                  className={`text-center font-mono text-[10px] font-semibold ${
+                    day.weekend ? "text-danger" : "text-muted"
+                  }`}
+                >
+                  {day.label}
+                </div>
+              ))}
+            </div>
             {shiftPlan.employees.map((employee) => (
               <EmployeeShiftRow key={employee.initials} employee={employee} />
             ))}
@@ -467,6 +494,8 @@ function ShiftsTab({ location }: { location: Location }) {
     </section>
   );
 }
+
+void ShiftsTab;
 
 export default async function LocationDetailPage({
   params,
@@ -486,9 +515,15 @@ export default async function LocationDetailPage({
   const isEditing = edit === "1" && isHomeTab;
   const locationHref = `/u/${tenant}/standorte/${location.id}`;
   const locationEditHref = `${locationHref}?edit=1`;
+  const auditEntries = makeAuditLogs({
+    id: location.id,
+    name: location.name,
+    source: "Standortdetail",
+  });
 
   return (
     <>
+      <UnsavedChangesGuard active={isEditing} />
       <div className="mb-[18px]">
         <Link
           href={`/u/${tenant}/standorte`}
@@ -559,10 +594,7 @@ export default async function LocationDetailPage({
                   <X size={14} />
                   Abbrechen
                 </Link>
-                <Link href={locationHref} className="btn btn-primary btn-sm">
-                  <Save size={14} />
-                  Speichern
-                </Link>
+                <ConfirmedSaveLink href={locationHref} />
               </>
             ) : (
               <>
@@ -619,7 +651,7 @@ export default async function LocationDetailPage({
       {isFilesTab ? (
         <FilesTab location={location} />
       ) : isShiftsTab ? (
-        <ShiftsTab location={location} />
+        <LocationShiftPlanner location={location} />
       ) : (
         <>
           <section className="mb-4 grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(190px,1fr))]">
@@ -785,6 +817,10 @@ export default async function LocationDetailPage({
           </div>
         </>
       )}
+
+      <div className="mt-4">
+        <AuditLogPanel entries={auditEntries} />
+      </div>
 
       <div className="mt-8 text-center font-mono text-[10px] tracking-[0.4px] text-[#B0B0AB]">
         Ployo {"\u00b7"} Personalakte-System {"\u00b7"} Alle Zugriffe

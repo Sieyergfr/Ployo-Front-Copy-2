@@ -44,10 +44,22 @@
   }
 } */
 
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
+}
+
+html,
+body {
+  height: 100%;
+  overflow: hidden;
 }
 
 .text-logo {
@@ -207,19 +219,29 @@ body {
 }
 
 @utility checkbox-row {
-  @apply flex items-center gap-[9px];
+  @apply flex min-w-0 items-center gap-[9px];
 }
 
 @utility checkbox {
-  @apply flex size-[18px] shrink-0 items-center justify-center rounded-[5px] border border-border-light bg-white text-white transition-all text-white;
+  @apply relative flex size-[18px] shrink-0 items-center justify-center overflow-hidden rounded-[5px] border border-border-light bg-white text-white transition-all text-white;
 } 
 
 @utility checkbox-label {
-  @apply select-none text-[13px] text-muted-2;
+  @apply min-w-0 select-none text-[13px] text-muted-2;
 }
 
 .peer:checked + .checkbox {
   @apply border-ink bg-ink;
+}
+
+.peer:checked + .checkbox::after {
+  content: "";
+  display: block;
+  width: 9px;
+  height: 5px;
+  border-left: 2px solid #fff;
+  border-bottom: 2px solid #fff;
+  transform: translateY(-1px) rotate(-45deg);
 }
 
 .peer:focus-visible + .checkbox {
@@ -348,11 +370,10 @@ body {
 }
 
 @utility sidebar {
-  @apply sticky top-0 flex h-screen min-w-[236px] flex-[0_0_236px] flex-col overflow-hidden bg-[#0D0D0D] text-[#EDEDEA];
+  @apply flex h-svh min-w-[236px] flex-[0_0_236px] flex-col overflow-hidden bg-[#0D0D0D] text-[#EDEDEA];
   transition:
     flex-basis 220ms cubic-bezier(0.4, 0, 0.2, 1),
     min-width 220ms cubic-bezier(0.4, 0, 0.2, 1);
-  align-self: flex-start;
 }
 
 @utility sidebar-collapsed {
@@ -530,11 +551,11 @@ body {
 }
 
 @utility main-content {
-  @apply h-screen min-w-0 flex-1 overflow-y-auto;
+  @apply h-full min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto;
 }
 
 @utility container {
-  @apply mx-auto max-w-[1200px] px-[clamp(24px,4vw,60px)] pt-10 pb-16;
+  @apply mx-auto w-full max-w-[1200px] px-[clamp(24px,4vw,60px)] pt-10 pb-16;
 } 
 
 @keyframes action-drawer-backdrop-in {

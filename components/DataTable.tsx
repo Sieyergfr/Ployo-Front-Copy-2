@@ -8,6 +8,7 @@ export type DataTableColumn<T> = {
   render: (row: T) => ReactNode;
   className?: string;
   headerClassName?: string;
+  isRowAction?: boolean;
 };
 
 type DataTableProps<T> = {
@@ -76,14 +77,29 @@ export default function DataTable<T>({
 
               if (href) {
                 return (
-                  <Link
-                    key={key}
-                    href={href}
-                    className={rowClassName}
-                    style={gridStyle}
-                  >
-                    {rowContent}
-                  </Link>
+                  <div key={key} className={rowClassName} style={gridStyle}>
+                    {columns.map((column) => {
+                      const content = (
+                        <div className={cx("min-w-0", column.className)}>
+                          {column.render(row)}
+                        </div>
+                      );
+
+                      if (column.isRowAction) {
+                        return <div key={column.key}>{content}</div>;
+                      }
+
+                      return (
+                        <Link
+                          key={column.key}
+                          href={href}
+                          className="block min-w-0 no-underline"
+                        >
+                          {content}
+                        </Link>
+                      );
+                    })}
+                  </div>
                 );
               }
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useUniversalPopup } from "@/components/UniversalPopup";
+import { LocationMultiSelectDropdown } from "@/components/TeamEditControls";
 import { employees } from "@/lib/employees";
 import { Check, ChevronDown, Plus, Users } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -187,17 +188,7 @@ function CreateTeamForm({ onDone }: { onDone: () => void }) {
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <CustomDropdownField
-          label="Hauptstandort"
-          name="location"
-          placeholder="Standort auswählen"
-          options={[
-            { value: "muenchen", label: "München" },
-            { value: "berlin", label: "Berlin" },
-            { value: "hamburg", label: "Hamburg" },
-            { value: "alle", label: "Alle Standorte" },
-          ]}
-        />
+        <LocationMultiSelectDropdown defaultLocations={["München"]} />
 
         <CustomDropdownField
           label="Teamleitung"

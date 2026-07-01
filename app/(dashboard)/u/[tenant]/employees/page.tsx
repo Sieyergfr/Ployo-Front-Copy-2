@@ -6,6 +6,7 @@ import DataTable, {
   type DataTableColumn,
 } from "@/components/DataTable";
 import InviteEmployeeButton from "@/components/InviteEmployeeButton";
+import EmployeeQuickView from "@/components/EmployeeQuickView";
 import PageHeader from "@/components/PageHeader";
 import SearchInput from "@/components/inputs/SearchInput";
 import {
@@ -15,7 +16,8 @@ import {
 } from "@/lib/employees";
 import { ChevronDown } from "lucide-react";
 
-const columns: Array<DataTableColumn<Employee>> = [
+function getColumns(tenant: string): Array<DataTableColumn<Employee>> {
+  return [
   {
     key: "name",
     header: "Name",
@@ -69,12 +71,29 @@ const columns: Array<DataTableColumn<Employee>> = [
       return <DataTableStatus label={status.label} tone={status.tone} />;
     },
   },
-];
+    {
+      key: "quickView",
+      header: "",
+      width: "56px",
+      headerClassName: "text-right",
+      isRowAction: true,
+      render: (employee) => (
+        <div className="flex justify-end">
+          <EmployeeQuickView
+            employee={employee}
+            href={`/u/${tenant}/employees/${employee.id}`}
+          />
+        </div>
+      ),
+    },
+  ];
+}
 
 export default async function EmployeesPage({
   params,
 }: PageProps<"/u/[tenant]/employees">) {
   const { tenant } = await params;
+  const columns = getColumns(tenant);
 
   return (
     <>
@@ -114,6 +133,7 @@ export default async function EmployeesPage({
         rows={employees}
         getRowKey={(employee) => employee.id}
         getRowHref={(employee) => `/u/${tenant}/employees/${employee.id}`}
+        minWidth={980}
       />
     </>
   );

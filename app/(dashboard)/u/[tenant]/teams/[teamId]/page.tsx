@@ -5,11 +5,18 @@ import {
   type Team,
   type TeamMember,
 } from "@/lib/teams";
+import AuditLogPanel from "@/components/AuditLogPanel";
+import { ConfirmedSaveLink, UnsavedChangesGuard } from "@/components/EditSafety";
+import {
+  LocationMultiSelectDropdown,
+  TeamColorButtons,
+} from "@/components/TeamEditControls";
+import TeamRoleEditorButton from "@/components/TeamRoleEditorButton";
+import { makeAuditLogs } from "@/lib/audit";
 import {
   ArrowLeft,
   Pencil,
   Plus,
-  Save,
   UserRoundCheck,
   UserRoundMinus,
   X,
@@ -127,6 +134,73 @@ function EditableSelectField({
   );
 }
 
+const teamColorOptions = [
+  { value: "bg-[#C9622A]", label: "Orange", swatch: "bg-[#C9622A]" },
+  { value: "bg-[#2A5BC9]", label: "Blau", swatch: "bg-[#2A5BC9]" },
+  { value: "bg-[#1D8A65]", label: "Grün", swatch: "bg-[#1D8A65]" },
+  { value: "bg-[#7A3C9C]", label: "Violett", swatch: "bg-[#7A3C9C]" },
+];
+
+function TeamColorSelect({ team }: { team: Team }) {
+  return (
+    <div className="field">
+      <label htmlFor="team-color" className="label">
+        Farbmarkierung
+      </label>
+      <select
+        id="team-color"
+        name="color"
+        className="input cursor-pointer bg-white"
+        defaultValue={team.colorClassName}
+      >
+        {teamColorOptions.map((color) => (
+          <option key={color.value} value={color.value}>
+            {color.label}
+          </option>
+        ))}
+      </select>
+      <div className="mt-2 flex gap-2">
+        {teamColorOptions.map((color) => (
+          <span
+            key={color.value}
+            className={`size-5 rounded-full border border-border ${color.swatch}`}
+            title={color.label}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TeamLocationsMultiSelect({ team }: { team: Team }) {
+  const selectedLocations = team.locations.split(",").map((item) => item.trim());
+
+  return (
+    <div className="field">
+      <span className="label">Standorte</span>
+      <div className="grid gap-2 rounded-xl border border-border bg-bg p-3">
+        {["München", "Berlin", "Hamburg"].map((location) => (
+          <label key={location} className="checkbox-row">
+            <input
+              type="checkbox"
+              name="locations"
+              value={location}
+              className="peer sr-only"
+              defaultChecked={selectedLocations.includes(location)}
+            />
+            <span className="checkbox" />
+            <span className="checkbox-label">{location}</span>
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+void EditableSelectField;
+void TeamColorSelect;
+void TeamLocationsMultiSelect;
+
 function teamAccentTextClass(team: Team) {
   const colors: Record<string, string> = {
     empfang: "text-[#7A3C9C]",
@@ -235,10 +309,7 @@ function MemberRow({
           </button>
         )}
         {isEditing ? (
-          <button type="button" className="btn btn-secondary btn-sm px-3">
-            <Pencil size={13} />
-            Rolle
-          </button>
+          <TeamRoleEditorButton member={member} />
         ) : (
           <span className="font-mono text-[10px] text-muted">-</span>
         )}
@@ -356,6 +427,7 @@ export default async function TeamDetailPage({
 
   return (
     <>
+      <UnsavedChangesGuard active={isEditing} />
       <section className="mb-7 grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]">
         {teamMetrics.map((metric) => (
           <TeamMetricCard key={metric.label} {...metric} />
@@ -384,11 +456,10 @@ export default async function TeamDetailPage({
                   name="name"
                   value={team.name}
                 />
-                <EditableTextField
-                  id="team-locations"
-                  label="Standorte"
-                  name="locations"
-                  value={team.locations}
+                <LocationMultiSelectDropdown
+                  defaultLocations={team.locations
+                    .split(",")
+                    .map((item) => item.trim())}
                 />
               </div>
             ) : (
@@ -429,10 +500,7 @@ export default async function TeamDetailPage({
                   <X size={14} />
                   Abbrechen
                 </Link>
-                <Link href={teamHref} className="btn btn-primary btn-sm">
-                  <Save size={14} />
-                  Speichern
-                </Link>
+                <ConfirmedSaveLink href={teamHref} />
               </div>
             ) : (
               <Link href={teamEditHref} className="btn btn-secondary btn-sm">
@@ -448,32 +516,8 @@ export default async function TeamDetailPage({
         <>
           <TeamLeaderEditor team={team} />
           <section className="mb-3.5 rounded-card border border-border bg-white px-6 py-4">
-            <div className="grid gap-3 sm:grid-cols-3">
-              <EditableSelectField
-                id="team-default-role"
-                label="Standardrolle"
-                name="defaultRole"
-                value={team.name}
-                options={["Verkauf", "Logistik", "Service", "Empfang"]}
-              />
-              <EditableSelectField
-                id="team-color"
-                label="Farbmarkierung"
-                name="color"
-                value={team.colorClassName}
-                options={[
-                  "bg-[#C9622A]",
-                  "bg-[#2A5BC9]",
-                  "bg-[#1D8A65]",
-                  "bg-[#7A3C9C]",
-                ]}
-              />
-              <EditableTextField
-                id="team-capacity"
-                label="Zielgröße"
-                name="capacity"
-                value={`${team.members.length + 2}`}
-              />
+            <div className="grid gap-3 sm:grid-cols-2">
+              <TeamColorButtons defaultValue={team.colorClassName} />
             </div>
           </section>
         </>
@@ -513,6 +557,16 @@ export default async function TeamDetailPage({
           </div>
         </div>
       </section>
+
+      <div className="mt-4">
+        <AuditLogPanel
+          entries={makeAuditLogs({
+            id: team.id,
+            name: team.name,
+            source: "Teamdetail",
+          })}
+        />
+      </div>
 
       <div className="mt-8 text-center font-mono text-[10px] tracking-[0.4px] text-[#B0B0AB]">
         Ployo {"\u00b7"} Personalakte-System {"\u00b7"} Alle Zugriffe

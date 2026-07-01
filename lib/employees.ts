@@ -21,6 +21,35 @@ export type EmployeeFile = {
   locked?: boolean;
 };
 
+export type EmergencyContact = {
+  id: string;
+  name: string;
+  relation: string;
+  phone: string;
+  email?: string;
+  note?: string;
+};
+
+export type PayrollStatement = {
+  id: string;
+  period: string;
+  issuedAt: string;
+  gross: string;
+  net: string;
+  fileName: string;
+  status: "available" | "corrected";
+};
+
+export type InfoRequest = {
+  id: string;
+  title: string;
+  requestedBy: string;
+  requestedAt: string;
+  dueAt: string;
+  fileRequested: boolean;
+  status: "open" | "uploaded" | "review";
+};
+
 export type EmployeeShift = {
   day: string;
   label: string;
@@ -85,6 +114,9 @@ export type Employee = {
   documents: EmployeeDocument[];
   fileFolders: EmployeeFileFolder[];
   files: EmployeeFile[];
+  emergencyContacts: EmergencyContact[];
+  payrollStatements: PayrollStatement[];
+  infoRequests: InfoRequest[];
   shifts: EmployeeShift[];
   timeline: EmployeeTimelineItem[];
   contractDetails: EmployeeContractDetails;
@@ -160,6 +192,75 @@ const defaultFiles: EmployeeFile[] = [
     size: "118 KB",
     updatedAt: "31.05.2026",
     locked: true,
+  },
+];
+
+const defaultEmergencyContacts: EmergencyContact[] = [
+  {
+    id: "primary",
+    name: "Clara Wagner",
+    relation: "Partnerin",
+    phone: "+49 170 456 9821",
+    email: "clara.wagner@example.com",
+    note: "Darf bei medizinischen Notfällen sofort kontaktiert werden.",
+  },
+  {
+    id: "secondary",
+    name: "Martin Wagner",
+    relation: "Vater",
+    phone: "+49 89 882244",
+    note: "Ersatzkontakt, falls primär nicht erreichbar.",
+  },
+];
+
+const defaultPayrollStatements: PayrollStatement[] = [
+  {
+    id: "payroll-2026-06",
+    period: "Juni 2026",
+    issuedAt: "30.06.2026 · 07:12",
+    gross: "2.980,00 EUR",
+    net: "1.984,22 EUR",
+    fileName: "Lohnabrechnung-2026-06.pdf",
+    status: "available",
+  },
+  {
+    id: "payroll-2026-05",
+    period: "Mai 2026",
+    issuedAt: "31.05.2026 · 07:04",
+    gross: "2.980,00 EUR",
+    net: "1.984,22 EUR",
+    fileName: "Lohnabrechnung-2026-05.pdf",
+    status: "available",
+  },
+  {
+    id: "payroll-2026-04",
+    period: "April 2026",
+    issuedAt: "30.04.2026 · 07:08",
+    gross: "2.980,00 EUR",
+    net: "1.971,18 EUR",
+    fileName: "Lohnabrechnung-2026-04-korrigiert.pdf",
+    status: "corrected",
+  },
+];
+
+const defaultInfoRequests: InfoRequest[] = [
+  {
+    id: "bank-update",
+    title: "Aktuelle Bankverbindung bestätigen",
+    requestedBy: "Carla Brandt",
+    requestedAt: "26.06.2026 · 09:10",
+    dueAt: "05.07.2026",
+    fileRequested: false,
+    status: "open",
+  },
+  {
+    id: "certificate",
+    title: "Fortbildungsnachweis hochladen",
+    requestedBy: "Thomas Berger",
+    requestedAt: "20.06.2026 · 15:44",
+    dueAt: "12.07.2026",
+    fileRequested: true,
+    status: "uploaded",
   },
 ];
 
@@ -249,6 +350,9 @@ function makeEmployee(
     | "documents"
     | "fileFolders"
     | "files"
+    | "emergencyContacts"
+    | "payrollStatements"
+    | "infoRequests"
     | "shifts"
     | "timeline"
     | "contractDetails"
@@ -276,6 +380,9 @@ function makeEmployee(
         | "documents"
         | "fileFolders"
         | "files"
+        | "emergencyContacts"
+        | "payrollStatements"
+        | "infoRequests"
         | "shifts"
         | "timeline"
         | "contractDetails"
@@ -303,6 +410,9 @@ function makeEmployee(
     documents: defaultDocuments,
     fileFolders: defaultFileFolders,
     files: defaultFiles,
+    emergencyContacts: defaultEmergencyContacts,
+    payrollStatements: defaultPayrollStatements,
+    infoRequests: defaultInfoRequests,
     shifts: defaultShifts,
     timeline: defaultTimeline,
     contractDetails: {

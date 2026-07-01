@@ -1,5 +1,9 @@
 import { DataTableStatus } from "@/components/DataTable";
+import AuditLogPanel from "@/components/AuditLogPanel";
 import { FileReminderButton } from "@/components/ActionDrawers";
+import EmployeeInfoRequestButton from "@/components/EmployeeInfoRequestButton";
+import { ConfirmedSaveLink, UnsavedChangesGuard } from "@/components/EditSafety";
+import { makeAuditLogs } from "@/lib/audit";
 import {
   employeeStatusConfig,
   getEmployeeById,
@@ -11,6 +15,7 @@ import {
 } from "@/lib/employees";
 import {
   ArrowLeft,
+  AlertTriangle,
   BriefcaseBusiness,
   Eye,
   FileText,
@@ -19,7 +24,6 @@ import {
   Lock,
   MessageSquare,
   Pencil,
-  Save,
   X,
   Upload,
 } from "lucide-react";
@@ -45,6 +49,150 @@ function DetailCard({
       </h2>
       {children}
     </section>
+  );
+}
+
+function EmergencyContactsCard({
+  employee,
+  isEditing,
+}: {
+  employee: Employee;
+  isEditing: boolean;
+}) {
+  return (
+    <DetailCard
+      title={
+        <span className="flex items-center gap-2 text-danger">
+          <AlertTriangle size={17} />
+          Notfallkontakte
+        </span>
+      }
+      className="border-danger/25 bg-danger/5 [&>h2]:mb-3.5"
+    >
+      <div className="grid gap-2.5">
+        {employee.emergencyContacts.map((contact, index) => (
+          <div
+            key={contact.id}
+            className="rounded-xl border border-danger/20 bg-white p-3"
+          >
+            {isEditing ? (
+              <div className="grid gap-2 sm:grid-cols-2">
+                <input
+                  className="input bg-white"
+                  aria-label={`Notfallkontakt ${index + 1} Name`}
+                  defaultValue={contact.name}
+                />
+                <input
+                  className="input bg-white"
+                  aria-label={`Notfallkontakt ${index + 1} Beziehung`}
+                  defaultValue={contact.relation}
+                />
+                <input
+                  className="input input-mono bg-white"
+                  aria-label={`Notfallkontakt ${index + 1} Telefon`}
+                  defaultValue={contact.phone}
+                />
+                <input
+                  className="input bg-white"
+                  aria-label={`Notfallkontakt ${index + 1} E-Mail`}
+                  defaultValue={contact.email ?? ""}
+                  placeholder="E-Mail optional"
+                />
+              </div>
+            ) : (
+              <>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-[14px] font-semibold text-ink">
+                      {contact.name}
+                    </div>
+                    <div className="mt-0.5 text-[12px] text-muted">
+                      {contact.relation}
+                    </div>
+                  </div>
+                  <div className="font-mono text-[12px] font-semibold text-danger">
+                    {contact.phone}
+                  </div>
+                </div>
+                {contact.note && (
+                  <div className="mt-2 text-[12px] text-muted-2">{contact.note}</div>
+                )}
+              </>
+            )}
+          </div>
+        ))}
+      </div>
+      {isEditing && (
+        <button type="button" className="btn btn-secondary btn-sm mt-3">
+          Kontakt hinzufügen
+        </button>
+      )}
+    </DetailCard>
+  );
+}
+
+function PayrollTab({ employee }: { employee: Employee }) {
+  return (
+    <DetailCard title="Gehaltsabrechnungen" className="[&>h2]:mb-3.5">
+      {employee.payrollStatements.map((statement) => (
+        <div
+          key={statement.id}
+          className="grid gap-3 border-t border-border-soft py-3.5 sm:grid-cols-[1fr_150px_150px_120px]"
+        >
+          <div className="min-w-0">
+            <div className="truncate text-[13.5px] font-semibold text-ink">
+              {statement.period}
+            </div>
+            <div className="mt-0.5 truncate font-mono text-[10.5px] text-muted">
+              {statement.fileName} · {statement.issuedAt}
+            </div>
+          </div>
+          <div className="font-mono text-[12px] text-muted-2">
+            Brutto {statement.gross}
+          </div>
+          <div className="font-mono text-[12px] text-ink">
+            Netto {statement.net}
+          </div>
+          <span className="h-fit rounded-[7px] border border-border-light px-2 py-[3px] text-center font-mono text-[10px] text-muted-2">
+            {statement.status === "corrected" ? "Korrigiert" : "Verfügbar"}
+          </span>
+        </div>
+      ))}
+    </DetailCard>
+  );
+}
+
+function InfoRequestsCard({ employee }: { employee: Employee }) {
+  return (
+    <DetailCard title="Info-Anfragen" className="[&>h2]:mb-3.5">
+      {employee.infoRequests.map((request) => (
+        <div key={request.id} className="border-t border-border-soft py-3">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div className="min-w-0">
+              <div className="truncate text-[13px] font-semibold text-ink">
+                {request.title}
+              </div>
+              <div className="mt-0.5 font-mono text-[10.5px] text-muted">
+                {request.requestedBy} · {request.requestedAt}
+              </div>
+            </div>
+            <span className="rounded-[7px] bg-border-soft px-2 py-[3px] font-mono text-[10px] text-muted-2">
+              bis {request.dueAt}
+            </span>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {request.fileRequested && (
+              <span className="rounded-[7px] border border-border-light px-2 py-[3px] font-mono text-[10px] text-muted">
+                Datei gewünscht
+              </span>
+            )}
+            <span className="rounded-[7px] border border-border-light px-2 py-[3px] font-mono text-[10px] text-muted">
+              {request.status === "uploaded" ? "Upload erhalten" : "Offen"}
+            </span>
+          </div>
+        </div>
+      ))}
+    </DetailCard>
   );
 }
 
@@ -548,12 +696,18 @@ export default async function EmployeeDetailPage({
   const status = employeeStatusConfig[employee.status];
   const isFilesTab = tab === "files";
   const isContractTab = tab === "contract";
-  const isHomeTab = !isFilesTab && !isContractTab;
+  const isPayrollTab = tab === "payroll";
+  const isHomeTab = !isFilesTab && !isContractTab && !isPayrollTab;
   const isEditableTab = isHomeTab || isContractTab;
   const isEditing = edit === "1" && isEditableTab;
   const employeeHref = `/u/${tenant}/employees/${employee.id}`;
   const activeTabHref = isContractTab ? `${employeeHref}?tab=contract` : employeeHref;
   const employeeFilesHref = `${employeeHref}?tab=files`;
+  const auditEntries = makeAuditLogs({
+    id: employee.id,
+    name: employee.name,
+    source: "Mitarbeiterakte",
+  });
   const employeeEditHref = isContractTab
     ? `${employeeHref}?tab=contract&edit=1`
     : `${employeeHref}?edit=1`;
@@ -564,6 +718,7 @@ export default async function EmployeeDetailPage({
 
   return (
     <>
+      <UnsavedChangesGuard active={isEditing} />
       <div className="mb-[22px] flex flex-wrap items-center gap-3.5">
         <Link href={`/u/${tenant}/employees`} className="btn btn-secondary btn-sm">
           <ArrowLeft size={14} />
@@ -602,10 +757,7 @@ export default async function EmployeeDetailPage({
                 <X size={14} />
                 Abbrechen
               </Link>
-              <Link href={activeTabHref} className="btn btn-primary btn-sm">
-                <Save size={14} />
-                Speichern
-              </Link>
+              <ConfirmedSaveLink href={activeTabHref} />
             </>
           ) : (
             <>
@@ -613,6 +765,7 @@ export default async function EmployeeDetailPage({
                 <MessageSquare size={14} />
                 Nachricht senden
               </button>
+              <EmployeeInfoRequestButton employeeName={employee.name} />
               <Link href={employeeEditHref} className="btn btn-secondary btn-sm">
                 <Pencil size={14} />
                 Bearbeiten
@@ -657,10 +810,25 @@ export default async function EmployeeDetailPage({
             {employee.files.length + employee.fileFolders.length}
           </span>
         </Link>
+        <Link
+          href={`${employeeHref}?tab=payroll`}
+          className={`mb-[-1px] inline-flex items-center gap-2 border-b-2 px-0.5 py-3 text-[14px] ${
+            isPayrollTab
+              ? "border-ink font-semibold text-ink"
+              : "border-transparent font-medium text-muted"
+          }`}
+        >
+          Abrechnungen
+          <span className="font-mono text-[11px] text-muted">
+            {employee.payrollStatements.length}
+          </span>
+        </Link>
       </div>
 
       {isFilesTab ? (
         <FilesTab employee={employee} />
+      ) : isPayrollTab ? (
+        <PayrollTab employee={employee} />
       ) : isContractTab ? (
         <ContractTab
           employee={employee}
@@ -924,9 +1092,13 @@ export default async function EmployeeDetailPage({
                 ))}
               </div>
             </DetailCard>
+
+            <InfoRequestsCard employee={employee} />
           </div>
 
           <div className="flex flex-col gap-4">
+            <EmergencyContactsCard employee={employee} isEditing={isEditing} />
+
             <DetailCard title="Kontakt">
               {isEditing ? (
                 <div className="grid gap-3">
@@ -981,6 +1153,10 @@ export default async function EmployeeDetailPage({
           </div>
         </div>
       )}
+
+      <div className="mt-4">
+        <AuditLogPanel entries={auditEntries} />
+      </div>
 
       <div className="mt-8 text-center font-mono text-[10px] tracking-[0.4px] text-[#B0B0AB]">
         Ployo {"\u00b7"} Personalakte-System {"\u00b7"} Alle Zugriffe

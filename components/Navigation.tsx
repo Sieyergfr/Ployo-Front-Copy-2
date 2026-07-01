@@ -42,6 +42,7 @@ const navigationItems: NavItem[] = [
   { label: "Mitarbeiter", code: "MA", href: "/employees" },
   { label: "Standorte", code: "St", href: "/standorte" },
   { label: "Teams", code: "Tm", href: "/teams" },
+  { label: "Rollen", code: "Ro", href: "/rollen" },
   { label: "Dateien", code: "Dt", href: "/dateien" },
   { label: "Urlaub", code: "Ur", href: "/urlaub" },
   { label: "Krankheit", code: "Kr", href: "/krankheit" },

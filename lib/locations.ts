@@ -49,7 +49,7 @@ export type LocationShiftRow = {
 };
 
 export type LocationShiftEmployee = LocationTeamMember & {
-  days: Array<"F" | "S" | "N" | null>;
+  days: Array<string | null>;
 };
 
 export type LocationShiftPlan = {
@@ -227,11 +227,11 @@ const defaultShiftPlan: LocationShiftPlan = {
     },
   ],
   employees: [
-    { initials: "TK", name: "Tom K.", days: ["F", "S", "F", null, "F", "S", null] },
-    { initials: "LP", name: "Laura P.", days: ["F", "S", "F", null, "F", "S", null] },
-    { initials: "MH", name: "Max H.", days: ["F", "S", "F", null, "F", "S", null] },
-    { initials: "SK", name: "Sara K.", days: ["F", "S", "F", null, "F", "S", null] },
-    { initials: "JB", name: "Jan B.", days: ["F", "S", "F", null, "F", "S", null] },
+    { initials: "TK", name: "Tom K.", days: ["06:00-14:00", "14:00-22:00", "06:00-14:00", null, "06:00-14:00", "14:00-22:00", null] },
+    { initials: "LP", name: "Laura P.", days: ["06:00-14:00", "14:00-22:00", "06:00-14:00", null, "06:00-14:00", "14:00-22:00", null] },
+    { initials: "MH", name: "Max H.", days: ["06:00-14:00", "14:00-22:00", "06:00-14:00", null, "06:00-14:00", "14:00-22:00", null] },
+    { initials: "SK", name: "Sara K.", days: ["06:00-14:00", "14:00-22:00", "06:00-14:00", null, "06:00-14:00", "14:00-22:00", null] },
+    { initials: "JB", name: "Jan B.", days: ["06:00-14:00", "14:00-22:00", "06:00-14:00", null, "06:00-14:00", "14:00-22:00", null] },
   ],
 };
 
