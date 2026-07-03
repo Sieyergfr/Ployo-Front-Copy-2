@@ -4,6 +4,10 @@ import { permissionRoles } from "@/lib/roles";
 import { ArrowRight, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 
+export const metadata = {
+  title: "Rollen",
+};
+
 export default async function RolesPage({
   params,
 }: PageProps<"/u/[tenant]/rollen">) {

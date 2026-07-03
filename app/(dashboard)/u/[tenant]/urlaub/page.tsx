@@ -9,6 +9,10 @@ import {
   type VacationRequest,
 } from "@/lib/vacations";
 
+export const metadata = {
+  title: "Urlaub",
+};
+
 const filters = ["Alle", "Ausstehend", "Genehmigt", "Abgelehnt"];
 
 function VacationMetricCard({ label, value, caption, tone }: VacationMetric) {

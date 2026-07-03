@@ -11,6 +11,10 @@ import {
   type SicknessMetric,
 } from "@/lib/sickness";
 
+export const metadata = {
+  title: "Krankheit",
+};
+
 function SicknessMetricCard({ label, value, caption, tone }: SicknessMetric) {
   return (
     <div className="rounded-[14px] border border-border bg-white px-[22px] pt-5 pb-4">

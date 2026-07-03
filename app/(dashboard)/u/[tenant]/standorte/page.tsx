@@ -9,6 +9,10 @@ import {
 } from "@/lib/locations";
 import Link from "next/link";
 
+export const metadata = {
+  title: "Standorte",
+};
+
 function LocationMetricCard({
   label,
   value,

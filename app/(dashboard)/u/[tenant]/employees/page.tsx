@@ -16,6 +16,10 @@ import {
 } from "@/lib/employees";
 import { ChevronDown } from "lucide-react";
 
+export const metadata = {
+  title: "Mitarbeiter",
+};
+
 function getColumns(tenant: string): Array<DataTableColumn<Employee>> {
   return [
   {

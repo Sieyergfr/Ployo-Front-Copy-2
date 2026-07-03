@@ -1,0 +1,201 @@
+"use client";
+
+import PrimaryButton from "@/components/Buttons/PrimaryButton";
+import Checkbox from "@/components/inputs/checkbox";
+import PasswordInput from "@/components/inputs/password-input";
+import TextInput from "@/components/inputs/text-input";
+import { authClient } from "@/lib/auth-client";
+import { ArrowRight } from "lucide-react";
+import Image from "next/image";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+
+type SocialProvider = "google" | "apple";
+
+type SocialProviderConfig = Record<SocialProvider, boolean>;
+
+export default function LoginForm() {
+  const router = useRouter();
+  const [error, setError] = useState<string | null>(null);
+  const [isPending, setIsPending] = useState(false);
+  const [providerConfig, setProviderConfig] = useState<SocialProviderConfig>({
+    apple: false,
+    google: false,
+  });
+  const [socialProvider, setSocialProvider] = useState<SocialProvider | null>(
+    null,
+  );
+
+  useEffect(() => {
+    let isMounted = true;
+
+    fetch("/api/auth-config")
+      .then((response) => response.json())
+      .then((data: { providers?: Partial<SocialProviderConfig> }) => {
+        if (!isMounted) {
+          return;
+        }
+
+        setProviderConfig({
+          apple: Boolean(data.providers?.apple),
+          google: Boolean(data.providers?.google),
+        });
+      })
+      .catch(() => {
+        if (isMounted) {
+          setProviderConfig({ apple: false, google: false });
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  async function handleSocialSignIn(provider: SocialProvider) {
+    if (!providerConfig[provider]) {
+      setError(
+        `${provider === "google" ? "Google" : "Apple"} Login ist noch nicht konfiguriert.`,
+      );
+      return;
+    }
+
+    setError(null);
+    setSocialProvider(provider);
+
+    const { error: signInError } = await authClient.signIn.social({
+      provider,
+      callbackURL: "/select",
+      errorCallbackURL: "/login",
+    });
+
+    setSocialProvider(null);
+
+    if (signInError) {
+      setError(signInError.message ?? "Anmeldung fehlgeschlagen.");
+    }
+  }
+
+  return (
+    <form
+      className="flex flex-col gap-4"
+      onSubmit={async (event) => {
+        event.preventDefault();
+        setError(null);
+        setIsPending(true);
+
+        const formData = new FormData(event.currentTarget);
+        const email = String(formData.get("email") ?? "");
+        const password = String(formData.get("password") ?? "");
+        const rememberMe = formData.get("stay_logged") === "on";
+
+        const { error: signInError } = await authClient.signIn.email({
+          email,
+          password,
+          rememberMe,
+          callbackURL: "/select",
+        });
+
+        setIsPending(false);
+
+        if (signInError) {
+          setError(signInError.message ?? "Anmeldung fehlgeschlagen.");
+          return;
+        }
+
+        router.push("/select");
+        router.refresh();
+      }}
+    >
+      <div className="card-form">
+        <TextInput
+          id="email"
+          label="E-Mail"
+          type="email"
+          placeholder="name@unternehmen.de"
+          autoComplete="email"
+          required
+        />
+        <PasswordInput
+          id="password"
+          label="Passwort"
+          placeholder="password"
+          autoComplete="current-password"
+          required
+        />
+        <Checkbox id="stay_logged">
+          <span>Angemeldet bleiben</span>
+        </Checkbox>
+      </div>
+
+      {error && (
+        <p className="rounded-[10px] border border-danger/20 bg-danger/5 px-3 py-2 text-[12.5px] text-danger">
+          {error}
+        </p>
+      )}
+
+      <PrimaryButton type="submit" disabled={isPending}>
+        <span className="leading-tight">
+          {isPending ? "Anmelden..." : "Anmelden"}
+        </span>
+        <ArrowRight size={12} strokeWidth={3} color="currentColor" />
+      </PrimaryButton>
+
+      <div className="flex items-center gap-3">
+        <span className="h-px flex-1 bg-border-soft" />
+        <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted">
+          oder
+        </span>
+        <span className="h-px flex-1 bg-border-soft" />
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          className="btn btn-secondary flex min-w-0 items-center justify-center gap-2 px-3"
+          disabled={Boolean(socialProvider) || isPending || !providerConfig.google}
+          title={
+            providerConfig.google
+              ? "Mit Google anmelden"
+              : "Google Login ist noch nicht konfiguriert"
+          }
+          onClick={() => handleSocialSignIn("google")}
+        >
+          <Image
+            src="/google.svg"
+            alt=""
+            width={16}
+            height={16}
+            aria-hidden="true"
+          />
+          <span className="truncate">
+            {socialProvider === "google" ? "Verbinden..." : "Google"}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          className="btn btn-secondary flex min-w-0 items-center justify-center gap-2 px-3"
+          disabled={Boolean(socialProvider) || isPending || !providerConfig.apple}
+          title={
+            providerConfig.apple
+              ? "Mit Apple anmelden"
+              : "Apple Login ist noch nicht konfiguriert"
+          }
+          onClick={() => handleSocialSignIn("apple")}
+        >
+          <Image
+            src="/apple.svg"
+            alt=""
+            width={16}
+            height={16}
+            aria-hidden="true"
+          />
+          <span className="truncate">
+            {socialProvider === "apple" ? "Verbinden..." : "Apple"}
+          </span>
+        </button>
+      </div>
+    </form>
+  );
+}

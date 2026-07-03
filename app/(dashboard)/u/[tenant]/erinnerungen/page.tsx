@@ -11,6 +11,10 @@ import {
 } from "@/lib/reminders";
 import { Check } from "lucide-react";
 
+export const metadata = {
+  title: "Erinnerungen",
+};
+
 function ReminderMetricCard({ label, value, caption, tone }: ReminderMetric) {
   const valueClassName =
     tone === "danger"

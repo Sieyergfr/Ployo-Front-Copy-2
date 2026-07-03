@@ -1,9 +1,13 @@
-import PrimaryButton from "@/components/Buttons/PrimaryButton";
 import CardHeader from "@/components/Card/CardHeader";
 import CompanyList from "@/components/CompanyList/CompanyList";
 import CompanyListItem from "@/components/CompanyList/CompanyListItem";
 import SearchInput from "@/components/inputs/SearchInput";
 import { ArrowRight } from "lucide-react";
+import Link from "next/link";
+
+export const metadata = {
+  title: "Unternehmen auswählen",
+};
 
 export default function TenantSelectPage() {
     return (
@@ -18,10 +22,10 @@ export default function TenantSelectPage() {
                 <CompanyListItem title="B&B Holding GmbH" industry="Hotellerie" />
                 <CompanyListItem title="B&B Holding GmbH" industry="Hotellerie" />
             </CompanyList>
-            <PrimaryButton>
+            <Link href="/select/create" className="btn btn-block btn-primary">
                 <span>Neues Unternehmen erstellen</span>
                 <ArrowRight size={12} strokeWidth={3} />
-            </PrimaryButton>
+            </Link>
         </>
     )
 }

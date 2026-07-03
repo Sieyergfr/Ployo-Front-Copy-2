@@ -9,6 +9,17 @@ import { ArrowLeft, EyeOff, Save, ShieldCheck, X } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+export async function generateMetadata({
+  params,
+}: PageProps<"/u/[tenant]/rollen/[roleId]">) {
+  const { roleId } = await params;
+  const role = permissionRoles.find((item) => item.id === roleId);
+
+  return {
+    title: role?.name ?? "Rollen",
+  };
+}
+
 const levelTone = {
   none: "border-border-light bg-bg text-muted",
   read: "border-[#2A6FDB]/25 bg-[#2A6FDB]/10 text-[#2A6FDB]",

@@ -1,5 +1,9 @@
 import FilesPageContent from "@/components/FilesPageContent";
 
+export const metadata = {
+  title: "Dateien",
+};
+
 export default async function FilesPathPage({
   params,
 }: PageProps<"/u/[tenant]/dateien/[...path]">) {

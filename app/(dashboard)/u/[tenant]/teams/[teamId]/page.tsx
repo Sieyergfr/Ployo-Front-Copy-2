@@ -24,6 +24,17 @@ import {
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+export async function generateMetadata({
+  params,
+}: PageProps<"/u/[tenant]/teams/[teamId]">) {
+  const { teamId } = await params;
+  const team = getTeamById(teamId);
+
+  return {
+    title: team?.name ?? "Teams",
+  };
+}
+
 function TeamMetricCard({
   label,
   value,

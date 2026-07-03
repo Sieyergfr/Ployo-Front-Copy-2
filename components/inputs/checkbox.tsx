@@ -18,6 +18,7 @@ export default function Checkbox({
     <label htmlFor={id} className="checkbox-row cursor-pointer" style={{ alignItems }}>
       <input
         id={id}
+        name={id}
         type="checkbox"
         defaultChecked={defaultChecked}
         className="peer sr-only"

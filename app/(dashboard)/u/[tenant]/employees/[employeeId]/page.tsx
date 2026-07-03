@@ -31,6 +31,17 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 
+export async function generateMetadata({
+  params,
+}: PageProps<"/u/[tenant]/employees/[employeeId]">) {
+  const { employeeId } = await params;
+  const employee = getEmployeeById(employeeId);
+
+  return {
+    title: employee?.name ?? "Mitarbeiter",
+  };
+}
+
 function DetailCard({
   title,
   children,

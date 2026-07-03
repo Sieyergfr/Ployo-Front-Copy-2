@@ -32,6 +32,17 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 
+export async function generateMetadata({
+  params,
+}: PageProps<"/u/[tenant]/standorte/[locationId]">) {
+  const { locationId } = await params;
+  const location = getLocationById(locationId);
+
+  return {
+    title: location?.name ?? "Standorte",
+  };
+}
+
 function LocationStatusBadge({ status }: { status: LocationStatus }) {
   if (status === "active") {
     return (

@@ -24,6 +24,15 @@ export type FileItem = {
   reminder?: string;
 };
 
+export type FileVersion = {
+  version: number;
+  uploadedAt: string;
+  uploadedBy: string;
+  note: string;
+  downloadName: string;
+  downloadHref: string;
+};
+
 export const fileFolders: FileFolder[] = [
   {
     slug: "personalakten",
@@ -211,7 +220,32 @@ export function getFileByPath(path: string[] = []) {
   );
 }
 
-export function getFileVersions(file: FileItem) {
+export function getFileDownloadName(file: FileItem, version = file.version) {
+  const extensionIndex = file.name.lastIndexOf(".");
+
+  if (extensionIndex === -1) {
+    return `${file.name}-v${version}`;
+  }
+
+  const baseName = file.name.slice(0, extensionIndex);
+  const extension = file.name.slice(extensionIndex);
+
+  return `${baseName}-v${version}${extension}`;
+}
+
+export function getFileDownloadHref(file: FileItem, version = file.version) {
+  const content = [
+    `Ployo Download: ${file.name}`,
+    `Version: ${version}`,
+    `Ordner: ${file.folder}`,
+    `Verantwortlich: ${file.owner}`,
+    `Stand: ${version === file.version ? file.updatedAt : "Archivierte Version"}`,
+  ].join("\n");
+
+  return `data:text/plain;charset=utf-8,${encodeURIComponent(content)}`;
+}
+
+export function getFileVersions(file: FileItem): FileVersion[] {
   return Array.from({ length: file.version }, (_, index) => {
     const version = file.version - index;
 
@@ -223,6 +257,8 @@ export function getFileVersions(file: FileItem) {
           : `${Math.max(10, 28 - version)}.06. · 14:${10 + version}`,
       uploadedBy: version === 1 ? "System Import" : file.owner,
       note: version === file.version ? "Aktuelle Version" : "Vorherige Version",
+      downloadName: getFileDownloadName(file, version),
+      downloadHref: getFileDownloadHref(file, version),
     };
   });
 }

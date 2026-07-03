@@ -19,6 +19,10 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 
+export const metadata = {
+  title: "Übersicht",
+};
+
 type DashboardHomeProps = {
   params: Promise<{ tenant: string }>;
 };

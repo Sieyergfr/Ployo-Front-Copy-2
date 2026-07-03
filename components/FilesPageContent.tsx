@@ -1,6 +1,11 @@
 import FilesBrowser from "@/components/FilesBrowser";
 import AuditLogPanel from "@/components/AuditLogPanel";
 import PageHeader from "@/components/PageHeader";
+import {
+  FileDownloadButton,
+  FileViewButton,
+  VersionUploadButton,
+} from "@/components/FileActionButtons";
 import { makeFileAuditLogs } from "@/lib/audit";
 import {
   fileFolders,
@@ -12,7 +17,7 @@ import {
   getFilesByFolderSlug,
   type FileItem,
 } from "@/lib/files";
-import { Archive, ArrowLeft, FileText, Lock, Upload } from "lucide-react";
+import { Archive, ArrowLeft, FileText, Lock } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -57,10 +62,11 @@ function FileInfoCard({ file }: { file: FileItem }) {
             </div>
           </div>
         </div>
-        <button type="button" className="btn btn-primary btn-sm">
-          <Upload size={14} />
-          Neue Version hochladen
-        </button>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <FileViewButton file={file} />
+          <FileDownloadButton file={file} label="Aktuelle Version" />
+          <VersionUploadButton file={file} />
+        </div>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -117,13 +123,17 @@ function FileInfoCard({ file }: { file: FileItem }) {
           Versionen
         </div>
         {versions.map((version) => (
-          <div key={version.version} className="grid gap-3 border-t border-border-soft py-3 sm:grid-cols-[80px_1fr_160px]">
+          <div key={version.version} className="grid items-center gap-3 border-t border-border-soft py-3 sm:grid-cols-[80px_1fr_160px_auto]">
             <div className="font-mono text-[12px] font-semibold text-ink">
               v{version.version}
             </div>
             <div className="text-[12.5px] text-muted-2">{version.note}</div>
             <div className="font-mono text-[10.5px] text-muted">
               {version.uploadedBy} · {version.uploadedAt}
+            </div>
+            <div className="flex gap-2">
+              <FileViewButton file={file} version={version} compact />
+              <FileDownloadButton file={file} version={version} compact />
             </div>
           </div>
         ))}

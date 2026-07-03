@@ -1,7 +1,13 @@
 import type { FileFolder, FileItem } from "@/lib/files";
 import { FileReminderButton } from "@/components/ActionDrawers";
-import { CreateFolderButton, UploadFileButton } from "@/components/FileActionButtons";
-import { ArrowLeft, FileText, Folder, Lock, Upload } from "lucide-react";
+import {
+  CreateFolderButton,
+  FileDownloadButton,
+  FileViewButton,
+  UploadFileButton,
+  VersionUploadButton,
+} from "@/components/FileActionButtons";
+import { ArrowLeft, FileText, Folder, Lock } from "lucide-react";
 import Link from "next/link";
 
 function FolderCard({
@@ -64,14 +70,9 @@ function FileRow({ file, baseHref }: { file: FileItem; baseHref: string }) {
       <span className="rounded-[7px] border border-border-light px-2 py-[3px] font-mono text-[10px] text-muted-2">
         v{file.version}
       </span>
-      <button
-        type="button"
-        className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-[8px] border border-border bg-white text-muted transition-colors hover:border-muted hover:text-ink"
-        title="Neue Version hochladen"
-        aria-label={`Neue Version für ${file.name} hochladen`}
-      >
-        <Upload size={14} />
-      </button>
+      <FileViewButton file={file} compact />
+      <FileDownloadButton file={file} compact />
+      <VersionUploadButton file={file} compact />
       {file.locked && <Lock size={13} className="shrink-0 text-muted" />}
       <FileReminderButton
         compact

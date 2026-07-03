@@ -338,6 +338,60 @@ body {
   }
 }
 
+@keyframes fadeup {
+  0% {
+    opacity: 0;
+    transform: translateY(9px);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes skring {
+  0% {
+    opacity: 0;
+    transform: scale(0.55);
+  }
+
+  70% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes skpop {
+  0% {
+    transform: scale(0);
+  }
+
+  55% {
+    transform: scale(1.14);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes skdraw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.sk-check-path {
+  animation: skdraw 0.45s cubic-bezier(0.65, 0, 0.35, 1) 0.35s forwards;
+  stroke-dasharray: 34;
+  stroke-dashoffset: 34;
+}
+
 .shift-drawer-panel {
   animation: shift-drawer-in 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
   will-change: transform;

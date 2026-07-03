@@ -2,6 +2,10 @@ import { SecondaryButton } from "@/components/Buttons/PrimaryButton";
 import Divider from "@/components/Divider";
 import { Mail, RefreshCcw, RotateCcw } from "lucide-react";
 
+export const metadata = {
+  title: "E-Mail bestätigen",
+};
+
 export default function ConfirmPage() {
     return (
         <>

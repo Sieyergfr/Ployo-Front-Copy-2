@@ -4,6 +4,10 @@ import { teamMetrics, teams, type Team, type TeamMember } from "@/lib/teams";
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 
+export const metadata = {
+  title: "Teams",
+};
+
 function TeamMetricCard({
   label,
   value,
