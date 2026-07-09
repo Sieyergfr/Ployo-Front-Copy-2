@@ -37,6 +37,8 @@ type TenantItem = {
   colorClass: string;
 };
 
+export type NavigationTenantItem = TenantItem;
+
 const navigationItems: NavItem[] = [
   { label: "Übersicht", code: "Üb", href: "" },
   { label: "Mitarbeiter", code: "MA", href: "/employees" },
@@ -50,29 +52,13 @@ const navigationItems: NavItem[] = [
   { label: "Erinnerungen", code: "Er", href: "/erinnerungen" },
 ];
 
-const tenantItems: TenantItem[] = [
-  {
-    name: "Müller & Partner GmbH",
-    role: "HR-Leitung",
-    mark: "M",
-    href: "/u/mueller-partner",
-    colorClass: "sidebar-tenant-mark-blue",
-  },
-  {
-    name: "Technik Solutions AG",
-    role: "Lohnbuchhalterin",
-    mark: "T",
-    href: "/u/technik-solutions",
-    colorClass: "sidebar-tenant-mark-green",
-  },
-  {
-    name: "Nord Logistik GmbH",
-    role: "HR-Referentin",
-    mark: "N",
-    href: "/u/nord-logistik",
-    colorClass: "sidebar-tenant-mark-purple",
-  },
-];
+const fallbackTenantItem: TenantItem = {
+  name: "Unternehmen auswählen",
+  role: "Kein Unternehmen aktiv",
+  mark: "U",
+  href: "/select",
+  colorClass: "sidebar-tenant-mark-blue",
+};
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -883,7 +869,11 @@ function SettingsPopup({ onClose }: { onClose: () => void }) {
   );
 }
 
-export default function NavigationSidebar() {
+export default function NavigationSidebar({
+  tenants = [],
+}: {
+  tenants?: NavigationTenantItem[];
+}) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isTenantMenuOpen, setIsTenantMenuOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -893,9 +883,19 @@ export default function NavigationSidebar() {
 
   const tenant = Array.isArray(params.tenant) ? params.tenant[0] : params.tenant;
   const baseHref = tenant ? `/u/${tenant}` : "/u";
+  const tenantItems = tenants.length > 0 ? tenants : [fallbackTenantItem];
   const toggleLabel = isCollapsed ? "Navigation ausklappen" : "Navigation einklappen";
   const activeTenant =
-    tenantItems.find((item) => item.href === baseHref) ?? tenantItems[0];
+    tenantItems.find((item) => item.href === baseHref) ??
+    (tenant
+      ? {
+          ...fallbackTenantItem,
+          name: tenant,
+          role: "Unbekanntes Unternehmen",
+          mark: tenant.slice(0, 1).toUpperCase(),
+          href: baseHref,
+        }
+      : tenantItems[0]);
 
   const items = useMemo(
     () =>

@@ -67,12 +67,22 @@ model Verification {
 }
 
 model Tenant {
-  id          String             @id @default(cuid())
-  slug        String             @unique
-  name        String
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
-  memberships TenantMembership[]
+  id            String             @id @default(cuid())
+  slug          String             @unique
+  name          String
+  country       String             @default("DE")
+  timezone      String             @default("Europe/Berlin")
+  size          String?
+  industry      String?
+  contactEmail  String?
+  logoUrl       String?
+  primaryColor  String             @default("#2A6FDB")
+  plan          String             @default("professional")
+  billingCycle  String             @default("monthly")
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  invitations   TenantInvitation[]
+  memberships   TenantMembership[]
 }
 
 model TenantMembership {
@@ -87,4 +97,18 @@ model TenantMembership {
 
   @@unique([tenantId, userId])
   @@index([userId])
+}
+
+model TenantInvitation {
+  id        String   @id @default(cuid())
+  email     String
+  role      String   @default("EMPLOYEE")
+  status    String   @default("PENDING")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, email])
+  @@index([email])
 }

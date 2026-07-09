@@ -5,11 +5,12 @@ import {
   ImagePlus,
   Loader2,
   Mail,
+  Pencil,
   Plus,
   X,
 } from "lucide-react";
 import Link from "next/link";
-import { type ChangeEvent, useState } from "react";
+import { type ChangeEvent, useEffect, useState } from "react";
 
 type PlanId = "starter" | "professional" | "business";
 
@@ -29,7 +30,7 @@ type Plan = {
   features: string[];
 };
 
-const takenSlugs = ["acme", "test", "demo", "muster", "muster-gmbh", "ployo", "admin"];
+type SlugState = "empty" | "checking" | "available" | "taken" | "error";
 
 const countries = [
   { code: "DE", name: "Deutschland", timezone: "Europe/Berlin" },
@@ -188,6 +189,10 @@ export default function CompanyCreateWizard() {
   const [billingCycle, setBillingCycle] = useState<"monthly" | "yearly">("monthly");
   const [creating, setCreating] = useState(false);
   const [done, setDone] = useState(false);
+  const [editingSlug, setEditingSlug] = useState(false);
+  const [slugState, setSlugState] = useState<SlugState>("empty");
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [createdTenantSlug, setCreatedTenantSlug] = useState<string | null>(null);
   const [emailRows, setEmailRows] = useState<InviteRow[]>([
     { email: "", role: "Admin" },
     { email: "", role: "HR" },
@@ -195,11 +200,45 @@ export default function CompanyCreateWizard() {
   ]);
 
   const baseSlug = customSlug || slugify(name);
-  const slugState = !baseSlug ? "empty" : takenSlugs.includes(baseSlug) ? "taken" : "available";
+  const showSlugStatus = slugState !== "empty";
   const companyName = name.trim() || "Muster GmbH";
   const currentCopy = stepCopy[step as keyof typeof stepCopy];
   const blocked = step === 1 && slugState !== "available";
   const canSkip = step >= 3 && step <= 5;
+  const tenantSlug = createdTenantSlug ?? baseSlug;
+
+  useEffect(() => {
+    if (!baseSlug) {
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeout = window.setTimeout(async () => {
+      try {
+        const response = await fetch(
+          `/api/tenants/slug?slug=${encodeURIComponent(baseSlug)}`,
+          { signal: controller.signal },
+        );
+
+        if (!response.ok) {
+          setSlugState("error");
+          return;
+        }
+
+        const data = (await response.json()) as { available?: boolean };
+        setSlugState(data.available ? "available" : "taken");
+      } catch {
+        if (!controller.signal.aborted) {
+          setSlugState("error");
+        }
+      }
+    }, 450);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timeout);
+    };
+  }, [baseSlug]);
 
   function formatEuro(value: number) {
     return new Intl.NumberFormat("de-DE", {
@@ -241,10 +280,12 @@ export default function CompanyCreateWizard() {
     );
   }
 
-  function goNext() {
+  async function goNext() {
     if (blocked) {
       return;
     }
+
+    setCreateError(null);
 
     if (step < 5) {
       setStep((current) => current + 1);
@@ -252,10 +293,53 @@ export default function CompanyCreateWizard() {
     }
 
     setCreating(true);
-    window.setTimeout(() => {
+    const response = await fetch("/api/tenants", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name,
+        slug: baseSlug,
+        country,
+        timezone,
+        size,
+        industry,
+        contactEmail,
+        logoUrl,
+        primaryColor,
+        plan,
+        billingCycle,
+        invitations: emailRows
+          .map((row) => ({
+            email: row.email.trim(),
+            role: row.role,
+          }))
+          .filter((row) => row.email),
+      }),
+    });
+    const data = (await response.json().catch(() => null)) as {
+      error?: string;
+      tenant?: {
+        slug?: string;
+      };
+    } | null;
+
+    if (!response.ok) {
       setCreating(false);
-      setDone(true);
-    }, 1200);
+      setCreateError(data?.error ?? "Unternehmen konnte nicht erstellt werden.");
+
+      if (response.status === 409) {
+        setSlugState("taken");
+        setStep(1);
+      }
+
+      return;
+    }
+
+    setCreatedTenantSlug(data?.tenant?.slug ?? baseSlug);
+    setCreating(false);
+    setDone(true);
   }
 
   if (done) {
@@ -295,7 +379,7 @@ export default function CompanyCreateWizard() {
               />
             </svg>
             <span className="font-mono text-[11.5px] text-muted-2">
-              app.ployo.de/{baseSlug || "muster-gmbh"}
+              app.ployo.de/{tenantSlug || "muster-gmbh"}
             </span>
           </div>
         </div>
@@ -357,7 +441,7 @@ export default function CompanyCreateWizard() {
         </div>
 
         <Link
-          href={`/u/${baseSlug || "muster-gmbh"}`}
+          href={`/u/${tenantSlug || "muster-gmbh"}`}
           className="mt-5 flex w-full cursor-pointer items-center justify-center gap-2 rounded-[11px] bg-ink px-[18px] py-3.5 text-[14.5px] font-semibold text-white no-underline transition-colors hover:bg-ink-hover active:translate-y-px [animation:fadeup_.5s_ease_.54s_both]"
         >
           Zum Dashboard
@@ -460,43 +544,78 @@ export default function CompanyCreateWizard() {
                   placeholder="z. B. Acme GmbH"
                   value={name}
                   onChange={(event) => {
-                    setName(event.target.value);
+                    const nextName = event.target.value;
+                    const nextSlug = slugify(nextName);
+
+                    setName(nextName);
                     setCustomSlug("");
+                    setSlugState(nextSlug ? "checking" : "empty");
                   }}
                 />
 
                 <div className="mt-1.5 rounded-[12px] border border-border bg-bg px-[15px] py-3.5">
                   <div className="flex items-center justify-between gap-3">
                     <div className="font-mono text-[9px] uppercase tracking-[0.05em] text-muted">
-                      Ihre Arbeitsbereich-URL
+                      Your workspace URL
                     </div>
-                    {slugState !== "empty" && (
+                    <button
+                      type="button"
+                      className="inline-flex cursor-pointer items-center gap-[5px] border-0 bg-transparent p-0 text-[11.5px] font-medium text-muted-2 transition-colors hover:text-ink"
+                      onClick={() => setEditingSlug((current) => !current)}
+                    >
+                      <Pencil size={11} strokeWidth={2.2} />
+                      Edit
+                    </button>
+                  </div>
+
+                  <div className="mt-[9px] flex flex-wrap items-center justify-between gap-3">
+                    <div className="break-all font-mono text-[14px] text-ink">
+                      app.ployo.de/
+                      <span className="font-medium">
+                        {baseSlug || "ihr-unternehmen"}
+                      </span>
+                    </div>
+                    {showSlugStatus && (
                       <div
                         className={cx(
-                          "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-semibold",
-                          slugState === "available" ? "bg-success/10 text-success" : "bg-danger/10 text-danger",
+                          "inline-flex min-h-[26px] items-center gap-1.5 rounded-full px-[11px] py-[5px] text-[12px] font-semibold",
+                          slugState === "checking"
+                            ? "bg-border-soft text-muted-2"
+                            : slugState === "available"
+                              ? "bg-success/10 text-success"
+                              : "bg-danger/10 text-danger",
                         )}
                       >
-                        {slugState === "available" ? <Check size={12} /> : <X size={12} />}
-                        {slugState === "available" ? "Verfügbar" : "Bereits vergeben"}
+                        {slugState === "checking" ? (
+                          <Loader2 size={13} className="animate-spin" />
+                        ) : slugState === "available" ? (
+                          <Check size={13} strokeWidth={2.6} />
+                        ) : (
+                          <X size={13} strokeWidth={2.6} />
+                        )}
+                        {slugState === "checking"
+                          ? "Checking"
+                          : slugState === "available"
+                            ? "Available"
+                            : "Not available"}
                       </div>
                     )}
                   </div>
 
-                  <div className="mt-[9px] break-all font-mono text-[14px] text-[#C0BEB7]">
-                    app.ployo.de/
-                    <span className={baseSlug ? "text-ink" : "text-[#C0BEB7]"}>
-                      {baseSlug || "ihr-unternehmen"}
-                    </span>
-                  </div>
+                  {editingSlug && (
+                    <input
+                      aria-label="Arbeitsbereich-URL anpassen"
+                      className="mt-3 w-full rounded-[10px] border border-border-light bg-white px-3 py-2.5 font-mono text-[13px] text-ink outline-none transition-colors placeholder:text-muted focus:border-ink"
+                      placeholder={slugify(name) || "muster-gmbh"}
+                      value={customSlug}
+                      onChange={(event) => {
+                        const nextSlug = slugify(event.target.value);
 
-                  <input
-                    aria-label="Arbeitsbereich-URL anpassen"
-                    className="mt-3 w-full rounded-[10px] border border-border-light bg-white px-3 py-2.5 font-mono text-[13px] text-ink outline-none transition-colors placeholder:text-muted focus:border-ink"
-                    placeholder={slugify(name) || "muster-gmbh"}
-                    value={customSlug}
-                    onChange={(event) => setCustomSlug(slugify(event.target.value))}
-                  />
+                        setCustomSlug(nextSlug);
+                        setSlugState(nextSlug ? "checking" : "empty");
+                      }}
+                    />
+                  )}
                 </div>
               </div>
             )}
@@ -868,6 +987,12 @@ export default function CompanyCreateWizard() {
               </div>
             )}
           </div>
+
+          {createError && (
+            <div className="mx-7 mt-3 rounded-[10px] border border-danger/20 bg-danger/5 px-3 py-2 text-[12.5px] text-danger">
+              {createError}
+            </div>
+          )}
 
           <div className="mt-3 flex items-center justify-between gap-3 border-t border-border-soft px-7 py-[18px] pb-[22px]">
             <button
