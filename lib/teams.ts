@@ -1,4 +1,6 @@
 export type TeamMember = {
+  id?: string;
+  employeeId?: string;
   initials: string;
   name: string;
   location: string;
@@ -10,7 +12,10 @@ export type TeamMember = {
 
 export type Team = {
   id: string;
+  dbId?: string;
+  key?: string;
   name: string;
+  description?: string;
   locations: string;
   colorClassName: string;
   members: TeamMember[];

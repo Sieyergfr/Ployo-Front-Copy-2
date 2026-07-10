@@ -8,33 +8,37 @@ export type PermissionArea = {
 
 export type PermissionRole = {
   id: string;
+  key: string;
   name: string;
   description: string;
   members: number;
+  isSystem: boolean;
   permissions: Record<string, PermissionLevel>;
 };
 
+export const permissionLevels = ["none", "read", "write", "admin"] as const;
+
 export const permissionAreas: PermissionArea[] = [
   { id: "employees", label: "Mitarbeiter", description: "Personalakte, Kontakte, Notfallkontakte" },
-  { id: "payroll", label: "Gehaltsabrechnungen", description: "Abrechnungen, Vergütung, sensible Dokumente" },
+  { id: "payroll", label: "Gehaltsabrechnungen", description: "Abrechnungen, Verguetung, sensible Dokumente" },
   { id: "locations", label: "Standorte", description: "Standortdaten, Schichten, Teams vor Ort" },
   { id: "teams", label: "Teams", description: "Teamrollen, Teamleitung, Mitglieder" },
   { id: "files", label: "Dateien", description: "Ablage, Versionen, Ablaufdaten, Freigaben" },
-  { id: "vacation", label: "Urlaub", description: "Anträge, Kontingente, Freigaben" },
+  { id: "vacation", label: "Urlaub", description: "Antraege, Kontingente, Freigaben" },
   { id: "sickness", label: "Krankheit", description: "Krankmeldungen, Atteste, Abschluss" },
-  { id: "shifts", label: "Schichtplanung", description: "Dienstpläne, Wochenplanung, Konflikte" },
+  { id: "shifts", label: "Schichtplanung", description: "Dienstplaene, Wochenplanung, Konflikte" },
   { id: "reminders", label: "Erinnerungen", description: "Fristen, Wiedervorlagen, Eskalationen" },
-  { id: "audit", label: "Audit Logs", description: "Zugriffe, Änderungen, Exporte" },
+  { id: "audit", label: "Audit Logs", description: "Zugriffe, Aenderungen, Exporte" },
   { id: "roles", label: "Rollen", description: "Berechtigungen und Sicherheitsrichtlinien" },
   { id: "settings", label: "Einstellungen", description: "Mandant, Integrationen, Abrechnung" },
 ];
 
-export const permissionRoles: PermissionRole[] = [
+export const defaultPermissionRoles: Omit<PermissionRole, "id" | "members">[] = [
   {
-    id: "hr-lead",
+    key: "hr-lead",
     name: "HR-Leitung",
     description: "Vollzugriff auf Personalprozesse und Sicherheitsprotokolle.",
-    members: 3,
+    isSystem: true,
     permissions: {
       employees: "admin",
       payroll: "admin",
@@ -51,10 +55,10 @@ export const permissionRoles: PermissionRole[] = [
     },
   },
   {
-    id: "payroll",
+    key: "payroll",
     name: "Lohnbuchhaltung",
-    description: "Fokus auf Abrechnung, Verträge und exportrelevante Daten.",
-    members: 5,
+    description: "Fokus auf Abrechnung, Vertraege und exportrelevante Daten.",
+    isSystem: true,
     permissions: {
       employees: "read",
       payroll: "admin",
@@ -71,10 +75,10 @@ export const permissionRoles: PermissionRole[] = [
     },
   },
   {
-    id: "teamlead",
+    key: "teamlead",
     name: "Teamleitung",
-    description: "Operative Planung für eigene Teams und Standorte.",
-    members: 14,
+    description: "Operative Planung fuer eigene Teams und Standorte.",
+    isSystem: true,
     permissions: {
       employees: "read",
       payroll: "none",
@@ -91,10 +95,10 @@ export const permissionRoles: PermissionRole[] = [
     },
   },
   {
-    id: "employee",
+    key: "employee",
     name: "Mitarbeiter",
-    description: "Self-Service für eigene Daten, Dokumente und Anträge.",
-    members: 225,
+    description: "Self-Service fuer eigene Daten, Dokumente und Antraege.",
+    isSystem: true,
     permissions: {
       employees: "read",
       payroll: "read",
@@ -112,9 +116,40 @@ export const permissionRoles: PermissionRole[] = [
   },
 ];
 
+export const permissionRoles: PermissionRole[] = defaultPermissionRoles.map((role) => ({
+  ...role,
+  id: role.key,
+  members: 0,
+}));
+
 export const permissionLevelLabels = {
   none: "Kein Zugriff",
   read: "Lesen",
   write: "Schreiben",
   admin: "Admin",
 } satisfies Record<PermissionLevel, string>;
+
+export function isPermissionLevel(value: FormDataEntryValue | null): value is PermissionLevel {
+  return typeof value === "string" && permissionLevels.includes(value as PermissionLevel);
+}
+
+export function normalizePermissionLevel(value: FormDataEntryValue | null): PermissionLevel {
+  return isPermissionLevel(value) ? value : "none";
+}
+
+export function emptyPermissionSet() {
+  return Object.fromEntries(
+    permissionAreas.map((area) => [area.id, "none" satisfies PermissionLevel]),
+  ) as Record<string, PermissionLevel>;
+}
+
+export function normalizeRoleKey(value: string) {
+  return value
+    .toLowerCase()
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 64);
+}

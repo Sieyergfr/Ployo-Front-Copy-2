@@ -8,11 +8,19 @@ export type ShiftDay = {
 
 export type Shift = {
   id: string;
+  dbId?: string;
+  key?: string;
   time: string;
+  startTime?: string;
+  endTime?: string;
+  breakMinutes?: number;
+  employeeId?: string;
+  locationId?: string;
   assignee?: string;
   location?: string;
   team?: string;
   conflict?: boolean;
+  note?: string;
 };
 
 export const shiftWeekLabel = "KW 26 · 22.06–28.06.2026";

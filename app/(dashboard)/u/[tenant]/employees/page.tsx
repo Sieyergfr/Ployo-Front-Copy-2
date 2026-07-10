@@ -5,16 +5,16 @@ import DataTable, {
   DataTableStatus,
   type DataTableColumn,
 } from "@/components/DataTable";
-import InviteEmployeeButton from "@/components/InviteEmployeeButton";
 import EmployeeQuickView from "@/components/EmployeeQuickView";
+import InviteEmployeeButton from "@/components/InviteEmployeeButton";
 import PageHeader from "@/components/PageHeader";
 import SearchInput from "@/components/inputs/SearchInput";
-import {
-  employeeStatusConfig,
-  employees,
-  type Employee,
-} from "@/lib/employees";
+import { getEmployeesForTenant } from "@/lib/employee-service";
+import { employeeStatusConfig, type Employee } from "@/lib/employees";
+import { getLocationsForTenant } from "@/lib/location-service";
+import { getTeamsForTenant } from "@/lib/team-service";
 import { ChevronDown } from "lucide-react";
+import { notFound } from "next/navigation";
 
 export const metadata = {
   title: "Mitarbeiter",
@@ -22,59 +22,59 @@ export const metadata = {
 
 function getColumns(tenant: string): Array<DataTableColumn<Employee>> {
   return [
-  {
-    key: "name",
-    header: "Name",
-    width: "2fr",
-    render: (employee) => (
-      <DataTableAvatar initials={employee.initials} label={employee.name} />
-    ),
-  },
-  {
-    key: "employeeNumber",
-    header: "Personal-Nr.",
-    width: "116px",
-    className: "font-mono text-[12px] text-muted-2",
-    render: (employee) => employee.employeeNumber,
-  },
-  {
-    key: "location",
-    header: "Standort",
-    width: "120px",
-    className: "text-[13px] text-ink",
-    render: (employee) => employee.location,
-  },
-  {
-    key: "teamRole",
-    header: "Team / Rolle",
-    width: "1.3fr",
-    render: (employee) => (
-      <DataTableStack title={employee.team} subtitle={employee.role} />
-    ),
-  },
-  {
-    key: "startDate",
-    header: "Eintritt",
-    width: "112px",
-    className: "font-mono text-[11.5px] text-muted",
-    render: (employee) => employee.startDate,
-  },
-  {
-    key: "contract",
-    header: "Vertrag",
-    width: "132px",
-    render: (employee) => <DataTableBadge>{employee.contract}</DataTableBadge>,
-  },
-  {
-    key: "status",
-    header: "Status",
-    width: "130px",
-    render: (employee) => {
-      const status = employeeStatusConfig[employee.status];
-
-      return <DataTableStatus label={status.label} tone={status.tone} />;
+    {
+      key: "name",
+      header: "Name",
+      width: "2fr",
+      render: (employee) => (
+        <DataTableAvatar initials={employee.initials} label={employee.name} />
+      ),
     },
-  },
+    {
+      key: "employeeNumber",
+      header: "Personal-Nr.",
+      width: "116px",
+      className: "font-mono text-[12px] text-muted-2",
+      render: (employee) => employee.employeeNumber,
+    },
+    {
+      key: "location",
+      header: "Standort",
+      width: "120px",
+      className: "text-[13px] text-ink",
+      render: (employee) => employee.location,
+    },
+    {
+      key: "teamRole",
+      header: "Team / Rolle",
+      width: "1.3fr",
+      render: (employee) => (
+        <DataTableStack title={employee.team} subtitle={employee.role} />
+      ),
+    },
+    {
+      key: "startDate",
+      header: "Eintritt",
+      width: "112px",
+      className: "font-mono text-[11.5px] text-muted",
+      render: (employee) => employee.startDate,
+    },
+    {
+      key: "contract",
+      header: "Vertrag",
+      width: "132px",
+      render: (employee) => <DataTableBadge>{employee.contract}</DataTableBadge>,
+    },
+    {
+      key: "status",
+      header: "Status",
+      width: "130px",
+      render: (employee) => {
+        const status = employeeStatusConfig[employee.status];
+
+        return <DataTableStatus label={status.label} tone={status.tone} />;
+      },
+    },
     {
       key: "quickView",
       header: "",
@@ -97,14 +97,26 @@ export default async function EmployeesPage({
   params,
 }: PageProps<"/u/[tenant]/employees">) {
   const { tenant } = await params;
+  const [employees, locations, teams] = await Promise.all([
+    getEmployeesForTenant(tenant),
+    getLocationsForTenant(tenant),
+    getTeamsForTenant(tenant),
+  ]);
+
+  if (!employees || !locations || !teams) {
+    notFound();
+  }
+
   const columns = getColumns(tenant);
+  const locationNames = locations.map((location) => location.name);
+  const teamNames = teams.map((team) => team.name);
 
   return (
     <>
       <PageHeader
         eyebrow="Personalverzeichnis"
         title="Mitarbeiter"
-        subtitle={`${employees.length} Eintr\u00e4ge \u00b7 alle Standorte`}
+        subtitle={`${employees.length} Eintraege \u00b7 alle Standorte`}
       >
         <SearchInput
           placeholder="Name, Personal-Nr. oder Team"
@@ -119,9 +131,11 @@ export default async function EmployeesPage({
             defaultValue="Alle Standorte"
           >
             <option value="Alle Standorte">Alle Standorte</option>
-            <option value={"München"}>{"München"}</option>
-            <option value="Berlin">Berlin</option>
-            <option value="Hamburg">Hamburg</option>
+            {locationNames.map((location) => (
+              <option key={location} value={location}>
+                {location}
+              </option>
+            ))}
           </select>
           <ChevronDown
             size={14}
@@ -129,7 +143,11 @@ export default async function EmployeesPage({
           />
         </div>
 
-        <InviteEmployeeButton />
+        <InviteEmployeeButton
+          tenant={tenant}
+          locations={locationNames}
+          teams={teamNames}
+        />
       </PageHeader>
 
       <DataTable

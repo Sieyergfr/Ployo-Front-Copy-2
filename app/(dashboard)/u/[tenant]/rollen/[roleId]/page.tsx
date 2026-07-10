@@ -1,19 +1,21 @@
+import { deleteRoleAction, updateRoleAction } from "@/app/(dashboard)/u/[tenant]/rollen/actions";
 import PageHeader from "@/components/PageHeader";
+import { getRoleForTenant } from "@/lib/role-service";
 import {
   permissionAreas,
   permissionLevelLabels,
-  permissionRoles,
+  permissionLevels,
   type PermissionLevel,
 } from "@/lib/roles";
-import { ArrowLeft, EyeOff, Save, ShieldCheck, X } from "lucide-react";
+import { ArrowLeft, EyeOff, Save, ShieldCheck, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
 export async function generateMetadata({
   params,
 }: PageProps<"/u/[tenant]/rollen/[roleId]">) {
-  const { roleId } = await params;
-  const role = permissionRoles.find((item) => item.id === roleId);
+  const { tenant, roleId } = await params;
+  const role = await getRoleForTenant(tenant, roleId);
 
   return {
     title: role?.name ?? "Rollen",
@@ -33,7 +35,7 @@ export default async function RoleDetailPage({
 }: PageProps<"/u/[tenant]/rollen/[roleId]">) {
   const { tenant, roleId } = await params;
   const { edit } = await searchParams;
-  const role = permissionRoles.find((item) => item.id === roleId);
+  const role = await getRoleForTenant(tenant, roleId);
 
   if (!role) {
     notFound();
@@ -41,6 +43,7 @@ export default async function RoleDetailPage({
 
   const isEditing = edit === "1";
   const roleHref = `/u/${tenant}/rollen/${role.id}`;
+  const canDelete = !role.isSystem && role.members === 0;
 
   return (
     <>
@@ -62,21 +65,65 @@ export default async function RoleDetailPage({
               <X size={15} />
               Abbrechen
             </Link>
-            <Link href={roleHref} className="btn btn-primary">
+            <button type="submit" form="role-edit-form" className="btn btn-primary">
               <Save size={15} />
               Speichern
-            </Link>
+            </button>
           </>
         ) : (
-          <Link href={`${roleHref}?edit=1`} className="btn btn-secondary">
-            <ShieldCheck size={15} />
-            Rechte bearbeiten
-          </Link>
+          <>
+            {canDelete && (
+              <form action={deleteRoleAction}>
+                <input type="hidden" name="tenant" value={tenant} />
+                <input type="hidden" name="roleId" value={role.id} />
+                <button
+                  type="submit"
+                  className="btn btn-secondary border-danger/25 text-danger hover:border-danger/40 hover:bg-danger/5"
+                >
+                  <Trash2 size={15} />
+                  Loeschen
+                </button>
+              </form>
+            )}
+            <Link href={`${roleHref}?edit=1`} className="btn btn-secondary">
+              <ShieldCheck size={15} />
+              Rechte bearbeiten
+            </Link>
+          </>
         )}
       </PageHeader>
 
       {isEditing ? (
-        <section className="grid gap-3">
+        <form id="role-edit-form" action={updateRoleAction} className="grid gap-3">
+          <input type="hidden" name="tenant" value={tenant} />
+          <input type="hidden" name="roleId" value={role.id} />
+          <section className="rounded-card border border-border bg-white p-5">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="field">
+                <label htmlFor="role-name" className="label">
+                  Rollenname
+                </label>
+                <input
+                  id="role-name"
+                  name="name"
+                  className="input"
+                  defaultValue={role.name}
+                  required
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="role-description" className="label">
+                  Beschreibung
+                </label>
+                <input
+                  id="role-description"
+                  name="description"
+                  className="input"
+                  defaultValue={role.description}
+                />
+              </div>
+            </div>
+          </section>
           {permissionAreas.map((area) => {
             const level = role.permissions[area.id] ?? "none";
             const hasAccess = level !== "none";
@@ -107,29 +154,25 @@ export default async function RoleDetailPage({
                     <div className="mb-3 font-mono text-[9.5px] uppercase tracking-[0.6px] text-muted">
                       Rechte
                     </div>
-                    <div className="flex flex-wrap gap-x-4 gap-y-2">
-                      {(["read", "write", "admin"] as PermissionLevel[]).map(
-                        (permission) => (
-                          <label
-                            key={permission}
-                            className="checkbox-row relative cursor-pointer"
-                          >
-                            <input
-                              type="checkbox"
-                              className="peer absolute inset-0 cursor-pointer opacity-0"
-                              defaultChecked={
-                                permission === "read"
-                                  ? level !== "none"
-                                  : permission === level || level === "admin"
-                              }
-                            />
-                            <span className="checkbox" />
-                            <span className="checkbox-label">
-                              {permissionLevelLabels[permission]}
-                            </span>
-                          </label>
-                        ),
-                      )}
+                    <div className="grid grid-cols-2 gap-2">
+                      {permissionLevels.map((permission) => (
+                        <label
+                          key={permission}
+                          className="checkbox-row relative cursor-pointer"
+                        >
+                          <input
+                            type="radio"
+                            name={`permission-${area.id}`}
+                            value={permission}
+                            className="peer absolute inset-0 cursor-pointer opacity-0"
+                            defaultChecked={permission === level}
+                          />
+                          <span className="checkbox" />
+                          <span className="checkbox-label">
+                            {permissionLevelLabels[permission]}
+                          </span>
+                        </label>
+                      ))}
                     </div>
                   </div>
 
@@ -143,6 +186,7 @@ export default async function RoleDetailPage({
                           type="checkbox"
                           className="peer absolute inset-0 cursor-pointer opacity-0"
                           defaultChecked={!hasAccess}
+                          disabled
                         />
                         <span className="checkbox" />
                         <span className="checkbox-label">
@@ -157,6 +201,7 @@ export default async function RoleDetailPage({
                           type="checkbox"
                           className="peer absolute inset-0 cursor-pointer opacity-0"
                           defaultChecked={!hasAccess}
+                          disabled
                         />
                         <span className="checkbox" />
                         <span className="checkbox-label">Route sperren</span>
@@ -167,7 +212,7 @@ export default async function RoleDetailPage({
               </div>
             );
           })}
-        </section>
+        </form>
       ) : (
         <section className="overflow-hidden rounded-card border border-border bg-white">
           <div className="overflow-x-auto">

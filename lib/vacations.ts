@@ -9,6 +9,9 @@ export type VacationMetric = {
 
 export type VacationRequest = {
   id: string;
+  dbId?: string;
+  key?: string;
+  employeeId?: string;
   initials: string;
   name: string;
   location: string;
@@ -16,6 +19,7 @@ export type VacationRequest = {
   startDate: string;
   endDate: string;
   days: string;
+  note?: string;
   status: VacationRequestStatus;
 };
 

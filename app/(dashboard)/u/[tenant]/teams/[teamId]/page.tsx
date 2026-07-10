@@ -1,12 +1,12 @@
 import {
-  getTeamById,
-  teamAssignableEmployees,
-  teamMetrics,
-  type Team,
-  type TeamMember,
-} from "@/lib/teams";
+  addTeamMemberAction,
+  deleteTeamAction,
+  removeTeamMemberAction,
+  setTeamLeadAction,
+  updateTeamAction,
+} from "@/app/(dashboard)/u/[tenant]/teams/actions";
 import AuditLogPanel from "@/components/AuditLogPanel";
-import { ConfirmedSaveLink, UnsavedChangesGuard } from "@/components/EditSafety";
+import { UnsavedChangesGuard } from "@/components/EditSafety";
 import {
   LocationMultiSelectDropdown,
   TeamColorButtons,
@@ -14,9 +14,18 @@ import {
 import TeamRoleEditorButton from "@/components/TeamRoleEditorButton";
 import { makeAuditLogs } from "@/lib/audit";
 import {
+  getAssignableEmployees,
+  getTeamForTenant,
+  getTeamMetrics,
+  getTeamsForTenant,
+} from "@/lib/team-service";
+import { type Team, type TeamMember } from "@/lib/teams";
+import {
   ArrowLeft,
   Pencil,
   Plus,
+  Save,
+  Trash2,
   UserRoundCheck,
   UserRoundMinus,
   X,
@@ -27,8 +36,8 @@ import { notFound } from "next/navigation";
 export async function generateMetadata({
   params,
 }: PageProps<"/u/[tenant]/teams/[teamId]">) {
-  const { teamId } = await params;
-  const team = getTeamById(teamId);
+  const { tenant, teamId } = await params;
+  const team = await getTeamForTenant(tenant, teamId);
 
   return {
     title: team?.name ?? "Teams",
@@ -106,111 +115,10 @@ function EditableTextField({
       <label htmlFor={id} className="label">
         {label}
       </label>
-      <input id={id} name={name} className="input bg-white" defaultValue={value} />
+      <input id={id} name={name} className="input bg-white" defaultValue={value} required />
     </div>
   );
 }
-
-function EditableSelectField({
-  id,
-  label,
-  name,
-  value,
-  options,
-}: {
-  id: string;
-  label: string;
-  name: string;
-  value: string;
-  options: string[];
-}) {
-  return (
-    <div className="field">
-      <label htmlFor={id} className="label">
-        {label}
-      </label>
-      <select
-        id={id}
-        name={name}
-        className="input cursor-pointer bg-white"
-        defaultValue={value}
-      >
-        {options.map((option) => (
-          <option key={option} value={option}>
-            {option}
-          </option>
-        ))}
-      </select>
-    </div>
-  );
-}
-
-const teamColorOptions = [
-  { value: "bg-[#C9622A]", label: "Orange", swatch: "bg-[#C9622A]" },
-  { value: "bg-[#2A5BC9]", label: "Blau", swatch: "bg-[#2A5BC9]" },
-  { value: "bg-[#1D8A65]", label: "Grün", swatch: "bg-[#1D8A65]" },
-  { value: "bg-[#7A3C9C]", label: "Violett", swatch: "bg-[#7A3C9C]" },
-];
-
-function TeamColorSelect({ team }: { team: Team }) {
-  return (
-    <div className="field">
-      <label htmlFor="team-color" className="label">
-        Farbmarkierung
-      </label>
-      <select
-        id="team-color"
-        name="color"
-        className="input cursor-pointer bg-white"
-        defaultValue={team.colorClassName}
-      >
-        {teamColorOptions.map((color) => (
-          <option key={color.value} value={color.value}>
-            {color.label}
-          </option>
-        ))}
-      </select>
-      <div className="mt-2 flex gap-2">
-        {teamColorOptions.map((color) => (
-          <span
-            key={color.value}
-            className={`size-5 rounded-full border border-border ${color.swatch}`}
-            title={color.label}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function TeamLocationsMultiSelect({ team }: { team: Team }) {
-  const selectedLocations = team.locations.split(",").map((item) => item.trim());
-
-  return (
-    <div className="field">
-      <span className="label">Standorte</span>
-      <div className="grid gap-2 rounded-xl border border-border bg-bg p-3">
-        {["München", "Berlin", "Hamburg"].map((location) => (
-          <label key={location} className="checkbox-row">
-            <input
-              type="checkbox"
-              name="locations"
-              value={location}
-              className="peer sr-only"
-              defaultChecked={selectedLocations.includes(location)}
-            />
-            <span className="checkbox" />
-            <span className="checkbox-label">{location}</span>
-          </label>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-void EditableSelectField;
-void TeamColorSelect;
-void TeamLocationsMultiSelect;
 
 function teamAccentTextClass(team: Team) {
   const colors: Record<string, string> = {
@@ -220,16 +128,18 @@ function teamAccentTextClass(team: Team) {
     verkauf: "text-[#C9622A]",
   };
 
-  return colors[team.id] ?? "text-muted";
+  return colors[team.key ?? team.id] ?? "text-muted";
 }
 
 function MemberRow({
   member,
   team,
+  tenant,
   isEditing,
 }: {
   member: TeamMember;
   team: Team;
+  tenant: string;
   isEditing: boolean;
 }) {
   return (
@@ -249,78 +159,36 @@ function MemberRow({
           )}
         </div>
       </div>
-      <div className="text-[13px] text-ink">
-        {isEditing ? (
-          <select
-            aria-label={`${member.name} Standort`}
-            className="input cursor-pointer bg-white px-2.5 py-2 text-[12px]"
-            defaultValue={member.location}
-          >
-            {["München", "Berlin", "Hamburg"].map((location) => (
-              <option key={location} value={location}>
-                {location}
-              </option>
-            ))}
-          </select>
-        ) : (
-          member.location
-        )}
-      </div>
-      <div className="text-[13px] text-muted-2">
-        {isEditing ? (
-          <input
-            aria-label={`${member.name} Rolle`}
-            className="input bg-white px-2.5 py-2 text-[12px]"
-            defaultValue={member.role}
-          />
-        ) : (
-          member.role
-        )}
-      </div>
+      <div className="text-[13px] text-ink">{member.location}</div>
+      <div className="text-[13px] text-muted-2">{member.role}</div>
       <div>
-        {isEditing ? (
-          <select
-            aria-label={`${member.name} Vertrag`}
-            className="input cursor-pointer bg-white px-2.5 py-2 text-[12px]"
-            defaultValue={member.contract}
-          >
-            {["Unbefristet", "Vollzeit", "Teilzeit", "Werkstudentin", "Minijob"].map(
-              (contract) => (
-                <option key={contract} value={contract}>
-                  {contract}
-                </option>
-              ),
-            )}
-          </select>
-        ) : (
-          <ContractBadge>{member.contract}</ContractBadge>
-        )}
+        <ContractBadge>{member.contract}</ContractBadge>
       </div>
-      {isEditing ? (
-        <select
-          aria-label={`${member.name} Status`}
-          className="input cursor-pointer bg-white px-2.5 py-2 text-[12px]"
-          defaultValue={member.status}
-        >
-          <option value="on-duty">Im Dienst</option>
-          <option value="vacation">Urlaub</option>
-        </select>
-      ) : (
-        <StatusPill status={member.status} />
-      )}
+      <StatusPill status={member.status} />
       <div className="flex items-center justify-end gap-2">
-        {isEditing && !member.isLead && (
-          <button
-            type="button"
-            className="flex size-8 cursor-pointer items-center justify-center rounded-[8px] border border-border bg-white text-muted transition-colors hover:border-danger hover:text-danger"
-            title="Aus Team entfernen"
-            aria-label={`${member.name} aus Team entfernen`}
-          >
-            <UserRoundMinus size={14} />
-          </button>
+        {isEditing && !member.isLead && member.id && (
+          <form action={removeTeamMemberAction}>
+            <input type="hidden" name="tenant" value={tenant} />
+            <input type="hidden" name="teamId" value={team.dbId} />
+            <input type="hidden" name="teamHandle" value={team.id} />
+            <input type="hidden" name="memberId" value={member.id} />
+            <button
+              type="submit"
+              className="flex size-8 cursor-pointer items-center justify-center rounded-[8px] border border-border bg-white text-muted transition-colors hover:border-danger hover:text-danger"
+              title="Aus Team entfernen"
+              aria-label={`${member.name} aus Team entfernen`}
+            >
+              <UserRoundMinus size={14} />
+            </button>
+          </form>
         )}
         {isEditing ? (
-          <TeamRoleEditorButton member={member} />
+          <TeamRoleEditorButton
+            tenant={tenant}
+            teamId={team.dbId ?? ""}
+            teamHandle={team.id}
+            member={member}
+          />
         ) : (
           <span className="font-mono text-[10px] text-muted">-</span>
         )}
@@ -329,9 +197,15 @@ function MemberRow({
   );
 }
 
-function TeamLeaderEditor({ team }: { team: Team }) {
+function TeamLeaderEditor({ team, tenant }: { team: Team; tenant: string }) {
   return (
-    <section className="mb-3.5 rounded-card border border-border bg-white px-6 py-4">
+    <form
+      action={setTeamLeadAction}
+      className="mb-3.5 rounded-card border border-border bg-white px-6 py-4"
+    >
+      <input type="hidden" name="tenant" value={tenant} />
+      <input type="hidden" name="teamId" value={team.dbId} />
+      <input type="hidden" name="teamHandle" value={team.id} />
       <div className="flex flex-wrap items-end gap-3">
         <div className="min-w-[220px] flex-1">
           <label
@@ -343,11 +217,13 @@ function TeamLeaderEditor({ team }: { team: Team }) {
           <div className="relative">
             <select
               id="team-lead"
-              defaultValue={team.lead.initials}
+              name="memberId"
+              defaultValue={team.lead.id}
               className="input cursor-pointer appearance-none bg-white pr-9 font-medium"
+              required
             >
               {team.members.map((member) => (
-                <option key={member.initials} value={member.initials}>
+                <option key={member.id ?? member.initials} value={member.id}>
                   {member.name}
                 </option>
               ))}
@@ -359,35 +235,48 @@ function TeamLeaderEditor({ team }: { team: Team }) {
           </div>
         </div>
 
-        <button type="button" className="btn btn-primary">
+        <button type="submit" className="btn btn-primary">
           Teamleitung speichern
         </button>
       </div>
-    </section>
+    </form>
   );
 }
 
-function TeamMemberAssignment({ team }: { team: Team }) {
+function TeamMemberAssignment({
+  team,
+  tenant,
+  assignableEmployees,
+}: {
+  team: Team;
+  tenant: string;
+  assignableEmployees: TeamMember[];
+}) {
   return (
-    <div className="border-b border-border bg-bg px-6 py-4">
+    <form action={addTeamMemberAction} className="border-b border-border bg-bg px-6 py-4">
+      <input type="hidden" name="tenant" value={tenant} />
+      <input type="hidden" name="teamId" value={team.dbId} />
+      <input type="hidden" name="teamHandle" value={team.id} />
       <div className="flex flex-wrap items-end gap-3">
         <div className="min-w-[220px] flex-1">
           <label
             htmlFor="team-member-add"
             className="mb-2 block font-mono text-[9.5px] uppercase tracking-[0.6px] text-muted"
           >
-            Mitarbeiter zum Team hinzufügen
+            Mitarbeiter zum Team hinzufuegen
           </label>
           <select
             id="team-member-add"
+            name="employeeId"
             defaultValue=""
             className="input cursor-pointer appearance-none bg-white font-medium"
+            required
           >
             <option value="" disabled>
-              Mitarbeiter ausw\u00e4hlen
+              Mitarbeiter auswaehlen
             </option>
-            {teamAssignableEmployees.map((employee) => (
-              <option key={employee.initials} value={employee.initials}>
+            {assignableEmployees.map((employee) => (
+              <option key={employee.employeeId ?? employee.initials} value={employee.employeeId}>
                 {employee.name} - {employee.location}
               </option>
             ))}
@@ -403,17 +292,18 @@ function TeamMemberAssignment({ team }: { team: Team }) {
           </label>
           <input
             id="team-member-role"
+            name="role"
             className="input bg-white"
             defaultValue={team.name}
           />
         </div>
 
-        <button type="button" className="btn btn-primary">
+        <button type="submit" className="btn btn-primary">
           <Plus size={15} />
-          Hinzufügen
+          Hinzufuegen
         </button>
       </div>
-    </div>
+    </form>
   );
 }
 
@@ -423,12 +313,17 @@ export default async function TeamDetailPage({
 }: PageProps<"/u/[tenant]/teams/[teamId]">) {
   const { tenant, teamId } = await params;
   const { edit } = await searchParams;
-  const team = getTeamById(teamId);
+  const [team, teams] = await Promise.all([
+    getTeamForTenant(tenant, teamId),
+    getTeamsForTenant(tenant),
+  ]);
 
-  if (!team) {
+  if (!team || !teams) {
     notFound();
   }
 
+  const assignableEmployees = await getAssignableEmployees(tenant, team.id);
+  const teamMetrics = getTeamMetrics(teams);
   const onDutyCount = team.members.filter(
     (member) => member.status === "on-duty",
   ).length;
@@ -455,84 +350,101 @@ export default async function TeamDetailPage({
         </span>
       </div>
 
-      <section className="mb-3.5 overflow-hidden rounded-card border border-border bg-white">
-        <div className={`h-1 w-full ${team.colorClassName}`} />
-        <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-[22px]">
-          <div className="min-w-[260px] flex-1">
-            {isEditing ? (
-              <div className="grid gap-3 sm:grid-cols-2">
-                <EditableTextField
-                  id="team-name"
-                  label="Teamname"
-                  name="name"
-                  value={team.name}
-                />
-                <LocationMultiSelectDropdown
-                  defaultLocations={team.locations
-                    .split(",")
-                    .map((item) => item.trim())}
-                />
-              </div>
-            ) : (
-              <>
-                <h1 className="m-0 font-display text-[28px] font-semibold tracking-[-0.8px] text-ink">
-                  {team.name}
-                </h1>
-                <div className="mt-1.5 text-[13px] text-muted">
-                  {team.locations}
+      <form id="team-edit-form" action={updateTeamAction}>
+        <input type="hidden" name="tenant" value={tenant} />
+        <input type="hidden" name="teamId" value={team.dbId} />
+        <section className="mb-3.5 overflow-hidden rounded-card border border-border bg-white">
+          <div className={`h-1 w-full ${team.colorClassName}`} />
+          <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-[22px]">
+            <div className="min-w-[260px] flex-1">
+              {isEditing ? (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <EditableTextField
+                    id="team-name"
+                    label="Teamname"
+                    name="name"
+                    value={team.name}
+                  />
+                  <LocationMultiSelectDropdown
+                    defaultLocations={team.locations
+                      .split(",")
+                      .map((item) => item.trim())
+                      .filter(Boolean)}
+                  />
                 </div>
-              </>
-            )}
-          </div>
-
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="flex gap-6">
-              <div className="text-center">
-                <div className="font-display text-[30px] font-semibold tracking-[-1px] text-ink">
-                  {team.members.length}
-                </div>
-                <div className="mt-[3px] font-mono text-[9px] uppercase text-muted">
-                  Mitglieder
-                </div>
-              </div>
-              <div className="text-center">
-                <div className="font-display text-[30px] font-semibold tracking-[-1px] text-success">
-                  {onDutyCount}
-                </div>
-                <div className="mt-[3px] font-mono text-[9px] uppercase text-muted">
-                  Im Dienst
-                </div>
-              </div>
+              ) : (
+                <>
+                  <h1 className="m-0 font-display text-[28px] font-semibold tracking-[-0.8px] text-ink">
+                    {team.name}
+                  </h1>
+                  <div className="mt-1.5 text-[13px] text-muted">
+                    {team.locations || "Keine Standorte"}
+                  </div>
+                </>
+              )}
             </div>
 
-            {isEditing ? (
-              <div className="flex gap-2">
-                <Link href={teamHref} className="btn btn-secondary btn-sm">
-                  <X size={14} />
-                  Abbrechen
-                </Link>
-                <ConfirmedSaveLink href={teamHref} />
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex gap-6">
+                <div className="text-center">
+                  <div className="font-display text-[30px] font-semibold tracking-[-1px] text-ink">
+                    {team.members.length}
+                  </div>
+                  <div className="mt-[3px] font-mono text-[9px] uppercase text-muted">
+                    Mitglieder
+                  </div>
+                </div>
+                <div className="text-center">
+                  <div className="font-display text-[30px] font-semibold tracking-[-1px] text-success">
+                    {onDutyCount}
+                  </div>
+                  <div className="mt-[3px] font-mono text-[9px] uppercase text-muted">
+                    Im Dienst
+                  </div>
+                </div>
               </div>
-            ) : (
-              <Link href={teamEditHref} className="btn btn-secondary btn-sm">
-                <Pencil size={14} />
-                Bearbeiten
-              </Link>
-            )}
-          </div>
-        </div>
-      </section>
 
-      {isEditing && (
-        <>
-          <TeamLeaderEditor team={team} />
+              {isEditing ? (
+                <div className="flex gap-2">
+                  <Link href={teamHref} className="btn btn-secondary btn-sm">
+                    <X size={14} />
+                    Abbrechen
+                  </Link>
+                  <button type="submit" className="btn btn-primary btn-sm">
+                    <Save size={14} />
+                    Speichern
+                  </button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <button
+                    type="submit"
+                    formAction={deleteTeamAction}
+                    className="btn btn-secondary btn-sm border-danger/25 text-danger hover:border-danger/40 hover:bg-danger/5"
+                  >
+                    <Trash2 size={14} />
+                    Loeschen
+                  </button>
+                  <Link href={teamEditHref} className="btn btn-secondary btn-sm">
+                    <Pencil size={14} />
+                    Bearbeiten
+                  </Link>
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+
+        {isEditing && (
           <section className="mb-3.5 rounded-card border border-border bg-white px-6 py-4">
             <div className="grid gap-3 sm:grid-cols-2">
               <TeamColorButtons defaultValue={team.colorClassName} />
             </div>
           </section>
-        </>
-      )}
+        )}
+      </form>
+
+      {isEditing && <TeamLeaderEditor team={team} tenant={tenant} />}
 
       <section className="overflow-hidden rounded-card border border-border bg-white">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-6 pt-5 pb-3.5">
@@ -546,7 +458,13 @@ export default async function TeamDetailPage({
             </Link>
           )}
         </div>
-        {isEditing && <TeamMemberAssignment team={team} />}
+        {isEditing && (
+          <TeamMemberAssignment
+            team={team}
+            tenant={tenant}
+            assignableEmployees={assignableEmployees}
+          />
+        )}
         <div className="overflow-x-auto">
           <div className="min-w-[820px]">
             <div className="grid gap-3.5 border-b border-border px-6 py-3.5 font-mono text-[9.5px] uppercase tracking-[0.6px] text-muted [grid-template-columns:2fr_120px_1.2fr_130px_110px_150px]">
@@ -559,9 +477,10 @@ export default async function TeamDetailPage({
             </div>
             {team.members.map((member) => (
               <MemberRow
-                key={`${team.id}-${member.initials}`}
+                key={member.id ?? `${team.dbId}-${member.initials}`}
                 member={member}
                 team={team}
+                tenant={tenant}
                 isEditing={isEditing}
               />
             ))}

@@ -1,5 +1,6 @@
 "use client";
 
+import { createLocationAction } from "@/app/(dashboard)/u/[tenant]/standorte/actions";
 import { useUniversalPopup } from "@/components/UniversalPopup";
 import { employees } from "@/lib/employees";
 import { Building2, Check, ChevronDown, Plus } from "lucide-react";
@@ -12,14 +13,14 @@ type DropdownOption = {
 };
 
 const locationColors = [
-  { value: "black", className: "bg-ink", label: "Schwarz" },
-  { value: "blue", className: "bg-[#2A6FDB]", label: "Blau" },
-  { value: "green", className: "bg-success", label: "Grün" },
-  { value: "purple", className: "bg-[#8B6ED4]", label: "Violett" },
-  { value: "orange", className: "bg-[#C9622A]", label: "Orange" },
-  { value: "red", className: "bg-danger", label: "Rot" },
-  { value: "teal", className: "bg-[#168A8A]", label: "Türkis" },
-  { value: "slate", className: "bg-[#5C6B7A]", label: "Schiefer" },
+  { value: "bg-ink", className: "bg-ink", label: "Schwarz" },
+  { value: "bg-[#2A6FDB]", className: "bg-[#2A6FDB]", label: "Blau" },
+  { value: "bg-success", className: "bg-success", label: "Gruen" },
+  { value: "bg-[#8B6ED4]", className: "bg-[#8B6ED4]", label: "Violett" },
+  { value: "bg-[#C9622A]", className: "bg-[#C9622A]", label: "Orange" },
+  { value: "bg-danger", className: "bg-danger", label: "Rot" },
+  { value: "bg-[#168A8A]", className: "bg-[#168A8A]", label: "Tuerkis" },
+  { value: "bg-[#5C6B7A]", className: "bg-[#5C6B7A]", label: "Schiefer" },
 ];
 
 function CustomDropdownField({
@@ -155,25 +156,26 @@ function LocationColorPicker() {
   );
 }
 
-function CreateLocationForm({ onDone }: { onDone: () => void }) {
+function CreateLocationForm({
+  tenant,
+  onDone,
+}: {
+  tenant: string;
+  onDone: () => void;
+}) {
   const leadOptions = useMemo(
     () =>
       employees.map((employee) => ({
         value: employee.id,
         label: employee.name,
-        meta: `${employee.location} · ${employee.team}`,
+        meta: `${employee.location} - ${employee.team}`,
       })),
     [],
   );
 
   return (
-    <form
-      className="flex flex-col gap-4"
-      onSubmit={(event) => {
-        event.preventDefault();
-        onDone();
-      }}
-    >
+    <form className="flex flex-col gap-4" action={createLocationAction}>
+      <input type="hidden" name="tenant" value={tenant} />
       <div className="field">
         <label htmlFor="location-name" className="label">
           Standortname
@@ -182,7 +184,7 @@ function CreateLocationForm({ onDone }: { onDone: () => void }) {
           id="location-name"
           name="name"
           className="input"
-          placeholder="Filiale München Zentrum"
+          placeholder="Filiale Muenchen Zentrum"
           required
         />
       </div>
@@ -191,19 +193,20 @@ function CreateLocationForm({ onDone }: { onDone: () => void }) {
         <CustomDropdownField
           label="Typ"
           name="kind"
-          placeholder="Auswählen"
+          placeholder="Auswaehlen"
+          defaultValue="Filiale"
           options={[
             { value: "Filiale", label: "Filiale" },
             { value: "Zentrale", label: "Zentrale" },
             { value: "Lager", label: "Lager" },
-            { value: "Büro", label: "Büro" },
+            { value: "Buero", label: "Buero" },
           ]}
         />
 
         <CustomDropdownField
           label="Status"
           name="status"
-          placeholder="Auswählen"
+          placeholder="Auswaehlen"
           defaultValue="active"
           options={[
             { value: "active", label: "Aktiv" },
@@ -214,13 +217,13 @@ function CreateLocationForm({ onDone }: { onDone: () => void }) {
 
       <div className="field">
         <label htmlFor="location-address" className="label">
-          Straße und Hausnummer
+          Strasse und Hausnummer
         </label>
         <input
           id="location-address"
           name="address"
           className="input"
-          placeholder="Leopoldstraße 12"
+          placeholder="Leopoldstrasse 12"
           autoComplete="street-address"
           required
         />
@@ -249,7 +252,7 @@ function CreateLocationForm({ onDone }: { onDone: () => void }) {
             id="location-city"
             name="city"
             className="input"
-            placeholder="München"
+            placeholder="Muenchen"
             autoComplete="address-level2"
             required
           />
@@ -260,7 +263,7 @@ function CreateLocationForm({ onDone }: { onDone: () => void }) {
         <CustomDropdownField
           label="Standortleitung"
           name="lead"
-          placeholder="Mitarbeiter auswählen"
+          placeholder="Mitarbeiter auswaehlen"
           options={leadOptions}
         />
 
@@ -282,7 +285,7 @@ function CreateLocationForm({ onDone }: { onDone: () => void }) {
       <LocationColorPicker />
 
       <p className="m-0 text-[12.5px] leading-[1.55] text-muted-2">
-        Teams, Mitarbeiter und Schichten können nach dem Anlegen dem Standort
+        Teams, Mitarbeiter und Schichten koennen nach dem Anlegen dem Standort
         zugeordnet werden.
       </p>
 
@@ -299,7 +302,7 @@ function CreateLocationForm({ onDone }: { onDone: () => void }) {
   );
 }
 
-export default function CreateLocationButton() {
+export default function CreateLocationButton({ tenant }: { tenant: string }) {
   const { openPopup, closePopup } = useUniversalPopup();
 
   return (
@@ -309,7 +312,7 @@ export default function CreateLocationButton() {
       onClick={() => {
         openPopup({
           title: "Standort erstellen",
-          content: <CreateLocationForm onDone={closePopup} />,
+          content: <CreateLocationForm tenant={tenant} onDone={closePopup} />,
         });
       }}
     >

@@ -1,15 +1,23 @@
 "use client";
 
+import { updateTeamMemberAction } from "@/app/(dashboard)/u/[tenant]/teams/actions";
 import { useUniversalPopup } from "@/components/UniversalPopup";
 import type { TeamMember } from "@/lib/teams";
 import { Crown, Pencil, Save } from "lucide-react";
 
 export default function TeamRoleEditorButton({
+  tenant,
+  teamId,
+  teamHandle,
   member,
 }: {
+  tenant: string;
+  teamId: string;
+  teamHandle: string;
   member: TeamMember;
 }) {
   const { openPopup, closePopup } = useUniversalPopup();
+  const memberId = member.id ?? "";
 
   return (
     <button
@@ -19,13 +27,11 @@ export default function TeamRoleEditorButton({
         openPopup({
           title: "Teamrolle bearbeiten",
           content: (
-            <form
-              className="flex flex-col gap-4"
-              onSubmit={(event) => {
-                event.preventDefault();
-                closePopup();
-              }}
-            >
+            <form className="flex flex-col gap-4" action={updateTeamMemberAction}>
+              <input type="hidden" name="tenant" value={tenant} />
+              <input type="hidden" name="teamId" value={teamId} />
+              <input type="hidden" name="teamHandle" value={teamHandle} />
+              <input type="hidden" name="memberId" value={memberId} />
               <div className="rounded-xl border border-border bg-bg p-3">
                 <div className="text-[13px] font-semibold text-ink">{member.name}</div>
                 <div className="mt-0.5 text-[12px] text-muted">{member.location}</div>
@@ -36,13 +42,20 @@ export default function TeamRoleEditorButton({
                 </label>
                 <input
                   id="team-role-text"
+                  name="role"
                   className="input"
                   defaultValue={member.role}
                   placeholder="z. B. Schichtleitung, Kassiererin"
+                  required
                 />
               </div>
               <label className="checkbox-row">
-                <input type="checkbox" className="peer sr-only" defaultChecked={member.isLead} />
+                <input
+                  type="checkbox"
+                  name="isLead"
+                  className="peer sr-only"
+                  defaultChecked={member.isLead}
+                />
                 <span className="checkbox" />
                 <span className="checkbox-label">
                   <span className="inline-flex items-center gap-1.5">

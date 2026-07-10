@@ -65,6 +65,8 @@ export type LocationShiftPlan = {
 
 export type Location = {
   id: string;
+  dbId?: string;
+  key?: string;
   kind: string;
   name: string;
   address: string;

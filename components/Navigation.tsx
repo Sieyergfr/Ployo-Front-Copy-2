@@ -1,5 +1,6 @@
 "use client";
 
+import { saveSettingsPopupAction } from "@/app/(dashboard)/u/[tenant]/einstellungen/actions";
 import {
   Bell,
   Building2,
@@ -35,6 +36,36 @@ type TenantItem = {
   mark: string;
   href: string;
   colorClass: string;
+  slug?: string;
+  country?: string;
+  timezone?: string;
+  size?: string;
+  industry?: string;
+  contactEmail?: string;
+  logoUrl?: string;
+  primaryColor?: string;
+  plan?: string;
+  billingCycle?: string;
+  settings?: {
+    companyAddress: string;
+    taxId: string;
+    defaultLocationId: string;
+    weekStart: string;
+    workHours: string;
+    vacationDays: number;
+    employeeNumberRequired: boolean;
+    archiveFormerEmployees: boolean;
+    mailNotifications: boolean;
+    inAppNotifications: boolean;
+    mobilePush: boolean;
+    deadlineAlerts: boolean;
+    absenceAlerts: boolean;
+    shiftAlerts: boolean;
+    digestTime: string;
+    twoFactorRequired: boolean;
+    sessionTimeout: boolean;
+    auditRetentionMonths: number;
+  };
 };
 
 export type NavigationTenantItem = TenantItem;
@@ -59,6 +90,31 @@ const fallbackTenantItem: TenantItem = {
   href: "/select",
   colorClass: "sidebar-tenant-mark-blue",
 };
+
+const defaultSettings: NonNullable<TenantItem["settings"]> = {
+  companyAddress: "",
+  taxId: "",
+  defaultLocationId: "",
+  weekStart: "monday",
+  workHours: "40 Stunden pro Woche",
+  vacationDays: 30,
+  employeeNumberRequired: true,
+  archiveFormerEmployees: true,
+  mailNotifications: true,
+  inAppNotifications: true,
+  mobilePush: false,
+  deadlineAlerts: true,
+  absenceAlerts: true,
+  shiftAlerts: true,
+  digestTime: "monday-0800",
+  twoFactorRequired: false,
+  sessionTimeout: true,
+  auditRetentionMonths: 24,
+};
+
+function tenantSlugFromHref(href: string) {
+  return href.split("/").filter(Boolean).at(1) ?? "";
+}
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -194,7 +250,14 @@ function SettingsCard({
   );
 }
 
-function SettingsPanel({ activeCategory }: { activeCategory: SettingsCategoryId }) {
+function SettingsPanel({
+  activeCategory,
+  tenant,
+}: {
+  activeCategory: SettingsCategoryId;
+  tenant: TenantItem;
+}) {
+  const settings = tenant.settings ?? defaultSettings;
   if (activeCategory === "company") {
     return (
       <div className="flex flex-col gap-4">
@@ -208,7 +271,7 @@ function SettingsPanel({ activeCategory }: { activeCategory: SettingsCategoryId 
                 id="settings-company-name"
                 name="companyName"
                 className="input bg-white"
-                defaultValue="Müller & Partner GmbH"
+                defaultValue={tenant.name}
               />
             </div>
             <div className="field">
@@ -219,7 +282,7 @@ function SettingsPanel({ activeCategory }: { activeCategory: SettingsCategoryId 
                 id="settings-company-id"
                 name="tenantId"
                 className="input input-mono bg-white"
-                defaultValue="mueller-partner"
+                defaultValue={tenant.slug ?? tenantSlugFromHref(tenant.href)}
               />
             </div>
             <div className="field">
@@ -230,7 +293,7 @@ function SettingsPanel({ activeCategory }: { activeCategory: SettingsCategoryId 
                 id="settings-company-address"
                 name="companyAddress"
                 className="input bg-white"
-                defaultValue="Friedrichstraße 42, 10117 Berlin"
+                defaultValue={settings.companyAddress}
               />
             </div>
             <div className="field">
@@ -241,7 +304,7 @@ function SettingsPanel({ activeCategory }: { activeCategory: SettingsCategoryId 
                 id="settings-company-tax"
                 name="taxId"
                 className="input input-mono bg-white"
-                defaultValue="DE123456789"
+                defaultValue={settings.taxId}
               />
             </div>
           </div>
@@ -256,7 +319,7 @@ function SettingsPanel({ activeCategory }: { activeCategory: SettingsCategoryId 
                 id="settings-default-location"
                 name="defaultLocation"
                 className="input cursor-pointer bg-white"
-                defaultValue="berlin"
+                defaultValue={settings.defaultLocationId}
               >
                 <option value="berlin">Berlin</option>
                 <option value="hamburg">Hamburg</option>
@@ -271,7 +334,7 @@ function SettingsPanel({ activeCategory }: { activeCategory: SettingsCategoryId 
                 id="settings-week-start"
                 name="weekStart"
                 className="input cursor-pointer bg-white"
-                defaultValue="monday"
+                defaultValue={settings.weekStart}
               >
                 <option value="monday">Montag</option>
                 <option value="sunday">Sonntag</option>
@@ -285,7 +348,7 @@ function SettingsPanel({ activeCategory }: { activeCategory: SettingsCategoryId 
                 id="settings-work-hours"
                 name="workHours"
                 className="input bg-white"
-                defaultValue="40 Stunden pro Woche"
+                defaultValue={settings.workHours}
               />
             </div>
             <div className="field">
@@ -297,17 +360,17 @@ function SettingsPanel({ activeCategory }: { activeCategory: SettingsCategoryId 
                 name="vacationDays"
                 type="number"
                 className="input bg-white"
-                defaultValue="30"
+                defaultValue={settings.vacationDays}
               />
             </div>
           </div>
         </SettingsSection>
         <SettingsSection title="Daten & Aufbewahrung" icon={KeyRound}>
           <div className="flex flex-col gap-3">
-            <SettingsCheckbox name="employeeNumberRequired" defaultChecked>
+            <SettingsCheckbox name="employeeNumberRequired" defaultChecked={settings.employeeNumberRequired}>
               Personalnummer für neue Mitarbeiter verpflichtend
             </SettingsCheckbox>
-            <SettingsCheckbox name="archiveFormerEmployees" defaultChecked>
+            <SettingsCheckbox name="archiveFormerEmployees" defaultChecked={settings.archiveFormerEmployees}>
               Ausgeschiedene Mitarbeiter automatisch archivieren
             </SettingsCheckbox>
           </div>
@@ -352,13 +415,13 @@ function SettingsPanel({ activeCategory }: { activeCategory: SettingsCategoryId 
             <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-muted">
               Kanäle
             </div>
-            <SettingsCheckbox name="mailNotifications" defaultChecked>
+            <SettingsCheckbox name="mailNotifications" defaultChecked={settings.mailNotifications}>
               E-Mail-Benachrichtigungen
             </SettingsCheckbox>
-            <SettingsCheckbox name="inAppNotifications" defaultChecked>
+            <SettingsCheckbox name="inAppNotifications" defaultChecked={settings.inAppNotifications}>
               In-App-Benachrichtigungen
             </SettingsCheckbox>
-            <SettingsCheckbox name="mobilePush">
+            <SettingsCheckbox name="mobilePush" defaultChecked={settings.mobilePush}>
               Mobile Push-Nachrichten
             </SettingsCheckbox>
           </div>
@@ -366,13 +429,13 @@ function SettingsPanel({ activeCategory }: { activeCategory: SettingsCategoryId 
             <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-muted">
               Ereignisse
             </div>
-            <SettingsCheckbox name="deadlineAlerts" defaultChecked>
+            <SettingsCheckbox name="deadlineAlerts" defaultChecked={settings.deadlineAlerts}>
               Fristen und Erinnerungen melden
             </SettingsCheckbox>
-            <SettingsCheckbox name="absenceAlerts" defaultChecked>
+            <SettingsCheckbox name="absenceAlerts" defaultChecked={settings.absenceAlerts}>
               Urlaubs- und Krankmeldungen sofort senden
             </SettingsCheckbox>
-            <SettingsCheckbox name="shiftAlerts" defaultChecked>
+            <SettingsCheckbox name="shiftAlerts" defaultChecked={settings.shiftAlerts}>
               Schichtplan-Konflikte hervorheben
             </SettingsCheckbox>
           </div>
@@ -384,7 +447,7 @@ function SettingsPanel({ activeCategory }: { activeCategory: SettingsCategoryId 
               id="settings-digest-time"
               name="digestTime"
               className="input cursor-pointer bg-white"
-              defaultValue="monday-0800"
+              defaultValue={settings.digestTime}
             >
               <option value="monday-0800">Montag, 08:00 Uhr</option>
               <option value="friday-1600">Freitag, 16:00 Uhr</option>
@@ -401,10 +464,10 @@ function SettingsPanel({ activeCategory }: { activeCategory: SettingsCategoryId 
       <div className="flex flex-col gap-4">
         <SettingsSection title="Login-Sicherheit" icon={ShieldCheck}>
           <div className="flex flex-col gap-3">
-            <SettingsCheckbox name="twoFactor" defaultChecked>
+            <SettingsCheckbox name="twoFactor" defaultChecked={settings.twoFactorRequired}>
               Zwei-Faktor-Authentifizierung verlangen
             </SettingsCheckbox>
-            <SettingsCheckbox name="sessionTimeout" defaultChecked>
+            <SettingsCheckbox name="sessionTimeout" defaultChecked={settings.sessionTimeout}>
               Inaktive Sitzungen automatisch abmelden
             </SettingsCheckbox>
           </div>
@@ -418,7 +481,7 @@ function SettingsPanel({ activeCategory }: { activeCategory: SettingsCategoryId 
               id="settings-audit-retention"
               name="auditRetention"
               className="input cursor-pointer bg-white"
-              defaultValue="24"
+              defaultValue={settings.auditRetentionMonths}
             >
               <option value="12">12 Monate</option>
               <option value="24">24 Monate</option>
@@ -446,6 +509,12 @@ function SettingsPanel({ activeCategory }: { activeCategory: SettingsCategoryId 
   if (activeCategory === "billing") {
     return (
       <div className="flex flex-col gap-4">
+        <input type="hidden" name="companyName" value={tenant.name} />
+        <input
+          type="hidden"
+          name="tenantId"
+          value={tenant.slug ?? tenantSlugFromHref(tenant.href)}
+        />
         <SettingsSection title="Abonnement" icon={CreditCard}>
           <div className="mb-4 flex flex-wrap items-start justify-between gap-3 rounded-[12px] border border-ink/10 bg-ink p-4 text-white">
             <div>
@@ -532,7 +601,7 @@ function SettingsPanel({ activeCategory }: { activeCategory: SettingsCategoryId 
                 id="settings-payment-interval"
                 name="paymentInterval"
                 className="input cursor-pointer bg-white"
-                defaultValue="monthly"
+                defaultValue={tenant.billingCycle ?? "monthly"}
               >
                 <option value="monthly">Monatlich</option>
                 <option value="yearly">Jährlich, 2 Monate sparen</option>
@@ -547,7 +616,7 @@ function SettingsPanel({ activeCategory }: { activeCategory: SettingsCategoryId 
                 name="receiptEmail"
                 type="email"
                 className="input bg-white"
-                defaultValue="billing@mueller-partner.de"
+                defaultValue={tenant.contactEmail ?? ""}
               />
             </div>
           </div>
@@ -743,7 +812,13 @@ function SettingsPanel({ activeCategory }: { activeCategory: SettingsCategoryId 
   );
 }
 
-function SettingsPopupForm({ onDone }: { onDone: () => void }) {
+function SettingsPopupForm({
+  tenant,
+  onDone,
+}: {
+  tenant: TenantItem;
+  onDone: () => void;
+}) {
   const [activeCategory, setActiveCategory] =
     useState<SettingsCategoryId>("account");
 
@@ -753,12 +828,20 @@ function SettingsPopupForm({ onDone }: { onDone: () => void }) {
 
   return (
     <form
+      action={saveSettingsPopupAction}
       className="grid h-full min-h-0 bg-white md:grid-cols-[260px_1fr] md:grid-rows-[1fr_auto]"
-      onSubmit={(event) => {
-        event.preventDefault();
-        onDone();
-      }}
     >
+      <input type="hidden" name="tenant" value={tenant.slug ?? tenantSlugFromHref(tenant.href)} />
+      <input type="hidden" name="category" value={activeCategory} />
+      <input type="hidden" name="country" value={tenant.country ?? "DE"} />
+      <input type="hidden" name="timezone" value={tenant.timezone ?? "Europe/Berlin"} />
+      <input type="hidden" name="size" value={tenant.size ?? ""} />
+      <input type="hidden" name="industry" value={tenant.industry ?? ""} />
+      <input type="hidden" name="contactEmail" value={tenant.contactEmail ?? ""} />
+      <input type="hidden" name="logoUrl" value={tenant.logoUrl ?? ""} />
+      <input type="hidden" name="primaryColor" value={tenant.primaryColor ?? "#2A6FDB"} />
+      <input type="hidden" name="plan" value={tenant.plan ?? "professional"} />
+      <input type="hidden" name="billingCycle" value={tenant.billingCycle ?? "monthly"} />
       <nav
         aria-label="Einstellungskategorien"
         className="border-b border-white/[0.08] bg-[#0D0D0D] p-3 md:row-span-2 md:border-r md:border-b-0"
@@ -819,7 +902,7 @@ function SettingsPopupForm({ onDone }: { onDone: () => void }) {
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto p-6">
-          <SettingsPanel activeCategory={activeCategory} />
+          <SettingsPanel activeCategory={activeCategory} tenant={tenant} />
         </div>
       </div>
 
@@ -836,7 +919,13 @@ function SettingsPopupForm({ onDone }: { onDone: () => void }) {
   );
 }
 
-function SettingsPopup({ onClose }: { onClose: () => void }) {
+function SettingsPopup({
+  tenant,
+  onClose,
+}: {
+  tenant: TenantItem;
+  onClose: () => void;
+}) {
   return (
     <div
       className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/45 backdrop-blur-[6px]"
@@ -863,7 +952,7 @@ function SettingsPopup({ onClose }: { onClose: () => void }) {
           <X size={15} strokeWidth={2} />
         </button>
 
-        <SettingsPopupForm onDone={onClose} />
+        <SettingsPopupForm tenant={tenant} onDone={onClose} />
       </div>
     </div>
   );
@@ -1097,7 +1186,10 @@ export default function NavigationSidebar({
       </div>
 
       {isSettingsOpen && (
-        <SettingsPopup onClose={() => setIsSettingsOpen(false)} />
+        <SettingsPopup
+          tenant={activeTenant}
+          onClose={() => setIsSettingsOpen(false)}
+        />
       )}
     </aside>
   );

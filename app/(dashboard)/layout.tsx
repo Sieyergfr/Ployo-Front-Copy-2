@@ -59,6 +59,41 @@ export default async function AuthLayout ({
         mark: getInitials(membership.tenant.name),
         href: `/u/${membership.tenant.slug}`,
         colorClass: tenantMarkClasses[index % tenantMarkClasses.length],
+        slug: membership.tenant.slug,
+        country: membership.tenant.country,
+        timezone: membership.tenant.timezone,
+        size: membership.tenant.size ?? undefined,
+        industry: membership.tenant.industry ?? undefined,
+        contactEmail: membership.tenant.contactEmail ?? undefined,
+        logoUrl: membership.tenant.logoUrl ?? undefined,
+        primaryColor: membership.tenant.primaryColor,
+        plan: membership.tenant.plan,
+        billingCycle: membership.tenant.billingCycle,
+        settings: membership.tenant.settings
+          ? {
+              companyAddress: membership.tenant.settings.companyAddress,
+              taxId: membership.tenant.settings.taxId,
+              defaultLocationId: membership.tenant.settings.defaultLocationId,
+              weekStart: membership.tenant.settings.weekStart,
+              workHours: membership.tenant.settings.workHours,
+              vacationDays: membership.tenant.settings.vacationDays,
+              employeeNumberRequired:
+                membership.tenant.settings.employeeNumberRequired,
+              archiveFormerEmployees:
+                membership.tenant.settings.archiveFormerEmployees,
+              mailNotifications: membership.tenant.settings.mailNotifications,
+              inAppNotifications: membership.tenant.settings.inAppNotifications,
+              mobilePush: membership.tenant.settings.mobilePush,
+              deadlineAlerts: membership.tenant.settings.deadlineAlerts,
+              absenceAlerts: membership.tenant.settings.absenceAlerts,
+              shiftAlerts: membership.tenant.settings.shiftAlerts,
+              digestTime: membership.tenant.settings.digestTime,
+              twoFactorRequired: membership.tenant.settings.twoFactorRequired,
+              sessionTimeout: membership.tenant.settings.sessionTimeout,
+              auditRetentionMonths:
+                membership.tenant.settings.auditRetentionMonths,
+            }
+          : undefined,
     }));
 
     return (

@@ -1,10 +1,11 @@
 "use client";
 
+import { createRoleAction } from "@/app/(dashboard)/u/[tenant]/rollen/actions";
 import { useUniversalPopup } from "@/components/UniversalPopup";
-import { permissionAreas } from "@/lib/roles";
+import { permissionAreas, permissionLevelLabels, permissionLevels } from "@/lib/roles";
 import { Plus, ShieldCheck } from "lucide-react";
 
-export default function CreateRoleButton() {
+export default function CreateRoleButton({ tenant }: { tenant: string }) {
   const { openPopup, closePopup } = useUniversalPopup();
 
   return (
@@ -18,11 +19,9 @@ export default function CreateRoleButton() {
           content: (
             <form
               className="flex flex-col gap-4"
-              onSubmit={(event) => {
-                event.preventDefault();
-                closePopup();
-              }}
+              action={createRoleAction}
             >
+              <input type="hidden" name="tenant" value={tenant} />
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="field">
                   <label htmlFor="role-name" className="label">
@@ -65,16 +64,20 @@ export default function CreateRoleButton() {
                       <div className="mt-0.5 min-h-8 text-[11.5px] leading-[1.4] text-muted">
                         {area.description}
                       </div>
-                      <div className="mt-3 flex flex-wrap gap-3">
-                        {["Lesen", "Schreiben", "Admin"].map((permission) => (
+                      <div className="mt-3 grid grid-cols-2 gap-2">
+                        {permissionLevels.map((permission) => (
                           <label key={permission} className="checkbox-row">
                             <input
-                              type="checkbox"
-                              name={`${area.id}-${permission}`}
+                              type="radio"
+                              name={`permission-${area.id}`}
+                              value={permission}
+                              defaultChecked={permission === "none"}
                               className="peer sr-only"
                             />
                             <span className="checkbox" />
-                            <span className="checkbox-label">{permission}</span>
+                            <span className="checkbox-label">
+                              {permissionLevelLabels[permission]}
+                            </span>
                           </label>
                         ))}
                       </div>

@@ -1,8 +1,11 @@
 import CreateTeamButton from "@/components/CreateTeamButton";
 import PageHeader from "@/components/PageHeader";
-import { teamMetrics, teams, type Team, type TeamMember } from "@/lib/teams";
+import { getEmployeesForTenant } from "@/lib/employee-service";
+import { getTeamMetrics, getTeamsForTenant } from "@/lib/team-service";
+import { type Team, type TeamMember } from "@/lib/teams";
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 
 export const metadata = {
   title: "Teams",
@@ -61,7 +64,7 @@ function TeamCard({ team, tenant }: { team: Team; tenant: string }) {
               {team.name}
             </div>
             <div className="mt-[5px] font-mono text-[10.5px] text-muted">
-              {team.locations}
+              {team.locations || "Keine Standorte"}
             </div>
           </div>
           <span className="font-display text-[30px] font-semibold leading-none tracking-[-1px] text-ink">
@@ -71,7 +74,7 @@ function TeamCard({ team, tenant }: { team: Team; tenant: string }) {
 
         <div className="mb-4 flex flex-wrap gap-1.5">
           {team.members.map((member) => (
-            <MemberAvatar key={`${team.id}-${member.initials}`} member={member} />
+            <MemberAvatar key={member.id ?? `${team.dbId}-${member.initials}`} member={member} />
           ))}
         </div>
 
@@ -100,11 +103,28 @@ export default async function TeamsPage({
   params,
 }: PageProps<"/u/[tenant]/teams">) {
   const { tenant } = await params;
+  const [teams, employees] = await Promise.all([
+    getTeamsForTenant(tenant),
+    getEmployeesForTenant(tenant),
+  ]);
+
+  if (!teams || !employees) {
+    notFound();
+  }
+
+  const teamMetrics = getTeamMetrics(teams);
+  const employeeOptions = employees
+    .filter((employee) => employee.dbId)
+    .map((employee) => ({
+      value: employee.dbId ?? employee.id,
+      label: employee.name,
+      meta: `${employee.location} - ${employee.role}`,
+    }));
 
   return (
     <>
       <PageHeader eyebrow="Organisationsstruktur" title="Teams">
-        <CreateTeamButton />
+        <CreateTeamButton tenant={tenant} employees={employeeOptions} />
       </PageHeader>
 
       <section className="mb-7 grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]">
@@ -115,7 +135,7 @@ export default async function TeamsPage({
 
       <section className="grid gap-3.5 [grid-template-columns:repeat(auto-fill,minmax(300px,1fr))]">
         {teams.map((team) => (
-          <TeamCard key={team.id} team={team} tenant={tenant} />
+          <TeamCard key={team.dbId ?? team.id} team={team} tenant={tenant} />
         ))}
       </section>
 

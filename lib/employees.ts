@@ -85,6 +85,8 @@ export type EmployeeContractDetails = {
 
 export type Employee = {
   id: string;
+  dbId?: string;
+  key?: string;
   initials: string;
   name: string;
   employeeNumber: string;

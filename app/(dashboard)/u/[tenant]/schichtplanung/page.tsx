@@ -1,9 +1,54 @@
 import ShiftPlanningClient from "@/components/ShiftPlanningClient";
+import {
+  getISOWeekFromDate,
+  getShiftFormOptions,
+  getShiftPlanForTenant,
+} from "@/lib/shift-service";
+import { notFound } from "next/navigation";
 
 export const metadata = {
   title: "Schichtplanung",
 };
 
-export default function ShiftPlanningPage() {
-  return <ShiftPlanningClient />;
+function searchParamNumber(
+  value: string | string[] | undefined,
+  fallback: number,
+) {
+  const raw = Array.isArray(value) ? value[0] : value;
+  const parsed = Number.parseInt(raw ?? "", 10);
+
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+export default async function ShiftPlanningPage({
+  params,
+  searchParams,
+}: PageProps<"/u/[tenant]/schichtplanung">) {
+  const { tenant } = await params;
+  const query = await searchParams;
+  const currentWeek = getISOWeekFromDate(new Date());
+  const year = searchParamNumber(query.year, currentWeek.year);
+  const week = searchParamNumber(query.week, currentWeek.week);
+  const [plan, options] = await Promise.all([
+    getShiftPlanForTenant({ tenantSlug: tenant, year, week }),
+    getShiftFormOptions(tenant),
+  ]);
+
+  if (!plan || !options) {
+    notFound();
+  }
+
+  return (
+    <ShiftPlanningClient
+      tenant={tenant}
+      year={year}
+      week={week}
+      weekLabel={plan.label}
+      weekRange={plan.range}
+      conflictCount={plan.conflictCount}
+      days={plan.days}
+      employees={options.employees}
+      locations={options.locations}
+    />
+  );
 }

@@ -1,13 +1,16 @@
 import CreateLocationButton from "@/components/CreateLocationButton";
 import PageHeader from "@/components/PageHeader";
 import {
-  locationMetrics,
-  locations,
+  getLocationMetrics,
+  getLocationsForTenant,
+} from "@/lib/location-service";
+import {
   type Location,
   type LocationMetric,
   type LocationStatus,
 } from "@/lib/locations";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 
 export const metadata = {
   title: "Standorte",
@@ -122,11 +125,18 @@ export default async function LocationsPage({
   params,
 }: PageProps<"/u/[tenant]/standorte">) {
   const { tenant } = await params;
+  const locations = await getLocationsForTenant(tenant);
+
+  if (!locations) {
+    notFound();
+  }
+
+  const locationMetrics = getLocationMetrics(locations);
 
   return (
     <>
       <PageHeader eyebrow="Unternehmensstruktur" title="Standorte">
-        <CreateLocationButton />
+        <CreateLocationButton tenant={tenant} />
       </PageHeader>
 
       <section className="mb-7 grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(190px,1fr))]">
@@ -135,11 +145,26 @@ export default async function LocationsPage({
         ))}
       </section>
 
-      <section className="grid gap-3.5 [grid-template-columns:repeat(auto-fill,minmax(310px,1fr))]">
-        {locations.map((location) => (
-          <LocationCard key={location.id} location={location} tenant={tenant} />
-        ))}
-      </section>
+      {locations.length > 0 ? (
+        <section className="grid gap-3.5 [grid-template-columns:repeat(auto-fill,minmax(310px,1fr))]">
+          {locations.map((location) => (
+            <LocationCard
+              key={location.dbId ?? location.id}
+              location={location}
+              tenant={tenant}
+            />
+          ))}
+        </section>
+      ) : (
+        <section className="rounded-card border border-border bg-white px-6 py-10 text-center">
+          <div className="font-display text-[20px] font-semibold text-ink">
+            Noch keine Standorte
+          </div>
+          <div className="mt-2 text-[13px] text-muted-2">
+            Lege den ersten Standort an, um Teams, Schichten und Dateien zu verknuepfen.
+          </div>
+        </section>
+      )}
 
       <div className="mt-8 text-center font-mono text-[10px] tracking-[0.4px] text-[#B0B0AB]">
         Ployo {"\u00b7"} Personalakte-System {"\u00b7"} Alle Zugriffe

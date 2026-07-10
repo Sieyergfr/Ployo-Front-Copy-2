@@ -1,5 +1,10 @@
 "use client";
 
+import {
+  approveVacationRequestAction,
+  deleteVacationRequestAction,
+  rejectVacationRequestAction,
+} from "@/app/(dashboard)/u/[tenant]/urlaub/actions";
 import { employees } from "@/lib/employees";
 import { files as generalFiles } from "@/lib/files";
 import { locations } from "@/lib/locations";
@@ -516,7 +521,13 @@ export function SicknessDrawerButton({
   );
 }
 
-export function VacationDrawerButton({ request }: { request: VacationRequest }) {
+export function VacationDrawerButton({
+  tenant,
+  request,
+}: {
+  tenant: string;
+  request: VacationRequest;
+}) {
   const [isOpen, setIsOpen] = useState(false);
   const [linkedFiles, setLinkedFiles] = useState<string[]>([]);
 
@@ -554,18 +565,34 @@ export function VacationDrawerButton({ request }: { request: VacationRequest }) 
               />
             </Field>
             <div className="flex flex-wrap gap-2">
-              <button type="button" className="btn btn-primary btn-sm">
-                <Check size={15} />
-                Genehmigen
-              </button>
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm border-danger/25 text-danger hover:border-danger/40 hover:bg-danger/5"
-              >
-                Ablehnen
-              </button>
+              <form action={approveVacationRequestAction}>
+                <input type="hidden" name="tenant" value={tenant} />
+                <input type="hidden" name="requestId" value={request.dbId ?? ""} />
+                <button type="submit" className="btn btn-primary btn-sm">
+                  <Check size={15} />
+                  Genehmigen
+                </button>
+              </form>
+              <form action={rejectVacationRequestAction}>
+                <input type="hidden" name="tenant" value={tenant} />
+                <input type="hidden" name="requestId" value={request.dbId ?? ""} />
+                <button
+                  type="submit"
+                  className="btn btn-secondary btn-sm border-danger/25 text-danger hover:border-danger/40 hover:bg-danger/5"
+                >
+                  Ablehnen
+                </button>
+              </form>
+              <form action={deleteVacationRequestAction}>
+                <input type="hidden" name="tenant" value={tenant} />
+                <input type="hidden" name="requestId" value={request.dbId ?? ""} />
+                <button type="submit" className="btn btn-secondary btn-sm">
+                  <Trash2 size={15} />
+                  Loeschen
+                </button>
+              </form>
               <button type="button" className="btn btn-secondary btn-sm">
-                Zeitraum ändern
+                Zeitraum aendern
               </button>
             </div>
             <LinkedFileBrowser

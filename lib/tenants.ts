@@ -143,7 +143,11 @@ export async function getTenantsForUser(userId: string) {
     where: { userId },
     orderBy: { createdAt: "asc" },
     include: {
-      tenant: true,
+      tenant: {
+        include: {
+          settings: true,
+        },
+      },
     },
   });
 }

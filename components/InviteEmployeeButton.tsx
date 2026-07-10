@@ -1,17 +1,25 @@
 "use client";
 
+import { createEmployeeAction } from "@/app/(dashboard)/u/[tenant]/employees/actions";
 import { useUniversalPopup } from "@/components/UniversalPopup";
 import { Plus, Send } from "lucide-react";
 
-function InviteEmployeeForm({ onDone }: { onDone: () => void }) {
+type InviteEmployeeButtonProps = {
+  tenant: string;
+  locations: string[];
+  teams: string[];
+};
+
+function InviteEmployeeForm({
+  tenant,
+  locations,
+  teams,
+  onDone,
+}: InviteEmployeeButtonProps & { onDone: () => void }) {
   return (
-    <form
-      className="flex flex-col gap-4"
-      onSubmit={(event) => {
-        event.preventDefault();
-        onDone();
-      }}
-    >
+    <form className="flex flex-col gap-4" action={createEmployeeAction}>
+      <input type="hidden" name="tenant" value={tenant} />
+
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="field">
           <label htmlFor="invite-first-name" className="label">
@@ -23,7 +31,6 @@ function InviteEmployeeForm({ onDone }: { onDone: () => void }) {
             className="input"
             placeholder="Sophie"
             autoComplete="given-name"
-            required
           />
         </div>
 
@@ -37,7 +44,6 @@ function InviteEmployeeForm({ onDone }: { onDone: () => void }) {
             className="input"
             placeholder="Wagner"
             autoComplete="family-name"
-            required
           />
         </div>
       </div>
@@ -69,11 +75,13 @@ function InviteEmployeeForm({ onDone }: { onDone: () => void }) {
             defaultValue=""
           >
             <option value="" disabled>
-              Auswählen
+              Auswaehlen
             </option>
-            <option value="München">München</option>
-            <option value="Berlin">Berlin</option>
-            <option value="Hamburg">Hamburg</option>
+            {locations.map((location) => (
+              <option key={location} value={location}>
+                {location}
+              </option>
+            ))}
           </select>
         </div>
 
@@ -88,35 +96,64 @@ function InviteEmployeeForm({ onDone }: { onDone: () => void }) {
             defaultValue=""
           >
             <option value="" disabled>
-              Auswählen
+              Auswaehlen
             </option>
-            <option value="Verkauf">Verkauf</option>
-            <option value="Logistik">Logistik</option>
-            <option value="Service">Service</option>
-            <option value="Empfang">Empfang</option>
+            {teams.map((team) => (
+              <option key={team} value={team}>
+                {team}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="field">
+          <label htmlFor="invite-role" className="label">
+            Rolle
+          </label>
+          <input
+            id="invite-role"
+            name="role"
+            className="input"
+            placeholder="Mitarbeiter"
+            defaultValue="Mitarbeiter"
+          />
+        </div>
+
+        <div className="field">
+          <label htmlFor="invite-contract" className="label">
+            Vertrag
+          </label>
+          <select
+            id="invite-contract"
+            name="contract"
+            className="input cursor-pointer bg-bg"
+            defaultValue="Unbefristet"
+          >
+            <option value="Unbefristet">Unbefristet</option>
+            <option value="Teilzeit">Teilzeit</option>
+            <option value="Befristet">Befristet</option>
+            <option value="Werkstudentin">Werkstudentin</option>
           </select>
         </div>
       </div>
 
       <div className="field">
-        <label htmlFor="invite-role" className="label">
-          Zugriff
+        <label htmlFor="invite-start-date" className="label">
+          Eintritt
         </label>
-        <select
-          id="invite-role"
-          name="role"
-          className="input cursor-pointer bg-bg"
-          defaultValue="employee"
-        >
-          <option value="employee">Mitarbeiter</option>
-          <option value="lead">Teamleitung</option>
-          <option value="hr">HR</option>
-        </select>
+        <input
+          id="invite-start-date"
+          name="startDate"
+          className="input"
+          placeholder="01.08.2026"
+        />
       </div>
 
       <p className="m-0 text-[12.5px] leading-[1.55] text-muted-2">
-        Der Mitarbeiter erhält eine Einladung per E-Mail und ergänzt persönliche
-        Daten, Dokumente und weitere Angaben selbst.
+        Der Mitarbeiter wird angelegt und kann danach in der Personalakte
+        vervollstaendigt werden.
       </p>
 
       <div className="mt-1 flex justify-end gap-2.5 border-t border-border-soft pt-4">
@@ -125,14 +162,14 @@ function InviteEmployeeForm({ onDone }: { onDone: () => void }) {
         </button>
         <button type="submit" className="btn btn-primary">
           <Send size={15} strokeWidth={2} />
-          Einladung senden
+          Anlegen
         </button>
       </div>
     </form>
   );
 }
 
-export default function InviteEmployeeButton() {
+export default function InviteEmployeeButton(props: InviteEmployeeButtonProps) {
   const { openPopup, closePopup } = useUniversalPopup();
 
   return (
@@ -141,13 +178,13 @@ export default function InviteEmployeeButton() {
       className="btn btn-primary"
       onClick={() => {
         openPopup({
-          title: "Mitarbeiter einladen",
-          content: <InviteEmployeeForm onDone={closePopup} />,
+          title: "Mitarbeiter anlegen",
+          content: <InviteEmployeeForm {...props} onDone={closePopup} />,
         });
       }}
     >
       <Plus size={15} strokeWidth={2} />
-      Einladen
+      Anlegen
     </button>
   );
 }

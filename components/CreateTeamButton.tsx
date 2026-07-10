@@ -1,10 +1,10 @@
 "use client";
 
-import { useUniversalPopup } from "@/components/UniversalPopup";
+import { createTeamAction } from "@/app/(dashboard)/u/[tenant]/teams/actions";
 import { LocationMultiSelectDropdown } from "@/components/TeamEditControls";
-import { employees } from "@/lib/employees";
+import { useUniversalPopup } from "@/components/UniversalPopup";
 import { Check, ChevronDown, Plus, Users } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 type DropdownOption = {
   value: string;
@@ -13,16 +13,16 @@ type DropdownOption = {
 };
 
 const teamColors = [
-  { value: "orange", className: "bg-[#C9622A]", label: "Orange" },
-  { value: "blue", className: "bg-[#2A5BC9]", label: "Blau" },
-  { value: "green", className: "bg-[#1D8A65]", label: "Grün" },
-  { value: "purple", className: "bg-[#7A3C9C]", label: "Violett" },
-  { value: "red", className: "bg-[#B4332A]", label: "Rot" },
-  { value: "teal", className: "bg-[#168A8A]", label: "Türkis" },
-  { value: "gold", className: "bg-[#B7791F]", label: "Gold" },
-  { value: "slate", className: "bg-[#4A5568]", label: "Schiefer" },
-  { value: "pink", className: "bg-[#C23B7A]", label: "Pink" },
-  { value: "lime", className: "bg-[#6B8E23]", label: "Limette" },
+  { value: "bg-[#C9622A]", className: "bg-[#C9622A]", label: "Orange" },
+  { value: "bg-[#2A5BC9]", className: "bg-[#2A5BC9]", label: "Blau" },
+  { value: "bg-[#1D8A65]", className: "bg-[#1D8A65]", label: "Gruen" },
+  { value: "bg-[#7A3C9C]", className: "bg-[#7A3C9C]", label: "Violett" },
+  { value: "bg-[#B4332A]", className: "bg-[#B4332A]", label: "Rot" },
+  { value: "bg-[#168A8A]", className: "bg-[#168A8A]", label: "Tuerkis" },
+  { value: "bg-[#B7791F]", className: "bg-[#B7791F]", label: "Gold" },
+  { value: "bg-[#4A5568]", className: "bg-[#4A5568]", label: "Schiefer" },
+  { value: "bg-[#C23B7A]", className: "bg-[#C23B7A]", label: "Pink" },
+  { value: "bg-[#6B8E23]", className: "bg-[#6B8E23]", label: "Limette" },
 ];
 
 function CustomDropdownField({
@@ -155,25 +155,18 @@ function TeamColorPicker() {
   );
 }
 
-function CreateTeamForm({ onDone }: { onDone: () => void }) {
-  const leadOptions = useMemo(
-    () =>
-      employees.map((employee) => ({
-        value: employee.id,
-        label: employee.name,
-        meta: `${employee.location} · ${employee.role}`,
-      })),
-    [],
-  );
-
+function CreateTeamForm({
+  tenant,
+  employees,
+  onDone,
+}: {
+  tenant: string;
+  employees: DropdownOption[];
+  onDone: () => void;
+}) {
   return (
-    <form
-      className="flex flex-col gap-4"
-      onSubmit={(event) => {
-        event.preventDefault();
-        onDone();
-      }}
-    >
+    <form className="flex flex-col gap-4" action={createTeamAction}>
+      <input type="hidden" name="tenant" value={tenant} />
       <div className="field">
         <label htmlFor="team-name" className="label">
           Teamname
@@ -188,13 +181,13 @@ function CreateTeamForm({ onDone }: { onDone: () => void }) {
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <LocationMultiSelectDropdown defaultLocations={["München"]} />
+        <LocationMultiSelectDropdown defaultLocations={["Muenchen"]} />
 
         <CustomDropdownField
           label="Teamleitung"
           name="lead"
-          placeholder="Mitarbeiter auswählen"
-          options={leadOptions}
+          placeholder="Mitarbeiter auswaehlen"
+          options={employees}
         />
       </div>
 
@@ -206,15 +199,15 @@ function CreateTeamForm({ onDone }: { onDone: () => void }) {
           id="team-description"
           name="description"
           className="input min-h-24 resize-none"
-          placeholder="Kurzer Zweck oder Zuständigkeitsbereich"
+          placeholder="Kurzer Zweck oder Zustaendigkeitsbereich"
         />
       </div>
 
       <TeamColorPicker />
 
       <p className="m-0 text-[12.5px] leading-[1.55] text-muted-2">
-        Mitglieder können nach dem Erstellen direkt über die Teamdetailseite
-        hinzugefügt werden.
+        Mitglieder koennen nach dem Erstellen direkt ueber die Teamdetailseite
+        hinzugefuegt werden.
       </p>
 
       <div className="mt-1 flex justify-end gap-2.5 border-t border-border-soft pt-4">
@@ -230,7 +223,13 @@ function CreateTeamForm({ onDone }: { onDone: () => void }) {
   );
 }
 
-export default function CreateTeamButton() {
+export default function CreateTeamButton({
+  tenant,
+  employees,
+}: {
+  tenant: string;
+  employees: DropdownOption[];
+}) {
   const { openPopup, closePopup } = useUniversalPopup();
 
   return (
@@ -240,7 +239,13 @@ export default function CreateTeamButton() {
       onClick={() => {
         openPopup({
           title: "Team erstellen",
-          content: <CreateTeamForm onDone={closePopup} />,
+          content: (
+            <CreateTeamForm
+              tenant={tenant}
+              employees={employees}
+              onDone={closePopup}
+            />
+          ),
         });
       }}
     >

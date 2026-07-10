@@ -1,10 +1,14 @@
 import { FileReminderButton } from "@/components/ActionDrawers";
 import AuditLogPanel from "@/components/AuditLogPanel";
-import { ConfirmedSaveLink, UnsavedChangesGuard } from "@/components/EditSafety";
+import { UnsavedChangesGuard } from "@/components/EditSafety";
 import LocationShiftPlanner from "@/components/LocationShiftPlanner";
-import { makeAuditLogs } from "@/lib/audit";
 import {
-  getLocationById,
+  deleteLocationAction,
+  updateLocationAction,
+} from "@/app/(dashboard)/u/[tenant]/standorte/actions";
+import { makeAuditLogs } from "@/lib/audit";
+import { getLocationForTenant } from "@/lib/location-service";
+import {
   type Location,
   type LocationActivity,
   type LocationFile,
@@ -25,6 +29,8 @@ import {
   Lock,
   Pencil,
   Plus,
+  Save,
+  Trash2,
   Upload,
   X,
 } from "lucide-react";
@@ -35,8 +41,8 @@ import type { ReactNode } from "react";
 export async function generateMetadata({
   params,
 }: PageProps<"/u/[tenant]/standorte/[locationId]">) {
-  const { locationId } = await params;
-  const location = getLocationById(locationId);
+  const { tenant, locationId } = await params;
+  const location = await getLocationForTenant(tenant, locationId);
 
   return {
     title: location?.name ?? "Standorte",
@@ -514,7 +520,7 @@ export default async function LocationDetailPage({
 }: PageProps<"/u/[tenant]/standorte/[locationId]">) {
   const { tenant, locationId } = await params;
   const { tab, edit } = await searchParams;
-  const location = getLocationById(locationId);
+  const location = await getLocationForTenant(tenant, locationId);
 
   if (!location) {
     notFound();
@@ -526,6 +532,7 @@ export default async function LocationDetailPage({
   const isEditing = edit === "1" && isHomeTab;
   const locationHref = `/u/${tenant}/standorte/${location.id}`;
   const locationEditHref = `${locationHref}?edit=1`;
+  const locationDbId = location.dbId ?? "";
   const auditEntries = makeAuditLogs({
     id: location.id,
     name: location.name,
@@ -545,6 +552,9 @@ export default async function LocationDetailPage({
         </Link>
       </div>
 
+      <form id="location-edit-form" action={updateLocationAction}>
+        <input type="hidden" name="tenant" value={tenant} />
+        <input type="hidden" name="locationId" value={locationDbId} />
       <section className="mb-5 overflow-hidden rounded-card border border-border bg-white">
         <div className={`h-1 w-full ${location.accentClassName}`} />
         <div className="flex flex-wrap items-start gap-6 px-7 py-7">
@@ -605,10 +615,21 @@ export default async function LocationDetailPage({
                   <X size={14} />
                   Abbrechen
                 </Link>
-                <ConfirmedSaveLink href={locationHref} />
+                <button type="submit" className="btn btn-primary btn-sm">
+                  <Save size={14} />
+                  Speichern
+                </button>
               </>
             ) : (
               <>
+                <button
+                  type="submit"
+                  formAction={deleteLocationAction}
+                  className="btn btn-secondary btn-sm border-danger/25 text-danger hover:border-danger/40 hover:bg-danger/5"
+                >
+                  <Trash2 size={14} />
+                  Loeschen
+                </button>
                 <Link href={locationEditHref} className="btn btn-secondary btn-sm">
                   <Pencil size={14} />
                   Bearbeiten
@@ -828,6 +849,7 @@ export default async function LocationDetailPage({
           </div>
         </>
       )}
+      </form>
 
       <div className="mt-4">
         <AuditLogPanel entries={auditEntries} />

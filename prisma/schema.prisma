@@ -83,6 +83,13 @@ model Tenant {
   updatedAt     DateTime           @updatedAt
   invitations   TenantInvitation[]
   memberships   TenantMembership[]
+  roles         TenantRole[]
+  teams         TenantTeam[]
+  locations     TenantLocation[]
+  employees     TenantEmployee[]
+  vacationRequests TenantVacationRequest[]
+  shifts       TenantShift[]
+  settings     TenantSettings?
 }
 
 model TenantMembership {
@@ -92,10 +99,13 @@ model TenantMembership {
   updatedAt DateTime   @updatedAt
   tenantId  String
   userId    String
+  roleId    String?
   tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  roleRef   TenantRole? @relation(fields: [roleId], references: [id], onDelete: SetNull)
   user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, userId])
+  @@index([roleId])
   @@index([userId])
 }
 
@@ -111,4 +121,230 @@ model TenantInvitation {
 
   @@unique([tenantId, email])
   @@index([email])
+}
+
+model TenantSettings {
+  id                         String   @id @default(cuid())
+  companyAddress             String   @default("")
+  taxId                      String   @default("")
+  defaultLocationId          String   @default("")
+  weekStart                  String   @default("monday")
+  workHours                  String   @default("40 Stunden pro Woche")
+  vacationDays               Int      @default(30)
+  employeeNumberRequired     Boolean  @default(true)
+  archiveFormerEmployees     Boolean  @default(true)
+  mailNotifications          Boolean  @default(true)
+  inAppNotifications         Boolean  @default(true)
+  mobilePush                 Boolean  @default(false)
+  deadlineAlerts             Boolean  @default(true)
+  absenceAlerts              Boolean  @default(true)
+  shiftAlerts                Boolean  @default(true)
+  digestTime                 String   @default("monday-0800")
+  twoFactorRequired          Boolean  @default(false)
+  sessionTimeout             Boolean  @default(true)
+  auditRetentionMonths       Int      @default(24)
+  billingNotifications       Boolean  @default(true)
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+  tenantId                   String   @unique
+  tenant                     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+model TenantRole {
+  id          String                 @id @default(cuid())
+  key         String
+  name        String
+  description String                 @default("")
+  isSystem    Boolean                @default(false)
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+  tenantId    String
+  tenant      Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  memberships TenantMembership[]
+  permissions TenantRolePermission[]
+
+  @@unique([tenantId, key])
+  @@index([tenantId])
+}
+
+model TenantRolePermission {
+  id        String     @id @default(cuid())
+  area      String
+  level     String     @default("none")
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  roleId    String
+  role      TenantRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, area])
+  @@index([area])
+}
+
+model TenantTeam {
+  id             String             @id @default(cuid())
+  key            String
+  name           String
+  description    String             @default("")
+  locations      String             @default("")
+  colorClassName String             @default("bg-[#C9622A]")
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  tenantId       String
+  tenant         Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  members        TenantTeamMember[]
+
+  @@unique([tenantId, key])
+  @@index([tenantId])
+}
+
+model TenantTeamMember {
+  id         String     @id @default(cuid())
+  employeeId String
+  initials   String
+  name       String
+  location   String
+  role       String
+  contract   String
+  status     String     @default("on-duty")
+  isLead     Boolean    @default(false)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  teamId     String
+  team       TenantTeam @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, employeeId])
+  @@index([employeeId])
+  @@index([teamId])
+}
+
+model TenantLocation {
+  id                 String   @id @default(cuid())
+  key                String
+  kind               String
+  name               String
+  address            String
+  employeeCount      Int      @default(0)
+  activeToday        Int      @default(0)
+  shiftCount         Int      @default(0)
+  openPositions      Int      @default(0)
+  utilization        String   @default("0%")
+  utilizationCaption String   @default("")
+  status             String   @default("active")
+  accentClassName    String   @default("bg-ink")
+  leadInitials       String   @default("--")
+  leadName           String   @default("Keine Leitung")
+  leadPhone          String   @default("")
+  leadEmail          String   @default("")
+  teamJson           String   @default("[]")
+  activityJson       String   @default("[]")
+  fileFoldersJson    String   @default("[]")
+  filesJson          String   @default("[]")
+  shiftPlanJson      String   @default("{}")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  tenantId           String
+  tenant             Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  shifts             TenantShift[]
+
+  @@unique([tenantId, key])
+  @@index([tenantId])
+}
+
+model TenantEmployee {
+  id                       String   @id @default(cuid())
+  key                      String
+  initials                 String
+  name                     String
+  employeeNumber           String
+  birthDate                String   @default("")
+  birthPlace               String   @default("")
+  nationality              String   @default("")
+  maritalStatus            String   @default("")
+  privateAddress           String   @default("")
+  taxId                    String   @default("")
+  socialSecurityNumber     String   @default("")
+  healthInsurance          String   @default("")
+  iban                     String   @default("")
+  location                 String   @default("")
+  team                     String   @default("")
+  role                     String   @default("")
+  startDate                String   @default("")
+  contract                 String   @default("Unbefristet")
+  weeklyHours              String   @default("")
+  tenure                   String   @default("")
+  status                   String   @default("active")
+  email                    String   @default("")
+  phone                    String   @default("")
+  address                  String   @default("")
+  vacationRemaining        Int      @default(0)
+  vacationTotal            Int      @default(30)
+  vacationTaken            Int      @default(0)
+  documentsJson            String   @default("[]")
+  fileFoldersJson          String   @default("[]")
+  filesJson                String   @default("[]")
+  emergencyContactsJson    String   @default("[]")
+  payrollStatementsJson    String   @default("[]")
+  infoRequestsJson         String   @default("[]")
+  shiftsJson               String   @default("[]")
+  timelineJson             String   @default("[]")
+  contractDetailsJson      String   @default("{}")
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+  tenantId                 String
+  tenant                   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  vacationRequests         TenantVacationRequest[]
+  shifts                   TenantShift[]
+
+  @@unique([tenantId, key])
+  @@index([tenantId])
+}
+
+model TenantShift {
+  id           String          @id @default(cuid())
+  key          String
+  date         String
+  weekday      String
+  startTime    String
+  endTime      String
+  breakMinutes Int             @default(30)
+  team         String          @default("")
+  note         String          @default("")
+  conflict     Boolean         @default(false)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  tenantId     String
+  employeeId   String?
+  locationId   String?
+  tenant       Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee     TenantEmployee? @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  location     TenantLocation? @relation(fields: [locationId], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, key])
+  @@index([tenantId])
+  @@index([employeeId])
+  @@index([locationId])
+  @@index([date])
+}
+
+model TenantVacationRequest {
+  id             String         @id @default(cuid())
+  key            String
+  startDate      String
+  endDate        String
+  days           Int            @default(1)
+  status         String         @default("pending")
+  note           String         @default("")
+  decidedAt      DateTime?
+  decidedBy      String         @default("")
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  tenantId       String
+  employeeId     String
+  tenant         Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee       TenantEmployee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, key])
+  @@index([tenantId])
+  @@index([employeeId])
+  @@index([status])
 }

@@ -2,11 +2,15 @@ import { DataTableStatus } from "@/components/DataTable";
 import AuditLogPanel from "@/components/AuditLogPanel";
 import { FileReminderButton } from "@/components/ActionDrawers";
 import EmployeeInfoRequestButton from "@/components/EmployeeInfoRequestButton";
-import { ConfirmedSaveLink, UnsavedChangesGuard } from "@/components/EditSafety";
+import { UnsavedChangesGuard } from "@/components/EditSafety";
+import {
+  deleteEmployeeAction,
+  updateEmployeeAction,
+} from "@/app/(dashboard)/u/[tenant]/employees/actions";
 import { makeAuditLogs } from "@/lib/audit";
+import { getEmployeeForTenant } from "@/lib/employee-service";
 import {
   employeeStatusConfig,
-  getEmployeeById,
   type EmployeeStatus,
   type Employee,
   type EmployeeFile,
@@ -34,8 +38,8 @@ import type { ReactNode } from "react";
 export async function generateMetadata({
   params,
 }: PageProps<"/u/[tenant]/employees/[employeeId]">) {
-  const { employeeId } = await params;
-  const employee = getEmployeeById(employeeId);
+  const { tenant, employeeId } = await params;
+  const employee = await getEmployeeForTenant(tenant, employeeId);
 
   return {
     title: employee?.name ?? "Mitarbeiter",
@@ -698,7 +702,7 @@ export default async function EmployeeDetailPage({
 }: PageProps<"/u/[tenant]/employees/[employeeId]">) {
   const { tenant, employeeId } = await params;
   const { tab, edit } = await searchParams;
-  const employee = getEmployeeById(employeeId);
+  const employee = await getEmployeeForTenant(tenant, employeeId);
 
   if (!employee) {
     notFound();
@@ -730,6 +734,9 @@ export default async function EmployeeDetailPage({
   return (
     <>
       <UnsavedChangesGuard active={isEditing} />
+      <form action={updateEmployeeAction}>
+        <input type="hidden" name="tenant" value={tenant} />
+        <input type="hidden" name="employeeId" value={employee.dbId ?? ""} />
       <div className="mb-[22px] flex flex-wrap items-center gap-3.5">
         <Link href={`/u/${tenant}/employees`} className="btn btn-secondary btn-sm">
           <ArrowLeft size={14} />
@@ -747,7 +754,17 @@ export default async function EmployeeDetailPage({
 
         <div className="min-w-[200px] flex-1">
           <h1 className="m-0 font-display text-[clamp(26px,3vw,34px)] font-semibold leading-[1.05] tracking-[-1px] text-ink">
-            {employee.name}
+            {isEditing ? (
+              <input
+                className="input max-w-[420px] bg-white font-display text-[26px] font-semibold text-ink sm:text-[34px]"
+                name="name"
+                defaultValue={employee.name}
+                aria-label="Name"
+                required
+              />
+            ) : (
+              employee.name
+            )}
           </h1>
           <div className="mt-[7px] text-[14px] text-muted-2">
             {employee.role} {"\u00b7"} {employee.team} {"\u00b7"}{" "}
@@ -768,7 +785,16 @@ export default async function EmployeeDetailPage({
                 <X size={14} />
                 Abbrechen
               </Link>
-              <ConfirmedSaveLink href={activeTabHref} />
+              <button type="submit" className="btn btn-primary btn-sm">
+                Speichern
+              </button>
+              <button
+                type="submit"
+                className="btn btn-secondary btn-sm text-danger"
+                formAction={deleteEmployeeAction}
+              >
+                Loeschen
+              </button>
             </>
           ) : (
             <>
@@ -1173,6 +1199,7 @@ export default async function EmployeeDetailPage({
         Ployo {"\u00b7"} Personalakte-System {"\u00b7"} Alle Zugriffe
         protokolliert {"\u00b7"} Server in Frankfurt
       </div>
+      </form>
     </>
   );
 }

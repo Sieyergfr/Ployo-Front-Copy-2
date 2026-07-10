@@ -1,8 +1,9 @@
 import CreateRoleButton from "@/components/CreateRoleButton";
 import PageHeader from "@/components/PageHeader";
-import { permissionRoles } from "@/lib/roles";
+import { getRolesForTenant } from "@/lib/role-service";
 import { ArrowRight, ShieldCheck } from "lucide-react";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 
 export const metadata = {
   title: "Rollen",
@@ -12,6 +13,11 @@ export default async function RolesPage({
   params,
 }: PageProps<"/u/[tenant]/rollen">) {
   const { tenant } = await params;
+  const roles = await getRolesForTenant(tenant);
+
+  if (!roles) {
+    notFound();
+  }
 
   return (
     <>
@@ -20,7 +26,7 @@ export default async function RolesPage({
         title="Rollen"
         subtitle="Alle Rollen mit zugewiesenen Mitarbeitern"
       >
-        <CreateRoleButton />
+        <CreateRoleButton tenant={tenant} />
       </PageHeader>
 
       <section className="overflow-hidden rounded-card border border-border bg-white">
@@ -32,7 +38,7 @@ export default async function RolesPage({
         </div>
         <div className="overflow-x-auto">
           <div className="min-w-[760px]">
-            {permissionRoles.map((role) => (
+            {roles.map((role) => (
               <Link
                 key={role.id}
                 href={`/u/${tenant}/rollen/${role.id}`}
