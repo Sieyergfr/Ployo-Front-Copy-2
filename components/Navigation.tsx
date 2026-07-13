@@ -136,6 +136,14 @@ type SettingsCategory = {
   icon: LucideIcon;
 };
 
+type NotificationItem = {
+  id: string;
+  title: string;
+  detail: string;
+  time: string;
+  category: string;
+};
+
 const settingsCategories: SettingsCategory[] = [
   {
     id: "account",
@@ -178,6 +186,30 @@ const settingsCategories: SettingsCategory[] = [
     label: "Abrechnung",
     description: "Plan, Zahlung, Stripe",
     icon: CreditCard,
+  },
+];
+
+const initialNotifications: NotificationItem[] = [
+  {
+    id: "absence-request",
+    title: "Urlaubsantrag wartet",
+    detail: "Jonas Weber hat 5 Tage Urlaub für August beantragt.",
+    time: "Vor 12 Min.",
+    category: "Freigabe",
+  },
+  {
+    id: "contract-deadline",
+    title: "Vertrag läuft bald aus",
+    detail: "Die Befristung von Lea Schneider endet in 21 Tagen.",
+    time: "Heute, 09:20",
+    category: "Frist",
+  },
+  {
+    id: "shift-conflict",
+    title: "Schichtkonflikt erkannt",
+    detail: "Standort Berlin ist am Freitag in der Spätschicht unterbesetzt.",
+    time: "Gestern",
+    category: "Planung",
   },
 ];
 
@@ -958,6 +990,145 @@ function SettingsPopup({
   );
 }
 
+function NotificationsPopup({
+  notifications,
+  readNotificationIds,
+  onClose,
+  onMarkAsRead,
+}: {
+  notifications: NotificationItem[];
+  readNotificationIds: string[];
+  onClose: () => void;
+  onMarkAsRead: (ids: string[]) => void;
+}) {
+  const unreadNotifications = notifications.filter(
+    (notification) => !readNotificationIds.includes(notification.id),
+  );
+  const hasUnread = unreadNotifications.length > 0;
+
+  return (
+    <div
+      className="sidebar-notification-popover"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) {
+          onClose();
+        }
+      }}
+    >
+      <div
+        role="dialog"
+        aria-label="Benachrichtigungen"
+        className="relative flex max-h-[calc(100svh-32px)] w-full max-w-[520px] flex-col overflow-hidden rounded-card bg-white shadow-[0_24px_80px_rgba(0,0,0,0.24)] md:max-h-[620px]"
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
+          <div>
+            <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
+              Inbox
+            </div>
+            <div className="mt-1 font-display text-[24px] font-semibold leading-tight text-ink">
+              Benachrichtigungen
+            </div>
+          </div>
+
+          <button
+            type="button"
+            aria-label="Benachrichtigungen schließen"
+            title="Schließen"
+            className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-[9px] border border-border bg-white text-muted transition-colors hover:border-muted hover:text-ink"
+            onClick={onClose}
+          >
+            <X size={15} strokeWidth={2} />
+          </button>
+        </div>
+
+        <div className="flex items-center justify-between gap-3 border-b border-border-soft bg-bg px-5 py-3">
+          <div className="text-[12.5px] text-muted-2">
+            {hasUnread
+              ? `${unreadNotifications.length} ungelesen`
+              : "Alles gelesen"}
+          </div>
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm px-3"
+            disabled={!hasUnread}
+            onClick={() =>
+              onMarkAsRead(unreadNotifications.map((notification) => notification.id))
+            }
+          >
+            <Check size={14} />
+            Als gelesen markieren
+          </button>
+        </div>
+
+        <div className="min-h-0 overflow-y-auto p-3">
+          <div className="flex flex-col gap-2">
+            {notifications.map((notification) => {
+              const isRead = readNotificationIds.includes(notification.id);
+
+              return (
+                <article
+                  key={notification.id}
+                  className={cx(
+                    "flex items-start gap-2 rounded-[12px] border p-3 transition-all hover:-translate-y-0.5 hover:border-ink/20 hover:bg-white hover:shadow-[0_8px_24px_rgba(0,0,0,0.08)]",
+                    isRead
+                      ? "border-border-soft bg-white"
+                      : "border-ink/10 bg-[#F6F4EF]",
+                  )}
+                >
+                  <button
+                    type="button"
+                    className="flex min-w-0 flex-1 cursor-pointer items-start gap-3 rounded-[9px] text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ink/20"
+                    onClick={() => {
+                      onMarkAsRead([notification.id]);
+                      onClose();
+                    }}
+                  >
+                    <span
+                      className={cx(
+                        "mt-1 size-2 shrink-0 rounded-full",
+                        isRead ? "bg-border-light" : "bg-warning",
+                      )}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <h3 className="text-[13.5px] font-semibold text-ink">
+                          {notification.title}
+                        </h3>
+                        <span className="rounded-chip bg-white px-1.5 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-[0.06em] text-muted-2">
+                          {notification.category}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-[12.5px] leading-5 text-muted-2">
+                        {notification.detail}
+                      </p>
+                      <div className="mt-2">
+                        <span className="font-mono text-[10px] text-muted">
+                          {notification.time}
+                        </span>
+                      </div>
+                    </div>
+                  </button>
+
+                  {!isRead && (
+                    <button
+                      type="button"
+                      className="shrink-0 text-[12px] font-semibold text-ink transition-colors hover:text-muted-2"
+                      onClick={() => onMarkAsRead([notification.id])}
+                    >
+                      Gelesen
+                    </button>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function NavigationSidebar({
   tenants = [],
 }: {
@@ -966,7 +1137,10 @@ export default function NavigationSidebar({
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isTenantMenuOpen, setIsTenantMenuOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [readNotificationIds, setReadNotificationIds] = useState<string[]>([]);
   const tenantSelectorRef = useRef<HTMLDivElement>(null);
+  const notificationRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
   const params = useParams<{ tenant?: string | string[] }>();
 
@@ -974,6 +1148,9 @@ export default function NavigationSidebar({
   const baseHref = tenant ? `/u/${tenant}` : "/u";
   const tenantItems = tenants.length > 0 ? tenants : [fallbackTenantItem];
   const toggleLabel = isCollapsed ? "Navigation ausklappen" : "Navigation einklappen";
+  const unreadNotificationCount = initialNotifications.filter(
+    (notification) => !readNotificationIds.includes(notification.id),
+  ).length;
   const activeTenant =
     tenantItems.find((item) => item.href === baseHref) ??
     (tenant
@@ -1023,6 +1200,27 @@ export default function NavigationSidebar({
       document.removeEventListener("pointerdown", handlePointerDown);
     };
   }, [isTenantMenuOpen]);
+
+  useEffect(() => {
+    if (!isNotificationsOpen) {
+      return;
+    }
+
+    function handlePointerDown(event: PointerEvent) {
+      if (
+        notificationRef.current &&
+        !notificationRef.current.contains(event.target as Node)
+      ) {
+        setIsNotificationsOpen(false);
+      }
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+    };
+  }, [isNotificationsOpen]);
 
   return (
     <aside className={cx("sidebar", isCollapsed && "sidebar-collapsed")}>
@@ -1171,17 +1369,58 @@ export default function NavigationSidebar({
           {!isCollapsed && <span className="sidebar-link-label">Einstellungen</span>}
         </button>
 
-        <div className="sidebar-user">
-          <div className="sidebar-user-avatar" title="Carla Brandt - HR-Leitung">
-            CB
+        <div className="sidebar-user-row">
+          <div className="sidebar-user">
+            <div className="sidebar-user-avatar" title="Carla Brandt - HR-Leitung">
+              CB
+            </div>
+
+            {!isCollapsed && (
+              <div className="sidebar-user-copy">
+                <div className="sidebar-user-name">Carla Brandt</div>
+                <div className="sidebar-user-role">HR-Leitung</div>
+              </div>
+            )}
           </div>
 
-          {!isCollapsed && (
-            <div className="sidebar-user-copy">
-              <div className="sidebar-user-name">Carla Brandt</div>
-              <div className="sidebar-user-role">HR-Leitung</div>
-            </div>
-          )}
+          <div className="sidebar-notification" ref={notificationRef}>
+            <button
+              type="button"
+              className="sidebar-notification-button"
+              title="Benachrichtigungen"
+              aria-label={
+                unreadNotificationCount > 0
+                  ? `${unreadNotificationCount} ungelesene Benachrichtigungen`
+                  : "Benachrichtigungen"
+              }
+              aria-haspopup="dialog"
+              aria-expanded={isNotificationsOpen}
+              onClick={() => {
+                setIsTenantMenuOpen(false);
+                setIsNotificationsOpen((current) => !current);
+              }}
+            >
+              <Bell size={16} />
+              {unreadNotificationCount > 0 && (
+                <span className="sidebar-notification-badge">
+                  {unreadNotificationCount}
+                </span>
+              )}
+            </button>
+
+            {isNotificationsOpen && (
+              <NotificationsPopup
+                notifications={initialNotifications}
+                readNotificationIds={readNotificationIds}
+                onClose={() => setIsNotificationsOpen(false)}
+                onMarkAsRead={(ids) => {
+                  setReadNotificationIds((current) =>
+                    Array.from(new Set([...current, ...ids])),
+                  );
+                }}
+              />
+            )}
+          </div>
         </div>
       </div>
 
@@ -1191,6 +1430,7 @@ export default function NavigationSidebar({
           onClose={() => setIsSettingsOpen(false)}
         />
       )}
+
     </aside>
   );
 }

@@ -26,6 +26,26 @@ function shiftsPath(tenant: string, year?: string, week?: string) {
   return year && week ? `${path}?year=${year}&week=${week}` : path;
 }
 
+function redirectPath(formData: FormData, tenant: string) {
+  const returnTo = formString(formData, "returnTo");
+
+  if (returnTo.startsWith(`/u/${tenant}/`)) {
+    return returnTo;
+  }
+
+  return shiftsPath(tenant, formString(formData, "year"), formString(formData, "week"));
+}
+
+function revalidateShiftViews(formData: FormData, tenant: string) {
+  revalidatePath(`/u/${tenant}/schichtplanung`);
+
+  const returnTo = formString(formData, "returnTo");
+
+  if (returnTo.startsWith(`/u/${tenant}/`)) {
+    revalidatePath(returnTo.split("?")[0]);
+  }
+}
+
 export async function createShiftAction(formData: FormData) {
   const tenant = formString(formData, "tenant");
   const date = formString(formData, "date");
@@ -48,8 +68,8 @@ export async function createShiftAction(formData: FormData) {
     note: formString(formData, "note"),
   });
 
-  revalidatePath(`/u/${tenant}/schichtplanung`);
-  redirect(shiftsPath(tenant, formString(formData, "year"), formString(formData, "week")));
+  revalidateShiftViews(formData, tenant);
+  redirect(redirectPath(formData, tenant));
 }
 
 export async function updateShiftAction(formData: FormData) {
@@ -76,8 +96,8 @@ export async function updateShiftAction(formData: FormData) {
     note: formString(formData, "note"),
   });
 
-  revalidatePath(`/u/${tenant}/schichtplanung`);
-  redirect(shiftsPath(tenant, formString(formData, "year"), formString(formData, "week")));
+  revalidateShiftViews(formData, tenant);
+  redirect(redirectPath(formData, tenant));
 }
 
 export async function deleteShiftAction(formData: FormData) {
@@ -90,6 +110,6 @@ export async function deleteShiftAction(formData: FormData) {
 
   await deleteTenantShift({ tenantSlug: tenant, shiftId });
 
-  revalidatePath(`/u/${tenant}/schichtplanung`);
-  redirect(shiftsPath(tenant, formString(formData, "year"), formString(formData, "week")));
+  revalidateShiftViews(formData, tenant);
+  redirect(redirectPath(formData, tenant));
 }

@@ -79,17 +79,19 @@ function ShiftCard({
   onClick: () => void;
 }) {
   const isOpen = !shift.assignee;
+  const accentClassName = shift.locationAccentClassName ?? "bg-border";
 
   return (
     <button
       type="button"
-      className={`flex w-full cursor-pointer flex-col gap-[3px] rounded-[9px] border px-2.5 py-[9px] text-left font-sans transition-colors ${
+      className={`relative flex w-full cursor-pointer flex-col gap-[3px] overflow-hidden rounded-[9px] border py-[9px] pr-2.5 pl-4 text-left font-sans transition-colors ${
         shift.conflict
           ? "border-danger/25 bg-danger/5 hover:border-danger/40"
-          : "border-border bg-bg hover:border-muted"
+          : "border-border bg-white hover:border-muted hover:bg-bg"
       }`}
       onClick={onClick}
     >
+      <span className={`absolute inset-y-0 left-0 w-1 ${accentClassName}`} />
       <div className="flex items-center justify-between gap-2">
         <span className="font-mono text-[11.5px] font-semibold text-ink">
           {shift.time}

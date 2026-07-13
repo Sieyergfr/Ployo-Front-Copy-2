@@ -1,5 +1,4 @@
 import { auth } from "@/lib/auth";
-import { employees } from "@/lib/employees";
 import {
   type Location,
   type LocationActivity,
@@ -125,8 +124,23 @@ function buildAddress(input: {
     .join(", ");
 }
 
-function employeeLead(employeeId?: string) {
-  const employee = employees.find((item) => item.id === employeeId);
+async function employeeLead(input: { tenantId: string; employeeId?: string }) {
+  if (!input.employeeId) {
+    return null;
+  }
+
+  const employee = await prisma.tenantEmployee.findFirst({
+    where: {
+      id: input.employeeId,
+      tenantId: input.tenantId,
+    },
+    select: {
+      initials: true,
+      name: true,
+      phone: true,
+      email: true,
+    },
+  });
 
   if (!employee) {
     return null;
@@ -324,7 +338,10 @@ export async function createTenantLocation(input: {
     tenantId: access.tenantId,
     name: input.name,
   });
-  const lead = employeeLead(input.leadEmployeeId);
+  const lead = await employeeLead({
+    tenantId: access.tenantId,
+    employeeId: input.leadEmployeeId,
+  });
 
   return prisma.tenantLocation.create({
     data: {
@@ -365,6 +382,7 @@ export async function updateTenantLocation(input: {
   leadInitials: string;
   leadPhone: string;
   leadEmail: string;
+  accentClassName: string;
 }) {
   const access = await requireLocationManager(input.tenantSlug);
   const key = await createUniqueLocationKey({
@@ -394,6 +412,118 @@ export async function updateTenantLocation(input: {
       leadInitials: input.leadInitials.trim() || "--",
       leadPhone: input.leadPhone.trim(),
       leadEmail: input.leadEmail.trim(),
+      accentClassName: input.accentClassName.trim() || "bg-ink",
+    },
+  });
+}
+
+export async function addEmployeesToTenantLocation(input: {
+  tenantSlug: string;
+  locationId: string;
+  employeeIds: string[];
+}) {
+  const access = await requireLocationManager(input.tenantSlug);
+  const employeeIds = Array.from(
+    new Set(input.employeeIds.map((id) => id.trim()).filter(Boolean)),
+  );
+
+  if (employeeIds.length === 0) {
+    throw new Error("Keine Mitarbeiter ausgewählt.");
+  }
+
+  const location = await prisma.tenantLocation.findFirst({
+    where: {
+      id: input.locationId,
+      tenantId: access.tenantId,
+    },
+  });
+
+  if (!location) {
+    throw new Error("Standort nicht gefunden.");
+  }
+
+  const employees = await prisma.tenantEmployee.findMany({
+    where: {
+      id: { in: employeeIds },
+      tenantId: access.tenantId,
+    },
+    select: {
+      id: true,
+      initials: true,
+      name: true,
+      status: true,
+    },
+  });
+  const currentTeam = parseJson<Array<LocationTeamMember & { employeeId?: string }>>(
+    location.teamJson,
+    [],
+  );
+  const existingKeys = new Set(
+    currentTeam.map((member) => member.employeeId ?? member.name),
+  );
+  const newMembers = employees
+    .filter((employee) => !existingKeys.has(employee.id) && !existingKeys.has(employee.name))
+    .map((employee) => ({
+      employeeId: employee.id,
+      initials: employee.initials,
+      name: employee.name,
+    }));
+  const nextTeam = [...currentTeam, ...newMembers];
+  const currentShiftPlan = parseJson<LocationShiftPlan>(
+    location.shiftPlanJson,
+    emptyShiftPlan,
+  );
+  const existingShiftKeys = new Set(
+    currentShiftPlan.employees.map((employee) => employee.employeeId ?? employee.name),
+  );
+  const shiftEmployees = employees
+    .filter(
+      (employee) =>
+        !existingShiftKeys.has(employee.id) && !existingShiftKeys.has(employee.name),
+    )
+    .map((employee) => ({
+      employeeId: employee.id,
+      initials: employee.initials,
+      name: employee.name,
+      days: currentShiftPlan.days.map(() => null),
+    }));
+  const nextShiftPlan: LocationShiftPlan = {
+    ...currentShiftPlan,
+    employees: [...currentShiftPlan.employees, ...shiftEmployees],
+  };
+  const activity = parseJson<LocationActivity[]>(location.activityJson, []);
+  const now = new Intl.DateTimeFormat("de-DE", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date());
+
+  return prisma.tenantLocation.update({
+    where: {
+      id: input.locationId,
+      tenantId: access.tenantId,
+    },
+    data: {
+      teamJson: JSON.stringify(nextTeam),
+      shiftPlanJson: JSON.stringify(nextShiftPlan),
+      employeeCount: nextTeam.length,
+      activeToday: Math.max(
+        nextTeam.length,
+        employees.filter((employee) => employee.status === "active").length,
+      ),
+      activityJson: JSON.stringify([
+        {
+          actor: "Carla Brandt",
+          text:
+            newMembers.length === 1
+              ? `hat ${newMembers[0].name} dem Standort hinzugefügt`
+              : `hat ${newMembers.length} Mitarbeiter dem Standort hinzugefügt`,
+          time: now,
+          tone: "success",
+        },
+        ...activity,
+      ]),
     },
   });
 }

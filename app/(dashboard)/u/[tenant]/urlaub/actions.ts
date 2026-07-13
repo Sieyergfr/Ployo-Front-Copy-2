@@ -18,6 +18,24 @@ function vacationPath(tenant: string) {
   return `/u/${tenant}/urlaub`;
 }
 
+function parseDateOnly(value: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+
+  if (!match) {
+    return null;
+  }
+
+  const [, year, month, day] = match;
+
+  return new Date(Number(year), Number(month) - 1, Number(day));
+}
+
+function todayDateOnly() {
+  const now = new Date();
+
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+}
+
 export async function createVacationRequestAction(formData: FormData) {
   const tenant = formString(formData, "tenant");
   const employeeId = formString(formData, "employeeId");
@@ -26,6 +44,22 @@ export async function createVacationRequestAction(formData: FormData) {
 
   if (!tenant || !employeeId || !startDate || !endDate) {
     throw new Error("Urlaubsantrag konnte nicht erstellt werden.");
+  }
+
+  const parsedStartDate = parseDateOnly(startDate);
+  const parsedEndDate = parseDateOnly(endDate);
+  const today = todayDateOnly();
+
+  if (!parsedStartDate || !parsedEndDate) {
+    throw new Error("Bitte gueltige Datumswerte auswaehlen.");
+  }
+
+  if (parsedStartDate < today || parsedEndDate < today) {
+    throw new Error("Urlaubsantrag darf nicht in der Vergangenheit liegen.");
+  }
+
+  if (parsedEndDate < parsedStartDate) {
+    throw new Error("Das Enddatum darf nicht vor dem Startdatum liegen.");
   }
 
   await createTenantVacationRequest({

@@ -1,6 +1,7 @@
 "use server";
 
 import {
+  addEmployeesToTenantLocation,
   createTenantLocation,
   deleteTenantLocation,
   updateTenantLocation,
@@ -73,6 +74,28 @@ export async function updateLocationAction(formData: FormData) {
     leadInitials: formString(formData, "leadInitials"),
     leadPhone: formString(formData, "leadPhone"),
     leadEmail: formString(formData, "leadEmail"),
+    accentClassName: formString(formData, "color", "bg-ink"),
+  });
+
+  revalidatePath(locationsPath(tenant));
+  redirect(locationPath(tenant, location.key));
+}
+
+export async function addLocationEmployeesAction(formData: FormData) {
+  const tenant = formString(formData, "tenant");
+  const locationId = formString(formData, "locationId");
+  const employeeIds = formData
+    .getAll("employees")
+    .filter((value): value is string => typeof value === "string");
+
+  if (!tenant || !locationId || employeeIds.length === 0) {
+    throw new Error("Mitarbeiter konnten nicht hinzugefuegt werden.");
+  }
+
+  const location = await addEmployeesToTenantLocation({
+    tenantSlug: tenant,
+    locationId,
+    employeeIds,
   });
 
   revalidatePath(locationsPath(tenant));

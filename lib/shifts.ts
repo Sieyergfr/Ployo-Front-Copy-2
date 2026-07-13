@@ -16,6 +16,7 @@ export type Shift = {
   breakMinutes?: number;
   employeeId?: string;
   locationId?: string;
+  locationAccentClassName?: string;
   assignee?: string;
   location?: string;
   team?: string;

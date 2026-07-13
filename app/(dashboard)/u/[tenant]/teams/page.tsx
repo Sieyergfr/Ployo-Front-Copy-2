@@ -1,6 +1,7 @@
 import CreateTeamButton from "@/components/CreateTeamButton";
 import PageHeader from "@/components/PageHeader";
 import { getEmployeesForTenant } from "@/lib/employee-service";
+import { getLocationsForTenant } from "@/lib/location-service";
 import { getTeamMetrics, getTeamsForTenant } from "@/lib/team-service";
 import { type Team, type TeamMember } from "@/lib/teams";
 import { ArrowRight } from "lucide-react";
@@ -103,12 +104,13 @@ export default async function TeamsPage({
   params,
 }: PageProps<"/u/[tenant]/teams">) {
   const { tenant } = await params;
-  const [teams, employees] = await Promise.all([
+  const [teams, employees, locations] = await Promise.all([
     getTeamsForTenant(tenant),
     getEmployeesForTenant(tenant),
+    getLocationsForTenant(tenant),
   ]);
 
-  if (!teams || !employees) {
+  if (!teams || !employees || !locations) {
     notFound();
   }
 
@@ -124,7 +126,11 @@ export default async function TeamsPage({
   return (
     <>
       <PageHeader eyebrow="Organisationsstruktur" title="Teams">
-        <CreateTeamButton tenant={tenant} employees={employeeOptions} />
+        <CreateTeamButton
+          tenant={tenant}
+          employees={employeeOptions}
+          locations={locations.map((location) => location.name)}
+        />
       </PageHeader>
 
       <section className="mb-7 grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]">

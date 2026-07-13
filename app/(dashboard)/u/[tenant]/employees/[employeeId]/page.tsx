@@ -471,6 +471,69 @@ function ContractDocumentCard({
   );
 }
 
+function hasContractDetails(employee: Employee) {
+  const contract = employee.contractDetails;
+  const linkedFileMeta = contract.linkedFileMeta.trim().toLowerCase();
+
+  if (linkedFileMeta === "noch nicht hochgeladen") {
+    return false;
+  }
+
+  if (linkedFileMeta) {
+    return true;
+  }
+
+  const detailValues = [
+    contract.supervisor,
+    contract.workLocation,
+    contract.compensation,
+    contract.workingTime,
+    contract.vacation,
+    contract.noticePeriod,
+    contract.collectiveAgreement,
+  ];
+
+  return detailValues.some((value) => {
+    if (typeof value !== "string") {
+      return false;
+    }
+
+    const normalized = value.trim().toLowerCase();
+
+    return normalized !== "" && normalized !== "noch nicht hochgeladen";
+  });
+}
+
+function ContractDetailsPrompt({
+  employeeName,
+  href,
+}: {
+  employeeName: string;
+  href: string;
+}) {
+  return (
+    <section className="rounded-card border border-warning/30 bg-[#FFF7EA] px-5 py-4">
+      <div className="flex flex-wrap items-center gap-4">
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-[10px] bg-white text-warning">
+          <BriefcaseBusiness size={18} />
+        </span>
+        <div className="min-w-[220px] flex-1">
+          <div className="text-[14px] font-semibold text-ink">
+            Vertragsdetails fehlen
+          </div>
+          <p className="mt-1 text-[12.5px] leading-5 text-muted-2">
+            Ergänze Vertragsdetails für {employeeName}, damit Fristen,
+            Arbeitszeit und Konditionen vollständig in der Personalakte stehen.
+          </p>
+        </div>
+        <Link href={href} className="btn btn-primary btn-sm">
+          Vertragsdetails einfügen
+        </Link>
+      </div>
+    </section>
+  );
+}
+
 function ContractTab({
   employee,
   isEditing,
@@ -484,6 +547,7 @@ function ContractTab({
 
   return (
     <div className="grid items-start gap-4 lg:grid-cols-[1.35fr_0.9fr]">
+      {isEditing && <input type="hidden" name="contractDetailsSubmitted" value="1" />}
       <div className="flex flex-col gap-4">
         <DetailCard
           title={
@@ -726,6 +790,8 @@ export default async function EmployeeDetailPage({
   const employeeEditHref = isContractTab
     ? `${employeeHref}?tab=contract&edit=1`
     : `${employeeHref}?edit=1`;
+  const contractEditHref = `${employeeHref}?tab=contract&edit=1`;
+  const showContractDetailsPrompt = isHomeTab && !hasContractDetails(employee);
   const vacationPercent = Math.round(
     (employee.vacationTaken / employee.vacationTotal) * 100,
   );
@@ -737,6 +803,11 @@ export default async function EmployeeDetailPage({
       <form action={updateEmployeeAction}>
         <input type="hidden" name="tenant" value={tenant} />
         <input type="hidden" name="employeeId" value={employee.dbId ?? ""} />
+        <input
+          type="hidden"
+          name="activeTab"
+          value={isContractTab ? "contract" : "home"}
+        />
       <div className="mb-[22px] flex flex-wrap items-center gap-3.5">
         <Link href={`/u/${tenant}/employees`} className="btn btn-secondary btn-sm">
           <ArrowLeft size={14} />
@@ -873,9 +944,17 @@ export default async function EmployeeDetailPage({
           fileHref={employeeFilesHref}
         />
       ) : (
-        <div className="grid items-start gap-4 [grid-template-columns:repeat(auto-fit,minmax(320px,1fr))]">
-          <div className="flex flex-col gap-4">
-            <DetailCard title="Stamminformationen">
+        <div className="flex flex-col gap-4">
+          {showContractDetailsPrompt && (
+            <ContractDetailsPrompt
+              employeeName={employee.name}
+              href={contractEditHref}
+            />
+          )}
+
+          <div className="grid items-start gap-4 [grid-template-columns:repeat(auto-fit,minmax(320px,1fr))]">
+            <div className="flex flex-col gap-4">
+              <DetailCard title="Stamminformationen">
               {isEditing ? (
                 <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]">
                   <EditableTextField
@@ -1130,11 +1209,11 @@ export default async function EmployeeDetailPage({
               </div>
             </DetailCard>
 
-            <InfoRequestsCard employee={employee} />
-          </div>
+              <InfoRequestsCard employee={employee} />
+            </div>
 
-          <div className="flex flex-col gap-4">
-            <EmergencyContactsCard employee={employee} isEditing={isEditing} />
+            <div className="flex flex-col gap-4">
+              <EmergencyContactsCard employee={employee} isEditing={isEditing} />
 
             <DetailCard title="Kontakt">
               {isEditing ? (
@@ -1186,7 +1265,8 @@ export default async function EmployeeDetailPage({
                   isLast={index === employee.timeline.length - 1}
                 />
               ))}
-            </DetailCard>
+              </DetailCard>
+            </div>
           </div>
         </div>
       )}

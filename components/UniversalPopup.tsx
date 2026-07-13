@@ -14,6 +14,8 @@ type PopupOptions = {
   title?: ReactNode;
   content: ReactNode;
   className?: string;
+  contentClassName?: string;
+  hideCloseButton?: boolean;
   onClose?: () => void;
 };
 
@@ -82,15 +84,17 @@ export function UniversalPopupProvider({ children }: { children: ReactNode }) {
               .filter(Boolean)
               .join(" ")}
           >
-            <button
-              type="button"
-              aria-label="Popup schließen"
-              title="Schließen"
-              className="absolute top-4 right-4 flex size-8 cursor-pointer items-center justify-center rounded-[9px] border border-border bg-white text-muted transition-colors hover:border-muted hover:text-ink"
-              onClick={closePopup}
-            >
-              <X size={15} strokeWidth={2} />
-            </button>
+            {!popup.hideCloseButton && (
+              <button
+                type="button"
+                aria-label="Popup schließen"
+                title="Schließen"
+                className="absolute top-4 right-4 flex size-8 cursor-pointer items-center justify-center rounded-[9px] border border-border bg-white text-muted transition-colors hover:border-muted hover:text-ink"
+                onClick={closePopup}
+              >
+                <X size={15} strokeWidth={2} />
+              </button>
+            )}
 
             {popup.title && (
               <div
@@ -101,7 +105,9 @@ export function UniversalPopupProvider({ children }: { children: ReactNode }) {
               </div>
             )}
 
-            <div className={popup.title ? "" : "pr-10"}>{popup.content}</div>
+            <div className={popup.contentClassName ?? (popup.title ? "" : "pr-10")}>
+              {popup.content}
+            </div>
           </div>
         </div>
       )}

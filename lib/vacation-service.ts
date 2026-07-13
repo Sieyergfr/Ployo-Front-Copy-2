@@ -100,6 +100,37 @@ function calculateVacationDays(startDate: string, endDate: string) {
   return Math.max(1, Math.floor(diff / 86_400_000) + 1);
 }
 
+function parseDateOnly(value: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+
+  if (!match) {
+    return null;
+  }
+
+  const [, year, month, day] = match;
+
+  return new Date(Number(year), Number(month) - 1, Number(day));
+}
+
+function validateVacationDateRange(startDate: string, endDate: string) {
+  const parsedStartDate = parseDateOnly(startDate);
+  const parsedEndDate = parseDateOnly(endDate);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  if (!parsedStartDate || !parsedEndDate) {
+    throw new Error("Bitte gueltige Datumswerte auswaehlen.");
+  }
+
+  if (parsedStartDate < today || parsedEndDate < today) {
+    throw new Error("Urlaubsantrag darf nicht in der Vergangenheit liegen.");
+  }
+
+  if (parsedEndDate < parsedStartDate) {
+    throw new Error("Das Enddatum darf nicht vor dem Startdatum liegen.");
+  }
+}
+
 function toVacationRequest(record: VacationRecord): VacationRequest {
   return {
     id: record.key,
@@ -278,6 +309,8 @@ export async function createTenantVacationRequest(input: {
   if (!employee) {
     throw new Error("Mitarbeiter nicht gefunden.");
   }
+
+  validateVacationDateRange(input.startDate, input.endDate);
 
   const key = await createUniqueVacationKey({
     tenantId,

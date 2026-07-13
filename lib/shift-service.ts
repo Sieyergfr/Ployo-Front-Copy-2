@@ -210,6 +210,7 @@ export async function getShiftPlanForTenant(input: {
         select: {
           id: true,
           name: true,
+          accentClassName: true,
         },
       },
     },
@@ -242,6 +243,7 @@ export async function getShiftPlanForTenant(input: {
       breakMinutes: record.breakMinutes,
       employeeId: record.employeeId ?? undefined,
       locationId: record.locationId ?? undefined,
+      locationAccentClassName: record.location?.accentClassName,
       time: toTimeRange(record.startTime, record.endTime),
       assignee: record.employee?.name,
       location: record.location?.name,

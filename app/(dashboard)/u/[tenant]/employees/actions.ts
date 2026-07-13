@@ -20,6 +20,12 @@ function optionalString(formData: FormData, key: string) {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
+function fieldString(formData: FormData, key: string) {
+  const value = formData.get(key);
+
+  return typeof value === "string" ? value.trim() : undefined;
+}
+
 function employeesPath(tenant: string) {
   return `/u/${tenant}/employees`;
 }
@@ -59,6 +65,8 @@ export async function createEmployeeAction(formData: FormData) {
 export async function updateEmployeeAction(formData: FormData) {
   const tenant = formString(formData, "tenant");
   const employeeId = formString(formData, "employeeId");
+  const activeTab = formString(formData, "activeTab");
+  const contractDetailsSubmitted = formData.get("contractDetailsSubmitted") === "1";
 
   if (!tenant || !employeeId) {
     throw new Error("Mitarbeiter konnte nicht gespeichert werden.");
@@ -92,25 +100,30 @@ export async function updateEmployeeAction(formData: FormData) {
     vacationRemaining: optionalString(formData, "vacationRemaining"),
     vacationTotal: optionalString(formData, "vacationTotal"),
     vacationTaken: optionalString(formData, "vacationTaken"),
-    contractType: optionalString(formData, "contractType"),
-    entryDate: optionalString(formData, "entryDate"),
-    exitDate: optionalString(formData, "exitDate"),
-    fixedTerm: optionalString(formData, "fixedTerm"),
-    probation: optionalString(formData, "probation"),
-    noticePeriod: optionalString(formData, "noticePeriod"),
-    position: optionalString(formData, "position"),
-    department: optionalString(formData, "department"),
-    supervisor: optionalString(formData, "supervisor"),
-    workLocation: optionalString(formData, "workLocation"),
-    parties: optionalString(formData, "parties"),
-    collectiveAgreement: optionalString(formData, "collectiveAgreement"),
-    compensation: optionalString(formData, "compensation"),
-    workingTime: optionalString(formData, "workingTime"),
-    vacation: optionalString(formData, "vacation"),
+    contractDetailsSubmitted,
+    contractType: fieldString(formData, "contractType"),
+    entryDate: fieldString(formData, "entryDate"),
+    exitDate: fieldString(formData, "exitDate"),
+    fixedTerm: fieldString(formData, "fixedTerm"),
+    probation: fieldString(formData, "probation"),
+    noticePeriod: fieldString(formData, "noticePeriod"),
+    position: fieldString(formData, "position"),
+    department: fieldString(formData, "department"),
+    supervisor: fieldString(formData, "supervisor"),
+    workLocation: fieldString(formData, "workLocation"),
+    parties: fieldString(formData, "parties"),
+    collectiveAgreement: fieldString(formData, "collectiveAgreement"),
+    compensation: fieldString(formData, "compensation"),
+    workingTime: fieldString(formData, "workingTime"),
+    vacation: fieldString(formData, "vacation"),
   });
 
   revalidatePath(employeesPath(tenant));
-  redirect(employeePath(tenant, employee.key ?? employee.id));
+  redirect(
+    activeTab === "contract"
+      ? `${employeePath(tenant, employee.key ?? employee.id)}?tab=contract`
+      : employeePath(tenant, employee.key ?? employee.id),
+  );
 }
 
 export async function deleteEmployeeAction(formData: FormData) {

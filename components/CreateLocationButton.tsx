@@ -1,10 +1,12 @@
 "use client";
 
 import { createLocationAction } from "@/app/(dashboard)/u/[tenant]/standorte/actions";
+import EmployeeSelector, {
+  type EmployeeSelectorOption,
+} from "@/components/EmployeeSelector";
 import { useUniversalPopup } from "@/components/UniversalPopup";
-import { employees } from "@/lib/employees";
 import { Building2, Check, ChevronDown, Plus } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 type DropdownOption = {
   value: string;
@@ -158,21 +160,13 @@ function LocationColorPicker() {
 
 function CreateLocationForm({
   tenant,
+  employees,
   onDone,
 }: {
   tenant: string;
+  employees: EmployeeSelectorOption[];
   onDone: () => void;
 }) {
-  const leadOptions = useMemo(
-    () =>
-      employees.map((employee) => ({
-        value: employee.id,
-        label: employee.name,
-        meta: `${employee.location} - ${employee.team}`,
-      })),
-    [],
-  );
-
   return (
     <form className="flex flex-col gap-4" action={createLocationAction}>
       <input type="hidden" name="tenant" value={tenant} />
@@ -260,11 +254,10 @@ function CreateLocationForm({
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <CustomDropdownField
+        <EmployeeSelector
           label="Standortleitung"
           name="lead"
-          placeholder="Mitarbeiter auswaehlen"
-          options={leadOptions}
+          options={employees}
         />
 
         <div className="field">
@@ -302,7 +295,13 @@ function CreateLocationForm({
   );
 }
 
-export default function CreateLocationButton({ tenant }: { tenant: string }) {
+export default function CreateLocationButton({
+  tenant,
+  employees,
+}: {
+  tenant: string;
+  employees: EmployeeSelectorOption[];
+}) {
   const { openPopup, closePopup } = useUniversalPopup();
 
   return (
@@ -312,7 +311,13 @@ export default function CreateLocationButton({ tenant }: { tenant: string }) {
       onClick={() => {
         openPopup({
           title: "Standort erstellen",
-          content: <CreateLocationForm tenant={tenant} onDone={closePopup} />,
+          content: (
+            <CreateLocationForm
+              tenant={tenant}
+              employees={employees}
+              onDone={closePopup}
+            />
+          ),
         });
       }}
     >

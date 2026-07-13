@@ -101,6 +101,7 @@ type EmployeeMutationInput = {
   compensation?: string;
   workingTime?: string;
   vacation?: string;
+  contractDetailsSubmitted?: boolean;
 };
 
 const sampleEmployee = sampleEmployees[0];
@@ -189,52 +190,61 @@ function initialsForName(name: string) {
   return initials || "--";
 }
 
-function contractTitle(contract: string) {
-  const labels: Record<string, string> = {
-    Unbefristet: "Unbefristeter Arbeitsvertrag",
-    Befristet: "Befristeter Arbeitsvertrag",
-    Teilzeit: "Teilzeit-Arbeitsvertrag",
-    Werkstudentin: "Werkstudentenvertrag",
-  };
-
-  return labels[contract] ?? contract;
-}
-
-function defaultContractDetails(input: {
-  name: string;
-  contract: string;
-  startDate: string;
-  role: string;
-  team: string;
-  weeklyHours: string;
-}): EmployeeContractDetails {
+function defaultContractDetails(): EmployeeContractDetails {
   return {
-    ...sampleEmployee.contractDetails,
-    linkedFileName: "Arbeitsvertrag.pdf",
+    linkedFileName: "Keine Vertragsdatei",
     linkedFileMeta: "Noch nicht hochgeladen",
-    contractType: contractTitle(input.contract),
-    entryDate: input.startDate,
+    contractType: "",
+    entryDate: "",
     exitDate: "",
-    fixedTerm: input.contract === "Befristet" ? "Befristet" : "Unbefristet",
-    position: input.role,
-    department: input.team,
-    parties: `Mueller & Partner GmbH / ${input.name}`,
-    workingTime: `${input.weeklyHours || "38 Std/Woche"}, Schichtmodell laut Dienstplan`,
+    fixedTerm: "",
+    probation: "",
+    position: "",
+    department: "",
+    supervisor: "",
+    workLocation: "",
+    parties: "",
+    compensation: "",
+    workingTime: "",
+    vacation: "",
+    noticePeriod: "",
+    collectiveAgreement: "",
+    clauses: [],
   };
 }
 
 function toEmployee(record: EmployeeRecord): Employee {
-  const contractDetails = parseJson<EmployeeContractDetails>(
-    record.contractDetailsJson,
-    defaultContractDetails({
-      name: record.name,
-      contract: record.contract,
-      startDate: record.startDate,
-      role: record.role,
-      team: record.team,
-      weeklyHours: record.weeklyHours,
-    }),
-  );
+  const contractDetailsFallback = defaultContractDetails();
+  const parsedContractDetails = {
+    ...contractDetailsFallback,
+    ...parseJson<Partial<EmployeeContractDetails>>(
+      record.contractDetailsJson,
+      {},
+    ),
+  };
+  const contractDetails =
+    parsedContractDetails.linkedFileMeta.trim().toLowerCase() ===
+    "noch nicht hochgeladen"
+      ? {
+          ...parsedContractDetails,
+          contractType: "",
+          entryDate: "",
+          exitDate: "",
+          fixedTerm: "",
+          probation: "",
+          position: "",
+          department: "",
+          supervisor: "",
+          workLocation: "",
+          parties: "",
+          compensation: "",
+          workingTime: "",
+          vacation: "",
+          noticePeriod: "",
+          collectiveAgreement: "",
+          clauses: [],
+        }
+      : parsedContractDetails;
 
   return {
     id: record.key,
@@ -473,9 +483,7 @@ export async function createTenantEmployee(input: EmployeeMutationInput) {
           tone: "success",
         },
       ] satisfies EmployeeTimelineItem[]),
-      contractDetailsJson: JSON.stringify(
-        defaultContractDetails({ name, contract, startDate, role, team, weeklyHours }),
-      ),
+      contractDetailsJson: JSON.stringify(defaultContractDetails()),
     },
   });
 
@@ -506,25 +514,53 @@ export async function updateTenantEmployee(input: EmployeeMutationInput & { empl
   const role = input.role?.trim() || current.role;
   const team = input.team?.trim() || current.team;
   const weeklyHours = input.weeklyHours?.trim() || current.weeklyHours;
+  const contractDetailsSubmitted = input.contractDetailsSubmitted === true;
+  const contractValue = (value: string | undefined, fallback: string) =>
+    contractDetailsSubmitted ? value?.trim() ?? "" : value?.trim() || fallback;
   const contractDetails: EmployeeContractDetails = {
     ...currentEmployee.contractDetails,
-    contractType: input.contractType?.trim() || currentEmployee.contractDetails.contractType,
-    entryDate: input.entryDate?.trim() || startDate,
-    exitDate: input.exitDate?.trim() ?? currentEmployee.contractDetails.exitDate,
-    fixedTerm: input.fixedTerm?.trim() || currentEmployee.contractDetails.fixedTerm,
-    probation: input.probation?.trim() || currentEmployee.contractDetails.probation,
-    noticePeriod: input.noticePeriod?.trim() || currentEmployee.contractDetails.noticePeriod,
-    position: input.position?.trim() || role,
-    department: input.department?.trim() || team,
-    supervisor: input.supervisor?.trim() || currentEmployee.contractDetails.supervisor,
-    workLocation: input.workLocation?.trim() || current.location,
-    parties: input.parties?.trim() || currentEmployee.contractDetails.parties,
-    collectiveAgreement:
-      input.collectiveAgreement?.trim() ||
+    linkedFileMeta: contractDetailsSubmitted
+      ? "Vertragsdetails manuell erfasst"
+      : currentEmployee.contractDetails.linkedFileMeta,
+    contractType: contractValue(
+      input.contractType,
+      currentEmployee.contractDetails.contractType,
+    ),
+    entryDate: contractValue(input.entryDate, currentEmployee.contractDetails.entryDate),
+    exitDate: contractValue(input.exitDate, currentEmployee.contractDetails.exitDate),
+    fixedTerm: contractValue(input.fixedTerm, currentEmployee.contractDetails.fixedTerm),
+    probation: contractValue(input.probation, currentEmployee.contractDetails.probation),
+    noticePeriod: contractValue(
+      input.noticePeriod,
+      currentEmployee.contractDetails.noticePeriod,
+    ),
+    position: contractValue(input.position, currentEmployee.contractDetails.position),
+    department: contractValue(
+      input.department,
+      currentEmployee.contractDetails.department,
+    ),
+    supervisor: contractValue(
+      input.supervisor,
+      currentEmployee.contractDetails.supervisor,
+    ),
+    workLocation: contractValue(
+      input.workLocation,
+      currentEmployee.contractDetails.workLocation,
+    ),
+    parties: contractValue(input.parties, currentEmployee.contractDetails.parties),
+    collectiveAgreement: contractValue(
+      input.collectiveAgreement,
       currentEmployee.contractDetails.collectiveAgreement,
-    compensation: input.compensation?.trim() || currentEmployee.contractDetails.compensation,
-    workingTime: input.workingTime?.trim() || weeklyHours,
-    vacation: input.vacation?.trim() || currentEmployee.contractDetails.vacation,
+    ),
+    compensation: contractValue(
+      input.compensation,
+      currentEmployee.contractDetails.compensation,
+    ),
+    workingTime: contractValue(
+      input.workingTime,
+      currentEmployee.contractDetails.workingTime,
+    ),
+    vacation: contractValue(input.vacation, currentEmployee.contractDetails.vacation),
   };
   const key =
     name === current.name

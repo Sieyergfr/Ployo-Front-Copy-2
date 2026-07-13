@@ -11,6 +11,13 @@ type EmployeeOption = {
   location: string;
 };
 
+function todayInputValue() {
+  const now = new Date();
+  const offsetDate = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
+
+  return offsetDate.toISOString().slice(0, 10);
+}
+
 function EmployeeSelect({
   employees,
   name = "employee",
@@ -52,6 +59,8 @@ function VacationRequestForm({
   employees: EmployeeOption[];
   onDone: () => void;
 }) {
+  const today = todayInputValue();
+
   return (
     <form className="flex flex-col gap-4" action={createVacationRequestAction}>
       <input type="hidden" name="tenant" value={tenant} />
@@ -66,6 +75,7 @@ function VacationRequestForm({
             name="startDate"
             type="date"
             className="input"
+            min={today}
             required
           />
         </div>
@@ -78,6 +88,7 @@ function VacationRequestForm({
             name="endDate"
             type="date"
             className="input"
+            min={today}
             required
           />
         </div>

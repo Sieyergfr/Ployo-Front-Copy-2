@@ -59,8 +59,10 @@ export function TeamColorButtons({ defaultValue }: { defaultValue: string }) {
 
 export function LocationMultiSelectDropdown({
   defaultLocations,
+  options,
 }: {
   defaultLocations: string[];
+  options?: string[];
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [selectedLocations, setSelectedLocations] = useState(defaultLocations);
@@ -71,7 +73,7 @@ export function LocationMultiSelectDropdown({
   } | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const options = ["Muenchen", "Berlin", "Hamburg"];
+  const locationOptions = options ?? ["Muenchen", "Berlin", "Hamburg"];
   const summary = useMemo(() => {
     if (selectedLocations.length === 0) {
       return "Standorte auswaehlen";
@@ -167,7 +169,7 @@ export function LocationMultiSelectDropdown({
             width: dropdownRect.width,
           }}
         >
-          {options.map((location) => {
+          {locationOptions.map((location) => {
             const isSelected = selectedLocations.includes(location);
 
             return (

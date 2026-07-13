@@ -1,4 +1,5 @@
 import { FileReminderButton } from "@/components/ActionDrawers";
+import AddLocationEmployeesButton from "@/components/AddLocationEmployeesButton";
 import AuditLogPanel from "@/components/AuditLogPanel";
 import { UnsavedChangesGuard } from "@/components/EditSafety";
 import LocationShiftPlanner from "@/components/LocationShiftPlanner";
@@ -7,7 +8,13 @@ import {
   updateLocationAction,
 } from "@/app/(dashboard)/u/[tenant]/standorte/actions";
 import { makeAuditLogs } from "@/lib/audit";
+import { getEmployeesForTenant } from "@/lib/employee-service";
 import { getLocationForTenant } from "@/lib/location-service";
+import {
+  getISOWeekFromDate,
+  getShiftFormOptions,
+  getShiftPlanForTenant,
+} from "@/lib/shift-service";
 import {
   type Location,
   type LocationActivity,
@@ -138,6 +145,7 @@ function EditableTextField({
       <input
         id={id}
         name={name}
+        form="location-edit-form"
         type={type}
         className="input bg-white"
         defaultValue={value}
@@ -167,6 +175,7 @@ function EditableSelectField({
       <select
         id={id}
         name={name}
+        form="location-edit-form"
         className="input cursor-pointer bg-white"
         defaultValue={value}
       >
@@ -178,6 +187,60 @@ function EditableSelectField({
       </select>
     </div>
   );
+}
+
+const locationColorOptions = [
+  { value: "bg-ink", className: "bg-ink", label: "Schwarz" },
+  { value: "bg-[#2A6FDB]", className: "bg-[#2A6FDB]", label: "Blau" },
+  { value: "bg-success", className: "bg-success", label: "Gruen" },
+  { value: "bg-[#8B6ED4]", className: "bg-[#8B6ED4]", label: "Violett" },
+  { value: "bg-[#C9622A]", className: "bg-[#C9622A]", label: "Orange" },
+  { value: "bg-danger", className: "bg-danger", label: "Rot" },
+  { value: "bg-[#168A8A]", className: "bg-[#168A8A]", label: "Tuerkis" },
+  { value: "bg-[#5C6B7A]", className: "bg-[#5C6B7A]", label: "Schiefer" },
+];
+
+function EditableColorField({ value }: { value: string }) {
+  const options = locationColorOptions.some((color) => color.value === value)
+    ? locationColorOptions
+    : [{ value, className: value, label: "Aktuell" }, ...locationColorOptions];
+
+  return (
+    <div className="field">
+      <div className="label">Standortfarbe</div>
+      <div className="flex flex-wrap gap-2">
+        {options.map((color) => (
+          <label
+            key={color.value}
+            className="group flex size-9 cursor-pointer items-center justify-center rounded-[9px] border border-border transition-colors hover:border-muted has-[:checked]:border-ink"
+            title={color.label}
+          >
+            <input
+              type="radio"
+              name="color"
+              value={color.value}
+              form="location-edit-form"
+              defaultChecked={value === color.value}
+              className="peer sr-only"
+            />
+            <span
+              className={`size-4 rounded-full transition-transform peer-checked:scale-110 ${color.className}`}
+            />
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function searchParamNumber(
+  value: string | string[] | undefined,
+  fallback: number,
+) {
+  const raw = Array.isArray(value) ? value[0] : value;
+  const parsed = Number.parseInt(raw ?? "", 10);
+
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
 function TeamChip({ member }: { member: Location["team"][number] }) {
@@ -519,10 +582,19 @@ export default async function LocationDetailPage({
   searchParams,
 }: PageProps<"/u/[tenant]/standorte/[locationId]">) {
   const { tenant, locationId } = await params;
-  const { tab, edit } = await searchParams;
-  const location = await getLocationForTenant(tenant, locationId);
+  const query = await searchParams;
+  const { tab, edit } = query;
+  const currentWeek = getISOWeekFromDate(new Date());
+  const year = searchParamNumber(query.year, currentWeek.year);
+  const week = searchParamNumber(query.week, currentWeek.week);
+  const [location, employees, shiftPlan, shiftOptions] = await Promise.all([
+    getLocationForTenant(tenant, locationId),
+    getEmployeesForTenant(tenant),
+    getShiftPlanForTenant({ tenantSlug: tenant, year, week }),
+    getShiftFormOptions(tenant),
+  ]);
 
-  if (!location) {
+  if (!location || !employees || !shiftPlan || !shiftOptions) {
     notFound();
   }
 
@@ -538,6 +610,27 @@ export default async function LocationDetailPage({
     name: location.name,
     source: "Standortdetail",
   });
+  const assignedEmployeeKeys = new Set(
+    location.team.map((member) => member.employeeId ?? member.name),
+  );
+  const locationShiftEmployeeKeys = new Set(
+    location.team.flatMap((member) => [member.employeeId, member.name].filter(Boolean)),
+  );
+  const assignableEmployees = employees
+    .filter(
+      (employee) =>
+        !assignedEmployeeKeys.has(employee.dbId ?? employee.id) &&
+        !assignedEmployeeKeys.has(employee.name),
+    )
+    .map((employee) => ({
+      id: employee.dbId ?? employee.id,
+      initials: employee.initials,
+      name: employee.name,
+      employeeNumber: employee.employeeNumber,
+      location: employee.location,
+      team: employee.team,
+      role: employee.role,
+    }));
 
   return (
     <>
@@ -552,9 +645,15 @@ export default async function LocationDetailPage({
         </Link>
       </div>
 
-      <form id="location-edit-form" action={updateLocationAction}>
+      <form
+        id="location-edit-form"
+        action={updateLocationAction}
+        className="hidden"
+        aria-hidden="true"
+      >
         <input type="hidden" name="tenant" value={tenant} />
         <input type="hidden" name="locationId" value={locationDbId} />
+      </form>
       <section className="mb-5 overflow-hidden rounded-card border border-border bg-white">
         <div className={`h-1 w-full ${location.accentClassName}`} />
         <div className="flex flex-wrap items-start gap-6 px-7 py-7">
@@ -589,6 +688,7 @@ export default async function LocationDetailPage({
                   value={location.status}
                   options={["active", "inactive"]}
                 />
+                <EditableColorField value={location.accentClassName} />
               </div>
             ) : (
               <>
@@ -615,7 +715,11 @@ export default async function LocationDetailPage({
                   <X size={14} />
                   Abbrechen
                 </Link>
-                <button type="submit" className="btn btn-primary btn-sm">
+                <button
+                  type="submit"
+                  form="location-edit-form"
+                  className="btn btn-primary btn-sm"
+                >
                   <Save size={14} />
                   Speichern
                 </button>
@@ -624,6 +728,7 @@ export default async function LocationDetailPage({
               <>
                 <button
                   type="submit"
+                  form="location-edit-form"
                   formAction={deleteLocationAction}
                   className="btn btn-secondary btn-sm border-danger/25 text-danger hover:border-danger/40 hover:bg-danger/5"
                 >
@@ -634,10 +739,11 @@ export default async function LocationDetailPage({
                   <Pencil size={14} />
                   Bearbeiten
                 </Link>
-                <button type="button" className="btn btn-primary btn-sm">
-                  <Plus size={14} />
-                  Mitarbeiter
-                </button>
+                <AddLocationEmployeesButton
+                  tenant={tenant}
+                  locationId={locationDbId}
+                  employees={assignableEmployees}
+                />
               </>
             )}
           </div>
@@ -683,7 +789,24 @@ export default async function LocationDetailPage({
       {isFilesTab ? (
         <FilesTab location={location} />
       ) : isShiftsTab ? (
-        <LocationShiftPlanner location={location} />
+        <LocationShiftPlanner
+          tenant={tenant}
+          location={location}
+          year={year}
+          week={week}
+          weekLabel={shiftPlan.label}
+          weekRange={shiftPlan.range}
+          days={shiftPlan.days.map((day) => ({
+            ...day,
+            shifts: day.shifts.filter((shift) => shift.locationId === locationDbId),
+          }))}
+          employees={shiftOptions.employees.filter(
+            (employee) =>
+              employee.location === location.name ||
+              locationShiftEmployeeKeys.has(employee.id) ||
+              locationShiftEmployeeKeys.has(employee.name),
+          )}
+        />
       ) : (
         <>
           <section className="mb-4 grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(190px,1fr))]">
@@ -849,8 +972,6 @@ export default async function LocationDetailPage({
           </div>
         </>
       )}
-      </form>
-
       <div className="mt-4">
         <AuditLogPanel entries={auditEntries} />
       </div>

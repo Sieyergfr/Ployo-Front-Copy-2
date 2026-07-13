@@ -158,10 +158,12 @@ function TeamColorPicker() {
 function CreateTeamForm({
   tenant,
   employees,
+  locations,
   onDone,
 }: {
   tenant: string;
   employees: DropdownOption[];
+  locations: string[];
   onDone: () => void;
 }) {
   return (
@@ -181,7 +183,7 @@ function CreateTeamForm({
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <LocationMultiSelectDropdown defaultLocations={["Muenchen"]} />
+        <LocationMultiSelectDropdown defaultLocations={[]} options={locations} />
 
         <CustomDropdownField
           label="Teamleitung"
@@ -226,9 +228,11 @@ function CreateTeamForm({
 export default function CreateTeamButton({
   tenant,
   employees,
+  locations,
 }: {
   tenant: string;
   employees: DropdownOption[];
+  locations: string[];
 }) {
   const { openPopup, closePopup } = useUniversalPopup();
 
@@ -243,6 +247,7 @@ export default function CreateTeamButton({
             <CreateTeamForm
               tenant={tenant}
               employees={employees}
+              locations={locations}
               onDone={closePopup}
             />
           ),

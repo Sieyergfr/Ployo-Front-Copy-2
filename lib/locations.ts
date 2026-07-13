@@ -8,6 +8,7 @@ export type LocationMetric = {
 };
 
 export type LocationTeamMember = {
+  employeeId?: string;
   initials: string;
   name: string;
 };

@@ -6,27 +6,40 @@ import { useMemo, useState } from "react";
 
 type EmployeeSelectorMode = "single" | "multi";
 
+export type EmployeeSelectorOption = {
+  id: string;
+  initials: string;
+  name: string;
+  employeeNumber: string;
+  location: string;
+  team: string;
+  role: string;
+};
+
 export default function EmployeeSelector({
   label = "Mitarbeiter",
   name = "employees",
   mode = "single",
   defaultSelectedIds = [],
+  options,
 }: {
   label?: string;
   name?: string;
   mode?: EmployeeSelectorMode;
   defaultSelectedIds?: string[];
+  options?: EmployeeSelectorOption[];
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [selectedIds, setSelectedIds] = useState(defaultSelectedIds);
-  const selectedEmployees = employees.filter((employee) =>
+  const employeeOptions = options ?? employees;
+  const selectedEmployees = employeeOptions.filter((employee) =>
     selectedIds.includes(employee.id),
   );
   const normalizedQuery = query.trim().toLowerCase();
   const visibleEmployees = useMemo(
     () =>
-      employees.filter((employee) =>
+      employeeOptions.filter((employee) =>
         [
           employee.name,
           employee.employeeNumber,
@@ -38,7 +51,7 @@ export default function EmployeeSelector({
           .toLowerCase()
           .includes(normalizedQuery),
       ),
-    [normalizedQuery],
+    [employeeOptions, normalizedQuery],
   );
   const summary =
     selectedEmployees.length === 0
