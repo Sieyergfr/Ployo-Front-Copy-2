@@ -144,11 +144,6 @@ export default async function TeamsPage({
           <TeamCard key={team.dbId ?? team.id} team={team} tenant={tenant} />
         ))}
       </section>
-
-      <div className="mt-8 text-center font-mono text-[10px] tracking-[0.4px] text-[#B0B0AB]">
-        Ployo {"\u00b7"} Personalakte-System {"\u00b7"} Alle Zugriffe
-        protokolliert {"\u00b7"} Server in Frankfurt
-      </div>
     </>
   );
 }

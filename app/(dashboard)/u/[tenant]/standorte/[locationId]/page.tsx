@@ -1,7 +1,9 @@
 import { FileReminderButton } from "@/components/ActionDrawers";
 import AddLocationEmployeesButton from "@/components/AddLocationEmployeesButton";
 import AuditLogPanel from "@/components/AuditLogPanel";
+import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
 import { UnsavedChangesGuard } from "@/components/EditSafety";
+import FloatingEditBar from "@/components/FloatingEditBar";
 import LocationShiftPlanner from "@/components/LocationShiftPlanner";
 import {
   deleteLocationAction,
@@ -36,10 +38,7 @@ import {
   Lock,
   Pencil,
   Plus,
-  Save,
-  Trash2,
   Upload,
-  X,
 } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -709,32 +708,16 @@ export default async function LocationDetailPage({
           </div>
 
           <div className="flex flex-wrap gap-2.5">
-            {isEditing ? (
+            {!isEditing && (
               <>
-                <Link href={locationHref} className="btn btn-secondary btn-sm">
-                  <X size={14} />
-                  Abbrechen
-                </Link>
-                <button
-                  type="submit"
-                  form="location-edit-form"
-                  className="btn btn-primary btn-sm"
-                >
-                  <Save size={14} />
-                  Speichern
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  type="submit"
+                <ConfirmSubmitButton
                   form="location-edit-form"
                   formAction={deleteLocationAction}
                   className="btn btn-secondary btn-sm border-danger/25 text-danger hover:border-danger/40 hover:bg-danger/5"
+                  description={`Der Standort "${location.name}" wird dauerhaft geloescht.`}
                 >
-                  <Trash2 size={14} />
                   Loeschen
-                </button>
+                </ConfirmSubmitButton>
                 <Link href={locationEditHref} className="btn btn-secondary btn-sm">
                   <Pencil size={14} />
                   Bearbeiten
@@ -809,55 +792,8 @@ export default async function LocationDetailPage({
         />
       ) : (
         <>
+          {!isEditing && (
           <section className="mb-4 grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(190px,1fr))]">
-            {isEditing ? (
-              <>
-                <DetailPanel title="Kennzahlen">
-                  <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
-                    <EditableTextField
-                      id="location-employee-count"
-                      label="Mitarbeiter"
-                      name="employeeCount"
-                      type="number"
-                      value={location.employeeCount}
-                    />
-                    <EditableTextField
-                      id="location-active-today"
-                      label="Aktiv heute"
-                      name="activeToday"
-                      type="number"
-                      value={location.activeToday}
-                    />
-                    <EditableTextField
-                      id="location-shift-count"
-                      label="Schichten"
-                      name="shiftCount"
-                      type="number"
-                      value={location.shiftCount}
-                    />
-                    <EditableTextField
-                      id="location-open-positions"
-                      label="Offene Stellen"
-                      name="openPositions"
-                      type="number"
-                      value={location.openPositions}
-                    />
-                    <EditableTextField
-                      id="location-utilization"
-                      label="Auslastung"
-                      name="utilization"
-                      value={location.utilization}
-                    />
-                    <EditableTextField
-                      id="location-utilization-caption"
-                      label="Auslastung Notiz"
-                      name="utilizationCaption"
-                      value={location.utilizationCaption}
-                    />
-                  </div>
-                </DetailPanel>
-              </>
-            ) : (
               <>
                 <DetailMetricCard
                   label="Mitarbeiter"
@@ -882,8 +818,8 @@ export default async function LocationDetailPage({
                   tone="success"
                 />
               </>
-            )}
           </section>
+          )}
 
           <div className="grid items-start gap-4 [grid-template-columns:repeat(auto-fit,minmax(320px,1fr))]">
             <DetailPanel title="Leitung & Team">
@@ -976,10 +912,9 @@ export default async function LocationDetailPage({
         <AuditLogPanel entries={auditEntries} />
       </div>
 
-      <div className="mt-8 text-center font-mono text-[10px] tracking-[0.4px] text-[#B0B0AB]">
-        Ployo {"\u00b7"} Personalakte-System {"\u00b7"} Alle Zugriffe
-        protokolliert {"\u00b7"} Server in Frankfurt
-      </div>
+      {isEditing && (
+        <FloatingEditBar cancelHref={locationHref} formId="location-edit-form" />
+      )}
     </>
   );
 }

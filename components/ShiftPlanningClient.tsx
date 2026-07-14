@@ -6,6 +6,7 @@ import {
   updateShiftAction,
 } from "@/app/(dashboard)/u/[tenant]/schichtplanung/actions";
 import { ShiftSettingsDrawerButton } from "@/components/ActionDrawers";
+import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
 import PageHeader from "@/components/PageHeader";
 import {
   type ShiftEmployeeOption,
@@ -19,7 +20,6 @@ import {
   ChevronRight,
   Plus,
   Save,
-  Trash2,
   X,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -177,7 +177,7 @@ function ShiftDrawer({
           </button>
         </div>
 
-        <form action={action} className="flex flex-col gap-4">
+        <form id="shift-drawer-form" action={action} className="flex flex-col gap-4">
           <input type="hidden" name="tenant" value={tenant} />
           <input type="hidden" name="year" value={year} />
           <input type="hidden" name="week" value={week} />
@@ -298,14 +298,14 @@ function ShiftDrawer({
               Abbrechen
             </button>
             {shift?.dbId && (
-              <button
-                type="submit"
+              <ConfirmSubmitButton
                 className="btn btn-secondary text-danger"
+                form="shift-drawer-form"
                 formAction={deleteShiftAction}
+                description="Diese Schicht wird dauerhaft aus dem Dienstplan entfernt."
               >
-                <Trash2 size={15} />
                 Loeschen
-              </button>
+              </ConfirmSubmitButton>
             )}
             <button type="submit" className="btn btn-primary">
               <Save size={15} />
@@ -340,97 +340,99 @@ export default function ShiftPlanningClient({
 
   return (
     <>
-      <PageHeader
-        eyebrow="Dienstplan"
-        title="Schichtplanung"
-        subtitle={<span className="font-mono">{weekLabel} {"\u00b7"} {weekRange}</span>}
-        className="mb-7"
-      >
-        <div className="inline-flex items-center gap-2 rounded-[10px] border border-danger/20 bg-danger/10 px-3.5 py-2.5">
-          <span className="size-[7px] shrink-0 rounded-full bg-danger" />
-          <span className="font-mono text-[12px] font-semibold text-danger">
-            {conflictCount} Konflikte offen
+      <div className="relative left-1/2 w-[calc(100vw-236px)] -translate-x-1/2 px-[clamp(24px,4vw,60px)] max-md:w-screen max-md:px-4">
+        <PageHeader
+          eyebrow="Dienstplan"
+          title="Schichtplanung"
+          subtitle={<span className="font-mono">{weekLabel} {"\u00b7"} {weekRange}</span>}
+          className="mb-7"
+        >
+          <div className="inline-flex items-center gap-2 rounded-[10px] border border-danger/20 bg-danger/10 px-3.5 py-2.5">
+            <span className="size-[7px] shrink-0 rounded-full bg-danger" />
+            <span className="font-mono text-[12px] font-semibold text-danger">
+              {conflictCount} Konflikte offen
+            </span>
+          </div>
+          <ShiftSettingsDrawerButton />
+          <div className="inline-flex items-center gap-1 rounded-xl border border-border bg-white p-1">
+            <button
+              type="button"
+              className="flex size-8 cursor-pointer items-center justify-center rounded-lg text-muted transition-colors hover:bg-bg hover:text-ink"
+              onClick={() => navigateWeek(-1)}
+              aria-label="Vorherige Woche"
+            >
+              <ChevronLeft size={15} />
+            </button>
+            <span className="min-w-[118px] rounded-lg px-3 py-2 text-center font-mono text-[12px] font-semibold text-ink">
+              KW {week} {"\u00b7"} {year}
+            </span>
+            <button
+              type="button"
+              className="flex size-8 cursor-pointer items-center justify-center rounded-lg text-muted transition-colors hover:bg-bg hover:text-ink"
+              onClick={() => navigateWeek(1)}
+              aria-label="Naechste Woche"
+            >
+              <ChevronRight size={15} />
+            </button>
+          </div>
+        </PageHeader>
+
+        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-white px-4 py-3">
+          <CalendarDays size={15} className="text-muted" />
+          <span className="font-mono text-[11px] text-muted">Planung:</span>
+          <span className="text-[12.5px] text-muted-2">
+            {employees.length} Mitarbeiter {"\u00b7"} {locations.length} Standorte
           </span>
         </div>
-        <ShiftSettingsDrawerButton />
-        <div className="inline-flex items-center gap-1 rounded-xl border border-border bg-white p-1">
-          <button
-            type="button"
-            className="flex size-8 cursor-pointer items-center justify-center rounded-lg text-muted transition-colors hover:bg-bg hover:text-ink"
-            onClick={() => navigateWeek(-1)}
-            aria-label="Vorherige Woche"
-          >
-            <ChevronLeft size={15} />
-          </button>
-          <span className="min-w-[118px] rounded-lg px-3 py-2 text-center font-mono text-[12px] font-semibold text-ink">
-            KW {week} {"\u00b7"} {year}
-          </span>
-          <button
-            type="button"
-            className="flex size-8 cursor-pointer items-center justify-center rounded-lg text-muted transition-colors hover:bg-bg hover:text-ink"
-            onClick={() => navigateWeek(1)}
-            aria-label="Naechste Woche"
-          >
-            <ChevronRight size={15} />
-          </button>
-        </div>
-      </PageHeader>
 
-      <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-white px-4 py-3">
-        <CalendarDays size={15} className="text-muted" />
-        <span className="font-mono text-[11px] text-muted">Planung:</span>
-        <span className="text-[12.5px] text-muted-2">
-          {employees.length} Mitarbeiter {"\u00b7"} {locations.length} Standorte
-        </span>
-      </div>
-
-      <section className="overflow-hidden rounded-card border border-border bg-white">
-        <div className="overflow-x-auto">
-          <div className="grid min-w-[700px] [grid-template-columns:repeat(7,minmax(130px,1fr))]">
-            {days.map((day, index) => (
-              <div
-                key={day.id}
-                className={`flex min-h-[210px] flex-col ${index > 0 ? "border-l border-border" : ""}`}
-              >
+        <section className="overflow-hidden rounded-card border border-border bg-white">
+          <div className="overflow-x-auto">
+            <div className="grid min-w-[900px] [grid-template-columns:repeat(7,minmax(150px,1fr))]">
+              {days.map((day, index) => (
                 <div
-                  className={`border-b border-border px-2.5 py-3 text-center ${
-                    day.isWeekend ? "bg-bg" : "bg-white"
-                  }`}
+                  key={day.id}
+                  className={`flex min-h-[calc(100svh-280px)] flex-col ${index > 0 ? "border-l border-border" : ""}`}
                 >
                   <div
-                    className={`font-mono text-[11px] font-semibold ${
-                      day.isWeekend ? "text-ink" : "text-muted"
+                    className={`border-b border-border px-2.5 py-3 text-center ${
+                      day.isWeekend ? "bg-bg" : "bg-white"
                     }`}
                   >
-                    {day.weekday}
+                    <div
+                      className={`font-mono text-[11px] font-semibold ${
+                        day.isWeekend ? "text-ink" : "text-muted"
+                      }`}
+                    >
+                      {day.weekday}
+                    </div>
+                    <div className="mt-0.5 font-mono text-[9px] text-[#B0B0AB]">
+                      {day.date}
+                    </div>
                   </div>
-                  <div className="mt-0.5 font-mono text-[9px] text-[#B0B0AB]">
-                    {day.date}
+                  <div className="flex min-h-[130px] flex-1 flex-col gap-1.5 p-2">
+                    {day.shifts.map((shift) => (
+                      <ShiftCard
+                        key={shift.dbId ?? shift.id}
+                        shift={shift}
+                        onClick={() => setDrawer({ day, shift })}
+                      />
+                    ))}
+                    <button
+                      type="button"
+                      aria-label={`Schicht am ${day.weekday} hinzufuegen`}
+                      title="Schicht hinzufuegen"
+                      className="flex w-full cursor-pointer items-center justify-center rounded-[9px] border-[1.5px] border-dashed border-[#DEDAD4] bg-transparent p-[7px] text-[#C0BFBA] transition-colors hover:border-muted hover:text-muted-2"
+                      onClick={() => setDrawer({ day })}
+                    >
+                      <Plus size={15} strokeWidth={1.8} />
+                    </button>
                   </div>
                 </div>
-                <div className="flex min-h-[130px] flex-col gap-1.5 p-2">
-                  {day.shifts.map((shift) => (
-                    <ShiftCard
-                      key={shift.dbId ?? shift.id}
-                      shift={shift}
-                      onClick={() => setDrawer({ day, shift })}
-                    />
-                  ))}
-                  <button
-                    type="button"
-                    aria-label={`Schicht am ${day.weekday} hinzufuegen`}
-                    title="Schicht hinzufuegen"
-                    className="flex w-full cursor-pointer items-center justify-center rounded-[9px] border-[1.5px] border-dashed border-[#DEDAD4] bg-transparent p-[7px] text-[#C0BFBA] transition-colors hover:border-muted hover:text-muted-2"
-                    onClick={() => setDrawer({ day })}
-                  >
-                    <Plus size={15} strokeWidth={1.8} />
-                  </button>
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      </div>
 
       <ShiftDrawer
         tenant={tenant}
@@ -442,10 +444,6 @@ export default function ShiftPlanningClient({
         onClose={() => setDrawer(null)}
       />
 
-      <div className="mt-8 text-center font-mono text-[10px] tracking-[0.4px] text-[#B0B0AB]">
-        Ployo {"\u00b7"} Personalakte-System {"\u00b7"} Alle Zugriffe
-        protokolliert {"\u00b7"} Server in Frankfurt
-      </div>
     </>
   );
 }

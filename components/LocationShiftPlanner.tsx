@@ -5,6 +5,7 @@ import {
   deleteShiftAction,
   updateShiftAction,
 } from "@/app/(dashboard)/u/[tenant]/schichtplanung/actions";
+import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
 import type { Location } from "@/lib/locations";
 import type { ShiftEmployeeOption } from "@/lib/shift-service";
 import type { Shift, ShiftDay } from "@/lib/shifts";
@@ -16,7 +17,6 @@ import {
   Clock3,
   Plus,
   Save,
-  Trash2,
   X,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -176,7 +176,7 @@ function ShiftDrawer({
           </button>
         </div>
 
-        <form action={action} className="flex flex-col gap-4">
+        <form id="location-shift-form" action={action} className="flex flex-col gap-4">
           <input type="hidden" name="tenant" value={tenant} />
           <input type="hidden" name="year" value={year} />
           <input type="hidden" name="week" value={week} />
@@ -271,14 +271,14 @@ function ShiftDrawer({
               Abbrechen
             </button>
             {shift?.dbId && (
-              <button
-                type="submit"
+              <ConfirmSubmitButton
                 className="btn btn-secondary text-danger"
+                form="location-shift-form"
                 formAction={deleteShiftAction}
+                description="Diese Schicht wird dauerhaft aus dem Dienstplan entfernt."
               >
-                <Trash2 size={15} />
                 Löschen
-              </button>
+              </ConfirmSubmitButton>
             )}
             <button type="submit" className="btn btn-primary">
               <Save size={15} />

@@ -6,7 +6,9 @@ import {
   updateTeamAction,
 } from "@/app/(dashboard)/u/[tenant]/teams/actions";
 import AuditLogPanel from "@/components/AuditLogPanel";
+import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
 import { UnsavedChangesGuard } from "@/components/EditSafety";
+import FloatingEditBar from "@/components/FloatingEditBar";
 import {
   LocationMultiSelectDropdown,
   TeamColorButtons,
@@ -24,11 +26,8 @@ import {
   ArrowLeft,
   Pencil,
   Plus,
-  Save,
-  Trash2,
   UserRoundCheck,
   UserRoundMinus,
-  X,
 } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -404,27 +403,16 @@ export default async function TeamDetailPage({
                 </div>
               </div>
 
-              {isEditing ? (
+              {!isEditing && (
                 <div className="flex gap-2">
-                  <Link href={teamHref} className="btn btn-secondary btn-sm">
-                    <X size={14} />
-                    Abbrechen
-                  </Link>
-                  <button type="submit" className="btn btn-primary btn-sm">
-                    <Save size={14} />
-                    Speichern
-                  </button>
-                </div>
-              ) : (
-                <div className="flex gap-2">
-                  <button
-                    type="submit"
+                  <ConfirmSubmitButton
+                    form="team-edit-form"
                     formAction={deleteTeamAction}
                     className="btn btn-secondary btn-sm border-danger/25 text-danger hover:border-danger/40 hover:bg-danger/5"
+                    description={`Das Team "${team.name}" wird dauerhaft entfernt.`}
                   >
-                    <Trash2 size={14} />
                     Loeschen
-                  </button>
+                  </ConfirmSubmitButton>
                   <Link href={teamEditHref} className="btn btn-secondary btn-sm">
                     <Pencil size={14} />
                     Bearbeiten
@@ -498,10 +486,9 @@ export default async function TeamDetailPage({
         />
       </div>
 
-      <div className="mt-8 text-center font-mono text-[10px] tracking-[0.4px] text-[#B0B0AB]">
-        Ployo {"\u00b7"} Personalakte-System {"\u00b7"} Alle Zugriffe
-        protokolliert {"\u00b7"} Server in Frankfurt
-      </div>
+      {isEditing && (
+        <FloatingEditBar cancelHref={teamHref} formId="team-edit-form" />
+      )}
     </>
   );
 }

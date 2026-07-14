@@ -1,8 +1,10 @@
 import { DataTableStatus } from "@/components/DataTable";
 import AuditLogPanel from "@/components/AuditLogPanel";
+import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
 import { FileReminderButton } from "@/components/ActionDrawers";
 import EmployeeInfoRequestButton from "@/components/EmployeeInfoRequestButton";
 import { UnsavedChangesGuard } from "@/components/EditSafety";
+import FloatingEditBar from "@/components/FloatingEditBar";
 import {
   deleteEmployeeAction,
   updateEmployeeAction,
@@ -17,6 +19,7 @@ import {
   type EmployeeFileFolder,
   type EmployeeTimelineItem,
 } from "@/lib/employees";
+import { getRolesForTenant } from "@/lib/role-service";
 import {
   ArrowLeft,
   AlertTriangle,
@@ -28,7 +31,6 @@ import {
   Lock,
   MessageSquare,
   Pencil,
-  X,
   Upload,
 } from "lucide-react";
 import Link from "next/link";
@@ -538,15 +540,40 @@ function ContractTab({
   employee,
   isEditing,
   fileHref,
+  roleOptions,
 }: {
   employee: Employee;
   isEditing: boolean;
   fileHref: string;
+  roleOptions: string[];
 }) {
   const contract = employee.contractDetails;
+  const contractHistory = [
+    {
+      id: "current",
+      title: contract.contractType || employee.contract,
+      status: "Aktiv",
+      period: `${contract.entryDate || employee.startDate || "ohne Start"} - ${contract.exitDate || "laufend"}`,
+      meta: contract.linkedFileMeta || "Keine Datei verknuepft",
+    },
+    {
+      id: "previous",
+      title: "Vorherige Vertragsfassung",
+      status: "Ersetzt",
+      period: "01.01.2025 - 31.12.2025",
+      meta: "Archiviert im Vertragsverlauf",
+    },
+    {
+      id: "inactive",
+      title: "Nebenvereinbarung Arbeitszeit",
+      status: "Inaktiv",
+      period: "01.06.2024 - 31.12.2024",
+      meta: "Inaktiv gesetzt, bleibt fuer die Historie erhalten",
+    },
+  ];
 
   return (
-    <div className="grid items-start gap-4 lg:grid-cols-[1.35fr_0.9fr]">
+    <div className="grid items-start gap-4 lg:grid-cols-[1.15fr_0.85fr]">
       {isEditing && <input type="hidden" name="contractDetailsSubmitted" value="1" />}
       <div className="flex flex-col gap-4">
         <DetailCard
@@ -556,15 +583,29 @@ function ContractTab({
                 <BriefcaseBusiness size={18} />
               </span>
               <span className="min-w-0">
-                <span className="block truncate">Vertragsdetails</span>
+                <span className="block truncate">Aktueller Vertrag</span>
                 <span className="mt-[3px] block font-mono text-[10.5px] font-normal tracking-normal text-muted">
-                  Arbeitsvertrag und Eckdaten
+                  Datei, Status und Eckdaten
                 </span>
               </span>
             </div>
           }
           className="[&>h2]:mb-4"
         >
+          <div className="mb-4 flex flex-wrap gap-2">
+            <button type="button" className="btn btn-primary btn-sm">
+              Vertrag hinzufuegen
+            </button>
+            <button type="button" className="btn btn-secondary btn-sm">
+              Vertrag ersetzen
+            </button>
+            <button type="button" className="btn btn-secondary btn-sm">
+              Inaktiv setzen
+            </button>
+            <button type="button" className="btn btn-secondary btn-sm text-danger">
+              Aufheben / kuendigen
+            </button>
+          </div>
           {isEditing ? (
             <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]">
               <EditableTextField
@@ -572,6 +613,13 @@ function ContractTab({
                 label="Vertragsart"
                 name="contractType"
                 value={contract.contractType}
+              />
+              <EditableSelectField
+                id="contract-permission-role"
+                label="Berechtigungsrolle"
+                name="role"
+                value={employee.role}
+                options={roleOptions}
               />
               <EditableTextField
                 id="contract-entry-date"
@@ -707,6 +755,42 @@ function ContractTab({
         </DetailCard>
 
         <ContractDocumentCard employee={employee} fileHref={fileHref} />
+        <DetailCard title="Vertragshistorie" className="[&>h2]:mb-3.5">
+          <div className="flex flex-col gap-2.5">
+            {contractHistory.map((item) => (
+              <article
+                key={item.id}
+                className="rounded-xl border border-border bg-bg p-3"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="truncate text-[13.5px] font-semibold text-ink">
+                      {item.title}
+                    </div>
+                    <div className="mt-1 font-mono text-[10.5px] text-muted">
+                      {item.period}
+                    </div>
+                  </div>
+                  <span className="rounded-[7px] border border-border-light bg-white px-2 py-[3px] font-mono text-[10px] text-muted-2">
+                    {item.status}
+                  </span>
+                </div>
+                <div className="mt-2 text-[12px] text-muted-2">{item.meta}</div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button type="button" className="btn btn-secondary btn-sm">
+                    Ersetzen
+                  </button>
+                  <button type="button" className="btn btn-secondary btn-sm">
+                    Inaktiv setzen
+                  </button>
+                  <button type="button" className="btn btn-secondary btn-sm text-danger">
+                    Aufheben
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+        </DetailCard>
       </div>
     </div>
   );
@@ -766,9 +850,12 @@ export default async function EmployeeDetailPage({
 }: PageProps<"/u/[tenant]/employees/[employeeId]">) {
   const { tenant, employeeId } = await params;
   const { tab, edit } = await searchParams;
-  const employee = await getEmployeeForTenant(tenant, employeeId);
+  const [employee, roles] = await Promise.all([
+    getEmployeeForTenant(tenant, employeeId),
+    getRolesForTenant(tenant),
+  ]);
 
-  if (!employee) {
+  if (!employee || !roles) {
     notFound();
   }
 
@@ -796,11 +883,14 @@ export default async function EmployeeDetailPage({
     (employee.vacationTaken / employee.vacationTotal) * 100,
   );
   const statusOptions: EmployeeStatus[] = ["active", "vacation", "absent"];
+  const roleOptions = roles.length > 0
+    ? roles.map((role) => role.name)
+    : ["Mitarbeiter"];
 
   return (
     <>
       <UnsavedChangesGuard active={isEditing} />
-      <form action={updateEmployeeAction}>
+      <form id="employee-edit-form" action={updateEmployeeAction}>
         <input type="hidden" name="tenant" value={tenant} />
         <input type="hidden" name="employeeId" value={employee.dbId ?? ""} />
         <input
@@ -851,22 +941,14 @@ export default async function EmployeeDetailPage({
 
         <div className="flex flex-wrap gap-[9px]">
           {isEditing ? (
-            <>
-              <Link href={activeTabHref} className="btn btn-secondary btn-sm">
-                <X size={14} />
-                Abbrechen
-              </Link>
-              <button type="submit" className="btn btn-primary btn-sm">
-                Speichern
-              </button>
-              <button
-                type="submit"
-                className="btn btn-secondary btn-sm text-danger"
-                formAction={deleteEmployeeAction}
-              >
-                Loeschen
-              </button>
-            </>
+            <ConfirmSubmitButton
+              className="btn btn-secondary btn-sm text-danger"
+              form="employee-edit-form"
+              formAction={deleteEmployeeAction}
+              description={`Der Mitarbeiter "${employee.name}" wird dauerhaft geloescht.`}
+            >
+              Loeschen
+            </ConfirmSubmitButton>
           ) : (
             <>
               <button type="button" className="btn btn-primary btn-sm">
@@ -942,6 +1024,7 @@ export default async function EmployeeDetailPage({
           employee={employee}
           isEditing={isEditing}
           fileHref={employeeFilesHref}
+          roleOptions={roleOptions}
         />
       ) : (
         <div className="flex flex-col gap-4">
@@ -1113,11 +1196,12 @@ export default async function EmployeeDetailPage({
                     value={employee.team}
                     options={["Verkauf", "Logistik", "Service", "Empfang"]}
                   />
-                  <EditableTextField
+                  <EditableSelectField
                     id="employee-role"
-                    label="Rolle"
+                    label="Berechtigungsrolle"
                     name="role"
                     value={employee.role}
+                    options={roleOptions}
                   />
                   <EditableSelectField
                     id="employee-status"
@@ -1141,7 +1225,7 @@ export default async function EmployeeDetailPage({
                     value={employee.tenure}
                   />
                   <FieldValue label="Team" value={employee.team} />
-                  <FieldValue label="Rolle" value={employee.role} />
+                  <FieldValue label="Berechtigungsrolle" value={employee.role} />
                 </div>
               )}
             </DetailCard>
@@ -1275,10 +1359,9 @@ export default async function EmployeeDetailPage({
         <AuditLogPanel entries={auditEntries} />
       </div>
 
-      <div className="mt-8 text-center font-mono text-[10px] tracking-[0.4px] text-[#B0B0AB]">
-        Ployo {"\u00b7"} Personalakte-System {"\u00b7"} Alle Zugriffe
-        protokolliert {"\u00b7"} Server in Frankfurt
-      </div>
+      {isEditing && (
+        <FloatingEditBar cancelHref={activeTabHref} formId="employee-edit-form" />
+      )}
       </form>
     </>
   );

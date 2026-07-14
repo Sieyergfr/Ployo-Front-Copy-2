@@ -1,4 +1,6 @@
 import { deleteRoleAction, updateRoleAction } from "@/app/(dashboard)/u/[tenant]/rollen/actions";
+import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
+import FloatingEditBar from "@/components/FloatingEditBar";
 import PageHeader from "@/components/PageHeader";
 import { getRoleForTenant } from "@/lib/role-service";
 import {
@@ -7,7 +9,7 @@ import {
   permissionLevels,
   type PermissionLevel,
 } from "@/lib/roles";
-import { ArrowLeft, EyeOff, Save, ShieldCheck, Trash2, X } from "lucide-react";
+import { ArrowLeft, EyeOff, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -59,30 +61,19 @@ export default async function RoleDetailPage({
         title={role.name}
         subtitle={`${role.members} zugewiesene Mitarbeiter · ${role.description}`}
       >
-        {isEditing ? (
-          <>
-            <Link href={roleHref} className="btn btn-secondary">
-              <X size={15} />
-              Abbrechen
-            </Link>
-            <button type="submit" form="role-edit-form" className="btn btn-primary">
-              <Save size={15} />
-              Speichern
-            </button>
-          </>
-        ) : (
+        {!isEditing && (
           <>
             {canDelete && (
-              <form action={deleteRoleAction}>
+              <form id="role-delete-form" action={deleteRoleAction}>
                 <input type="hidden" name="tenant" value={tenant} />
                 <input type="hidden" name="roleId" value={role.id} />
-                <button
-                  type="submit"
+                <ConfirmSubmitButton
+                  form="role-delete-form"
                   className="btn btn-secondary border-danger/25 text-danger hover:border-danger/40 hover:bg-danger/5"
+                  description={`Die Rolle "${role.name}" wird dauerhaft geloescht.`}
                 >
-                  <Trash2 size={15} />
                   Loeschen
-                </button>
+                </ConfirmSubmitButton>
               </form>
             )}
             <Link href={`${roleHref}?edit=1`} className="btn btn-secondary">
@@ -247,6 +238,9 @@ export default async function RoleDetailPage({
             </div>
           </div>
         </section>
+      )}
+      {isEditing && (
+        <FloatingEditBar cancelHref={roleHref} formId="role-edit-form" />
       )}
     </>
   );

@@ -7,12 +7,14 @@ import { Plus, Send } from "lucide-react";
 type InviteEmployeeButtonProps = {
   tenant: string;
   locations: string[];
+  permissionRoles: string[];
   teams: string[];
 };
 
 function InviteEmployeeForm({
   tenant,
   locations,
+  permissionRoles,
   teams,
   onDone,
 }: InviteEmployeeButtonProps & { onDone: () => void }) {
@@ -110,15 +112,20 @@ function InviteEmployeeForm({
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="field">
           <label htmlFor="invite-role" className="label">
-            Rolle
+            Berechtigungsrolle
           </label>
-          <input
+          <select
             id="invite-role"
             name="role"
-            className="input"
-            placeholder="Mitarbeiter"
-            defaultValue="Mitarbeiter"
-          />
+            className="input cursor-pointer bg-bg"
+            defaultValue={permissionRoles[0] ?? "Mitarbeiter"}
+          >
+            {permissionRoles.map((role) => (
+              <option key={role} value={role}>
+                {role}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div className="field">

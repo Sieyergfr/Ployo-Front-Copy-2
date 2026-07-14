@@ -12,6 +12,7 @@ import SearchInput from "@/components/inputs/SearchInput";
 import { getEmployeesForTenant } from "@/lib/employee-service";
 import { employeeStatusConfig, type Employee } from "@/lib/employees";
 import { getLocationsForTenant } from "@/lib/location-service";
+import { getRolesForTenant } from "@/lib/role-service";
 import { getTeamsForTenant } from "@/lib/team-service";
 import { ChevronDown } from "lucide-react";
 import { notFound } from "next/navigation";
@@ -97,18 +98,22 @@ export default async function EmployeesPage({
   params,
 }: PageProps<"/u/[tenant]/employees">) {
   const { tenant } = await params;
-  const [employees, locations, teams] = await Promise.all([
+  const [employees, locations, teams, roles] = await Promise.all([
     getEmployeesForTenant(tenant),
     getLocationsForTenant(tenant),
     getTeamsForTenant(tenant),
+    getRolesForTenant(tenant),
   ]);
 
-  if (!employees || !locations || !teams) {
+  if (!employees || !locations || !teams || !roles) {
     notFound();
   }
 
   const columns = getColumns(tenant);
   const locationNames = locations.map((location) => location.name);
+  const permissionRoleNames = roles.length > 0
+    ? roles.map((role) => role.name)
+    : ["Mitarbeiter"];
   const teamNames = teams.map((team) => team.name);
 
   return (
@@ -146,6 +151,7 @@ export default async function EmployeesPage({
         <InviteEmployeeButton
           tenant={tenant}
           locations={locationNames}
+          permissionRoles={permissionRoleNames}
           teams={teamNames}
         />
       </PageHeader>

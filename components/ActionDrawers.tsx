@@ -5,6 +5,8 @@ import {
   deleteVacationRequestAction,
   rejectVacationRequestAction,
 } from "@/app/(dashboard)/u/[tenant]/urlaub/actions";
+import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
+import { useUniversalPopup } from "@/components/UniversalPopup";
 import { employees } from "@/lib/employees";
 import { files as generalFiles } from "@/lib/files";
 import { locations } from "@/lib/locations";
@@ -583,13 +585,16 @@ export function VacationDrawerButton({
                   Ablehnen
                 </button>
               </form>
-              <form action={deleteVacationRequestAction}>
+              <form id={`vacation-delete-${request.dbId ?? request.id}`} action={deleteVacationRequestAction}>
                 <input type="hidden" name="tenant" value={tenant} />
                 <input type="hidden" name="requestId" value={request.dbId ?? ""} />
-                <button type="submit" className="btn btn-secondary btn-sm">
-                  <Trash2 size={15} />
+                <ConfirmSubmitButton
+                  form={`vacation-delete-${request.dbId ?? request.id}`}
+                  className="btn btn-secondary btn-sm"
+                  description={`Der Urlaubsantrag von ${request.name} wird geloescht.`}
+                >
                   Loeschen
-                </button>
+                </ConfirmSubmitButton>
               </form>
               <button type="button" className="btn btn-secondary btn-sm">
                 Zeitraum aendern
@@ -608,6 +613,7 @@ export function VacationDrawerButton({
 }
 
 export function ShiftSettingsDrawerButton() {
+  const { openPopup, closePopup } = useUniversalPopup();
   const [isOpen, setIsOpen] = useState(false);
   const [editingShiftId, setEditingShiftId] = useState<string | null>(null);
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
@@ -682,6 +688,35 @@ export function ShiftSettingsDrawerButton() {
     setEditingShiftId((currentId) => (currentId === id ? null : currentId));
   }
 
+  function confirmRemoveShiftPreset(shift: ShiftPreset) {
+    openPopup({
+      title: "Schichtvorlage loeschen",
+      content: (
+        <div>
+          <p className="m-0 text-[13px] leading-[1.55] text-muted-2">
+            {`Die Vorlage "${shift.label}" wird aus den Einstellungen entfernt.`}
+          </p>
+          <div className="mt-5 flex justify-end gap-2.5 border-t border-border-soft pt-4">
+            <button type="button" className="btn btn-secondary" onClick={closePopup}>
+              Abbrechen
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary border-danger/25 text-danger hover:border-danger/40 hover:bg-danger/5"
+              onClick={() => {
+                removeShiftPreset(shift.id);
+                closePopup();
+              }}
+            >
+              <Trash2 size={15} />
+              Loeschen
+            </button>
+          </div>
+        </div>
+      ),
+    });
+  }
+
   function updateTemplate(
     id: string,
     field: keyof Omit<ShiftTemplate, "id">,
@@ -708,6 +743,35 @@ export function ShiftSettingsDrawerButton() {
   function removeTemplate(id: string) {
     setTemplates((items) => items.filter((item) => item.id !== id));
     setEditingTemplateId((currentId) => (currentId === id ? null : currentId));
+  }
+
+  function confirmRemoveTemplate(template: ShiftTemplate) {
+    openPopup({
+      title: "Schichtvorlage loeschen",
+      content: (
+        <div>
+          <p className="m-0 text-[13px] leading-[1.55] text-muted-2">
+            {`Die Vorlage "${template.name}" wird aus den Einstellungen entfernt.`}
+          </p>
+          <div className="mt-5 flex justify-end gap-2.5 border-t border-border-soft pt-4">
+            <button type="button" className="btn btn-secondary" onClick={closePopup}>
+              Abbrechen
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary border-danger/25 text-danger hover:border-danger/40 hover:bg-danger/5"
+              onClick={() => {
+                removeTemplate(template.id);
+                closePopup();
+              }}
+            >
+              <Trash2 size={15} />
+              Loeschen
+            </button>
+          </div>
+        </div>
+      ),
+    });
   }
 
   return (
@@ -869,7 +933,7 @@ export function ShiftSettingsDrawerButton() {
                           type="button"
                           aria-label={`${shift.label} l\u00f6schen`}
                           className="btn btn-secondary btn-sm px-3 text-danger hover:border-danger/30 hover:bg-danger/5"
-                          onClick={() => removeShiftPreset(shift.id)}
+                          onClick={() => confirmRemoveShiftPreset(shift)}
                         >
                           <Trash2 size={14} />
                         </button>
@@ -967,7 +1031,7 @@ export function ShiftSettingsDrawerButton() {
                           type="button"
                           aria-label={`${template.name} l\u00f6schen`}
                           className="btn btn-secondary btn-sm px-3 text-danger hover:border-danger/30 hover:bg-danger/5"
-                          onClick={() => removeTemplate(template.id)}
+                          onClick={() => confirmRemoveTemplate(template)}
                         >
                           <Trash2 size={14} />
                         </button>

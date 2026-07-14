@@ -122,11 +122,6 @@ export default function RemindersPage() {
           <ReminderRow key={reminder.id} reminder={reminder} />
         ))}
       </section>
-
-      <div className="mt-8 text-center font-mono text-[10px] tracking-[0.4px] text-[#B0B0AB]">
-        Ployo {"·"} Personalakte-System {"·"} Alle Zugriffe protokolliert{" "}
-        {"·"} Server in Frankfurt
-      </div>
     </>
   );
 }
