@@ -8,6 +8,7 @@ import {
 import AuditLogPanel from "@/components/AuditLogPanel";
 import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
 import { UnsavedChangesGuard } from "@/components/EditSafety";
+import FormSubmitButton from "@/components/FormSubmitButton";
 import FloatingEditBar from "@/components/FloatingEditBar";
 import {
   LocationMultiSelectDropdown,
@@ -141,6 +142,8 @@ function MemberRow({
   tenant: string;
   isEditing: boolean;
 }) {
+  const removeMemberFormId = member.id ? `remove-team-member-${member.id}` : undefined;
+
   return (
     <div className="grid items-center gap-3.5 border-t border-border-soft px-6 py-[13px] [grid-template-columns:2fr_120px_1.2fr_130px_110px_150px]">
       <div className="flex min-w-0 items-center gap-[11px]">
@@ -166,19 +169,21 @@ function MemberRow({
       <StatusPill status={member.status} />
       <div className="flex items-center justify-end gap-2">
         {isEditing && !member.isLead && member.id && (
-          <form action={removeTeamMemberAction}>
+          <form id={removeMemberFormId} action={removeTeamMemberAction}>
             <input type="hidden" name="tenant" value={tenant} />
             <input type="hidden" name="teamId" value={team.dbId} />
             <input type="hidden" name="teamHandle" value={team.id} />
             <input type="hidden" name="memberId" value={member.id} />
-            <button
-              type="submit"
+            <ConfirmSubmitButton
+              form={removeMemberFormId}
               className="flex size-8 cursor-pointer items-center justify-center rounded-[8px] border border-border bg-white text-muted transition-colors hover:border-danger hover:text-danger"
               title="Aus Team entfernen"
-              aria-label={`${member.name} aus Team entfernen`}
+              confirmLabel="Entfernen"
+              description={`${member.name} wird aus "${team.name}" entfernt.`}
             >
               <UserRoundMinus size={14} />
-            </button>
+              <span className="sr-only">{member.name} aus Team entfernen</span>
+            </ConfirmSubmitButton>
           </form>
         )}
         {isEditing ? (
@@ -234,9 +239,12 @@ function TeamLeaderEditor({ team, tenant }: { team: Team; tenant: string }) {
           </div>
         </div>
 
-        <button type="submit" className="btn btn-primary">
+        <FormSubmitButton
+          className="btn btn-primary"
+          pendingLabel="Wird gespeichert..."
+        >
           Teamleitung speichern
-        </button>
+        </FormSubmitButton>
       </div>
     </form>
   );
@@ -297,10 +305,12 @@ function TeamMemberAssignment({
           />
         </div>
 
-        <button type="submit" className="btn btn-primary">
-          <Plus size={15} />
+        <FormSubmitButton
+          Icon={Plus}
+          pendingLabel="Wird hinzugefuegt..."
+        >
           Hinzufuegen
-        </button>
+        </FormSubmitButton>
       </div>
     </form>
   );

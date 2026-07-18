@@ -5,11 +5,18 @@ import {
   deleteVacationRequestAction,
   rejectVacationRequestAction,
 } from "@/app/(dashboard)/u/[tenant]/urlaub/actions";
+import {
+  createReminderAction,
+  updateReminderAction,
+} from "@/app/(dashboard)/u/[tenant]/erinnerungen/actions";
 import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
+import DatePickerField from "@/components/DatePickerField";
+import FormSubmitButton from "@/components/FormSubmitButton";
 import { useUniversalPopup } from "@/components/UniversalPopup";
-import { employees } from "@/lib/employees";
-import { files as generalFiles } from "@/lib/files";
-import { locations } from "@/lib/locations";
+import type {
+  ReminderFileBrowserData,
+  ReminderFileBrowserSource,
+} from "@/lib/files";
 import type { Reminder } from "@/lib/reminders";
 import type { CurrentSickness, SicknessHistoryItem } from "@/lib/sickness";
 import type { VacationRequest } from "@/lib/vacations";
@@ -30,16 +37,6 @@ import {
 } from "lucide-react";
 import { type ReactNode, useMemo, useState } from "react";
 
-type FileSource = "general" | "employee" | "location";
-
-type LinkableFile = {
-  id: string;
-  name: string;
-  meta: string;
-  type: string;
-  source: FileSource;
-};
-
 type ShiftPreset = {
   id: string;
   label: string;
@@ -55,47 +52,13 @@ type ShiftTemplate = {
 };
 
 const sourceLabels = {
-  general: "Allgemeine Dateien",
-  employee: "Mitarbeiterdateien",
-  location: "Standortdateien",
-} satisfies Record<FileSource, string>;
+  central: "Zentral",
+  employee: "Mitarbeiter",
+  location: "Standort",
+} satisfies Record<ReminderFileBrowserSource, string>;
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
-}
-
-function getLinkableFiles(): LinkableFile[] {
-  const employeeFiles = employees.flatMap((employee) =>
-    employee.files.map((file) => ({
-      id: `employee-${employee.id}-${file.folder}-${file.name}`,
-      name: file.name,
-      meta: `${employee.name} · ${file.folder} · ${file.updatedAt}`,
-      type: file.type,
-      source: "employee" as const,
-    })),
-  );
-
-  const locationFiles = locations.flatMap((location) =>
-    location.files.map((file) => ({
-      id: `location-${location.id}-${file.folder}-${file.name}`,
-      name: file.name,
-      meta: `${location.name} · ${file.folder} · ${file.updatedAt}`,
-      type: file.type,
-      source: "location" as const,
-    })),
-  );
-
-  return [
-    ...generalFiles.map((file) => ({
-      id: `general-${file.folderSlug}-${file.name}`,
-      name: file.name,
-      meta: `${file.folder} · ${file.owner} · ${file.updatedAt}`,
-      type: file.type,
-      source: "general" as const,
-    })),
-    ...employeeFiles,
-    ...locationFiles,
-  ];
 }
 
 function RightDrawer({
@@ -153,14 +116,33 @@ function RightDrawer({
 }
 
 function DrawerFooter({ onClose }: { onClose: () => void }) {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   return (
     <div className="mt-5 flex justify-end gap-2.5 border-t border-border-soft pt-4">
       <button type="button" className="btn btn-secondary" onClick={onClose}>
         Abbrechen
       </button>
-      <button type="button" className="btn btn-primary" onClick={onClose}>
-        <Save size={15} />
-        Speichern
+      <button
+        type="button"
+        className="btn btn-primary"
+        disabled={isSubmitting}
+        onClick={() => {
+          setIsSubmitting(true);
+          window.setTimeout(() => {
+            setIsSubmitting(false);
+            onClose();
+          }, 350);
+        }}
+      >
+        {isSubmitting ? (
+          "Wird gespeichert..."
+        ) : (
+          <>
+            <Save size={15} />
+            Speichern
+          </>
+        )}
       </button>
     </div>
   );
@@ -181,25 +163,80 @@ function Field({
   );
 }
 
-function LinkedFileBrowser({
+function getOwnerOptions(data: ReminderFileBrowserData, source: ReminderFileBrowserSource) {
+  const options = new Map<string, string>();
+
+  for (const file of data.files) {
+    if (file.source === source) {
+      options.set(file.ownerId, file.ownerName);
+    }
+  }
+
+  for (const folder of data.folders) {
+    if (folder.source === source) {
+      options.set(folder.ownerId, folder.ownerName);
+    }
+  }
+
+  if (source === "central" && options.size === 0) {
+    options.set("central", "Zentral");
+  }
+
+  return Array.from(options, ([id, name]) => ({ id, name }));
+}
+
+function isDirectChild(path: string, currentPath: string) {
+  if (!currentPath) {
+    return !path.includes("/");
+  }
+
+  const prefix = `${currentPath}/`;
+
+  return path.startsWith(prefix) && path.slice(prefix.length).split("/").length === 1;
+}
+
+export function LinkedFileBrowser({
   selectedIds,
   setSelectedIds,
+  fileBrowserData = { files: [], folders: [] },
 }: {
   selectedIds: string[];
   setSelectedIds: (ids: string[]) => void;
+  fileBrowserData?: ReminderFileBrowserData;
 }) {
-  const [source, setSource] = useState<FileSource>("general");
+  const [source, setSource] = useState<ReminderFileBrowserSource>("central");
+  const [ownerId, setOwnerId] = useState("central");
+  const [currentPath, setCurrentPath] = useState("");
   const [query, setQuery] = useState("");
-  const files = useMemo(() => getLinkableFiles(), []);
   const normalizedQuery = query.trim().toLowerCase();
-  const visibleFiles = files.filter((file) => {
-    const matchesSource = file.source === source;
-    const matchesQuery =
-      normalizedQuery.length === 0 ||
-      `${file.name} ${file.meta}`.toLowerCase().includes(normalizedQuery);
-
-    return matchesSource && matchesQuery;
-  });
+  const owners = useMemo(
+    () => getOwnerOptions(fileBrowserData, source),
+    [fileBrowserData, source],
+  );
+  const selectedOwnerId = owners.some((owner) => owner.id === ownerId)
+    ? ownerId
+    : owners[0]?.id || (source === "central" ? "central" : "");
+  const visibleFolders = fileBrowserData.folders.filter(
+    (folder) =>
+      folder.source === source &&
+      folder.ownerId === selectedOwnerId &&
+      isDirectChild(folder.path, currentPath) &&
+      (normalizedQuery.length === 0 ||
+        `${folder.name} ${folder.ownerName}`.toLowerCase().includes(normalizedQuery)),
+  );
+  const visibleFiles = fileBrowserData.files.filter(
+    (file) =>
+      file.source === source &&
+      file.ownerId === selectedOwnerId &&
+      file.folderSlug === currentPath &&
+      (normalizedQuery.length === 0 ||
+        `${file.name} ${file.folderName} ${file.ownerName}`
+          .toLowerCase()
+          .includes(normalizedQuery)),
+  );
+  const selectedFiles = fileBrowserData.files.filter((file) =>
+    selectedIds.includes(file.id),
+  );
 
   function toggleFile(fileId: string) {
     setSelectedIds(
@@ -209,17 +246,30 @@ function LinkedFileBrowser({
     );
   }
 
+  function selectSource(nextSource: ReminderFileBrowserSource) {
+    const nextOwners = getOwnerOptions(fileBrowserData, nextSource);
+
+    setSource(nextSource);
+    setOwnerId(nextOwners[0]?.id || (nextSource === "central" ? "central" : ""));
+    setCurrentPath("");
+  }
+
   return (
     <section className="rounded-xl border border-border bg-bg p-3">
-      <div className="mb-3 flex items-center gap-2">
-        <Paperclip size={15} className="text-muted" />
-        <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.06em] text-muted">
-          Dateien verlinken
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Paperclip size={15} className="text-muted" />
+          <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.06em] text-muted">
+            Dateien verlinken
+          </span>
+        </div>
+        <span className="rounded-[7px] border border-border bg-white px-2 py-[3px] font-mono text-[10px] text-muted">
+          {selectedIds.length} gewaehlt
         </span>
       </div>
 
       <div className="mb-3 flex gap-1 overflow-x-auto rounded-xl bg-border-soft p-1">
-        {(Object.keys(sourceLabels) as FileSource[]).map((item) => (
+        {(Object.keys(sourceLabels) as ReminderFileBrowserSource[]).map((item) => (
           <button
             key={item}
             type="button"
@@ -229,22 +279,91 @@ function LinkedFileBrowser({
                 ? "bg-white font-semibold text-ink shadow-sm"
                 : "text-muted hover:text-ink",
             )}
-            onClick={() => setSource(item)}
+            onClick={() => selectSource(item)}
           >
             {sourceLabels[item]}
           </button>
         ))}
       </div>
 
+      {source !== "central" && (
+        <div className="mb-3 flex gap-1 overflow-x-auto pb-1">
+          {owners.map((owner) => (
+            <button
+              key={owner.id}
+              type="button"
+              className={cx(
+                "shrink-0 cursor-pointer rounded-[9px] border px-3 py-2 text-[12px] transition-colors",
+                selectedOwnerId === owner.id
+                  ? "border-ink bg-white font-semibold text-ink"
+                  : "border-border bg-white text-muted hover:border-muted hover:text-ink",
+              )}
+              onClick={() => {
+                setOwnerId(owner.id);
+                setCurrentPath("");
+              }}
+            >
+              {owner.name}
+            </button>
+          ))}
+        </div>
+      )}
+
       <input
         type="search"
         className="input mb-3 bg-white"
-        placeholder="Datei suchen"
+        placeholder="Datei oder Ordner suchen"
         value={query}
         onChange={(event) => setQuery(event.target.value)}
       />
 
-      <div className="grid max-h-[260px] gap-2 overflow-y-auto pr-1">
+      <div className="mb-3 flex items-center gap-2 text-[11px] text-muted">
+        <button
+          type="button"
+          className="cursor-pointer font-semibold text-ink hover:text-muted"
+          onClick={() => setCurrentPath("")}
+        >
+          Home
+        </button>
+        {currentPath && <span>/</span>}
+        {currentPath && <span className="truncate">{currentPath}</span>}
+      </div>
+
+      <div className="grid max-h-[280px] gap-2 overflow-y-auto pr-1">
+        {currentPath && (
+          <button
+            type="button"
+            className="flex cursor-pointer items-center gap-3 rounded-[10px] border border-border bg-white p-3 text-left transition-colors hover:border-muted"
+            onClick={() => setCurrentPath(currentPath.split("/").slice(0, -1).join("/"))}
+          >
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-[9px] bg-bg text-muted">
+              <Folder size={14} />
+            </span>
+            <span className="text-[13px] font-semibold text-ink">Zurueck</span>
+          </button>
+        )}
+
+        {visibleFolders.map((folder) => (
+          <button
+            key={folder.id}
+            type="button"
+            className="flex cursor-pointer items-center gap-3 rounded-[10px] border border-border bg-white p-3 text-left transition-colors hover:border-muted"
+            onClick={() => setCurrentPath(folder.path)}
+          >
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-[9px] bg-bg text-muted">
+              <Folder size={14} />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-[13px] font-semibold text-ink">
+                {folder.name}
+              </span>
+              <span className="mt-0.5 block truncate text-[11px] text-muted">
+                {folder.fileCount} Dateien {"\u00b7"} {folder.ownerName}
+              </span>
+            </span>
+          </button>
+        ))}
+
         {visibleFiles.map((file) => {
           const isSelected = selectedIds.includes(file.id);
 
@@ -276,7 +395,7 @@ function LinkedFileBrowser({
                   {file.name}
                 </span>
                 <span className="mt-0.5 block truncate text-[11px] text-muted">
-                  {file.meta}
+                  {file.folderName || "Home"} {"\u00b7"} {file.ownerName} {"\u00b7"} {file.updatedAt}
                 </span>
               </span>
               <span className="rounded-[7px] border border-border-light px-2 py-[3px] font-mono text-[10px] text-muted-2">
@@ -285,31 +404,89 @@ function LinkedFileBrowser({
             </button>
           );
         })}
+
+        {visibleFolders.length === 0 && visibleFiles.length === 0 && (
+          <div className="rounded-[10px] border border-dashed border-border bg-white px-4 py-6 text-center text-[12px] text-muted">
+            Keine Dateien gefunden.
+          </div>
+        )}
       </div>
+
+      {selectedFiles.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {selectedFiles.map((file) => (
+            <button
+              key={file.id}
+              type="button"
+              className="cursor-pointer rounded-[8px] border border-border bg-white px-2.5 py-1.5 text-[11px] text-muted transition-colors hover:border-danger/30 hover:text-danger"
+              onClick={() => toggleFile(file.id)}
+            >
+              {file.name}
+            </button>
+          ))}
+        </div>
+      )}
     </section>
   );
 }
 
 function ReminderFields({
+  tenant,
+  returnPath,
+  reminderId,
   defaultTitle,
   defaultContext,
+  defaultDueDate = "",
+  defaultPriority = "normal",
+  defaultCategory = "Allgemein",
+  defaultNotes = "",
+  defaultLinkedFiles = [],
+  fileBrowserData,
+  onCancel,
 }: {
+  tenant: string;
+  returnPath: string;
+  reminderId?: string;
   defaultTitle: string;
   defaultContext: string;
+  defaultDueDate?: string;
+  defaultPriority?: Reminder["priority"];
+  defaultCategory?: string;
+  defaultNotes?: string;
+  defaultLinkedFiles?: string[];
+  fileBrowserData?: ReminderFileBrowserData;
+  onCancel: () => void;
 }) {
-  const [linkedFiles, setLinkedFiles] = useState<string[]>([]);
+  const [linkedFiles, setLinkedFiles] = useState<string[]>(defaultLinkedFiles);
 
   return (
-    <div className="flex flex-col gap-4">
+    <form
+      className="flex flex-col gap-4"
+      action={reminderId ? updateReminderAction : createReminderAction}
+    >
+      <input type="hidden" name="tenant" value={tenant} />
+      <input type="hidden" name="returnPath" value={returnPath} />
+      <input type="hidden" name="reminderId" value={reminderId ?? ""} />
+      {linkedFiles.map((fileId) => (
+        <input key={fileId} type="hidden" name="linkedFiles" value={fileId} />
+      ))}
       <Field label="Titel">
-        <input className="input" defaultValue={defaultTitle} />
+        <input name="title" className="input" defaultValue={defaultTitle} required />
       </Field>
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Ablaufdatum">
-          <input type="date" className="input" defaultValue="2026-07-01" />
+          <DatePickerField
+            name="dueDate"
+            defaultValue={defaultDueDate}
+            placeholder="Datum auswaehlen"
+          />
         </Field>
         <Field label="Priorität">
-          <select className="input cursor-pointer bg-bg" defaultValue="urgent">
+          <select
+            name="priority"
+            className="input cursor-pointer bg-bg"
+            defaultValue={defaultPriority}
+          >
             <option value="urgent">Dringend</option>
             <option value="important">Wichtig</option>
             <option value="normal">Normal</option>
@@ -317,20 +494,48 @@ function ReminderFields({
         </Field>
       </div>
       <Field label="Bezug">
-        <input className="input" defaultValue={defaultContext} />
+        <input name="subject" className="input" defaultValue={defaultContext} />
+      </Field>
+      <Field label="Kategorie">
+        <input name="category" className="input" defaultValue={defaultCategory} />
       </Field>
       <Field label="Hinweise">
         <textarea
+          name="notes"
           className="input min-h-28 resize-none"
           placeholder="Interne Hinweise, nächste Schritte oder Kontext ergänzen"
+          defaultValue={defaultNotes}
         />
       </Field>
-      <LinkedFileBrowser selectedIds={linkedFiles} setSelectedIds={setLinkedFiles} />
-    </div>
+      <LinkedFileBrowser
+        selectedIds={linkedFiles}
+        setSelectedIds={setLinkedFiles}
+        fileBrowserData={fileBrowserData}
+      />
+      <div className="mt-1 flex justify-end gap-2.5 border-t border-border-soft pt-4">
+        <button type="button" className="btn btn-secondary" onClick={onCancel}>
+          Abbrechen
+        </button>
+        <button type="submit" className="btn btn-primary">
+          <Save size={15} />
+          Speichern
+        </button>
+      </div>
+    </form>
   );
 }
 
-export function ReminderDrawerButton({ reminder }: { reminder: Reminder }) {
+export function ReminderDrawerButton({
+  reminder,
+  tenant,
+  returnPath,
+  fileBrowserData,
+}: {
+  reminder: Reminder;
+  tenant: string;
+  returnPath: string;
+  fileBrowserData?: ReminderFileBrowserData;
+}) {
   const [isOpen, setIsOpen] = useState(false);
 
   return (
@@ -349,10 +554,19 @@ export function ReminderDrawerButton({ reminder }: { reminder: Reminder }) {
           onClose={() => setIsOpen(false)}
         >
           <ReminderFields
+            tenant={tenant}
+            returnPath={returnPath}
+            reminderId={reminder.id}
             defaultTitle={reminder.title}
             defaultContext={reminder.subject}
+            defaultDueDate={reminder.dueDate}
+            defaultPriority={reminder.priority}
+            defaultCategory={reminder.category}
+            defaultNotes={reminder.notes}
+            defaultLinkedFiles={reminder.linkedFiles}
+            fileBrowserData={fileBrowserData}
+            onCancel={() => setIsOpen(false)}
           />
-          <DrawerFooter onClose={() => setIsOpen(false)} />
         </RightDrawer>
       )}
     </>
@@ -361,10 +575,16 @@ export function ReminderDrawerButton({ reminder }: { reminder: Reminder }) {
 
 export function ReminderRowButton({
   reminder,
+  tenant,
+  returnPath,
+  fileBrowserData,
   className,
   children,
 }: {
   reminder: Reminder;
+  tenant: string;
+  returnPath: string;
+  fileBrowserData?: ReminderFileBrowserData;
   className: string;
   children: ReactNode;
 }) {
@@ -382,10 +602,19 @@ export function ReminderRowButton({
           onClose={() => setIsOpen(false)}
         >
           <ReminderFields
+            tenant={tenant}
+            returnPath={returnPath}
+            reminderId={reminder.id}
             defaultTitle={reminder.title}
             defaultContext={reminder.subject}
+            defaultDueDate={reminder.dueDate}
+            defaultPriority={reminder.priority}
+            defaultCategory={reminder.category}
+            defaultNotes={reminder.notes}
+            defaultLinkedFiles={reminder.linkedFiles}
+            fileBrowserData={fileBrowserData}
+            onCancel={() => setIsOpen(false)}
           />
-          <DrawerFooter onClose={() => setIsOpen(false)} />
         </RightDrawer>
       )}
     </>
@@ -393,10 +622,14 @@ export function ReminderRowButton({
 }
 
 export function FileReminderButton({
+  tenant,
+  returnPath,
   name,
   context,
   compact = false,
 }: {
+  tenant: string;
+  returnPath: string;
   name: string;
   context: string;
   compact?: boolean;
@@ -430,10 +663,12 @@ export function FileReminderButton({
           onClose={() => setIsOpen(false)}
         >
           <ReminderFields
+            tenant={tenant}
+            returnPath={returnPath}
             defaultTitle={`Nachfassen: ${name}`}
             defaultContext={context}
+            onCancel={() => setIsOpen(false)}
           />
-          <DrawerFooter onClose={() => setIsOpen(false)} />
         </RightDrawer>
       )}
     </>
@@ -551,10 +786,10 @@ export function VacationDrawerButton({
           <div className="flex flex-col gap-4">
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Von">
-                <input className="input" defaultValue={request.startDate} />
+                <DatePickerField name="startDatePreview" defaultValue={request.startDate} />
               </Field>
               <Field label="Bis">
-                <input className="input" defaultValue={request.endDate} />
+                <DatePickerField name="endDatePreview" defaultValue={request.endDate} />
               </Field>
             </div>
             <Field label="Dauer">
@@ -570,20 +805,23 @@ export function VacationDrawerButton({
               <form action={approveVacationRequestAction}>
                 <input type="hidden" name="tenant" value={tenant} />
                 <input type="hidden" name="requestId" value={request.dbId ?? ""} />
-                <button type="submit" className="btn btn-primary btn-sm">
-                  <Check size={15} />
+                <FormSubmitButton
+                  Icon={Check}
+                  className="btn btn-primary btn-sm"
+                  pendingLabel="Laeuft..."
+                >
                   Genehmigen
-                </button>
+                </FormSubmitButton>
               </form>
               <form action={rejectVacationRequestAction}>
                 <input type="hidden" name="tenant" value={tenant} />
                 <input type="hidden" name="requestId" value={request.dbId ?? ""} />
-                <button
-                  type="submit"
+                <FormSubmitButton
                   className="btn btn-secondary btn-sm border-danger/25 text-danger hover:border-danger/40 hover:bg-danger/5"
+                  pendingLabel="Laeuft..."
                 >
                   Ablehnen
-                </button>
+                </FormSubmitButton>
               </form>
               <form id={`vacation-delete-${request.dbId ?? request.id}`} action={deleteVacationRequestAction}>
                 <input type="hidden" name="tenant" value={tenant} />

@@ -1,5 +1,11 @@
 import { auth } from "@/lib/auth";
 import {
+  addressDefaults,
+  formatAddress,
+  normalizeAddressInput,
+  type AddressInput,
+} from "@/lib/address";
+import {
   employees as sampleEmployees,
   type Employee,
   type EmployeeContractDetails,
@@ -13,6 +19,7 @@ import {
   type InfoRequest,
   type PayrollStatement,
 } from "@/lib/employees";
+import { mapTenantFileToFileItem } from "@/lib/files";
 import { prisma } from "@/lib/prisma";
 import { headers } from "next/headers";
 
@@ -26,7 +33,14 @@ type EmployeeRecord = {
   birthPlace: string;
   nationality: string;
   maritalStatus: string;
-  privateAddress: string;
+  privateAddress: {
+    street: string;
+    houseNumber: string;
+    postalCode: string;
+    city: string;
+    careOf: string;
+    country: string;
+  } | null;
   taxId: string;
   socialSecurityNumber: string;
   healthInsurance: string;
@@ -41,7 +55,14 @@ type EmployeeRecord = {
   status: string;
   email: string;
   phone: string;
-  address: string;
+  workAddress: {
+    street: string;
+    houseNumber: string;
+    postalCode: string;
+    city: string;
+    careOf: string;
+    country: string;
+  } | null;
   vacationRemaining: number;
   vacationTotal: number;
   vacationTaken: number;
@@ -54,6 +75,33 @@ type EmployeeRecord = {
   shiftsJson: string;
   timelineJson: string;
   contractDetailsJson: string;
+  storageFiles?: TenantFileRecord[];
+  storageFileFolders?: TenantFileFolderRecord[];
+};
+
+type TenantFileRecord = {
+  id: string;
+  displayName: string;
+  originalName: string;
+  folderName: string;
+  folderSlug: string;
+  ownerName: string;
+  updatedAt: Date;
+  createdAt: Date;
+  sizeBytes: number;
+  mimeType: string;
+  extension: string;
+  version: number;
+};
+
+type TenantFileFolderRecord = {
+  id: string;
+  name: string;
+  path: string;
+  ownerName: string;
+  locked: boolean;
+  updatedAt: Date;
+  createdAt: Date;
 };
 
 type EmployeeMutationInput = {
@@ -67,7 +115,7 @@ type EmployeeMutationInput = {
   birthPlace?: string;
   nationality?: string;
   maritalStatus?: string;
-  privateAddress?: string;
+  privateAddress?: AddressInput;
   taxId?: string;
   socialSecurityNumber?: string;
   healthInsurance?: string;
@@ -82,7 +130,7 @@ type EmployeeMutationInput = {
   status?: string;
   email?: string;
   phone?: string;
-  address?: string;
+  address?: AddressInput;
   vacationRemaining?: string;
   vacationTotal?: string;
   vacationTaken?: string;
@@ -213,6 +261,44 @@ function defaultContractDetails(): EmployeeContractDetails {
   };
 }
 
+function mergeEmployeeFileFolders(
+  folders: EmployeeFileFolder[],
+  files: EmployeeFile[],
+  storageFolders: TenantFileFolderRecord[] = [],
+) {
+  const folderMap = new Map<string, EmployeeFileFolder>();
+
+  for (const folder of folders) {
+    folderMap.set(folder.name, { ...folder });
+  }
+
+  for (const folder of storageFolders) {
+    folderMap.set(folder.name, {
+      name: folder.name,
+      path: folder.path,
+      fileCount: 0,
+      locked: folder.locked,
+    });
+  }
+
+  for (const file of files) {
+    const current = folderMap.get(file.folder);
+
+    if (current) {
+      current.fileCount += file.storageFileId ? 1 : 0;
+    } else {
+      folderMap.set(file.folder, {
+        name: file.folder,
+        path: file.folder,
+        fileCount: 1,
+        locked: Boolean(file.storageFileId),
+      });
+    }
+  }
+
+  return Array.from(folderMap.values());
+}
+
 function toEmployee(record: EmployeeRecord): Employee {
   const contractDetailsFallback = defaultContractDetails();
   const parsedContractDetails = {
@@ -246,6 +332,26 @@ function toEmployee(record: EmployeeRecord): Employee {
         }
       : parsedContractDetails;
 
+  const storedFiles: EmployeeFile[] = (record.storageFiles ?? []).map((file) => {
+    const mapped = mapTenantFileToFileItem(file);
+
+    return {
+      name: mapped.name,
+      folder: mapped.folder,
+      type: mapped.type,
+      size: mapped.size,
+      updatedAt: mapped.updatedAt,
+      locked: true,
+      storageFileId: mapped.storageFileId,
+    };
+  });
+  const files = storedFiles;
+  const fileFolders = mergeEmployeeFileFolders(
+    [],
+    storedFiles,
+    record.storageFileFolders ?? [],
+  );
+
   return {
     id: record.key,
     dbId: record.id,
@@ -257,7 +363,8 @@ function toEmployee(record: EmployeeRecord): Employee {
     birthPlace: record.birthPlace,
     nationality: record.nationality,
     maritalStatus: record.maritalStatus,
-    privateAddress: record.privateAddress,
+    privateAddress: formatAddress(record.privateAddress),
+    privateAddressFields: addressDefaults(record.privateAddress),
     taxId: record.taxId,
     socialSecurityNumber: record.socialSecurityNumber,
     healthInsurance: record.healthInsurance,
@@ -272,13 +379,14 @@ function toEmployee(record: EmployeeRecord): Employee {
     status: normalizeStatus(record.status),
     email: record.email,
     phone: record.phone,
-    address: record.address,
+    address: formatAddress(record.workAddress),
+    addressFields: addressDefaults(record.workAddress),
     vacationRemaining: record.vacationRemaining,
     vacationTotal: record.vacationTotal,
     vacationTaken: record.vacationTaken,
     documents: parseJson<EmployeeDocument[]>(record.documentsJson, []),
-    fileFolders: parseJson<EmployeeFileFolder[]>(record.fileFoldersJson, []),
-    files: parseJson<EmployeeFile[]>(record.filesJson, []),
+    fileFolders,
+    files,
     emergencyContacts: parseJson<EmergencyContact[]>(record.emergencyContactsJson, []),
     payrollStatements: parseJson<PayrollStatement[]>(record.payrollStatementsJson, []),
     infoRequests: parseJson<InfoRequest[]>(record.infoRequestsJson, []),
@@ -315,6 +423,18 @@ export async function getEmployeesForTenant(tenantSlug: string) {
   const records = await prisma.tenantEmployee.findMany({
     where: { tenantId },
     orderBy: { createdAt: "asc" },
+    include: {
+      privateAddress: true,
+      workAddress: true,
+      storageFiles: {
+        where: { status: "active" },
+        orderBy: { updatedAt: "desc" },
+      },
+      storageFileFolders: {
+        where: { status: "active" },
+        orderBy: { name: "asc" },
+      },
+    },
   });
 
   return records.map(toEmployee);
@@ -331,6 +451,18 @@ export async function getEmployeeForTenant(tenantSlug: string, employeeHandle: s
     where: {
       tenantId,
       key: employeeHandle,
+    },
+    include: {
+      privateAddress: true,
+      workAddress: true,
+      storageFiles: {
+        where: { status: "active" },
+        orderBy: { updatedAt: "desc" },
+      },
+      storageFileFolders: {
+        where: { status: "active" },
+        orderBy: { name: "asc" },
+      },
     },
   });
 
@@ -441,7 +573,9 @@ export async function createTenantEmployee(input: EmployeeMutationInput) {
 
   const record = await prisma.tenantEmployee.create({
     data: {
-      tenantId,
+      tenant: {
+        connect: { id: tenantId },
+      },
       key,
       initials,
       name,
@@ -450,7 +584,9 @@ export async function createTenantEmployee(input: EmployeeMutationInput) {
       birthPlace: input.birthPlace?.trim() || "",
       nationality: input.nationality?.trim() || "",
       maritalStatus: input.maritalStatus?.trim() || "",
-      privateAddress: input.privateAddress?.trim() || "",
+      privateAddress: {
+        create: normalizeAddressInput(input.privateAddress),
+      },
       taxId: input.taxId?.trim() || "",
       socialSecurityNumber: input.socialSecurityNumber?.trim() || "",
       healthInsurance: input.healthInsurance?.trim() || "",
@@ -465,7 +601,9 @@ export async function createTenantEmployee(input: EmployeeMutationInput) {
       status: normalizeStatus(input.status),
       email: input.email?.trim() || "",
       phone: input.phone?.trim() || "",
-      address: input.address?.trim() || "",
+      workAddress: {
+        create: normalizeAddressInput(input.address),
+      },
       vacationRemaining: toInt(input.vacationRemaining, 0),
       vacationTotal: toInt(input.vacationTotal, 30),
       vacationTaken: toInt(input.vacationTaken, 0),
@@ -485,6 +623,18 @@ export async function createTenantEmployee(input: EmployeeMutationInput) {
       ] satisfies EmployeeTimelineItem[]),
       contractDetailsJson: JSON.stringify(defaultContractDetails()),
     },
+    include: {
+      privateAddress: true,
+      workAddress: true,
+      storageFiles: {
+        where: { status: "active" },
+        orderBy: { updatedAt: "desc" },
+      },
+      storageFileFolders: {
+        where: { status: "active" },
+        orderBy: { name: "asc" },
+      },
+    },
   });
 
   return toEmployee(record);
@@ -501,6 +651,18 @@ export async function updateTenantEmployee(input: EmployeeMutationInput & { empl
 
   const current = await prisma.tenantEmployee.findFirst({
     where: { tenantId, id: input.employeeId },
+    include: {
+      privateAddress: true,
+      workAddress: true,
+      storageFiles: {
+        where: { status: "active" },
+        orderBy: { updatedAt: "desc" },
+      },
+      storageFileFolders: {
+        where: { status: "active" },
+        orderBy: { name: "asc" },
+      },
+    },
   });
 
   if (!current) {
@@ -582,7 +744,12 @@ export async function updateTenantEmployee(input: EmployeeMutationInput & { empl
       birthPlace: input.birthPlace?.trim() ?? current.birthPlace,
       nationality: input.nationality?.trim() ?? current.nationality,
       maritalStatus: input.maritalStatus?.trim() ?? current.maritalStatus,
-      privateAddress: input.privateAddress?.trim() ?? current.privateAddress,
+      privateAddress: {
+        upsert: {
+          create: normalizeAddressInput(input.privateAddress),
+          update: normalizeAddressInput(input.privateAddress ?? current.privateAddress ?? {}),
+        },
+      },
       taxId: input.taxId?.trim() ?? current.taxId,
       socialSecurityNumber:
         input.socialSecurityNumber?.trim() ?? current.socialSecurityNumber,
@@ -598,11 +765,20 @@ export async function updateTenantEmployee(input: EmployeeMutationInput & { empl
       status: normalizeStatus(input.status ?? current.status),
       email: input.email?.trim() ?? current.email,
       phone: input.phone?.trim() ?? current.phone,
-      address: input.address?.trim() ?? current.address,
+      workAddress: {
+        upsert: {
+          create: normalizeAddressInput(input.address),
+          update: normalizeAddressInput(input.address ?? current.workAddress ?? {}),
+        },
+      },
       vacationRemaining: toInt(input.vacationRemaining, current.vacationRemaining),
       vacationTotal: toInt(input.vacationTotal, current.vacationTotal),
       vacationTaken: toInt(input.vacationTaken, current.vacationTaken),
       contractDetailsJson: JSON.stringify(contractDetails),
+    },
+    include: {
+      privateAddress: true,
+      workAddress: true,
     },
   });
   const employee = toEmployee(record);

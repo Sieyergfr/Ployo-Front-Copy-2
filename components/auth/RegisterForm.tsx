@@ -4,6 +4,7 @@ import PrimaryButton from "@/components/Buttons/PrimaryButton";
 import Checkbox from "@/components/inputs/checkbox";
 import PasswordInput from "@/components/inputs/password-input";
 import TextInput from "@/components/inputs/text-input";
+import { useToast } from "@/components/Toasts";
 import { authClient } from "@/lib/auth-client";
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
@@ -12,6 +13,7 @@ import { useState } from "react";
 
 export default function RegisterForm() {
   const router = useRouter();
+  const { toast } = useToast();
   const [error, setError] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
 
@@ -31,12 +33,14 @@ export default function RegisterForm() {
         const termsAccepted = formData.get("terms") === "on";
 
         if (password !== passwordRepeat) {
-          setError("Die Passwörter stimmen nicht überein.");
+          const message = "Die Passwoerter stimmen nicht ueberein.";
+          setError(message);
           return;
         }
 
         if (!termsAccepted) {
-          setError("Bitte akzeptieren Sie die Nutzungsbedingungen.");
+          const message = "Bitte akzeptieren Sie die Nutzungsbedingungen.";
+          setError(message);
           return;
         }
 
@@ -52,10 +56,21 @@ export default function RegisterForm() {
         setIsPending(false);
 
         if (signUpError) {
-          setError(signUpError.message ?? "Registrierung fehlgeschlagen.");
+          const message = signUpError.message ?? "Registrierung fehlgeschlagen.";
+          setError(message);
+          toast({
+            tone: "error",
+            title: "Registrierung fehlgeschlagen",
+            subtitle: message,
+          });
           return;
         }
 
+        toast({
+          tone: "success",
+          title: "Konto erstellt",
+          subtitle: "Sie werden zur Unternehmensauswahl weitergeleitet.",
+        });
         router.push("/select");
         router.refresh();
       }}

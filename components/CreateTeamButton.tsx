@@ -1,6 +1,7 @@
 "use client";
 
 import { createTeamAction } from "@/app/(dashboard)/u/[tenant]/teams/actions";
+import FormSubmitButton from "@/components/FormSubmitButton";
 import { LocationMultiSelectDropdown } from "@/components/TeamEditControls";
 import { useUniversalPopup } from "@/components/UniversalPopup";
 import { Check, ChevronDown, Plus, Users } from "lucide-react";
@@ -216,10 +217,12 @@ function CreateTeamForm({
         <button type="button" className="btn btn-secondary" onClick={onDone}>
           Abbrechen
         </button>
-        <button type="submit" className="btn btn-primary">
-          <Users size={15} strokeWidth={2} />
+        <FormSubmitButton
+          Icon={Users}
+          pendingLabel="Team wird erstellt..."
+        >
           Team erstellen
-        </button>
+        </FormSubmitButton>
       </div>
     </form>
   );

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { ToastProvider } from "@/components/Toasts";
 import { UniversalPopupProvider } from "@/components/UniversalPopup";
 import "./globals.css";
 import { inter, jetbrainsMono, spaceGrotesk } from "./fonts";
@@ -33,7 +34,9 @@ export default function RootLayout({
       className={`${spaceGrotesk.variable} ${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <UniversalPopupProvider>{children}</UniversalPopupProvider>
+        <ToastProvider>
+          <UniversalPopupProvider>{children}</UniversalPopupProvider>
+        </ToastProvider>
       </body>
     </html>
   );

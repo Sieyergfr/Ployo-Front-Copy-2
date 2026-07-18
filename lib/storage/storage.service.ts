@@ -1,0 +1,505 @@
+import { auth } from "@/lib/auth";
+import { fileFolders } from "@/lib/files";
+import { getStorageBucket, type StorageBucketId } from "@/lib/storage/buckets";
+import { buildStorageKey, getFileExtension } from "@/lib/storage/key-builder";
+import { markObjectDeleted } from "@/lib/storage/delete";
+import { createReadSignedUrl } from "@/lib/storage/signed-url";
+import { uploadObject } from "@/lib/storage/upload";
+import { prisma } from "@/lib/prisma";
+import { headers } from "next/headers";
+
+export type FileOwnerType = "tenant" | "employee" | "location";
+
+export type UploadTenantFileInput = {
+  tenantSlug: string;
+  file: File;
+  bucketId?: StorageBucketId;
+  ownerType?: FileOwnerType;
+  ownerId?: string;
+  folderSlug?: string;
+  folderName?: string;
+  ownerName?: string;
+  documentType?: string;
+  validFrom?: string;
+  expiresAt?: string;
+  reminderAt?: string;
+  description?: string;
+  tags?: string[];
+  assignedEmployeeId?: string;
+  assignedLocationId?: string;
+  accessRoleIds?: string[];
+  accessUserIds?: string[];
+};
+
+function slugify(value: string) {
+  return value
+    .toLowerCase()
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+}
+
+function normalizeFolderPath(value: string) {
+  return value
+    .split("/")
+    .map((part) => slugify(part))
+    .filter(Boolean)
+    .join("/");
+}
+
+function folderScope(ownerType: FileOwnerType, ownerId?: string) {
+  return ownerType === "tenant" ? "tenant" : `${ownerType}:${ownerId ?? "unknown"}`;
+}
+
+function formatFileName(value: string) {
+  return value.trim().replace(/[\\/]+/g, "-").slice(0, 240) || "Datei";
+}
+
+function cleanStringList(values: string[] = []) {
+  return Array.from(
+    new Set(values.map((value) => value.trim()).filter(Boolean)),
+  );
+}
+
+async function findNamesById(input: {
+  tenantId: string;
+  employeeId?: string;
+  locationId?: string;
+  roleIds?: string[];
+  userIds?: string[];
+}) {
+  const roleIds = cleanStringList(input.roleIds);
+  const userIds = cleanStringList(input.userIds);
+  const [employee, location, roles, users] = await Promise.all([
+    input.employeeId
+      ? prisma.tenantEmployee.findFirst({
+          where: { id: input.employeeId, tenantId: input.tenantId },
+          select: { id: true, name: true },
+        })
+      : null,
+    input.locationId
+      ? prisma.tenantLocation.findFirst({
+          where: { id: input.locationId, tenantId: input.tenantId },
+          select: { id: true, name: true },
+        })
+      : null,
+    roleIds.length
+      ? prisma.tenantRole.findMany({
+          where: { id: { in: roleIds }, tenantId: input.tenantId },
+          select: { id: true, name: true },
+        })
+      : [],
+    userIds.length
+      ? prisma.tenantMembership.findMany({
+          where: { tenantId: input.tenantId, userId: { in: userIds } },
+          include: { user: { select: { id: true, name: true, email: true } } },
+        })
+      : [],
+  ]);
+
+  return {
+    employee,
+    location,
+    roles,
+    users: users.map((membership) => membership.user),
+  };
+}
+
+async function requireTenantFileAccess(tenantSlug: string) {
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  });
+
+  if (!session?.user?.id) {
+    throw new Error("UNAUTHORIZED");
+  }
+
+  const membership = await prisma.tenantMembership.findFirst({
+    where: {
+      userId: session.user.id,
+      tenant: { slug: tenantSlug },
+    },
+    include: {
+      tenant: { select: { id: true, slug: true } },
+      roleRef: { include: { permissions: true } },
+    },
+  });
+
+  if (!membership) {
+    throw new Error("FORBIDDEN");
+  }
+
+  const role = membership.role.toUpperCase();
+  const filesPermission = membership.roleRef?.permissions.find(
+    (permission) => permission.area === "files",
+  );
+  const canWrite =
+    ["OWNER", "ADMIN", "HR"].includes(role) ||
+    filesPermission?.level === "write" ||
+    filesPermission?.level === "admin";
+
+  if (!canWrite) {
+    throw new Error("FORBIDDEN");
+  }
+
+  return {
+    tenantId: membership.tenant.id,
+    tenantSlug: membership.tenant.slug,
+    userId: session.user.id,
+    userName: session.user.name ?? "HR",
+  };
+}
+
+async function validateOwner(input: {
+  tenantId: string;
+  ownerType: FileOwnerType;
+  ownerId?: string;
+}) {
+  if (input.ownerType === "employee" && input.ownerId) {
+    const employee = await prisma.tenantEmployee.findFirst({
+      where: { id: input.ownerId, tenantId: input.tenantId },
+      select: { id: true, name: true },
+    });
+
+    if (!employee) {
+      throw new Error("Mitarbeiter nicht gefunden.");
+    }
+
+    return { ownerId: employee.id, ownerName: employee.name };
+  }
+
+  if (input.ownerType === "location" && input.ownerId) {
+    const location = await prisma.tenantLocation.findFirst({
+      where: { id: input.ownerId, tenantId: input.tenantId },
+      select: { id: true, name: true },
+    });
+
+    if (!location) {
+      throw new Error("Standort nicht gefunden.");
+    }
+
+    return { ownerId: location.id, ownerName: location.name };
+  }
+
+  return { ownerId: undefined, ownerName: "HR" };
+}
+
+async function fileToBuffer(file: File) {
+  if (!file || file.size <= 0) {
+    throw new Error("Bitte eine Datei auswählen.");
+  }
+
+  return Buffer.from(await file.arrayBuffer());
+}
+
+export async function uploadTenantFile(input: UploadTenantFileInput) {
+  const access = await requireTenantFileAccess(input.tenantSlug);
+  const ownerType = input.ownerType ?? "tenant";
+  const owner = await validateOwner({
+    tenantId: access.tenantId,
+    ownerType,
+    ownerId: input.ownerId,
+  });
+  const scope = folderScope(ownerType, owner.ownerId);
+  const bucketConfig = getStorageBucket(input.bucketId);
+  const originalName = formatFileName(input.file.name);
+  const requestedFolderSlug = normalizeFolderPath(input.folderSlug ?? "");
+  const storedFolder = requestedFolderSlug
+    ? await prisma.tenantFileFolder.findFirst({
+        where: {
+          tenantId: access.tenantId,
+          scope,
+          path: requestedFolderSlug,
+          status: "active",
+        },
+        select: { name: true },
+      })
+    : null;
+  const staticFolder = requestedFolderSlug
+    ? fileFolders.find((folder) => folder.slug === requestedFolderSlug)
+    : undefined;
+  const folderName = requestedFolderSlug
+    ? input.folderName?.trim() ||
+      storedFolder?.name ||
+      staticFolder?.name ||
+      "Allgemein"
+    : input.folderName?.trim() || "Home";
+  const folderSlug = requestedFolderSlug;
+  const tags = cleanStringList(input.tags);
+  const accessRoleIds = cleanStringList(input.accessRoleIds);
+  const accessUserIds = cleanStringList(input.accessUserIds);
+  const linked = await findNamesById({
+    tenantId: access.tenantId,
+    employeeId: input.assignedEmployeeId,
+    locationId: input.assignedLocationId,
+    roleIds: accessRoleIds,
+    userIds: accessUserIds,
+  });
+  const storageKey = buildStorageKey(bucketConfig, {
+    tenantId: access.tenantId,
+    fileName: originalName,
+    ownerType,
+    ownerId: owner.ownerId,
+  });
+  const uploaded = await uploadObject({
+    bucketId: input.bucketId,
+    key: storageKey,
+    body: await fileToBuffer(input.file),
+    contentType: input.file.type || "application/octet-stream",
+    metadata: {
+      tenantId: access.tenantId,
+      originalName,
+    },
+  });
+
+  return prisma.tenantFile.create({
+    data: {
+      tenantId: access.tenantId,
+      employeeId: ownerType === "employee" ? owner.ownerId : undefined,
+      locationId: ownerType === "location" ? owner.ownerId : undefined,
+      bucket: uploaded.bucket,
+      storageKey: uploaded.key,
+      originalName,
+      displayName: originalName,
+      mimeType: input.file.type || "application/octet-stream",
+      sizeBytes: input.file.size,
+      extension: getFileExtension(originalName),
+      folderSlug,
+      folderName,
+      ownerName: input.ownerName?.trim() || owner.ownerName || access.userName,
+      uploadedById: access.userId,
+      uploadedByName: access.userName,
+      documentType: input.documentType?.trim() || "Sonstiges",
+      validFrom: input.validFrom?.trim() ?? "",
+      expiresAt: input.expiresAt?.trim() ?? "",
+      reminderAt: input.reminderAt?.trim() ?? "",
+      description: input.description?.trim() ?? "",
+      tagsJson: JSON.stringify(tags),
+      assignedEmployeeId: linked.employee?.id ?? "",
+      assignedEmployeeName: linked.employee?.name ?? "",
+      assignedLocationId: linked.location?.id ?? "",
+      assignedLocationName: linked.location?.name ?? "",
+      accessRoleIdsJson: JSON.stringify(linked.roles.map((role) => role.id)),
+      accessRoleNamesJson: JSON.stringify(linked.roles.map((role) => role.name)),
+      accessUserIdsJson: JSON.stringify(linked.users.map((user) => user.id)),
+      accessUserNamesJson: JSON.stringify(
+        linked.users.map((user) => user.name || user.email),
+      ),
+      provider: uploaded.provider,
+    },
+  });
+}
+
+export async function createTenantFileFolder(input: {
+  tenantSlug: string;
+  name: string;
+  ownerType?: FileOwnerType;
+  ownerId?: string;
+  parentPath?: string;
+  ownerName?: string;
+  locked?: boolean;
+}) {
+  const access = await requireTenantFileAccess(input.tenantSlug);
+  const name = input.name.trim();
+  const ownerType = input.ownerType ?? "tenant";
+  const owner = await validateOwner({
+    tenantId: access.tenantId,
+    ownerType,
+    ownerId: input.ownerId,
+  });
+  const scope = folderScope(ownerType, owner.ownerId);
+
+  if (!name) {
+    throw new Error("Ordnername ist erforderlich.");
+  }
+
+  const slug = slugify(name);
+  const parentPath = normalizeFolderPath(input.parentPath ?? "");
+  const parent = parentPath
+    ? await prisma.tenantFileFolder.findFirst({
+        where: {
+          tenantId: access.tenantId,
+          scope,
+          path: parentPath,
+          status: "active",
+        },
+        select: { id: true, path: true },
+      })
+    : null;
+  const staticParent = parentPath
+    ? fileFolders.some((folder) => folder.slug === parentPath)
+    : false;
+
+  if (parentPath && !parent && !staticParent) {
+    throw new Error("Übergeordneter Ordner nicht gefunden.");
+  }
+
+  const path = parent
+    ? `${parent.path}/${slug}`
+    : parentPath
+      ? `${parentPath}/${slug}`
+      : slug;
+
+  return prisma.tenantFileFolder.upsert({
+    where: {
+      tenantId_scope_path: {
+        tenantId: access.tenantId,
+        scope,
+        path,
+      },
+    },
+    create: {
+      tenantId: access.tenantId,
+      employeeId: ownerType === "employee" ? owner.ownerId : undefined,
+      locationId: ownerType === "location" ? owner.ownerId : undefined,
+      parentId: parent?.id,
+      scope,
+      name,
+      slug,
+      path,
+      ownerName: input.ownerName?.trim() || access.userName || "HR",
+      locked: input.locked === true,
+    },
+    update: {
+      status: "active",
+      name,
+      ownerName: input.ownerName?.trim() || access.userName || "HR",
+      locked: input.locked === true,
+    },
+  });
+}
+
+export async function uploadTenantFileVersion(input: {
+  tenantSlug: string;
+  fileId: string;
+  file: File;
+}) {
+  const access = await requireTenantFileAccess(input.tenantSlug);
+  const current = await prisma.tenantFile.findFirst({
+    where: {
+      id: input.fileId,
+      tenantId: access.tenantId,
+      status: { not: "delete" },
+    },
+  });
+
+  if (!current) {
+    throw new Error("Datei nicht gefunden.");
+  }
+
+  const rootId = current.parentId ?? current.id;
+  const nextVersion = current.version + 1;
+  const originalName = formatFileName(input.file.name || current.originalName);
+  const bucketConfig = getStorageBucket("hrDocuments");
+  const ownerType: FileOwnerType = current.employeeId
+    ? "employee"
+    : current.locationId
+      ? "location"
+      : "tenant";
+  const ownerId = current.employeeId ?? current.locationId ?? undefined;
+  const storageKey = buildStorageKey(bucketConfig, {
+    tenantId: access.tenantId,
+    fileName: originalName,
+    ownerType,
+    ownerId,
+    version: nextVersion,
+  });
+  const uploaded = await uploadObject({
+    key: storageKey,
+    body: await fileToBuffer(input.file),
+    contentType: input.file.type || current.mimeType,
+    metadata: {
+      tenantId: access.tenantId,
+      originalName,
+      previousFileId: current.id,
+    },
+  });
+
+  return prisma.$transaction(async (tx) => {
+    await tx.tenantFile.update({
+      where: { id: current.id },
+      data: { status: "replaced" },
+    });
+
+    return tx.tenantFile.create({
+      data: {
+        tenantId: access.tenantId,
+        employeeId: current.employeeId,
+        locationId: current.locationId,
+        parentId: rootId,
+        bucket: uploaded.bucket,
+        storageKey: uploaded.key,
+        originalName,
+        displayName: current.displayName || originalName,
+        mimeType: input.file.type || current.mimeType,
+        sizeBytes: input.file.size,
+        extension: getFileExtension(originalName),
+        folderSlug: current.folderSlug,
+        folderName: current.folderName,
+        ownerName: access.userName,
+        status: "active",
+        version: nextVersion,
+        provider: uploaded.provider,
+      },
+    });
+  });
+}
+
+export async function softDeleteTenantFile(input: {
+  tenantSlug: string;
+  fileId: string;
+}) {
+  const access = await requireTenantFileAccess(input.tenantSlug);
+
+  return markObjectDeleted({
+    tenantId: access.tenantId,
+    fileId: input.fileId,
+  });
+}
+
+export async function getTenantFileSignedUrl(input: {
+  tenantSlug: string;
+  fileId: string;
+  version?: number;
+  disposition?: "inline" | "attachment";
+}) {
+  const access = await requireTenantFileAccess(input.tenantSlug);
+  const baseFile = await prisma.tenantFile.findFirst({
+    where: {
+      tenantId: access.tenantId,
+      status: { not: "delete" },
+      id: input.fileId,
+    },
+  });
+
+  if (!baseFile) {
+    throw new Error("Datei nicht gefunden.");
+  }
+
+  const rootId = baseFile.parentId ?? baseFile.id;
+  const file = input.version
+    ? await prisma.tenantFile.findFirst({
+        where: {
+          tenantId: access.tenantId,
+          status: { not: "delete" },
+          version: input.version,
+          OR: [{ id: rootId }, { parentId: rootId }],
+        },
+      })
+    : baseFile;
+
+  if (!file) {
+    throw new Error("Datei nicht gefunden.");
+  }
+
+  return createReadSignedUrl({
+    bucket: file.bucket,
+    key: file.storageKey,
+    fileName: file.displayName,
+    disposition: input.disposition,
+    contentType: file.mimeType,
+  });
+}

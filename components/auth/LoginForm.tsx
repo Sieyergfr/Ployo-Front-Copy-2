@@ -4,9 +4,11 @@ import PrimaryButton from "@/components/Buttons/PrimaryButton";
 import Checkbox from "@/components/inputs/checkbox";
 import PasswordInput from "@/components/inputs/password-input";
 import TextInput from "@/components/inputs/text-input";
+import { useToast } from "@/components/Toasts";
 import { authClient } from "@/lib/auth-client";
 import { ArrowRight } from "lucide-react";
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -16,6 +18,7 @@ type SocialProviderConfig = Record<SocialProvider, boolean>;
 
 export default function LoginForm() {
   const router = useRouter();
+  const { toast } = useToast();
   const [error, setError] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
   const [providerConfig, setProviderConfig] = useState<SocialProviderConfig>({
@@ -54,9 +57,8 @@ export default function LoginForm() {
 
   async function handleSocialSignIn(provider: SocialProvider) {
     if (!providerConfig[provider]) {
-      setError(
-        `${provider === "google" ? "Google" : "Apple"} Login ist noch nicht konfiguriert.`,
-      );
+      const message = `${provider === "google" ? "Google" : "Apple"} Login ist noch nicht konfiguriert.`;
+      setError(message);
       return;
     }
 
@@ -72,7 +74,13 @@ export default function LoginForm() {
     setSocialProvider(null);
 
     if (signInError) {
-      setError(signInError.message ?? "Anmeldung fehlgeschlagen.");
+      const message = signInError.message ?? "Anmeldung fehlgeschlagen.";
+      setError(message);
+      toast({
+        tone: "error",
+        title: "Anmeldung fehlgeschlagen",
+        subtitle: message,
+      });
     }
   }
 
@@ -99,10 +107,21 @@ export default function LoginForm() {
         setIsPending(false);
 
         if (signInError) {
-          setError(signInError.message ?? "Anmeldung fehlgeschlagen.");
+          const message = signInError.message ?? "Anmeldung fehlgeschlagen.";
+          setError(message);
+          toast({
+            tone: "error",
+            title: "Anmeldung fehlgeschlagen",
+            subtitle: message,
+          });
           return;
         }
 
+        toast({
+          tone: "success",
+          title: "Willkommen zurueck",
+          subtitle: "Sie werden zur Unternehmensauswahl weitergeleitet.",
+        });
         router.push("/select");
         router.refresh();
       }}
@@ -126,6 +145,12 @@ export default function LoginForm() {
         <Checkbox id="stay_logged">
           <span>Angemeldet bleiben</span>
         </Checkbox>
+        <Link
+          href="/forgot-password"
+          className="self-start text-[12.5px] font-medium text-ink underline underline-offset-2"
+        >
+          Passwort vergessen?
+        </Link>
       </div>
 
       {error && (

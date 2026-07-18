@@ -5,6 +5,12 @@ import {
   deleteTenantEmployee,
   updateTenantEmployee,
 } from "@/lib/employee-service";
+import {
+  contractStatuses,
+  createEmployeeContract,
+  updateEmployeeContractStatus,
+  type ContractStatus,
+} from "@/lib/contract-service";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -24,6 +30,24 @@ function fieldString(formData: FormData, key: string) {
   const value = formData.get(key);
 
   return typeof value === "string" ? value.trim() : undefined;
+}
+
+function requiredFile(formData: FormData, key: string) {
+  const value = formData.get(key);
+
+  if (!(value instanceof File) || value.size === 0) {
+    throw new Error("Bitte die Vertrags-PDF auswählen.");
+  }
+
+  return value;
+}
+
+function contractStatus(formData: FormData, fallback: ContractStatus = "draft") {
+  const value = formString(formData, "status", fallback);
+
+  return contractStatuses.includes(value as ContractStatus)
+    ? (value as ContractStatus)
+    : fallback;
 }
 
 function employeesPath(tenant: string) {
@@ -81,7 +105,14 @@ export async function updateEmployeeAction(formData: FormData) {
     birthPlace: optionalString(formData, "birthPlace"),
     nationality: optionalString(formData, "nationality"),
     maritalStatus: optionalString(formData, "maritalStatus"),
-    privateAddress: optionalString(formData, "privateAddress"),
+    privateAddress: {
+      street: formString(formData, "privateAddressStreet"),
+      houseNumber: formString(formData, "privateAddressHouseNumber"),
+      postalCode: formString(formData, "privateAddressPostalCode"),
+      city: formString(formData, "privateAddressCity"),
+      careOf: formString(formData, "privateAddressCareOf"),
+      country: formString(formData, "privateAddressCountry", "DE"),
+    },
     taxId: optionalString(formData, "taxId"),
     socialSecurityNumber: optionalString(formData, "socialSecurityNumber"),
     healthInsurance: optionalString(formData, "healthInsurance"),
@@ -96,7 +127,14 @@ export async function updateEmployeeAction(formData: FormData) {
     status: optionalString(formData, "status"),
     email: optionalString(formData, "email"),
     phone: optionalString(formData, "phone"),
-    address: optionalString(formData, "address"),
+    address: {
+      street: formString(formData, "addressStreet"),
+      houseNumber: formString(formData, "addressHouseNumber"),
+      postalCode: formString(formData, "addressPostalCode"),
+      city: formString(formData, "addressCity"),
+      careOf: formString(formData, "addressCareOf"),
+      country: formString(formData, "addressCountry", "DE"),
+    },
     vacationRemaining: optionalString(formData, "vacationRemaining"),
     vacationTotal: optionalString(formData, "vacationTotal"),
     vacationTaken: optionalString(formData, "vacationTaken"),
@@ -138,4 +176,70 @@ export async function deleteEmployeeAction(formData: FormData) {
 
   revalidatePath(employeesPath(tenant));
   redirect(employeesPath(tenant));
+}
+
+export async function createEmployeeContractAction(formData: FormData) {
+  const tenant = formString(formData, "tenant");
+  const employeeId = formString(formData, "employeeId");
+  const employeeHandle = formString(formData, "employeeHandle");
+  const title = formString(formData, "title");
+  const startDate = formString(formData, "startDate");
+
+  if (!tenant || !employeeId || !employeeHandle || !title || !startDate) {
+    throw new Error("Titel, Mitarbeiter und Vertragsbeginn sind erforderlich.");
+  }
+
+  await createEmployeeContract({
+    tenantSlug: tenant,
+    employeeId,
+    file: requiredFile(formData, "contractFile"),
+    title,
+    contractType: formString(formData, "contractType", "Arbeitsvertrag"),
+    status: contractStatus(formData),
+    startDate,
+    endDate: formString(formData, "endDate"),
+    probationEndDate: formString(formData, "probationEndDate"),
+    noticePeriod: formString(formData, "noticePeriod"),
+    position: formString(formData, "position"),
+    department: formString(formData, "department"),
+    workLocation: formString(formData, "workLocation"),
+    weeklyHours: formString(formData, "weeklyHours"),
+    compensation: formString(formData, "compensation"),
+    vacationDays: Math.max(0, Number(formString(formData, "vacationDays", "0")) || 0),
+    notes: formString(formData, "notes"),
+  });
+
+  const path = `${employeePath(tenant, employeeHandle)}?tab=contract`;
+  revalidatePath(path);
+  redirect(path);
+}
+
+export async function updateEmployeeContractStatusAction(formData: FormData) {
+  const tenant = formString(formData, "tenant");
+  const employeeId = formString(formData, "employeeId");
+  const employeeHandle = formString(formData, "employeeHandle");
+  const contractId = formString(formData, "contractId");
+  const status = contractStatus(formData, "inactive");
+  const terminationDate = formString(formData, "terminationDate");
+
+  if (!tenant || !employeeId || !employeeHandle || !contractId) {
+    throw new Error("Vertrag konnte nicht aktualisiert werden.");
+  }
+
+  if (status === "terminated" && !terminationDate) {
+    throw new Error("Bitte ein Kündigungsdatum auswählen.");
+  }
+
+  await updateEmployeeContractStatus({
+    tenantSlug: tenant,
+    employeeId,
+    contractId,
+    status,
+    terminationDate,
+    terminationReason: formString(formData, "terminationReason"),
+  });
+
+  const path = `${employeePath(tenant, employeeHandle)}?tab=contract`;
+  revalidatePath(path);
+  redirect(path);
 }

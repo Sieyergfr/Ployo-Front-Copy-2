@@ -83,6 +83,11 @@ export const auth = betterAuth({
   }),
   emailAndPassword: {
     enabled: true,
+    sendResetPassword: async ({ user, url }) => {
+      console.info(
+        `[auth] Passwort-Reset für ${user.email} angefordert: ${url}`,
+      );
+    },
   },
   socialProviders: {
     ...googleProvider,

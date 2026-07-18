@@ -1,5 +1,11 @@
 import { auth } from "@/lib/auth";
 import {
+  addressDefaults,
+  formatAddress,
+  normalizeAddressInput,
+  type AddressInput,
+} from "@/lib/address";
+import {
   type Location,
   type LocationActivity,
   type LocationFile,
@@ -9,6 +15,7 @@ import {
   type LocationStatus,
   type LocationTeamMember,
 } from "@/lib/locations";
+import { mapTenantFileToFileItem } from "@/lib/files";
 import { prisma } from "@/lib/prisma";
 import { headers } from "next/headers";
 
@@ -17,7 +24,14 @@ type LocationRecord = {
   key: string;
   kind: string;
   name: string;
-  address: string;
+  address: {
+    street: string;
+    houseNumber: string;
+    postalCode: string;
+    city: string;
+    careOf: string;
+    country: string;
+  } | null;
   employeeCount: number;
   activeToday: number;
   shiftCount: number;
@@ -35,6 +49,33 @@ type LocationRecord = {
   fileFoldersJson: string;
   filesJson: string;
   shiftPlanJson: string;
+  storageFiles?: TenantFileRecord[];
+  storageFileFolders?: TenantFileFolderRecord[];
+};
+
+type TenantFileRecord = {
+  id: string;
+  displayName: string;
+  originalName: string;
+  folderName: string;
+  folderSlug: string;
+  ownerName: string;
+  updatedAt: Date;
+  createdAt: Date;
+  sizeBytes: number;
+  mimeType: string;
+  extension: string;
+  version: number;
+};
+
+type TenantFileFolderRecord = {
+  id: string;
+  name: string;
+  path: string;
+  ownerName: string;
+  locked: boolean;
+  updatedAt: Date;
+  createdAt: Date;
 };
 
 const emptyShiftPlan: LocationShiftPlan = {
@@ -107,23 +148,6 @@ function toInt(value: number | string) {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
 }
 
-function buildAddress(input: {
-  street?: string;
-  postalCode?: string;
-  city?: string;
-  address?: string;
-}) {
-  const address = input.address?.trim();
-
-  if (address) {
-    return address;
-  }
-
-  return [input.street?.trim(), [input.postalCode?.trim(), input.city?.trim()].filter(Boolean).join(" ")]
-    .filter(Boolean)
-    .join(", ");
-}
-
 async function employeeLead(input: { tenantId: string; employeeId?: string }) {
   if (!input.employeeId) {
     return null;
@@ -155,13 +179,53 @@ async function employeeLead(input: { tenantId: string; employeeId?: string }) {
 }
 
 function toLocation(record: LocationRecord): Location {
+  const storedFiles: LocationFile[] = (record.storageFiles ?? []).map((file) => {
+    const mapped = mapTenantFileToFileItem(file);
+
+    return {
+      name: mapped.name,
+      folder: mapped.folder,
+      updatedAt: mapped.updatedAt,
+      size: mapped.size,
+      type: mapped.type,
+      locked: true,
+      storageFileId: mapped.storageFileId,
+    };
+  });
+  const files = storedFiles;
+  const folderMap = new Map<string, LocationFileFolder>();
+
+  for (const folder of record.storageFileFolders ?? []) {
+    folderMap.set(folder.name, {
+      name: folder.name,
+      path: folder.path,
+      fileCount: 0,
+      locked: folder.locked,
+    });
+  }
+
+  for (const file of storedFiles) {
+    const current = folderMap.get(file.folder);
+
+    if (current) {
+      current.fileCount += 1;
+    } else {
+      folderMap.set(file.folder, {
+        name: file.folder,
+        fileCount: 1,
+        locked: true,
+      });
+    }
+  }
+
   return {
     id: record.key,
     dbId: record.id,
     key: record.key,
     kind: record.kind,
     name: record.name,
-    address: record.address,
+    address: formatAddress(record.address),
+    addressFields: addressDefaults(record.address),
     employeeCount: record.employeeCount,
     activeToday: record.activeToday,
     shiftCount: record.shiftCount,
@@ -178,8 +242,8 @@ function toLocation(record: LocationRecord): Location {
     },
     team: parseJson<LocationTeamMember[]>(record.teamJson, []),
     activity: parseJson<LocationActivity[]>(record.activityJson, []),
-    fileFolders: parseJson<LocationFileFolder[]>(record.fileFoldersJson, []),
-    files: parseJson<LocationFile[]>(record.filesJson, []),
+    fileFolders: Array.from(folderMap.values()),
+    files,
     shiftPlan: parseJson<LocationShiftPlan>(record.shiftPlanJson, emptyShiftPlan),
   };
 }
@@ -211,6 +275,17 @@ export async function getLocationsForTenant(tenantSlug: string) {
   const records = await prisma.tenantLocation.findMany({
     where: { tenantId },
     orderBy: { createdAt: "asc" },
+    include: {
+      address: true,
+      storageFiles: {
+        where: { status: "active" },
+        orderBy: { updatedAt: "desc" },
+      },
+      storageFileFolders: {
+        where: { status: "active" },
+        orderBy: { name: "asc" },
+      },
+    },
   });
 
   return records.map(toLocation);
@@ -227,6 +302,17 @@ export async function getLocationForTenant(tenantSlug: string, locationHandle: s
     where: {
       tenantId,
       key: locationHandle,
+    },
+    include: {
+      address: true,
+      storageFiles: {
+        where: { status: "active" },
+        orderBy: { updatedAt: "desc" },
+      },
+      storageFileFolders: {
+        where: { status: "active" },
+        orderBy: { name: "asc" },
+      },
     },
   });
 
@@ -326,9 +412,7 @@ export async function createTenantLocation(input: {
   name: string;
   kind: string;
   status: string;
-  street: string;
-  postalCode: string;
-  city: string;
+  address: AddressInput;
   leadEmployeeId?: string;
   email: string;
   accentClassName: string;
@@ -345,16 +429,16 @@ export async function createTenantLocation(input: {
 
   return prisma.tenantLocation.create({
     data: {
-      tenantId: access.tenantId,
+      tenant: {
+        connect: { id: access.tenantId },
+      },
       key,
       name: input.name.trim(),
       kind: input.kind.trim() || "Standort",
       status: normalizeStatus(input.status),
-      address: buildAddress({
-        street: input.street,
-        postalCode: input.postalCode,
-        city: input.city,
-      }),
+      address: {
+        create: normalizeAddressInput(input.address),
+      },
       accentClassName: input.accentClassName,
       leadInitials: lead?.leadInitials ?? "--",
       leadName: lead?.leadName ?? "Keine Leitung",
@@ -362,6 +446,7 @@ export async function createTenantLocation(input: {
       leadEmail: input.email.trim() || lead?.leadEmail || "",
       shiftPlanJson: JSON.stringify(emptyShiftPlan),
     },
+    include: { address: true },
   });
 }
 
@@ -370,7 +455,7 @@ export async function updateTenantLocation(input: {
   locationId: string;
   name: string;
   kind: string;
-  address: string;
+  address: AddressInput;
   status: string;
   employeeCount: string;
   activeToday: string;
@@ -400,7 +485,12 @@ export async function updateTenantLocation(input: {
       key,
       name: input.name.trim(),
       kind: input.kind.trim() || "Standort",
-      address: buildAddress({ address: input.address }),
+      address: {
+        upsert: {
+          create: normalizeAddressInput(input.address),
+          update: normalizeAddressInput(input.address),
+        },
+      },
       status: normalizeStatus(input.status),
       employeeCount: toInt(input.employeeCount),
       activeToday: toInt(input.activeToday),
@@ -414,6 +504,7 @@ export async function updateTenantLocation(input: {
       leadEmail: input.leadEmail.trim(),
       accentClassName: input.accentClassName.trim() || "bg-ink",
     },
+    include: { address: true },
   });
 }
 

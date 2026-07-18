@@ -495,7 +495,7 @@ body {
 }
 
 @utility sidebar-footer {
-  @apply mx-2.5 mb-3 flex h-[140px] shrink-0 flex-col gap-1 border-t border-white/[0.08] pt-1.5;
+  @apply mx-2.5 mb-3 flex shrink-0 flex-col gap-1 border-t border-white/[0.08] pt-1.5;
 }
 
 @utility sidebar-tenant {
@@ -616,10 +616,6 @@ body {
   @apply justify-center;
 }
 
-.sidebar-collapsed .sidebar-footer {
-  @apply h-[178px];
-}
-
 .sidebar-collapsed .sidebar-user-row {
   @apply flex-col gap-1;
 }
@@ -676,4 +672,40 @@ body {
 .action-drawer-panel {
   animation: action-drawer-panel-in 190ms cubic-bezier(0.2, 0.8, 0.2, 1);
   will-change: transform;
+}
+
+.toast-card {
+  animation: toast-in 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition:
+    transform 140ms ease,
+    opacity 140ms ease;
+  touch-action: pan-y;
+}
+
+.toast-card-exit {
+  animation: toast-out 160ms ease-in forwards;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translate(14px, 10px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes toast-out {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: translate(14px, 10px) scale(0.98);
+  }
 }

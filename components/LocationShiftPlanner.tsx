@@ -1,26 +1,39 @@
 "use client";
 
 import {
+  approveWishFreeRequestAction,
   createShiftAction,
+  createWishFreeRequestAction,
   deleteShiftAction,
+  rejectWishFreeRequestAction,
   updateShiftAction,
 } from "@/app/(dashboard)/u/[tenant]/schichtplanung/actions";
 import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
+import DatePickerField from "@/components/DatePickerField";
+import FormSubmitButton from "@/components/FormSubmitButton";
 import type { Location } from "@/lib/locations";
 import type { ShiftEmployeeOption } from "@/lib/shift-service";
 import type { Shift, ShiftDay } from "@/lib/shifts";
 import {
+  type WishFreeFilter,
+  type WishFreeRequest,
+  type WishFreeRequestStatus,
+} from "@/lib/wish-free";
+import {
   AlertCircle,
   CalendarDays,
+  CalendarX,
+  Check,
   ChevronLeft,
   ChevronRight,
   Clock3,
   Plus,
   Save,
+  Send,
   X,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 type DrawerState = {
   day: ShiftDay;
@@ -36,7 +49,21 @@ type LocationShiftPlannerProps = {
   weekRange: string;
   days: ShiftDay[];
   employees: ShiftEmployeeOption[];
+  wishFreeRequests: WishFreeRequest[];
 };
+
+const wishFreeStatusLabels: Record<WishFreeRequestStatus, string> = {
+  open: "Offen",
+  approved: "Genehmigt",
+  rejected: "Abgelehnt",
+};
+
+const wishFreeFilters: { label: string; value: WishFreeFilter }[] = [
+  { label: "Offen", value: "open" },
+  { label: "Genehmigt", value: "approved" },
+  { label: "Abgelehnt", value: "rejected" },
+  { label: "Alle", value: "all" },
+];
 
 function getWeeksInISOYear(year: number) {
   const december28 = new Date(Date.UTC(year, 11, 28));
@@ -109,6 +136,388 @@ function ShiftCard({
         </>
       )}
     </button>
+  );
+}
+
+function WishFreeBlock({
+  requests,
+  onRequestClick,
+}: {
+  requests: WishFreeRequest[];
+  onRequestClick: (request: WishFreeRequest) => void;
+}) {
+  if (requests.length === 0) {
+    return null;
+  }
+
+  return (
+    <div
+      className="rounded-[9px] border border-ink/10 px-3 py-2.5 text-left"
+      style={{
+        backgroundImage:
+          "repeating-linear-gradient(135deg, rgba(14,14,14,0.055) 0, rgba(14,14,14,0.055) 1px, #ffffff 1px, #ffffff 7px)",
+      }}
+    >
+      <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
+        Wunschfrei
+      </div>
+      <div className="mt-1.5 flex flex-wrap gap-1.5">
+        {requests.map((request) => (
+          <button
+            key={request.dbId}
+            type="button"
+            className="cursor-pointer rounded-md bg-white/80 px-1.5 py-0.5 text-left text-[12px] font-semibold leading-snug text-ink transition-colors hover:bg-border-soft"
+            onClick={() => onRequestClick(request)}
+          >
+            {request.employeeName}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function WishFreeDrawer({
+  tenant,
+  location,
+  year,
+  week,
+  employees,
+  requests,
+  activeFilter,
+  selectedRequestId,
+  isCreating,
+  onFilterChange,
+  onSelectRequest,
+  onCreateRequest,
+  onClose,
+}: {
+  tenant: string;
+  location: Location;
+  year: number;
+  week: number;
+  employees: ShiftEmployeeOption[];
+  requests: WishFreeRequest[];
+  activeFilter: WishFreeFilter;
+  selectedRequestId: string | null;
+  isCreating: boolean;
+  onFilterChange: (filter: WishFreeFilter) => void;
+  onSelectRequest: (requestId: string) => void;
+  onCreateRequest: () => void;
+  onClose: () => void;
+}) {
+  const returnTo = `/u/${tenant}/standorte/${location.id}?tab=shifts&year=${year}&week=${week}`;
+  const filteredRequests =
+    activeFilter === "all"
+      ? requests
+      : requests.filter((request) => request.status === activeFilter);
+  const selectedRequest =
+    requests.find((request) => request.id === selectedRequestId) ??
+    filteredRequests[0] ??
+    null;
+
+  return (
+    <div
+      className="action-drawer-backdrop fixed inset-0 z-[1000] flex justify-end bg-black/35 backdrop-blur-[4px]"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) {
+          onClose();
+        }
+      }}
+    >
+      <aside
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="location-wishfree-drawer-title"
+        className="action-drawer-panel flex h-full w-full max-w-[620px] flex-col border-l border-border bg-white shadow-[-20px_0_70px_rgba(0,0,0,0.18)]"
+      >
+        <div className="border-b border-border px-6 py-5">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="font-mono text-[11px] font-semibold text-muted">
+                {location.name}
+              </div>
+              <h2
+                id="location-wishfree-drawer-title"
+                className="mt-1 font-display text-[22px] font-semibold leading-tight text-ink"
+              >
+                Wunschfrei
+              </h2>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <button
+                type="button"
+                className={`inline-flex cursor-pointer items-center gap-2 rounded-[9px] border px-3 py-2 text-[12px] font-semibold transition-colors ${
+                  isCreating
+                    ? "border-ink bg-ink text-white"
+                    : "border-border bg-bg text-ink hover:border-muted"
+                }`}
+                onClick={onCreateRequest}
+              >
+                <Plus size={14} />
+                Neue Anfrage
+              </button>
+              <button
+                type="button"
+                aria-label="Drawer schliessen"
+                title="Schliessen"
+                className="flex size-8 cursor-pointer items-center justify-center rounded-[9px] border border-border bg-white text-muted transition-colors hover:border-muted hover:text-ink"
+                onClick={onClose}
+              >
+                <X size={15} strokeWidth={2} />
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-5 flex flex-wrap gap-2">
+            {wishFreeFilters.map((filter) => {
+              const isActive = activeFilter === filter.value;
+              const count =
+                filter.value === "all"
+                  ? requests.length
+                  : requests.filter((request) => request.status === filter.value).length;
+
+              return (
+                <button
+                  key={filter.value}
+                  type="button"
+                  className={`inline-flex cursor-pointer items-center gap-2 rounded-full border px-3.5 py-2 font-mono text-[11px] font-semibold transition-colors ${
+                    isActive
+                      ? "border-ink bg-ink text-white"
+                      : "border-border bg-bg text-muted-2 hover:border-muted hover:text-ink"
+                  }`}
+                  onClick={() => onFilterChange(filter.value)}
+                >
+                  {filter.label}
+                  <span
+                    className={`rounded-full px-1.5 text-[10px] ${
+                      isActive ? "bg-white/15 text-white" : "bg-white text-muted"
+                    }`}
+                  >
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="grid min-h-0 flex-1 grid-cols-[minmax(220px,0.85fr)_minmax(280px,1fr)] max-md:grid-cols-1">
+          <div className="min-h-0 overflow-y-auto border-r border-border bg-bg p-3 max-md:max-h-[42svh] max-md:border-r-0 max-md:border-b">
+            {isCreating && (
+              <button
+                type="button"
+                className="mb-2 w-full cursor-pointer rounded-xl border border-ink bg-white p-3 text-left"
+                onClick={onCreateRequest}
+              >
+                <div className="text-[13px] font-semibold text-ink">
+                  Neue Wunschfrei Anfrage
+                </div>
+                <div className="mt-1 font-mono text-[10px] text-muted">
+                  Nur Mitarbeiter dieses Standorts
+                </div>
+              </button>
+            )}
+            {filteredRequests.length === 0 ? (
+              <div className="rounded-xl border border-border bg-white px-4 py-6 text-center text-[12.5px] text-muted">
+                Keine Anfragen in diesem Filter.
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {filteredRequests.map((request) => {
+                  const isSelected = selectedRequest?.id === request.id;
+
+                  return (
+                    <button
+                      key={request.id}
+                      type="button"
+                      className={`cursor-pointer rounded-xl border p-3 text-left transition-colors ${
+                        isSelected
+                          ? "border-ink bg-white"
+                          : "border-border bg-white hover:border-muted"
+                      }`}
+                      onClick={() => onSelectRequest(request.id)}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="truncate text-[13px] font-semibold text-ink">
+                            {request.employeeName}
+                          </div>
+                          <div className="mt-1 font-mono text-[10px] text-muted">
+                            {request.dateLabel}
+                          </div>
+                        </div>
+                        <span className="shrink-0 rounded-full bg-border-soft px-2 py-1 font-mono text-[9px] font-semibold text-muted-2">
+                          {wishFreeStatusLabels[request.status]}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="min-h-0 overflow-y-auto p-6">
+            {isCreating ? (
+              <form className="flex min-h-full flex-col" action={createWishFreeRequestAction}>
+                <input type="hidden" name="tenant" value={tenant} />
+                <input type="hidden" name="year" value={year} />
+                <input type="hidden" name="week" value={week} />
+                <input type="hidden" name="returnTo" value={returnTo} />
+
+                <div className="flex-1">
+                  <div>
+                    <div className="font-mono text-[11px] font-semibold text-muted">
+                      Neuer Antrag
+                    </div>
+                    <h3 className="mt-1 font-display text-[22px] font-semibold text-ink">
+                      Wunschfrei anlegen
+                    </h3>
+                  </div>
+
+                  <div className="field mt-6">
+                    <label htmlFor="location-wishfree-employee" className="label">
+                      Mitarbeiter
+                    </label>
+                    <select
+                      id="location-wishfree-employee"
+                      name="employeeId"
+                      className="input cursor-pointer bg-bg"
+                      required
+                      defaultValue=""
+                    >
+                      <option value="" disabled>
+                        Mitarbeiter auswaehlen
+                      </option>
+                      {employees.map((employee) => (
+                        <option key={employee.id} value={employee.id}>
+                          {employee.name} - {employee.role}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="field mt-4">
+                    <div className="label">Datum</div>
+                    <DatePickerField name="date" />
+                  </div>
+
+                  <div className="field mt-4">
+                    <label htmlFor="location-wishfree-reason" className="label">
+                      Begruendung
+                    </label>
+                    <textarea
+                      id="location-wishfree-reason"
+                      name="reason"
+                      className="input min-h-28 resize-none"
+                      placeholder="Optionaler Grund fuer den Wunschfrei Antrag"
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-6 flex justify-end gap-2.5 border-t border-border-soft pt-4">
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => onFilterChange(activeFilter)}
+                  >
+                    Abbrechen
+                  </button>
+                  <FormSubmitButton Icon={Send} pendingLabel="Wird erstellt...">
+                    Antrag erstellen
+                  </FormSubmitButton>
+                </div>
+              </form>
+            ) : selectedRequest ? (
+              <form key={selectedRequest.dbId} className="flex min-h-full flex-col">
+                <input type="hidden" name="tenant" value={tenant} />
+                <input type="hidden" name="year" value={year} />
+                <input type="hidden" name="week" value={week} />
+                <input type="hidden" name="requestId" value={selectedRequest.dbId} />
+                <input type="hidden" name="returnTo" value={returnTo} />
+                <div className="flex-1">
+                  <div className="flex items-center gap-3">
+                    <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-ink text-[13px] font-semibold text-white">
+                      {selectedRequest.employeeName
+                        .split(" ")
+                        .map((part) => part[0])
+                        .join("")
+                        .slice(0, 2)}
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="truncate font-display text-[20px] font-semibold text-ink">
+                        {selectedRequest.employeeName}
+                      </h3>
+                      <p className="mt-0.5 truncate text-[12px] text-muted-2">
+                        {selectedRequest.role} {"\u00b7"} {selectedRequest.location}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-6 grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-xl border border-border bg-bg px-4 py-3">
+                      <div className="label">Datum</div>
+                      <div className="mt-1 font-mono text-[13px] font-semibold text-ink">
+                        {selectedRequest.dateLabel}
+                      </div>
+                    </div>
+                    <div className="rounded-xl border border-border bg-bg px-4 py-3">
+                      <div className="label">Status</div>
+                      <div className="mt-1 font-mono text-[13px] font-semibold text-ink">
+                        {wishFreeStatusLabels[selectedRequest.status]}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 rounded-xl border border-border bg-white px-4 py-3">
+                    <div className="label">Begruendung</div>
+                    <p className="mt-2 text-[13px] leading-6 text-muted-2">
+                      {selectedRequest.reason || "Keine Begruendung angegeben."}
+                    </p>
+                  </div>
+
+                  <div className="field mt-4">
+                    <label htmlFor="location-wishfree-reject-reason" className="label">
+                      Grund bei Ablehnung optional
+                    </label>
+                    <textarea
+                      id="location-wishfree-reject-reason"
+                      name="rejectReason"
+                      className="input min-h-24 resize-none"
+                      defaultValue={selectedRequest.rejectReason ?? ""}
+                      placeholder="Optionaler Hinweis fuer die Ablehnung"
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-6 flex justify-end gap-2.5 border-t border-border-soft pt-4">
+                  <button
+                    type="submit"
+                    formAction={rejectWishFreeRequestAction}
+                    className="btn btn-secondary text-danger"
+                  >
+                    Ablehnen
+                  </button>
+                  <FormSubmitButton
+                    formAction={approveWishFreeRequestAction}
+                    className="btn btn-primary"
+                  >
+                    <Check size={15} />
+                    Annehmen
+                  </FormSubmitButton>
+                </div>
+              </form>
+            ) : (
+              <div className="flex h-full items-center justify-center text-[13px] text-muted">
+                Keine Anfrage ausgewaehlt.
+              </div>
+            )}
+          </div>
+        </div>
+      </aside>
+    </div>
   );
 }
 
@@ -280,10 +689,12 @@ function ShiftDrawer({
                 Löschen
               </ConfirmSubmitButton>
             )}
-            <button type="submit" className="btn btn-primary">
-              <Save size={15} />
+            <FormSubmitButton
+              Icon={Save}
+              pendingLabel="Wird gespeichert..."
+            >
               Speichern
-            </button>
+            </FormSubmitButton>
           </div>
         </form>
       </aside>
@@ -300,13 +711,37 @@ export default function LocationShiftPlanner({
   weekRange,
   days,
   employees,
+  wishFreeRequests,
 }: LocationShiftPlannerProps) {
   const router = useRouter();
   const [drawer, setDrawer] = useState<DrawerState | null>(null);
+  const [isWishFreeDrawerOpen, setIsWishFreeDrawerOpen] = useState(false);
+  const [isCreatingWishFreeRequest, setIsCreatingWishFreeRequest] = useState(false);
+  const [wishFreeFilter, setWishFreeFilter] = useState<WishFreeFilter>("open");
+  const [selectedWishFreeRequestId, setSelectedWishFreeRequestId] = useState<
+    string | null
+  >(null);
   const conflictCount = days.reduce(
     (total, day) => total + day.shifts.filter((shift) => shift.conflict).length,
     0,
   );
+  const openWishFreeCount = wishFreeRequests.filter(
+    (request) => request.status === "open",
+  ).length;
+  const approvedWishFreeByDate = useMemo(() => {
+    const grouped = new Map<string, WishFreeRequest[]>();
+
+    wishFreeRequests
+      .filter((request) => request.status === "approved")
+      .forEach((request) => {
+        const dayRequests = grouped.get(request.date) ?? [];
+
+        dayRequests.push(request);
+        grouped.set(request.date, dayRequests);
+      });
+
+    return grouped;
+  }, [wishFreeRequests]);
 
   function navigateWeek(direction: -1 | 1) {
     const next = getAdjacentWeek(year, week, direction);
@@ -314,6 +749,28 @@ export default function LocationShiftPlanner({
     router.push(
       `/u/${tenant}/standorte/${location.id}?tab=shifts&year=${next.year}&week=${next.week}`,
     );
+  }
+
+  function openWishFreeDrawer() {
+    setIsWishFreeDrawerOpen(true);
+    setIsCreatingWishFreeRequest(false);
+    setWishFreeFilter("open");
+    setSelectedWishFreeRequestId(
+      wishFreeRequests.find((request) => request.status === "open")?.id ?? null,
+    );
+  }
+
+  function openWishFreeRequest(request: WishFreeRequest) {
+    setIsCreatingWishFreeRequest(false);
+    setWishFreeFilter(request.status);
+    setSelectedWishFreeRequestId(request.id);
+    setIsWishFreeDrawerOpen(true);
+  }
+
+  function openCreateWishFreeRequest() {
+    setIsCreatingWishFreeRequest(true);
+    setSelectedWishFreeRequestId(null);
+    setIsWishFreeDrawerOpen(true);
   }
 
   return (
@@ -332,6 +789,20 @@ export default function LocationShiftPlanner({
               {conflictCount} Konflikte
             </span>
           </div>
+          <button
+            type="button"
+            className="relative inline-flex cursor-pointer items-center gap-2 rounded-[10px] border border-border bg-white px-3.5 py-2.5 text-[13px] font-semibold text-ink transition-colors hover:border-muted hover:bg-bg"
+            onClick={openWishFreeDrawer}
+          >
+            <CalendarX size={15} />
+            Wunschfrei
+            {openWishFreeCount > 0 && (
+              <span
+                aria-label={`${openWishFreeCount} neue Wunschfrei Anfragen`}
+                className="absolute -right-1.5 -top-1.5 size-3 rounded-full border-2 border-white bg-warning"
+              />
+            )}
+          </button>
           <div className="inline-flex items-center gap-1 rounded-xl border border-border bg-white p-1">
             <button
               type="button"
@@ -381,6 +852,10 @@ export default function LocationShiftPlanner({
                   </div>
                 </div>
                 <div className="flex min-h-[160px] flex-col gap-1.5 p-2">
+                  <WishFreeBlock
+                    requests={approvedWishFreeByDate.get(day.id) ?? []}
+                    onRequestClick={openWishFreeRequest}
+                  />
                   {day.shifts.map((shift) => (
                     <ShiftCard
                       key={shift.dbId ?? shift.id}
@@ -414,6 +889,30 @@ export default function LocationShiftPlanner({
         employees={employees}
         onClose={() => setDrawer(null)}
       />
+      {isWishFreeDrawerOpen && (
+        <WishFreeDrawer
+          tenant={tenant}
+          location={location}
+          year={year}
+          week={week}
+          employees={employees}
+          requests={wishFreeRequests}
+          activeFilter={wishFreeFilter}
+          selectedRequestId={selectedWishFreeRequestId}
+          isCreating={isCreatingWishFreeRequest}
+          onFilterChange={(filter) => {
+            setWishFreeFilter(filter);
+            setIsCreatingWishFreeRequest(false);
+            setSelectedWishFreeRequestId(null);
+          }}
+          onSelectRequest={(requestId) => {
+            setIsCreatingWishFreeRequest(false);
+            setSelectedWishFreeRequestId(requestId);
+          }}
+          onCreateRequest={openCreateWishFreeRequest}
+          onClose={() => setIsWishFreeDrawerOpen(false)}
+        />
+      )}
     </>
   );
 }

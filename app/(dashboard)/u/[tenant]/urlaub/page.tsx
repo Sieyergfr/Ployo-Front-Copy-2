@@ -1,5 +1,6 @@
 import { VacationRequestButton } from "@/components/AbsenceActionButtons";
 import { VacationDrawerButton } from "@/components/ActionDrawers";
+import FormSubmitButton from "@/components/FormSubmitButton";
 import PageHeader from "@/components/PageHeader";
 import {
   approveVacationRequestAction,
@@ -76,9 +77,12 @@ function DecisionForm({
     <form action={action}>
       <input type="hidden" name="tenant" value={tenant} />
       <input type="hidden" name="requestId" value={request.dbId ?? ""} />
-      <button type="submit" className={className}>
+      <FormSubmitButton
+        className={className}
+        pendingLabel="Laeuft..."
+      >
         {children}
-      </button>
+      </FormSubmitButton>
     </form>
   );
 }

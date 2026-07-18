@@ -1,6 +1,7 @@
 "use client";
 
 import { updateTeamMemberAction } from "@/app/(dashboard)/u/[tenant]/teams/actions";
+import FormSubmitButton from "@/components/FormSubmitButton";
 import { useUniversalPopup } from "@/components/UniversalPopup";
 import type { TeamMember } from "@/lib/teams";
 import { Crown, Pencil, Save } from "lucide-react";
@@ -68,10 +69,12 @@ export default function TeamRoleEditorButton({
                 <button type="button" className="btn btn-secondary" onClick={closePopup}>
                   Abbrechen
                 </button>
-                <button type="submit" className="btn btn-primary">
-                  <Save size={15} />
+                <FormSubmitButton
+                  Icon={Save}
+                  pendingLabel="Wird gespeichert..."
+                >
                   Speichern
-                </button>
+                </FormSubmitButton>
               </div>
             </form>
           ),

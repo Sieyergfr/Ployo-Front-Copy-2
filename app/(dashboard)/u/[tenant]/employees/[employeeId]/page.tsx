@@ -1,8 +1,14 @@
 import { DataTableStatus } from "@/components/DataTable";
+import AddressFields from "@/components/AddressFields";
 import AuditLogPanel from "@/components/AuditLogPanel";
 import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
+import DatePickerField from "@/components/DatePickerField";
+import {
+  CreateFolderButton,
+  UploadFileButton,
+} from "@/components/FileActionButtons";
 import { FileReminderButton } from "@/components/ActionDrawers";
-import EmployeeInfoRequestButton from "@/components/EmployeeInfoRequestButton";
+import EmployeeContracts, { type EmployeeContractItem } from "@/components/EmployeeContracts";
 import { UnsavedChangesGuard } from "@/components/EditSafety";
 import FloatingEditBar from "@/components/FloatingEditBar";
 import {
@@ -11,6 +17,7 @@ import {
 } from "@/app/(dashboard)/u/[tenant]/employees/actions";
 import { makeAuditLogs } from "@/lib/audit";
 import { getEmployeeForTenant } from "@/lib/employee-service";
+import { getEmployeeContracts } from "@/lib/contract-service";
 import {
   employeeStatusConfig,
   type EmployeeStatus,
@@ -27,15 +34,14 @@ import {
   Eye,
   FileText,
   Folder,
-  FolderPlus,
   Lock,
   MessageSquare,
   Pencil,
-  Upload,
 } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
+import { getFileUploadOptions, type FileFolder, type FileUploadOptions } from "@/lib/files";
 
 export async function generateMetadata({
   params,
@@ -269,6 +275,27 @@ function EditableTextField({
   );
 }
 
+function EditableDateField({
+  id,
+  label,
+  name,
+  value,
+}: {
+  id: string;
+  label: string;
+  name: string;
+  value: string;
+}) {
+  return (
+    <div className="field">
+      <label htmlFor={id} className="label">
+        {label}
+      </label>
+      <DatePickerField id={id} name={name} defaultValue={value} />
+    </div>
+  );
+}
+
 function EditableSelectField({
   id,
   label,
@@ -324,7 +351,15 @@ function DocumentRow({ document }: { document: Employee["documents"][number] }) 
   );
 }
 
-function FileFolderCard({ folder }: { folder: EmployeeFileFolder }) {
+function FileFolderCard({
+  folder,
+  tenant,
+  returnPath,
+}: {
+  folder: EmployeeFileFolder;
+  tenant: string;
+  returnPath: string;
+}) {
   return (
     <div className="flex w-full cursor-pointer items-center gap-[13px] rounded-xl border border-border bg-white p-[15px] text-left font-sans transition-colors hover:bg-bg">
       <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-border-soft text-muted-2">
@@ -340,6 +375,8 @@ function FileFolderCard({ folder }: { folder: EmployeeFileFolder }) {
       </span>
       {folder.locked && <Lock size={13} className="shrink-0 text-muted" />}
       <FileReminderButton
+        tenant={tenant}
+        returnPath={returnPath}
         compact
         name={folder.name}
         context={`Mitarbeiterordner \u00b7 ${folder.name}`}
@@ -348,7 +385,15 @@ function FileFolderCard({ folder }: { folder: EmployeeFileFolder }) {
   );
 }
 
-function FileRow({ file }: { file: EmployeeFile }) {
+function FileRow({
+  file,
+  tenant,
+  returnPath,
+}: {
+  file: EmployeeFile;
+  tenant: string;
+  returnPath: string;
+}) {
   return (
     <div className="flex w-full cursor-pointer items-center gap-3.5 border-t border-border-soft py-3 text-left font-sans transition-colors hover:bg-bg">
       <span className="flex size-[30px] shrink-0 items-center justify-center rounded-lg bg-border-soft text-muted-2">
@@ -370,6 +415,8 @@ function FileRow({ file }: { file: EmployeeFile }) {
       </span>
       {file.locked && <Lock size={13} className="shrink-0 text-muted" />}
       <FileReminderButton
+        tenant={tenant}
+        returnPath={returnPath}
         compact
         name={file.name}
         context={`${file.folder} \u00b7 Mitarbeiterdatei`}
@@ -378,7 +425,41 @@ function FileRow({ file }: { file: EmployeeFile }) {
   );
 }
 
-function FilesTab({ employee }: { employee: Employee }) {
+function folderOptionSlug(value: string) {
+  return value
+    .toLowerCase()
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function employeeFolderOptions(employee: Employee): FileFolder[] {
+  return employee.fileFolders.map((folder) => ({
+    slug: folder.path ?? folderOptionSlug(folder.name),
+    path: folder.path ?? folderOptionSlug(folder.name),
+    name: folder.name,
+    fileCount: folder.fileCount,
+    owner: "HR",
+    updatedAt: "",
+    locked: folder.locked,
+  }));
+}
+
+function FilesTab({
+  employee,
+  tenant,
+  employeeHref,
+  uploadOptions,
+}: {
+  employee: Employee;
+  tenant: string;
+  employeeHref: string;
+  uploadOptions: FileUploadOptions;
+}) {
+  const folderOptions = employeeFolderOptions(employee);
+
   return (
     <DetailCard
       title={
@@ -402,20 +483,31 @@ function FilesTab({ employee }: { employee: Employee }) {
           Dateien
         </span>
         <div className="flex flex-wrap gap-2">
-          <button type="button" className="btn btn-secondary btn-sm">
-            <FolderPlus size={14} />
-            Ordner erstellen
-          </button>
-          <button type="button" className="btn btn-primary btn-sm">
-            <Upload size={14} />
-            Datei hochladen
-          </button>
+          <CreateFolderButton
+            tenant={tenant}
+            returnPath={`${employeeHref}?tab=files`}
+            ownerType="employee"
+            ownerId={employee.dbId}
+          />
+          <UploadFileButton
+            tenant={tenant}
+            returnPath={`${employeeHref}?tab=files`}
+            ownerType="employee"
+            ownerId={employee.dbId}
+            folderOptions={folderOptions}
+            uploadOptions={uploadOptions}
+          />
         </div>
       </div>
 
       <div className="grid gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(210px,1fr))]">
         {employee.fileFolders.map((folder) => (
-          <FileFolderCard key={folder.name} folder={folder} />
+            <FileFolderCard
+              key={folder.name}
+              folder={folder}
+              tenant={tenant}
+              returnPath={`${employeeHref}?tab=files`}
+            />
         ))}
       </div>
 
@@ -424,7 +516,12 @@ function FilesTab({ employee }: { employee: Employee }) {
           Dateien
         </div>
         {employee.files.map((file) => (
-          <FileRow key={`${file.folder}-${file.name}`} file={file} />
+            <FileRow
+              key={`${file.folder}-${file.name}`}
+              file={file}
+              tenant={tenant}
+              returnPath={`${employeeHref}?tab=files`}
+            />
         ))}
       </div>
     </DetailCard>
@@ -536,7 +633,9 @@ function ContractDetailsPrompt({
   );
 }
 
-function ContractTab({
+// Kept temporarily as a reference while legacy JSON contract fields are migrated.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function LegacyContractTab({
   employee,
   isEditing,
   fileHref,
@@ -621,19 +720,17 @@ function ContractTab({
                 value={employee.role}
                 options={roleOptions}
               />
-              <EditableTextField
+              <EditableDateField
                 id="contract-entry-date"
                 label="Eintritt"
                 name="entryDate"
                 value={contract.entryDate}
-                mono
               />
-              <EditableTextField
+              <EditableDateField
                 id="contract-exit-date"
                 label="Austritt"
                 name="exitDate"
                 value={contract.exitDate}
-                mono
               />
               <EditableTextField
                 id="contract-fixed-term"
@@ -796,6 +893,87 @@ function ContractTab({
   );
 }
 
+function ContractTab({
+  employee,
+  isEditing,
+  roleOptions,
+  tenant,
+  contracts,
+}: {
+  employee: Employee;
+  isEditing: boolean;
+  roleOptions: string[];
+  tenant: string;
+  contracts: EmployeeContractItem[];
+}) {
+  const details = employee.contractDetails;
+  const activeContract = contracts.find((contract) => contract.status === "active");
+  const value = (primary: string | number | undefined, fallback: string) =>
+    primary === undefined || primary === "" || primary === 0 ? fallback : String(primary);
+
+  return (
+    <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.05fr)_minmax(340px,0.95fr)]">
+      {isEditing && <input type="hidden" name="contractDetailsSubmitted" value="1" />}
+      <div className="flex flex-col gap-4">
+        <DetailCard
+          title={
+            <div className="flex items-center justify-between gap-3">
+              <span className="flex items-center gap-3">
+                <span className="flex size-9 items-center justify-center rounded-lg bg-border-soft text-muted-2"><BriefcaseBusiness size={18} /></span>
+                <span><span className="block">Vertragsdetails</span><span className="mt-0.5 block font-mono text-[10.5px] font-normal text-muted">Die wichtigsten Informationen auf einen Blick</span></span>
+              </span>
+              {activeContract && <span className="rounded-[7px] bg-success/10 px-2.5 py-1 font-mono text-[10px] text-success">Aktiv</span>}
+            </div>
+          }
+        >
+          {isEditing ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <EditableTextField id="contract-type" label="Vertragsart" name="contractType" value={details.contractType} />
+              <EditableSelectField id="contract-permission-role" label="Berechtigungsrolle" name="role" value={employee.role} options={roleOptions} />
+              <EditableDateField id="contract-entry-date" label="Eintritt" name="entryDate" value={details.entryDate} />
+              <EditableDateField id="contract-exit-date" label="Austritt" name="exitDate" value={details.exitDate} />
+              <EditableTextField id="contract-position" label="Position" name="position" value={details.position} />
+              <EditableTextField id="contract-department" label="Abteilung" name="department" value={details.department} />
+              <EditableTextField id="contract-work-location" label="Arbeitsort" name="workLocation" value={details.workLocation} />
+              <EditableTextField id="contract-working-time" label="Arbeitszeit" name="workingTime" value={details.workingTime} />
+              <EditableTextField id="contract-compensation" label="Vergütung" name="compensation" value={details.compensation} />
+              <EditableTextField id="contract-vacation" label="Urlaub" name="vacation" value={details.vacation} />
+              <EditableTextField id="contract-probation" label="Probezeit" name="probation" value={details.probation} />
+              <EditableTextField id="contract-notice-period" label="Kündigungsfrist" name="noticePeriod" value={details.noticePeriod} />
+            </div>
+          ) : (
+            <div className="grid gap-x-6 gap-y-5 sm:grid-cols-2">
+              <FieldValue label="Vertragsart" value={value(activeContract?.contractType, details.contractType || employee.contract)} />
+              <FieldValue label="Beginn" value={value(activeContract?.startDate, details.entryDate || employee.startDate)} mono />
+              <FieldValue label="Position" value={value(activeContract?.position, details.position)} />
+              <FieldValue label="Abteilung" value={value(activeContract?.department, details.department)} />
+              <FieldValue label="Arbeitsort" value={value(activeContract?.workLocation, details.workLocation)} />
+              <FieldValue label="Arbeitszeit" value={value(activeContract?.weeklyHours, details.workingTime || employee.weeklyHours)} />
+              <FieldValue label="Vergütung" value={value(activeContract?.compensation, details.compensation)} />
+              <FieldValue label="Urlaub" value={activeContract?.vacationDays ? `${activeContract.vacationDays} Tage` : details.vacation} />
+              <FieldValue label="Probezeit bis" value={value(activeContract?.probationEndDate, details.probation)} mono />
+              <FieldValue label="Kündigungsfrist" value={value(activeContract?.noticePeriod, details.noticePeriod)} />
+            </div>
+          )}
+        </DetailCard>
+
+        {!isEditing && activeContract?.notes && (
+          <DetailCard title="Hinweise"><p className="whitespace-pre-wrap text-[13px] leading-6 text-muted-2">{activeContract.notes}</p></DetailCard>
+        )}
+      </div>
+
+      <DetailCard title={`Alle Verträge · ${contracts.length}`} className="[&>h2]:mb-3.5">
+        <EmployeeContracts
+          tenant={tenant}
+          employeeId={employee.dbId ?? employee.id}
+          employeeHandle={employee.id}
+          contracts={contracts}
+        />
+      </DetailCard>
+    </div>
+  );
+}
+
 function ShiftRow({ shift }: { shift: Employee["shifts"][number] }) {
   return (
     <div className="flex items-center gap-3 border-t border-border-soft py-2">
@@ -850,9 +1028,11 @@ export default async function EmployeeDetailPage({
 }: PageProps<"/u/[tenant]/employees/[employeeId]">) {
   const { tenant, employeeId } = await params;
   const { tab, edit } = await searchParams;
-  const [employee, roles] = await Promise.all([
+  const [employee, roles, uploadOptions, contracts] = await Promise.all([
     getEmployeeForTenant(tenant, employeeId),
     getRolesForTenant(tenant),
+    getFileUploadOptions(tenant),
+    getEmployeeContracts(tenant, employeeId),
   ]);
 
   if (!employee || !roles) {
@@ -868,7 +1048,6 @@ export default async function EmployeeDetailPage({
   const isEditing = edit === "1" && isEditableTab;
   const employeeHref = `/u/${tenant}/employees/${employee.id}`;
   const activeTabHref = isContractTab ? `${employeeHref}?tab=contract` : employeeHref;
-  const employeeFilesHref = `${employeeHref}?tab=files`;
   const auditEntries = makeAuditLogs({
     id: employee.id,
     name: employee.name,
@@ -955,7 +1134,6 @@ export default async function EmployeeDetailPage({
                 <MessageSquare size={14} />
                 Nachricht senden
               </button>
-              <EmployeeInfoRequestButton employeeName={employee.name} />
               <Link href={employeeEditHref} className="btn btn-secondary btn-sm">
                 <Pencil size={14} />
                 Bearbeiten
@@ -985,7 +1163,7 @@ export default async function EmployeeDetailPage({
           }`}
         >
           Vertrag
-          <span className="font-mono text-[11px] text-muted">1</span>
+          <span className="font-mono text-[11px] text-muted">{contracts.length}</span>
         </Link>
         <Link
           href={`${employeeHref}?tab=files`}
@@ -1016,15 +1194,21 @@ export default async function EmployeeDetailPage({
       </div>
 
       {isFilesTab ? (
-        <FilesTab employee={employee} />
+        <FilesTab
+          employee={employee}
+          tenant={tenant}
+          employeeHref={employeeHref}
+          uploadOptions={uploadOptions}
+        />
       ) : isPayrollTab ? (
         <PayrollTab employee={employee} />
       ) : isContractTab ? (
         <ContractTab
           employee={employee}
           isEditing={isEditing}
-          fileHref={employeeFilesHref}
           roleOptions={roleOptions}
+          tenant={tenant}
+          contracts={contracts as EmployeeContractItem[]}
         />
       ) : (
         <div className="flex flex-col gap-4">
@@ -1047,12 +1231,11 @@ export default async function EmployeeDetailPage({
                     value={employee.employeeNumber}
                     mono
                   />
-                  <EditableTextField
+                  <EditableDateField
                     id="employee-birth-date"
                     label="Geburtsdatum"
                     name="birthDate"
                     value={employee.birthDate}
-                    mono
                   />
                   <EditableTextField
                     id="employee-birth-place"
@@ -1072,12 +1255,14 @@ export default async function EmployeeDetailPage({
                     name="maritalStatus"
                     value={employee.maritalStatus}
                   />
-                  <EditableTextField
-                    id="employee-private-address"
-                    label="Anschrift"
-                    name="privateAddress"
-                    value={employee.privateAddress}
-                  />
+                  <div className="sm:col-span-2">
+                    <div className="mb-2 label">Anschrift</div>
+                    <AddressFields
+                      idPrefix="employee-private-address"
+                      namePrefix="privateAddress"
+                      defaults={employee.privateAddressFields}
+                    />
+                  </div>
                   <EditableTextField
                     id="employee-master-email"
                     label="E-Mail"
@@ -1176,12 +1361,11 @@ export default async function EmployeeDetailPage({
                     name="weeklyHours"
                     value={employee.weeklyHours}
                   />
-                  <EditableTextField
+                  <EditableDateField
                     id="employee-start-date"
                     label="Eintrittsdatum"
                     name="startDate"
                     value={employee.startDate}
-                    mono
                   />
                   <EditableTextField
                     id="employee-tenure"
@@ -1318,12 +1502,15 @@ export default async function EmployeeDetailPage({
                     value={employee.phone}
                     mono
                   />
-                  <EditableTextField
-                    id="employee-address"
-                    label="Standort-Adresse"
-                    name="address"
-                    value={employee.address}
-                  />
+                  <div>
+                    <div className="mb-2 label">Standort-Adresse</div>
+                    <AddressFields
+                      idPrefix="employee-address"
+                      namePrefix="address"
+                      defaults={employee.addressFields}
+                      className="grid gap-3"
+                    />
+                  </div>
                   <EditableSelectField
                     id="employee-location"
                     label="Standort"

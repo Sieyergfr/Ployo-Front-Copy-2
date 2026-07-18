@@ -9,6 +9,7 @@ import {
   Plus,
   X,
 } from "lucide-react";
+import { useToast } from "@/components/Toasts";
 import Link from "next/link";
 import { type ChangeEvent, useEffect, useState } from "react";
 
@@ -175,6 +176,7 @@ function slugify(value: string) {
 }
 
 export default function CompanyCreateWizard() {
+  const { toast } = useToast();
   const [step, setStep] = useState(1);
   const [name, setName] = useState("");
   const [customSlug, setCustomSlug] = useState("");
@@ -238,7 +240,7 @@ export default function CompanyCreateWizard() {
       controller.abort();
       window.clearTimeout(timeout);
     };
-  }, [baseSlug]);
+  }, [baseSlug, toast]);
 
   function formatEuro(value: number) {
     return new Intl.NumberFormat("de-DE", {
@@ -326,8 +328,17 @@ export default function CompanyCreateWizard() {
     } | null;
 
     if (!response.ok) {
+      const message = data?.error ?? "Unternehmen konnte nicht erstellt werden.";
       setCreating(false);
-      setCreateError(data?.error ?? "Unternehmen konnte nicht erstellt werden.");
+      setCreateError(message);
+      toast({
+        tone: "error",
+        title:
+          response.status === 409
+            ? "URL bereits vergeben"
+            : "Unternehmen konnte nicht erstellt werden",
+        subtitle: message,
+      });
 
       if (response.status === 409) {
         setSlugState("taken");
@@ -339,6 +350,11 @@ export default function CompanyCreateWizard() {
 
     setCreatedTenantSlug(data?.tenant?.slug ?? baseSlug);
     setCreating(false);
+    toast({
+      tone: "success",
+      title: "Unternehmen erstellt",
+      subtitle: `${companyName} ist jetzt bereit.`,
+    });
     setDone(true);
   }
 
@@ -1014,6 +1030,7 @@ export default function CompanyCreateWizard() {
                   type="button"
                   className="cursor-pointer border-0 bg-transparent px-0 py-2 text-[13.5px] font-medium text-muted transition-colors hover:text-ink"
                   onClick={goNext}
+                  disabled={creating}
                 >
                   Überspringen
                 </button>

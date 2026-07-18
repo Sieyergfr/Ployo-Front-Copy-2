@@ -3,7 +3,7 @@ import PageHeader from "@/components/PageHeader";
 import { employees, employeeStatusConfig } from "@/lib/employees";
 import { files } from "@/lib/files";
 import { locations } from "@/lib/locations";
-import { reminders } from "@/lib/reminders";
+import { getRemindersForTenant } from "@/lib/reminders";
 import { shiftConflictCount, shiftDays, shiftWeekLabel } from "@/lib/shifts";
 import { currentSickness, sicknessMetrics } from "@/lib/sickness";
 import { vacationRequests } from "@/lib/vacations";
@@ -82,8 +82,9 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
   const pendingVacations = vacationRequests.filter(
     (request) => request.status === "pending",
   );
+  const reminders = await getRemindersForTenant(tenant);
   const urgentReminders = reminders.filter(
-    (reminder) => reminder.priority === "urgent",
+    (reminder) => reminder.daysLeft <= 7,
   );
   const openShiftCount = shiftDays.reduce(
     (total, day) =>

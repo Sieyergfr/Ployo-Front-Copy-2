@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth";
+import { normalizeAddressInput, type AddressInput } from "@/lib/address";
 import { prisma } from "@/lib/prisma";
 import { isReservedTenantSlug, slugify } from "@/lib/tenants";
 import { headers } from "next/headers";
@@ -110,6 +111,9 @@ async function ensureTenantSettings(tenantId: string) {
     where: { tenantId },
     create: { tenantId },
     update: {},
+    include: {
+      companyAddress: true,
+    },
   });
 }
 
@@ -120,7 +124,11 @@ export async function getTenantSettings(tenantSlug: string) {
       invitations: {
         orderBy: { createdAt: "desc" },
       },
-      settings: true,
+      settings: {
+        include: {
+          companyAddress: true,
+        },
+      },
     },
   });
 
@@ -193,7 +201,7 @@ export async function updateTenantProfile(input: {
 
 export async function updateTenantDefaults(input: {
   tenantSlug: string;
-  companyAddress?: string;
+  companyAddress?: AddressInput;
   taxId?: string;
   defaultLocationId?: string;
   weekStart?: string;
@@ -209,7 +217,12 @@ export async function updateTenantDefaults(input: {
   return prisma.tenantSettings.update({
     where: { tenantId: access.tenantId },
     data: {
-      companyAddress: optionalString(input.companyAddress),
+      companyAddress: {
+        upsert: {
+          create: normalizeAddressInput(input.companyAddress),
+          update: normalizeAddressInput(input.companyAddress),
+        },
+      },
       taxId: optionalString(input.taxId, 64),
       defaultLocationId: optionalString(input.defaultLocationId, 128),
       weekStart: input.weekStart === "sunday" ? "sunday" : "monday",

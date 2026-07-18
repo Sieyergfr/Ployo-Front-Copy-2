@@ -1,5 +1,8 @@
-import { Save, X } from "lucide-react";
+"use client";
+
+import { Loader2, Save, X } from "lucide-react";
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
 export default function FloatingEditBar({
@@ -11,6 +14,26 @@ export default function FloatingEditBar({
   formId: string;
   children?: ReactNode;
 }) {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    const form = document.getElementById(formId);
+
+    if (!(form instanceof HTMLFormElement)) {
+      return;
+    }
+
+    function handleSubmit() {
+      setIsSubmitting(true);
+    }
+
+    form.addEventListener("submit", handleSubmit);
+
+    return () => {
+      form.removeEventListener("submit", handleSubmit);
+    };
+  }, [formId]);
+
   return (
     <>
       <div
@@ -33,9 +56,32 @@ export default function FloatingEditBar({
               <X size={14} />
               Abbrechen
             </Link>
-            <button type="submit" form={formId} className="btn btn-primary btn-sm">
-              <Save size={14} />
-              Speichern
+            <button
+              type="submit"
+              form={formId}
+              className="btn btn-primary btn-sm"
+              disabled={isSubmitting}
+              onClick={() => {
+                const form = document.getElementById(formId);
+
+                if (form instanceof HTMLFormElement && !form.checkValidity()) {
+                  return;
+                }
+
+                setIsSubmitting(true);
+              }}
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 size={14} className="animate-spin" />
+                  Wird gespeichert...
+                </>
+              ) : (
+                <>
+                  <Save size={14} />
+                  Speichern
+                </>
+              )}
             </button>
           </div>
         </div>

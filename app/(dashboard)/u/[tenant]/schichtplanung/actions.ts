@@ -5,6 +5,10 @@ import {
   deleteTenantShift,
   updateTenantShift,
 } from "@/lib/shift-service";
+import {
+  createTenantWishFreeRequest,
+  setTenantWishFreeRequestStatus,
+} from "@/lib/wish-free-service";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -109,6 +113,63 @@ export async function deleteShiftAction(formData: FormData) {
   }
 
   await deleteTenantShift({ tenantSlug: tenant, shiftId });
+
+  revalidateShiftViews(formData, tenant);
+  redirect(redirectPath(formData, tenant));
+}
+
+export async function createWishFreeRequestAction(formData: FormData) {
+  const tenant = formString(formData, "tenant");
+  const employeeId = formString(formData, "employeeId");
+  const date = formString(formData, "date");
+
+  if (!tenant || !employeeId || !date) {
+    throw new Error("Wunschfrei Anfrage konnte nicht erstellt werden.");
+  }
+
+  await createTenantWishFreeRequest({
+    tenantSlug: tenant,
+    employeeId,
+    date,
+    reason: formString(formData, "reason"),
+  });
+
+  revalidateShiftViews(formData, tenant);
+  redirect(redirectPath(formData, tenant));
+}
+
+export async function approveWishFreeRequestAction(formData: FormData) {
+  const tenant = formString(formData, "tenant");
+  const requestId = formString(formData, "requestId");
+
+  if (!tenant || !requestId) {
+    throw new Error("Wunschfrei Anfrage konnte nicht genehmigt werden.");
+  }
+
+  await setTenantWishFreeRequestStatus({
+    tenantSlug: tenant,
+    requestId,
+    status: "approved",
+  });
+
+  revalidateShiftViews(formData, tenant);
+  redirect(redirectPath(formData, tenant));
+}
+
+export async function rejectWishFreeRequestAction(formData: FormData) {
+  const tenant = formString(formData, "tenant");
+  const requestId = formString(formData, "requestId");
+
+  if (!tenant || !requestId) {
+    throw new Error("Wunschfrei Anfrage konnte nicht abgelehnt werden.");
+  }
+
+  await setTenantWishFreeRequestStatus({
+    tenantSlug: tenant,
+    requestId,
+    status: "rejected",
+    rejectReason: formString(formData, "rejectReason"),
+  });
 
   revalidateShiftViews(formData, tenant);
   redirect(redirectPath(formData, tenant));

@@ -61,7 +61,14 @@ export async function updateTenantDefaultsAction(formData: FormData) {
 
   await updateTenantDefaults({
     tenantSlug: tenant,
-    companyAddress: formString(formData, "companyAddress"),
+    companyAddress: {
+      street: formString(formData, "companyAddressStreet"),
+      houseNumber: formString(formData, "companyAddressHouseNumber"),
+      postalCode: formString(formData, "companyAddressPostalCode"),
+      city: formString(formData, "companyAddressCity"),
+      careOf: formString(formData, "companyAddressCareOf"),
+      country: formString(formData, "companyAddressCountry", "DE"),
+    },
     taxId: formString(formData, "taxId"),
     defaultLocationId: formString(formData, "defaultLocationId"),
     weekStart: formString(formData, "weekStart"),
@@ -175,7 +182,14 @@ export async function saveSettingsPopupAction(formData: FormData) {
 
     await updateTenantDefaults({
       tenantSlug: tenant,
-      companyAddress: formString(formData, "companyAddress"),
+      companyAddress: {
+        street: formString(formData, "companyAddressStreet"),
+        houseNumber: formString(formData, "companyAddressHouseNumber"),
+        postalCode: formString(formData, "companyAddressPostalCode"),
+        city: formString(formData, "companyAddressCity"),
+        careOf: formString(formData, "companyAddressCareOf"),
+        country: formString(formData, "companyAddressCountry", "DE"),
+      },
       taxId: formString(formData, "taxId"),
       defaultLocationId: formString(formData, "defaultLocation"),
       weekStart: formString(formData, "weekStart"),

@@ -1,6 +1,7 @@
 "use client";
 
 import { createRoleAction } from "@/app/(dashboard)/u/[tenant]/rollen/actions";
+import FormSubmitButton from "@/components/FormSubmitButton";
 import { useUniversalPopup } from "@/components/UniversalPopup";
 import {
   emptyPermissionSet,
@@ -367,10 +368,12 @@ function CreateRoleForm({
           <button type="button" className="btn btn-secondary" onClick={onClose}>
             Abbrechen
           </button>
-          <button type="submit" className="btn btn-primary">
-            <ShieldCheck size={15} />
+          <FormSubmitButton
+            Icon={ShieldCheck}
+            pendingLabel="Rolle wird erstellt..."
+          >
             Rolle erstellen
-          </button>
+          </FormSubmitButton>
         </div>
       </div>
     </form>

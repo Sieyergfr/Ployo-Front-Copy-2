@@ -24,6 +24,7 @@ export type LocationFileFolder = {
   name: string;
   fileCount: number;
   locked?: boolean;
+  path?: string;
 };
 
 export type LocationFile = {
@@ -33,6 +34,7 @@ export type LocationFile = {
   size: string;
   type: string;
   locked?: boolean;
+  storageFileId?: string;
 };
 
 export type LocationShiftTone = "blue" | "success" | "muted";
@@ -71,6 +73,14 @@ export type Location = {
   kind: string;
   name: string;
   address: string;
+  addressFields?: {
+    street: string;
+    houseNumber: string;
+    postalCode: string;
+    city: string;
+    careOf: string;
+    country: string;
+  };
   employeeCount: number;
   activeToday: number;
   shiftCount: number;

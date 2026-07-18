@@ -145,7 +145,11 @@ export async function getTenantsForUser(userId: string) {
     include: {
       tenant: {
         include: {
-          settings: true,
+          settings: {
+            include: {
+              companyAddress: true,
+            },
+          },
         },
       },
     },

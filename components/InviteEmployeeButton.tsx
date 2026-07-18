@@ -1,6 +1,8 @@
 "use client";
 
 import { createEmployeeAction } from "@/app/(dashboard)/u/[tenant]/employees/actions";
+import DatePickerField from "@/components/DatePickerField";
+import FormSubmitButton from "@/components/FormSubmitButton";
 import { useUniversalPopup } from "@/components/UniversalPopup";
 import { Plus, Send } from "lucide-react";
 
@@ -150,12 +152,7 @@ function InviteEmployeeForm({
         <label htmlFor="invite-start-date" className="label">
           Eintritt
         </label>
-        <input
-          id="invite-start-date"
-          name="startDate"
-          className="input"
-          placeholder="01.08.2026"
-        />
+        <DatePickerField id="invite-start-date" name="startDate" />
       </div>
 
       <p className="m-0 text-[12.5px] leading-[1.55] text-muted-2">
@@ -167,10 +164,12 @@ function InviteEmployeeForm({
         <button type="button" className="btn btn-secondary" onClick={onDone}>
           Abbrechen
         </button>
-        <button type="submit" className="btn btn-primary">
-          <Send size={15} strokeWidth={2} />
+        <FormSubmitButton
+          Icon={Send}
+          pendingLabel="Wird angelegt..."
+        >
           Anlegen
-        </button>
+        </FormSubmitButton>
       </div>
     </form>
   );

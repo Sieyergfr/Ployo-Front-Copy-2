@@ -1,9 +1,11 @@
 "use client";
 
 import { createLocationAction } from "@/app/(dashboard)/u/[tenant]/standorte/actions";
+import AddressFields from "@/components/AddressFields";
 import EmployeeSelector, {
   type EmployeeSelectorOption,
 } from "@/components/EmployeeSelector";
+import FormSubmitButton from "@/components/FormSubmitButton";
 import { useUniversalPopup } from "@/components/UniversalPopup";
 import { Building2, Check, ChevronDown, Plus } from "lucide-react";
 import { useState } from "react";
@@ -209,48 +211,9 @@ function CreateLocationForm({
         />
       </div>
 
-      <div className="field">
-        <label htmlFor="location-address" className="label">
-          Strasse und Hausnummer
-        </label>
-        <input
-          id="location-address"
-          name="address"
-          className="input"
-          placeholder="Leopoldstrasse 12"
-          autoComplete="street-address"
-          required
-        />
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-[120px_1fr]">
-        <div className="field">
-          <label htmlFor="location-postal-code" className="label">
-            PLZ
-          </label>
-          <input
-            id="location-postal-code"
-            name="postalCode"
-            className="input"
-            placeholder="80802"
-            autoComplete="postal-code"
-            required
-          />
-        </div>
-
-        <div className="field">
-          <label htmlFor="location-city" className="label">
-            Ort
-          </label>
-          <input
-            id="location-city"
-            name="city"
-            className="input"
-            placeholder="Muenchen"
-            autoComplete="address-level2"
-            required
-          />
-        </div>
+      <div>
+        <div className="mb-2 label">Adresse</div>
+        <AddressFields idPrefix="location-address" required />
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
@@ -286,10 +249,12 @@ function CreateLocationForm({
         <button type="button" className="btn btn-secondary" onClick={onDone}>
           Abbrechen
         </button>
-        <button type="submit" className="btn btn-primary">
-          <Building2 size={15} strokeWidth={2} />
+        <FormSubmitButton
+          Icon={Building2}
+          pendingLabel="Standort wird erstellt..."
+        >
           Standort erstellen
-        </button>
+        </FormSubmitButton>
       </div>
     </form>
   );

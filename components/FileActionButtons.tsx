@@ -1,36 +1,82 @@
 "use client";
 
+import {
+  createHrFolderAction,
+  getHrFileSignedUrlAction,
+  softDeleteHrFileAction,
+  uploadHrFileAction,
+  uploadHrFileVersionAction,
+} from "@/app/(dashboard)/u/[tenant]/dateien/actions";
+import DatePickerField from "@/components/DatePickerField";
 import { useUniversalPopup } from "@/components/UniversalPopup";
 import {
+  getFileDownloadHref,
+  getFileDownloadName,
+  type FileFolder,
+  type FileItem,
+  type FileUploadOption,
+  type FileUploadOptions,
+  type FileVersion,
+} from "@/lib/files";
+import {
+  Check,
+  ChevronDown,
   Download,
   Eye,
   FileUp,
   FolderPlus,
+  Trash2,
   Upload,
   UploadCloud,
 } from "lucide-react";
-import {
-  getFileDownloadHref,
-  getFileDownloadName,
-  type FileItem,
-  type FileVersion,
-} from "@/lib/files";
+import { type ReactNode, useState, useTransition } from "react";
 
 const previewableFileTypes = new Set(["PDF", "PNG", "JPG", "JPEG"]);
+const documentTypes = [
+  "Arbeitsvertrag",
+  "Zusatzvereinbarung",
+  "Krankmeldung",
+  "Zeugnis",
+  "Abmahnung",
+  "Fortbildungsnachweis",
+  "Fuehrerschein",
+  "Aufenthaltstitel",
+  "Lohnunterlage",
+  "Bescheinigung",
+  "Richtlinie",
+  "Sonstiges",
+];
 
-function isPreviewableFile(file: FileItem) {
-  return previewableFileTypes.has(file.type.toUpperCase());
-}
+const emptyUploadOptions: FileUploadOptions = {
+  employees: [],
+  locations: [],
+  roles: [],
+  users: [],
+};
 
-function CreateFolderForm({ onDone }: { onDone: () => void }) {
+function CreateFolderForm({
+  tenant,
+  returnPath,
+  ownerType = "tenant",
+  ownerId,
+  parentPath,
+  onDone,
+}: {
+  tenant: string;
+  returnPath: string;
+  ownerType?: "tenant" | "employee" | "location";
+  ownerId?: string;
+  parentPath?: string;
+  onDone: () => void;
+}) {
   return (
-    <form
-      className="flex flex-col gap-4"
-      onSubmit={(event) => {
-        event.preventDefault();
-        onDone();
-      }}
-    >
+    <form className="flex flex-col gap-4" action={createHrFolderAction}>
+      <input type="hidden" name="tenant" value={tenant} />
+      <input type="hidden" name="returnPath" value={returnPath} />
+      <input type="hidden" name="ownerType" value={ownerType} />
+      <input type="hidden" name="ownerId" value={ownerId ?? ""} />
+      <input type="hidden" name="parentPath" value={parentPath ?? ""} />
+
       <div className="field">
         <label htmlFor="folder-name" className="label">
           Ordnername
@@ -50,7 +96,7 @@ function CreateFolderForm({ onDone }: { onDone: () => void }) {
         </label>
         <input
           id="folder-owner"
-          name="owner"
+          name="ownerName"
           className="input"
           placeholder="HR-Team"
         />
@@ -66,7 +112,7 @@ function CreateFolderForm({ onDone }: { onDone: () => void }) {
         <button type="button" className="btn btn-secondary" onClick={onDone}>
           Abbrechen
         </button>
-        <button type="submit" className="btn btn-primary">
+        <button type="submit" className="btn btn-primary" disabled={!tenant}>
           <FolderPlus size={15} />
           Ordner erstellen
         </button>
@@ -75,15 +121,215 @@ function CreateFolderForm({ onDone }: { onDone: () => void }) {
   );
 }
 
-function UploadFileForm({ onDone }: { onDone: () => void }) {
+function UploadSettingsGroup({
+  title,
+  children,
+  className = "",
+}: {
+  title: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+
   return (
-    <form
-      className="flex flex-col gap-4"
-      onSubmit={(event) => {
-        event.preventDefault();
-        onDone();
-      }}
-    >
+    <section className={`rounded-xl border border-border bg-white ${className}`}>
+      <button
+        type="button"
+        className="flex w-full cursor-pointer items-center justify-between gap-3 px-4 py-3 text-left text-[13px] font-semibold text-ink"
+        aria-expanded={isOpen}
+        onClick={() => setIsOpen((current) => !current)}
+      >
+        <span>{title}</span>
+        <span
+          className={`font-mono text-[13px] text-muted transition-transform duration-300 ${
+            isOpen ? "rotate-45" : "rotate-0"
+          }`}
+        >
+          +
+        </span>
+      </button>
+      <div
+        className={`grid transition-[grid-template-rows,opacity] duration-300 ease-out ${
+          isOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+        }`}
+      >
+        <div
+          className={`border-t border-border-soft ${
+            isOpen ? "overflow-visible" : "overflow-hidden"
+          }`}
+        >
+          {children}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function AccessMultiSelect({
+  id,
+  name,
+  options,
+  placeholder,
+}: {
+  id: string;
+  name: string;
+  options: FileUploadOption[];
+  placeholder: string;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const selectedOptions = options.filter((option) =>
+    selectedIds.includes(option.id),
+  );
+  const label =
+    selectedOptions.length === 0
+      ? placeholder
+      : selectedOptions.length === 1
+        ? selectedOptions[0].name
+        : `${selectedOptions.length} ausgewählt`;
+
+  function toggleOption(optionId: string) {
+    setSelectedIds((current) =>
+      current.includes(optionId)
+        ? current.filter((idValue) => idValue !== optionId)
+        : [...current, optionId],
+    );
+  }
+
+  return (
+    <div className="relative">
+      {selectedIds.map((selectedId) => (
+        <input key={selectedId} type="hidden" name={name} value={selectedId} />
+      ))}
+
+      <button
+        id={id}
+        type="button"
+        className={`input flex cursor-pointer items-center justify-between gap-3 text-left ${
+          isOpen ? "border-ink bg-white" : "bg-bg"
+        }`}
+        aria-expanded={isOpen}
+        onClick={() => setIsOpen((current) => !current)}
+      >
+        <span
+          className={`min-w-0 truncate text-[13px] ${
+            selectedOptions.length > 0
+              ? "font-semibold text-ink"
+              : "text-muted"
+          }`}
+        >
+          {label}
+        </span>
+        <ChevronDown
+          size={16}
+          className={`shrink-0 text-muted transition-transform duration-200 ${
+            isOpen ? "rotate-180" : "rotate-0"
+          }`}
+        />
+      </button>
+
+      <div
+        className={`grid transition-[grid-template-rows,opacity] duration-200 ease-out ${
+          isOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+        }`}
+      >
+        <div className="overflow-hidden">
+          <div className="mt-2 max-h-52 overflow-y-auto rounded-xl border border-border bg-white p-1.5 shadow-[0_12px_34px_rgba(0,0,0,0.10)]">
+            {options.length > 0 ? (
+              options.map((option) => {
+                const isSelected = selectedIds.includes(option.id);
+
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    className="flex w-full cursor-pointer items-center gap-3 rounded-[9px] px-2.5 py-2 text-left text-[12.5px] text-ink transition-colors hover:bg-bg"
+                    onClick={() => toggleOption(option.id)}
+                  >
+                    <span
+                      className={`flex size-4 shrink-0 items-center justify-center rounded-[5px] border transition-colors ${
+                        isSelected
+                          ? "border-ink bg-ink text-white"
+                          : "border-border bg-white text-transparent"
+                      }`}
+                    >
+                      <Check size={12} />
+                    </span>
+                    <span className="min-w-0 flex-1 truncate">{option.name}</span>
+                  </button>
+                );
+              })
+            ) : (
+              <div className="px-2.5 py-2 text-[12.5px] text-muted">
+                Keine Optionen verfügbar
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {selectedOptions.length > 1 && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {selectedOptions.slice(0, 3).map((option) => (
+            <span
+              key={option.id}
+              className="rounded-[7px] border border-border-light bg-bg px-2 py-1 text-[11px] text-muted"
+            >
+              {option.name}
+            </span>
+          ))}
+          {selectedOptions.length > 3 && (
+            <span className="rounded-[7px] border border-border-light bg-bg px-2 py-1 text-[11px] text-muted">
+              +{selectedOptions.length - 3}
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function UploadFileForm({
+  tenant,
+  returnPath,
+  ownerType = "tenant",
+  ownerId,
+  folderSlug,
+  folderName,
+  folderOptions = [],
+  uploadOptions = emptyUploadOptions,
+  onDone,
+}: {
+  tenant: string;
+  returnPath: string;
+  ownerType?: "tenant" | "employee" | "location";
+  ownerId?: string;
+  folderSlug?: string;
+  folderName?: string;
+  folderOptions?: FileFolder[];
+  uploadOptions?: FileUploadOptions;
+  onDone: () => void;
+}) {
+  const [selectedFileName, setSelectedFileName] = useState("");
+  const [selectedFolderName, setSelectedFolderName] = useState("");
+  const [hasExpiry, setHasExpiry] = useState(false);
+  const [hasReminder, setHasReminder] = useState(false);
+  const needsFolderSelection = !folderSlug;
+
+  return (
+    <form className="flex flex-col gap-4" action={uploadHrFileAction}>
+      <input type="hidden" name="tenant" value={tenant} />
+      <input type="hidden" name="returnPath" value={returnPath} />
+      <input type="hidden" name="ownerType" value={ownerType} />
+      <input type="hidden" name="ownerId" value={ownerId ?? ""} />
+      {folderSlug ? (
+        <>
+          <input type="hidden" name="folderSlug" value={folderSlug} />
+          <input type="hidden" name="folderName" value={folderName ?? folderSlug} />
+        </>
+      ) : null}
+
       <label
         htmlFor="file-upload"
         className="flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-border bg-bg px-4 py-8 text-center transition-colors hover:border-muted"
@@ -92,24 +338,53 @@ function UploadFileForm({ onDone }: { onDone: () => void }) {
         <span className="text-[13.5px] font-semibold text-ink">
           Datei auswählen
         </span>
-        <span className="mt-1 text-[12px] text-muted">
-          PDF, DOCX, PNG oder JPG
+        <span className="mt-1 max-w-full truncate text-[12px] text-muted">
+          {selectedFileName || "PDF, DOCX, PNG oder JPG"}
         </span>
       </label>
-      <input id="file-upload" name="file" type="file" className="sr-only" />
+      <input
+        id="file-upload"
+        name="file"
+        type="file"
+        className="sr-only"
+        required
+        onChange={(event) =>
+          setSelectedFileName(event.currentTarget.files?.[0]?.name ?? "")
+        }
+      />
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <div className="field">
-          <label htmlFor="file-folder" className="label">
-            Zielordner
-          </label>
-          <input
-            id="file-folder"
-            name="folder"
-            className="input"
-            placeholder="Aktueller Ordner"
-          />
-        </div>
+        {needsFolderSelection ? (
+          <div className="field">
+            <input type="hidden" name="folderName" value={selectedFolderName} />
+            <label htmlFor="file-folder-slug" className="label">
+              Zielordner
+            </label>
+            <select
+              id="file-folder-slug"
+              name="folderSlug"
+              className="input cursor-pointer"
+              defaultValue=""
+              onChange={(event) => {
+                const selected = folderOptions.find(
+                  (folder) =>
+                    (folder.path ?? folder.slug) === event.currentTarget.value,
+                );
+
+                setSelectedFolderName(selected?.name ?? "");
+              }}
+            >
+              <option value="">
+                Home
+              </option>
+              {folderOptions.map((folder) => (
+                <option key={folder.slug} value={folder.path ?? folder.slug}>
+                  {(folder.path ?? folder.slug).replaceAll("/", " / ")}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : null}
 
         <div className="field">
           <label htmlFor="file-owner" className="label">
@@ -117,18 +392,226 @@ function UploadFileForm({ onDone }: { onDone: () => void }) {
           </label>
           <input
             id="file-owner"
-            name="owner"
+            name="ownerName"
             className="input"
             placeholder="HR-Team"
           />
         </div>
       </div>
 
+      <div className="pt-1">
+        <div className="mb-3 flex items-center gap-3">
+          <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-muted">
+            Einstellungen
+          </span>
+          <span className="h-px flex-1 bg-border-soft" />
+        </div>
+
+        <UploadSettingsGroup title="Dokument & Gueltigkeit">
+          <div className="grid gap-3 px-4 py-3 sm:grid-cols-2">
+          <div className="field">
+            <label htmlFor="file-document-type" className="label">
+              Dokumententyp
+            </label>
+            <select
+              id="file-document-type"
+              name="documentType"
+              className="input cursor-pointer"
+              defaultValue="Sonstiges"
+            >
+              {documentTypes.map((type) => (
+                <option key={type} value={type}>
+                  {type}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="field">
+            <label htmlFor="file-valid-from" className="label">
+              Gueltig ab
+            </label>
+            <DatePickerField
+              id="file-valid-from"
+              name="validFrom"
+              placeholder="Optional"
+            />
+          </div>
+          </div>
+        </UploadSettingsGroup>
+
+        <UploadSettingsGroup title="Zuweisung" className="mt-2">
+          <div className="grid gap-3 px-4 py-3 sm:grid-cols-2">
+          <div className="field">
+            <label htmlFor="file-assigned-employee" className="label">
+              Mitarbeiter zuweisen
+            </label>
+            <select
+              id="file-assigned-employee"
+              name="assignedEmployeeId"
+              className="input cursor-pointer"
+              defaultValue=""
+            >
+              <option value="">Nicht zuweisen</option>
+              {uploadOptions.employees.map((employee) => (
+                <option key={employee.id} value={employee.id}>
+                  {employee.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="field">
+            <label htmlFor="file-assigned-location" className="label">
+              Standort zuweisen
+            </label>
+            <select
+              id="file-assigned-location"
+              name="assignedLocationId"
+              className="input cursor-pointer"
+              defaultValue=""
+            >
+              <option value="">Nicht zuweisen</option>
+              {uploadOptions.locations.map((location) => (
+                <option key={location.id} value={location.id}>
+                  {location.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          </div>
+        </UploadSettingsGroup>
+
+        <UploadSettingsGroup title="Fristen & Erinnerung" className="mt-2">
+          <div className="grid gap-3 px-4 py-3 sm:grid-cols-2">
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
+              className="peer sr-only"
+              checked={hasExpiry}
+              onChange={(event) => setHasExpiry(event.currentTarget.checked)}
+            />
+            <span className="checkbox" />
+            <span className="checkbox-label">Ablaufdatum setzen</span>
+          </label>
+
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
+              className="peer sr-only"
+              checked={hasReminder}
+              disabled={!hasExpiry}
+              onChange={(event) => setHasReminder(event.currentTarget.checked)}
+            />
+            <span className="checkbox" />
+            <span className="checkbox-label">Erinnerung setzen</span>
+          </label>
+          </div>
+
+        <div
+          className={`grid overflow-visible px-4 transition-all duration-200 ${
+            hasExpiry
+              ? "pb-4 max-h-[180px] opacity-100"
+              : "max-h-0 opacity-0"
+          }`}
+          aria-hidden={!hasExpiry}
+        >
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="field">
+              <label htmlFor="file-expires-at" className="label">
+                Ablaufdatum
+              </label>
+              <DatePickerField
+                id="file-expires-at"
+                name="expiresAt"
+                placeholder="Datum auswaehlen"
+              />
+            </div>
+
+            <div
+              className={`field transition-all duration-200 ${
+                hasReminder ? "opacity-100" : "pointer-events-none opacity-40"
+              }`}
+            >
+              <label htmlFor="file-reminder-at" className="label">
+                Erinnerung
+              </label>
+              {hasReminder ? (
+                <DatePickerField
+                  id="file-reminder-at"
+                  name="reminderAt"
+                  placeholder="Datum auswaehlen"
+                />
+              ) : (
+                <input className="input" value="" readOnly placeholder="Optional" />
+              )}
+            </div>
+          </div>
+        </div>
+        </UploadSettingsGroup>
+
+        <UploadSettingsGroup title="Beschreibung & Tags" className="mt-2">
+          <div className="grid gap-3 px-4 py-3 sm:grid-cols-2">
+          <div className="field sm:col-span-2">
+            <label htmlFor="file-description" className="label">
+              Beschreibung
+            </label>
+            <textarea
+              id="file-description"
+              name="description"
+              className="input min-h-20 resize-y py-3"
+              placeholder="Notiz zur Datei"
+            />
+          </div>
+
+          <div className="field sm:col-span-2">
+            <label htmlFor="file-tags" className="label">
+              Tags
+            </label>
+            <input
+              id="file-tags"
+              name="tags"
+              className="input"
+              placeholder="vertrag, onboarding, 2026"
+            />
+          </div>
+          </div>
+        </UploadSettingsGroup>
+
+        <UploadSettingsGroup title="Zugriffskontrolle" className="mt-2">
+          <div className="grid gap-3 px-4 py-3 sm:grid-cols-2">
+          <div className="field">
+            <label htmlFor="file-access-roles" className="label">
+              Rollen Zugriff
+            </label>
+            <AccessMultiSelect
+              id="file-access-roles"
+              name="accessRoleIds"
+              options={uploadOptions.roles}
+              placeholder="Rollen auswählen"
+            />
+          </div>
+
+          <div className="field">
+            <label htmlFor="file-access-users" className="label">
+              Einzelne User
+            </label>
+            <AccessMultiSelect
+              id="file-access-users"
+              name="accessUserIds"
+              options={uploadOptions.users}
+              placeholder="User auswählen"
+            />
+          </div>
+          </div>
+        </UploadSettingsGroup>
+      </div>
+
       <div className="mt-1 flex justify-end gap-2.5 border-t border-border-soft pt-4">
         <button type="button" className="btn btn-secondary" onClick={onDone}>
           Abbrechen
         </button>
-        <button type="submit" className="btn btn-primary">
+        <button type="submit" className="btn btn-primary" disabled={!tenant}>
           <Upload size={15} />
           Hochladen
         </button>
@@ -139,22 +622,24 @@ function UploadFileForm({ onDone }: { onDone: () => void }) {
 
 function UploadVersionForm({
   file,
+  tenant,
+  returnPath,
   onDone,
 }: {
   file: FileItem;
+  tenant: string;
+  returnPath: string;
   onDone: () => void;
 }) {
   return (
-    <form
-      className="flex flex-col gap-4"
-      onSubmit={(event) => {
-        event.preventDefault();
-        onDone();
-      }}
-    >
+    <form className="flex flex-col gap-4" action={uploadHrFileVersionAction}>
+      <input type="hidden" name="tenant" value={tenant} />
+      <input type="hidden" name="returnPath" value={returnPath} />
+      <input type="hidden" name="fileId" value={file.storageFileId ?? ""} />
+
       <p className="max-w-[420px] text-[13px] leading-5 text-muted">
-        Lade eine neue Datei fÃ¼r {file.name} hoch. Die aktuelle Version bleibt
-        in der Historie verfÃ¼gbar.
+        Lade eine neue Datei für {file.name} hoch. Die aktuelle Version bleibt
+        in der Historie verfügbar.
       </p>
 
       <label
@@ -163,7 +648,7 @@ function UploadVersionForm({
       >
         <UploadCloud size={25} className="mb-3 text-muted-2" />
         <span className="text-[13.5px] font-semibold text-ink">
-          Versionsdatei auswÃ¤hlen
+          Versionsdatei auswählen
         </span>
         <span className="mt-1 text-[12px] text-muted">
           Ersetzt die aktuelle Datei als v{file.version + 1}
@@ -174,6 +659,7 @@ function UploadVersionForm({
         name="file"
         type="file"
         className="sr-only"
+        required
       />
 
       <div className="field">
@@ -197,7 +683,7 @@ function UploadVersionForm({
           id={`version-description-${file.slug}`}
           name="description"
           className="input min-h-24 resize-y py-3"
-          placeholder="Was wurde geÃ¤ndert?"
+          placeholder="Was wurde geändert?"
         />
       </div>
 
@@ -205,7 +691,11 @@ function UploadVersionForm({
         <button type="button" className="btn btn-secondary" onClick={onDone}>
           Abbrechen
         </button>
-        <button type="submit" className="btn btn-primary">
+        <button
+          type="submit"
+          className="btn btn-primary"
+          disabled={!tenant || !file.storageFileId}
+        >
           <Upload size={15} />
           Version hochladen
         </button>
@@ -221,38 +711,19 @@ function FilePreviewContent({
   file: FileItem;
   versionNumber: number;
 }) {
-  const isPreviewable = isPreviewableFile(file);
-  const isImage = ["PNG", "JPG", "JPEG"].includes(file.type.toUpperCase());
+  const isPreviewable = previewableFileTypes.has(file.type.toUpperCase());
 
   if (!isPreviewable) {
     return (
       <div className="flex min-h-[280px] flex-col items-center justify-center rounded-xl border border-dashed border-border bg-bg px-6 py-10 text-center">
         <FileUp size={28} className="mb-3 text-muted-2" />
         <div className="font-display text-[18px] font-semibold text-ink">
-          Vorschau nicht verfÃ¼gbar
+          Vorschau nicht verfügbar
         </div>
         <p className="mt-2 max-w-[420px] text-[13px] leading-5 text-muted">
-          {file.type}-Dateien kÃ¶nnen aktuell nicht direkt im Browser angezeigt
-          werden. Lade die Version herunter, um sie lokal zu Ã¶ffnen.
+          {file.type}-Dateien können aktuell nicht direkt im Browser angezeigt
+          werden. Lade die Version herunter, um sie lokal zu öffnen.
         </p>
-      </div>
-    );
-  }
-
-  if (isImage) {
-    return (
-      <div className="overflow-hidden rounded-xl border border-border bg-bg">
-        <div className="flex aspect-[16/10] items-center justify-center bg-[linear-gradient(135deg,#f7f7f4_0%,#ecece7_100%)]">
-          <div className="rounded-[14px] border border-border bg-white px-6 py-5 text-center shadow-sm">
-            <FileUp size={32} className="mx-auto mb-3 text-muted-2" />
-            <div className="font-display text-[18px] font-semibold text-ink">
-              Bildvorschau
-            </div>
-            <div className="mt-1 font-mono text-[10.5px] text-muted">
-              {file.name} Â· v{versionNumber}
-            </div>
-          </div>
-        </div>
       </div>
     );
   }
@@ -266,7 +737,7 @@ function FilePreviewContent({
               {file.name}
             </div>
             <div className="mt-1 font-mono text-[10.5px] text-muted">
-              {file.folder} Â· Version {versionNumber}
+              {file.folder} · Version {versionNumber}
             </div>
           </div>
           <span className="rounded-[7px] border border-border-light px-2 py-1 font-mono text-[10px] text-muted-2">
@@ -291,31 +762,49 @@ function FilePreviewContent({
 
 export function FileViewButton({
   file,
+  tenant,
   version,
   label = "Ansehen",
   compact = false,
 }: {
   file: FileItem;
+  tenant?: string;
   version?: FileVersion;
   label?: string;
   compact?: boolean;
 }) {
   const { openPopup } = useUniversalPopup();
+  const [isPending, startTransition] = useTransition();
   const versionNumber = version?.version ?? file.version;
-  const openPreview = () =>
+  const openPreview = () => {
+    if (tenant && file.storageFileId) {
+      startTransition(async () => {
+        const url = await getHrFileSignedUrlAction({
+          tenant,
+          fileId: file.storageFileId!,
+          version: versionNumber,
+          disposition: "inline",
+        });
+        window.open(url, "_blank", "noopener,noreferrer");
+      });
+      return;
+    }
+
     openPopup({
-      title: `${file.name} Â· v${versionNumber}`,
+      title: `${file.name} · v${versionNumber}`,
       className: "max-w-[900px]",
       content: <FilePreviewContent file={file} versionNumber={versionNumber} />,
     });
+  };
 
   if (compact) {
     return (
       <button
         type="button"
-        className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-[8px] border border-border bg-white text-muted transition-colors hover:border-muted hover:text-ink"
+        className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-[8px] border border-border bg-white text-muted transition-colors hover:border-muted hover:text-ink disabled:cursor-wait disabled:opacity-60"
         title={`Version ${versionNumber} ansehen`}
         aria-label={`${file.name} Version ${versionNumber} ansehen`}
+        disabled={isPending}
         onClick={openPreview}
       >
         <Eye size={14} />
@@ -324,27 +813,75 @@ export function FileViewButton({
   }
 
   return (
-    <button type="button" className="btn btn-secondary btn-sm" onClick={openPreview}>
+    <button
+      type="button"
+      className="btn btn-secondary btn-sm"
+      disabled={isPending}
+      onClick={openPreview}
+    >
       <Eye size={14} />
-      {label}
+      {isPending ? "Öffne..." : label}
     </button>
   );
 }
 
 export function FileDownloadButton({
   file,
+  tenant,
   version,
   label = "Download",
   compact = false,
 }: {
   file: FileItem;
+  tenant?: string;
   version?: FileVersion;
   label?: string;
   compact?: boolean;
 }) {
+  const [isPending, startTransition] = useTransition();
   const versionNumber = version?.version ?? file.version;
   const downloadName = version?.downloadName ?? getFileDownloadName(file);
   const downloadHref = version?.downloadHref ?? getFileDownloadHref(file);
+
+  if (tenant && file.storageFileId) {
+    const openSignedUrl = () =>
+      startTransition(async () => {
+        const url = await getHrFileSignedUrlAction({
+          tenant,
+          fileId: file.storageFileId!,
+          version: versionNumber,
+          disposition: "attachment",
+        });
+        window.open(url, "_blank", "noopener,noreferrer");
+      });
+
+    if (compact) {
+      return (
+        <button
+          type="button"
+          className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-[8px] border border-border bg-white text-muted transition-colors hover:border-muted hover:text-ink disabled:cursor-wait disabled:opacity-60"
+          title={`Version ${versionNumber} herunterladen`}
+          aria-label={`${file.name} Version ${versionNumber} herunterladen`}
+          disabled={isPending}
+          onClick={openSignedUrl}
+        >
+          <Download size={14} />
+        </button>
+      );
+    }
+
+    return (
+      <button
+        type="button"
+        className="btn btn-secondary btn-sm"
+        disabled={isPending}
+        onClick={openSignedUrl}
+      >
+        <Download size={14} />
+        {isPending ? "Signiere..." : label}
+      </button>
+    );
+  }
 
   if (compact) {
     return (
@@ -370,51 +907,170 @@ export function FileDownloadButton({
 
 export function VersionUploadButton({
   file,
+  tenant,
+  returnPath,
   compact = false,
 }: {
   file: FileItem;
+  tenant?: string;
+  returnPath?: string;
   compact?: boolean;
 }) {
   const { openPopup, closePopup } = useUniversalPopup();
+  const canVersion = Boolean(tenant && returnPath && file.storageFileId);
+
   const openVersionPopup = () =>
     openPopup({
       title: "Neue Version hochladen",
-      content: <UploadVersionForm file={file} onDone={closePopup} />,
+      content: (
+        <UploadVersionForm
+          file={file}
+          tenant={tenant ?? ""}
+          returnPath={returnPath ?? ""}
+          onDone={closePopup}
+        />
+      ),
     });
 
-  if (compact) {
-    return (
-      <button
-        type="button"
-        className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-[8px] border border-border bg-white text-muted transition-colors hover:border-muted hover:text-ink"
-        title="Neue Version hochladen"
-        aria-label={`Neue Version fÃ¼r ${file.name} hochladen`}
-        onClick={openVersionPopup}
-      >
-        <Upload size={14} />
-      </button>
-    );
-  }
-
   return (
-    <button type="button" className="btn btn-primary btn-sm" onClick={openVersionPopup}>
+    <button
+      type="button"
+      className={
+        compact
+          ? "flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-[8px] border border-border bg-white text-muted transition-colors hover:border-muted hover:text-ink disabled:cursor-not-allowed disabled:opacity-45"
+          : "btn btn-primary btn-sm"
+      }
+      title="Neue Version hochladen"
+      aria-label={`Neue Version für ${file.name} hochladen`}
+      disabled={!canVersion}
+      onClick={openVersionPopup}
+    >
       <Upload size={14} />
-      Neue Version hochladen
+      {!compact && "Neue Version hochladen"}
     </button>
   );
 }
 
-export function CreateFolderButton() {
+function DeleteFileConfirmForm({
+  file,
+  tenant,
+  returnPath,
+  onCancel,
+}: {
+  file: FileItem;
+  tenant: string;
+  returnPath: string;
+  onCancel: () => void;
+}) {
+  return (
+    <form className="flex flex-col gap-4" action={softDeleteHrFileAction}>
+      <input type="hidden" name="tenant" value={tenant} />
+      <input type="hidden" name="returnPath" value={returnPath} />
+      <input type="hidden" name="fileId" value={file.storageFileId ?? ""} />
+
+      <div className="rounded-xl border border-danger/20 bg-danger/5 px-4 py-3">
+        <div className="text-[13.5px] font-semibold text-ink">
+          {file.name}
+        </div>
+        <p className="mt-1 text-[12.5px] leading-5 text-muted">
+          Die Datei wird aus der Ansicht entfernt, aber nicht aus dem Storage
+          geloescht.
+        </p>
+      </div>
+
+      <div className="mt-1 flex justify-end gap-2.5 border-t border-border-soft pt-4">
+        <button type="button" className="btn btn-secondary" onClick={onCancel}>
+          Abbrechen
+        </button>
+        <button type="submit" className="btn btn-secondary border-danger/25 text-danger hover:bg-danger/5">
+          <Trash2 size={15} />
+          Entfernen
+        </button>
+      </div>
+    </form>
+  );
+}
+
+export function FileSoftDeleteButton({
+  file,
+  tenant,
+  returnPath,
+  compact = false,
+}: {
+  file: FileItem;
+  tenant?: string;
+  returnPath?: string;
+  compact?: boolean;
+}) {
+  const { openPopup, closePopup } = useUniversalPopup();
+
+  if (!tenant || !returnPath || !file.storageFileId) {
+    return null;
+  }
+
+  return (
+    <button
+      type="button"
+      className={
+        compact
+          ? "flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-[8px] border border-danger/25 bg-white text-danger transition-colors hover:bg-danger/5"
+          : "btn btn-secondary btn-sm border-danger/25 text-danger hover:bg-danger/5"
+      }
+      title="Datei ausblenden"
+      aria-label={`${file.name} ausblenden`}
+      onClick={() =>
+        openPopup({
+          title: "Datei entfernen?",
+          content: (
+            <DeleteFileConfirmForm
+              file={file}
+              tenant={tenant}
+              returnPath={returnPath}
+              onCancel={closePopup}
+            />
+          ),
+        })
+      }
+    >
+      <Trash2 size={14} />
+      {!compact && "Entfernen"}
+    </button>
+  );
+}
+
+export function CreateFolderButton({
+  tenant,
+  returnPath,
+  ownerType = "tenant",
+  ownerId,
+  parentPath,
+}: {
+  tenant?: string;
+  returnPath?: string;
+  ownerType?: "tenant" | "employee" | "location";
+  ownerId?: string;
+  parentPath?: string;
+}) {
   const { openPopup, closePopup } = useUniversalPopup();
 
   return (
     <button
       type="button"
       className="btn btn-secondary btn-sm"
+      disabled={!tenant || !returnPath}
       onClick={() =>
         openPopup({
           title: "Ordner erstellen",
-          content: <CreateFolderForm onDone={closePopup} />,
+          content: (
+            <CreateFolderForm
+              tenant={tenant ?? ""}
+              returnPath={returnPath ?? ""}
+              ownerType={ownerType}
+              ownerId={ownerId}
+              parentPath={parentPath}
+              onDone={closePopup}
+            />
+          ),
         })
       }
     >
@@ -424,17 +1080,48 @@ export function CreateFolderButton() {
   );
 }
 
-export function UploadFileButton() {
+export function UploadFileButton({
+  tenant,
+  returnPath,
+  ownerType = "tenant",
+  ownerId,
+  folderSlug,
+  folderName,
+  folderOptions,
+  uploadOptions,
+}: {
+  tenant?: string;
+  returnPath?: string;
+  ownerType?: "tenant" | "employee" | "location";
+  ownerId?: string;
+  folderSlug?: string;
+  folderName?: string;
+  folderOptions?: FileFolder[];
+  uploadOptions?: FileUploadOptions;
+}) {
   const { openPopup, closePopup } = useUniversalPopup();
 
   return (
     <button
       type="button"
       className="btn btn-primary btn-sm"
+      disabled={!tenant || !returnPath}
       onClick={() =>
         openPopup({
           title: "Datei hochladen",
-          content: <UploadFileForm onDone={closePopup} />,
+          content: (
+            <UploadFileForm
+              tenant={tenant ?? ""}
+              returnPath={returnPath ?? ""}
+              ownerType={ownerType}
+              ownerId={ownerId}
+              folderSlug={folderSlug}
+              folderName={folderName}
+              folderOptions={folderOptions}
+              uploadOptions={uploadOptions}
+              onDone={closePopup}
+            />
+          ),
         })
       }
     >

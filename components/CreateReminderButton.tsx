@@ -1,17 +1,34 @@
 "use client";
 
+import { createReminderAction } from "@/app/(dashboard)/u/[tenant]/erinnerungen/actions";
+import { LinkedFileBrowser } from "@/components/ActionDrawers";
+import DatePickerField from "@/components/DatePickerField";
 import { useUniversalPopup } from "@/components/UniversalPopup";
+import type { ReminderFileBrowserData } from "@/lib/files";
 import { BellPlus, Plus } from "lucide-react";
+import { useState } from "react";
 
-function CreateReminderForm({ onDone }: { onDone: () => void }) {
+function CreateReminderForm({
+  tenant,
+  returnPath,
+  fileBrowserData,
+  onDone,
+}: {
+  tenant: string;
+  returnPath: string;
+  fileBrowserData: ReminderFileBrowserData;
+  onDone: () => void;
+}) {
+  const [linkedFiles, setLinkedFiles] = useState<string[]>([]);
+
   return (
-    <form
-      className="flex flex-col gap-4"
-      onSubmit={(event) => {
-        event.preventDefault();
-        onDone();
-      }}
-    >
+    <form className="flex flex-col gap-4" action={createReminderAction}>
+      <input type="hidden" name="tenant" value={tenant} />
+      <input type="hidden" name="returnPath" value={returnPath} />
+      {linkedFiles.map((fileId) => (
+        <input key={fileId} type="hidden" name="linkedFiles" value={fileId} />
+      ))}
+
       <div className="field">
         <label htmlFor="reminder-title" className="label">
           Titel
@@ -20,43 +37,96 @@ function CreateReminderForm({ onDone }: { onDone: () => void }) {
           id="reminder-title"
           name="title"
           className="input"
-          placeholder="z. B. Vertrag prüfen"
+          placeholder="z. B. Vertrag pruefen"
           required
         />
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="field">
           <label htmlFor="reminder-date" className="label">
-            Fällig am
+            Faellig am
           </label>
-          <input id="reminder-date" name="date" type="date" className="input" required />
+          <DatePickerField id="reminder-date" name="dueDate" />
         </div>
         <div className="field">
           <label htmlFor="reminder-priority" className="label">
-            Priorität
+            Prioritaet
           </label>
-          <select id="reminder-priority" name="priority" className="input cursor-pointer bg-bg" defaultValue="normal">
+          <select
+            id="reminder-priority"
+            name="priority"
+            className="input cursor-pointer bg-bg"
+            defaultValue="normal"
+          >
             <option value="normal">Normal</option>
             <option value="important">Wichtig</option>
             <option value="urgent">Dringend</option>
           </select>
         </div>
       </div>
-      <div className="field">
-        <label htmlFor="reminder-context" className="label">
-          Bezug
-        </label>
-        <input id="reminder-context" name="context" className="input" placeholder="Mitarbeiter, Team oder Standort" />
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="field">
+          <label htmlFor="reminder-category" className="label">
+            Kategorie
+          </label>
+          <input
+            id="reminder-category"
+            name="category"
+            className="input"
+            placeholder="Allgemein"
+            defaultValue="Allgemein"
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="reminder-context" className="label">
+            Bezug
+          </label>
+          <input
+            id="reminder-context"
+            name="subject"
+            className="input"
+            placeholder="Mitarbeiter, Team oder Standort"
+          />
+        </div>
       </div>
+      <div className="field">
+        <label htmlFor="reminder-notes" className="label">
+          Hinweise
+        </label>
+        <textarea
+          id="reminder-notes"
+          name="notes"
+          className="input min-h-24 resize-y py-3"
+          placeholder="Interne Hinweise oder naechste Schritte"
+        />
+      </div>
+      <LinkedFileBrowser
+        selectedIds={linkedFiles}
+        setSelectedIds={setLinkedFiles}
+        fileBrowserData={fileBrowserData}
+      />
       <div className="mt-1 flex justify-end gap-2.5 border-t border-border-soft pt-4">
-        <button type="button" className="btn btn-secondary" onClick={onDone}>Abbrechen</button>
-        <button type="submit" className="btn btn-primary"><BellPlus size={15} /> Erinnerung erstellen</button>
+        <button type="button" className="btn btn-secondary" onClick={onDone}>
+          Abbrechen
+        </button>
+        <button type="submit" className="btn btn-primary">
+          <BellPlus size={15} />
+          Erinnerung erstellen
+        </button>
       </div>
     </form>
   );
 }
 
-export default function CreateReminderButton() {
+export default function CreateReminderButton({
+  tenant,
+  returnPath,
+  fileBrowserData,
+}: {
+  tenant: string;
+  returnPath: string;
+  fileBrowserData: ReminderFileBrowserData;
+}) {
   const { openPopup, closePopup } = useUniversalPopup();
 
   return (
@@ -66,7 +136,14 @@ export default function CreateReminderButton() {
       onClick={() =>
         openPopup({
           title: "Erinnerung erstellen",
-          content: <CreateReminderForm onDone={closePopup} />,
+          content: (
+            <CreateReminderForm
+              tenant={tenant}
+              returnPath={returnPath}
+              fileBrowserData={fileBrowserData}
+              onDone={closePopup}
+            />
+          ),
         })
       }
     >

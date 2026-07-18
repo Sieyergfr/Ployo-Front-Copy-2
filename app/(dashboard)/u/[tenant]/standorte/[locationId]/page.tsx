@@ -1,7 +1,12 @@
 import { FileReminderButton } from "@/components/ActionDrawers";
+import AddressFields from "@/components/AddressFields";
 import AddLocationEmployeesButton from "@/components/AddLocationEmployeesButton";
 import AuditLogPanel from "@/components/AuditLogPanel";
 import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
+import {
+  CreateFolderButton,
+  UploadFileButton,
+} from "@/components/FileActionButtons";
 import { UnsavedChangesGuard } from "@/components/EditSafety";
 import FloatingEditBar from "@/components/FloatingEditBar";
 import LocationShiftPlanner from "@/components/LocationShiftPlanner";
@@ -17,6 +22,7 @@ import {
   getShiftFormOptions,
   getShiftPlanForTenant,
 } from "@/lib/shift-service";
+import { getWishFreeRequestsForTenant } from "@/lib/wish-free-service";
 import {
   type Location,
   type LocationActivity,
@@ -34,15 +40,14 @@ import {
   ChevronRight,
   FileText,
   Folder,
-  FolderPlus,
   Lock,
   Pencil,
   Plus,
-  Upload,
 } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
+import { getFileUploadOptions, type FileFolder, type FileUploadOptions } from "@/lib/files";
 
 export async function generateMetadata({
   params,
@@ -289,7 +294,15 @@ function ActivityItem({
   );
 }
 
-function FileFolderCard({ folder }: { folder: LocationFileFolder }) {
+function FileFolderCard({
+  folder,
+  tenant,
+  returnPath,
+}: {
+  folder: LocationFileFolder;
+  tenant: string;
+  returnPath: string;
+}) {
   return (
     <div className="flex w-full cursor-pointer items-center gap-[13px] rounded-xl border border-border bg-white p-[15px] text-left font-sans transition-colors hover:bg-bg">
       <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-border-soft text-muted-2">
@@ -305,6 +318,8 @@ function FileFolderCard({ folder }: { folder: LocationFileFolder }) {
       </span>
       {folder.locked && <Lock size={13} className="shrink-0 text-muted" />}
       <FileReminderButton
+        tenant={tenant}
+        returnPath={returnPath}
         compact
         name={folder.name}
         context={`Standortordner \u00b7 ${folder.name}`}
@@ -313,7 +328,15 @@ function FileFolderCard({ folder }: { folder: LocationFileFolder }) {
   );
 }
 
-function FileRow({ file }: { file: LocationFile }) {
+function FileRow({
+  file,
+  tenant,
+  returnPath,
+}: {
+  file: LocationFile;
+  tenant: string;
+  returnPath: string;
+}) {
   return (
     <div className="flex w-full cursor-pointer items-center gap-3.5 border-t border-border-soft py-3 text-left font-sans transition-colors hover:bg-bg">
       <span className="flex size-[30px] shrink-0 items-center justify-center rounded-lg bg-border-soft text-muted-2">
@@ -335,6 +358,8 @@ function FileRow({ file }: { file: LocationFile }) {
       </span>
       {file.locked && <Lock size={13} className="shrink-0 text-muted" />}
       <FileReminderButton
+        tenant={tenant}
+        returnPath={returnPath}
         compact
         name={file.name}
         context={`${file.folder} \u00b7 Standortdatei`}
@@ -343,7 +368,41 @@ function FileRow({ file }: { file: LocationFile }) {
   );
 }
 
-function FilesTab({ location }: { location: Location }) {
+function folderOptionSlug(value: string) {
+  return value
+    .toLowerCase()
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function locationFolderOptions(location: Location): FileFolder[] {
+  return location.fileFolders.map((folder) => ({
+    slug: folder.path ?? folderOptionSlug(folder.name),
+    path: folder.path ?? folderOptionSlug(folder.name),
+    name: folder.name,
+    fileCount: folder.fileCount,
+    owner: "HR",
+    updatedAt: "",
+    locked: folder.locked,
+  }));
+}
+
+function FilesTab({
+  location,
+  tenant,
+  locationHref,
+  uploadOptions,
+}: {
+  location: Location;
+  tenant: string;
+  locationHref: string;
+  uploadOptions: FileUploadOptions;
+}) {
+  const folderOptions = locationFolderOptions(location);
+
   return (
     <DetailPanel
       title={
@@ -366,20 +425,31 @@ function FilesTab({ location }: { location: Location }) {
           Dateien
         </span>
         <div className="flex flex-wrap gap-2">
-          <button type="button" className="btn btn-secondary btn-sm">
-            <FolderPlus size={14} />
-            Ordner erstellen
-          </button>
-          <button type="button" className="btn btn-primary btn-sm">
-            <Upload size={14} />
-            Datei hochladen
-          </button>
+          <CreateFolderButton
+            tenant={tenant}
+            returnPath={`${locationHref}?tab=files`}
+            ownerType="location"
+            ownerId={location.dbId}
+          />
+          <UploadFileButton
+            tenant={tenant}
+            returnPath={`${locationHref}?tab=files`}
+            ownerType="location"
+            ownerId={location.dbId}
+            folderOptions={folderOptions}
+            uploadOptions={uploadOptions}
+          />
         </div>
       </div>
 
       <div className="grid gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(210px,1fr))]">
         {location.fileFolders.map((folder) => (
-          <FileFolderCard key={folder.name} folder={folder} />
+            <FileFolderCard
+              key={folder.name}
+              folder={folder}
+              tenant={tenant}
+              returnPath={`${locationHref}?tab=files`}
+            />
         ))}
       </div>
 
@@ -388,7 +458,12 @@ function FilesTab({ location }: { location: Location }) {
           Dateien
         </div>
         {location.files.map((file) => (
-          <FileRow key={`${file.folder}-${file.name}`} file={file} />
+            <FileRow
+              key={`${file.folder}-${file.name}`}
+              file={file}
+              tenant={tenant}
+              returnPath={`${locationHref}?tab=files`}
+            />
         ))}
       </div>
     </DetailPanel>
@@ -586,11 +661,12 @@ export default async function LocationDetailPage({
   const currentWeek = getISOWeekFromDate(new Date());
   const year = searchParamNumber(query.year, currentWeek.year);
   const week = searchParamNumber(query.week, currentWeek.week);
-  const [location, employees, shiftPlan, shiftOptions] = await Promise.all([
+  const [location, employees, shiftPlan, shiftOptions, uploadOptions] = await Promise.all([
     getLocationForTenant(tenant, locationId),
     getEmployeesForTenant(tenant),
     getShiftPlanForTenant({ tenantSlug: tenant, year, week }),
     getShiftFormOptions(tenant),
+    getFileUploadOptions(tenant),
   ]);
 
   if (!location || !employees || !shiftPlan || !shiftOptions) {
@@ -615,6 +691,18 @@ export default async function LocationDetailPage({
   const locationShiftEmployeeKeys = new Set(
     location.team.flatMap((member) => [member.employeeId, member.name].filter(Boolean)),
   );
+  const locationShiftEmployees = shiftOptions.employees.filter(
+    (employee) =>
+      employee.location === location.name ||
+      locationShiftEmployeeKeys.has(employee.id) ||
+      locationShiftEmployeeKeys.has(employee.name),
+  );
+  const locationShiftEmployeeIds = new Set(
+    locationShiftEmployees.map((employee) => employee.id),
+  );
+  const wishFreeRequests = (
+    await getWishFreeRequestsForTenant({ tenantSlug: tenant })
+  ).filter((request) => locationShiftEmployeeIds.has(request.employeeId));
   const assignableEmployees = employees
     .filter(
       (employee) =>
@@ -673,11 +761,11 @@ export default async function LocationDetailPage({
                   options={["Filiale", "Lager", "Verwaltung"]}
                 />
                 <div className="sm:col-span-2">
-                  <EditableTextField
-                    id="location-address"
-                    label="Adresse"
-                    name="address"
-                    value={location.address}
+                  <div className="mb-2 label">Adresse</div>
+                  <AddressFields
+                    idPrefix="location-address"
+                    defaults={location.addressFields}
+                    required
                   />
                 </div>
                 <EditableSelectField
@@ -770,7 +858,12 @@ export default async function LocationDetailPage({
       </div>
 
       {isFilesTab ? (
-        <FilesTab location={location} />
+        <FilesTab
+          location={location}
+          tenant={tenant}
+          locationHref={locationHref}
+          uploadOptions={uploadOptions}
+        />
       ) : isShiftsTab ? (
         <LocationShiftPlanner
           tenant={tenant}
@@ -783,12 +876,8 @@ export default async function LocationDetailPage({
             ...day,
             shifts: day.shifts.filter((shift) => shift.locationId === locationDbId),
           }))}
-          employees={shiftOptions.employees.filter(
-            (employee) =>
-              employee.location === location.name ||
-              locationShiftEmployeeKeys.has(employee.id) ||
-              locationShiftEmployeeKeys.has(employee.name),
-          )}
+          employees={locationShiftEmployees}
+          wishFreeRequests={wishFreeRequests}
         />
       ) : (
         <>

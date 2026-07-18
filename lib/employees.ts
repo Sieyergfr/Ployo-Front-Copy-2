@@ -10,6 +10,7 @@ export type EmployeeFileFolder = {
   name: string;
   fileCount: number;
   locked?: boolean;
+  path?: string;
 };
 
 export type EmployeeFile = {
@@ -19,6 +20,7 @@ export type EmployeeFile = {
   size: string;
   updatedAt: string;
   locked?: boolean;
+  storageFileId?: string;
 };
 
 export type EmergencyContact = {
@@ -95,6 +97,14 @@ export type Employee = {
   nationality: string;
   maritalStatus: string;
   privateAddress: string;
+  privateAddressFields?: {
+    street: string;
+    houseNumber: string;
+    postalCode: string;
+    city: string;
+    careOf: string;
+    country: string;
+  };
   taxId: string;
   socialSecurityNumber: string;
   healthInsurance: string;
@@ -110,6 +120,14 @@ export type Employee = {
   email: string;
   phone: string;
   address: string;
+  addressFields?: {
+    street: string;
+    houseNumber: string;
+    postalCode: string;
+    city: string;
+    careOf: string;
+    country: string;
+  };
   vacationRemaining: number;
   vacationTotal: number;
   vacationTaken: number;

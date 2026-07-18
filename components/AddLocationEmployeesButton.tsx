@@ -4,6 +4,7 @@ import { addLocationEmployeesAction } from "@/app/(dashboard)/u/[tenant]/standor
 import EmployeeSelector, {
   type EmployeeSelectorOption,
 } from "@/components/EmployeeSelector";
+import FormSubmitButton from "@/components/FormSubmitButton";
 import { useUniversalPopup } from "@/components/UniversalPopup";
 import { Plus, UserPlus } from "lucide-react";
 
@@ -39,10 +40,12 @@ function AddLocationEmployeesForm({
         <button type="button" className="btn btn-secondary" onClick={onDone}>
           Abbrechen
         </button>
-        <button type="submit" className="btn btn-primary">
-          <UserPlus size={15} />
+        <FormSubmitButton
+          Icon={UserPlus}
+          pendingLabel="Wird hinzugefuegt..."
+        >
           Hinzufügen
-        </button>
+        </FormSubmitButton>
       </div>
     </form>
   );

@@ -88,7 +88,12 @@ model Tenant {
   locations     TenantLocation[]
   employees     TenantEmployee[]
   vacationRequests TenantVacationRequest[]
+  wishFreeRequests TenantWishFreeRequest[]
   shifts       TenantShift[]
+  files        TenantFile[]
+  fileFolders  TenantFileFolder[]
+  reminders    TenantReminder[]
+  contracts    TenantEmployeeContract[]
   settings     TenantSettings?
 }
 
@@ -125,7 +130,6 @@ model TenantInvitation {
 
 model TenantSettings {
   id                         String   @id @default(cuid())
-  companyAddress             String   @default("")
   taxId                      String   @default("")
   defaultLocationId          String   @default("")
   weekStart                  String   @default("monday")
@@ -147,7 +151,28 @@ model TenantSettings {
   createdAt                  DateTime @default(now())
   updatedAt                  DateTime @updatedAt
   tenantId                   String   @unique
+  companyAddressId           String?  @unique
+  companyAddress             Address? @relation("TenantSettingsCompanyAddress", fields: [companyAddressId], references: [id], onDelete: SetNull)
   tenant                     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+model Address {
+  id                         String          @id @default(cuid())
+  street                     String          @default("")
+  houseNumber                String          @default("")
+  postalCode                 String          @default("")
+  city                       String          @default("")
+  careOf                     String          @default("")
+  country                    String          @default("DE")
+  createdAt                  DateTime        @default(now())
+  updatedAt                  DateTime        @updatedAt
+  tenantSettingsCompany      TenantSettings? @relation("TenantSettingsCompanyAddress")
+  tenantLocation             TenantLocation? @relation("TenantLocationAddress")
+  tenantEmployeePrivate      TenantEmployee? @relation("TenantEmployeePrivateAddress")
+  tenantEmployeeWork         TenantEmployee? @relation("TenantEmployeeWorkAddress")
+
+  @@index([country])
+  @@index([postalCode, city])
 }
 
 model TenantRole {
@@ -222,7 +247,7 @@ model TenantLocation {
   key                String
   kind               String
   name               String
-  address            String
+  addressId          String?  @unique
   employeeCount      Int      @default(0)
   activeToday        Int      @default(0)
   shiftCount         Int      @default(0)
@@ -243,8 +268,11 @@ model TenantLocation {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
   tenantId           String
+  address            Address? @relation("TenantLocationAddress", fields: [addressId], references: [id], onDelete: SetNull)
   tenant             Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   shifts             TenantShift[]
+  storageFiles       TenantFile[]
+  storageFileFolders TenantFileFolder[]
 
   @@unique([tenantId, key])
   @@index([tenantId])
@@ -260,7 +288,7 @@ model TenantEmployee {
   birthPlace               String   @default("")
   nationality              String   @default("")
   maritalStatus            String   @default("")
-  privateAddress           String   @default("")
+  privateAddressId         String?  @unique
   taxId                    String   @default("")
   socialSecurityNumber     String   @default("")
   healthInsurance          String   @default("")
@@ -275,7 +303,7 @@ model TenantEmployee {
   status                   String   @default("active")
   email                    String   @default("")
   phone                    String   @default("")
-  address                  String   @default("")
+  workAddressId            String?  @unique
   vacationRemaining        Int      @default(0)
   vacationTotal            Int      @default(30)
   vacationTaken            Int      @default(0)
@@ -291,12 +319,157 @@ model TenantEmployee {
   createdAt                DateTime @default(now())
   updatedAt                DateTime @updatedAt
   tenantId                 String
+  privateAddress           Address? @relation("TenantEmployeePrivateAddress", fields: [privateAddressId], references: [id], onDelete: SetNull)
+  workAddress              Address? @relation("TenantEmployeeWorkAddress", fields: [workAddressId], references: [id], onDelete: SetNull)
   tenant                   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   vacationRequests         TenantVacationRequest[]
+  wishFreeRequests         TenantWishFreeRequest[]
   shifts                   TenantShift[]
+  storageFiles             TenantFile[]
+  storageFileFolders       TenantFileFolder[]
+  contracts                TenantEmployeeContract[]
 
   @@unique([tenantId, key])
   @@index([tenantId])
+}
+
+model TenantFile {
+  id           String          @id @default(cuid())
+  tenantId     String
+  employeeId   String?
+  locationId   String?
+  parentId     String?
+  bucket       String          @default("hr-documents")
+  storageKey   String
+  originalName String
+  displayName  String
+  mimeType     String          @default("application/octet-stream")
+  sizeBytes    Int             @default(0)
+  extension    String          @default("")
+  folderSlug   String          @default("allgemein")
+  folderName   String          @default("Allgemein")
+  ownerName    String          @default("HR")
+  uploadedById String          @default("")
+  uploadedByName String        @default("")
+  documentType String          @default("Sonstiges")
+  validFrom    String          @default("")
+  expiresAt    String          @default("")
+  reminderAt   String          @default("")
+  description  String          @default("")
+  tagsJson     String          @default("[]")
+  assignedEmployeeId String    @default("")
+  assignedEmployeeName String  @default("")
+  assignedLocationId String    @default("")
+  assignedLocationName String  @default("")
+  accessRoleIdsJson String     @default("[]")
+  accessRoleNamesJson String   @default("[]")
+  accessUserIdsJson String     @default("[]")
+  accessUserNamesJson String   @default("[]")
+  status       String          @default("active")
+  version      Int             @default(1)
+  provider     String          @default("s3")
+  deletedAt    DateTime?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  tenant       Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee     TenantEmployee? @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  location     TenantLocation? @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  parent       TenantFile?     @relation("TenantFileVersions", fields: [parentId], references: [id], onDelete: SetNull)
+  versions     TenantFile[]    @relation("TenantFileVersions")
+  employeeContract TenantEmployeeContract?
+
+  @@index([tenantId, status])
+  @@index([tenantId, folderSlug])
+  @@index([employeeId])
+  @@index([locationId])
+  @@index([assignedEmployeeId])
+  @@index([assignedLocationId])
+  @@index([parentId])
+  @@index([bucket, storageKey])
+}
+
+model TenantEmployeeContract {
+  id                  String         @id @default(cuid())
+  title               String
+  contractType        String         @default("Arbeitsvertrag")
+  status              String         @default("draft")
+  startDate           String
+  endDate             String         @default("")
+  probationEndDate    String         @default("")
+  noticePeriod        String         @default("")
+  position            String         @default("")
+  department          String         @default("")
+  workLocation        String         @default("")
+  weeklyHours         String         @default("")
+  compensation        String         @default("")
+  vacationDays        Int            @default(0)
+  terminationDate     String         @default("")
+  terminationReason   String         @default("")
+  notes               String         @default("")
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  tenantId            String
+  employeeId          String
+  fileId              String         @unique
+  tenant              Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee            TenantEmployee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  file                TenantFile     @relation(fields: [fileId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, employeeId, status])
+  @@index([employeeId, startDate])
+}
+
+model TenantFileFolder {
+  id          String             @id @default(cuid())
+  tenantId    String
+  employeeId  String?
+  locationId  String?
+  parentId    String?
+  scope       String             @default("tenant")
+  name        String
+  slug        String
+  path        String
+  ownerName   String             @default("HR")
+  status      String             @default("active")
+  locked      Boolean            @default(false)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee    TenantEmployee?    @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  location    TenantLocation?    @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  parent      TenantFileFolder?  @relation("TenantFileFolderChildren", fields: [parentId], references: [id], onDelete: SetNull)
+  children    TenantFileFolder[] @relation("TenantFileFolderChildren")
+
+  @@unique([tenantId, scope, path])
+  @@index([tenantId, parentId])
+  @@index([tenantId, status])
+  @@index([employeeId])
+  @@index([locationId])
+}
+
+model TenantReminder {
+  id              String   @id @default(cuid())
+  key             String
+  title           String
+  subject         String   @default("")
+  category        String   @default("Allgemein")
+  dueDate         String
+  priority        String   @default("normal")
+  status          String   @default("open")
+  notes           String   @default("")
+  linkedFilesJson String   @default("[]")
+  completedAt     DateTime?
+  createdById     String   @default("")
+  createdByName   String   @default("")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  tenantId        String
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, key])
+  @@index([tenantId, status])
+  @@index([tenantId, dueDate])
+  @@index([priority])
 }
 
 model TenantShift {
@@ -346,5 +519,28 @@ model TenantVacationRequest {
   @@unique([tenantId, key])
   @@index([tenantId])
   @@index([employeeId])
+  @@index([status])
+}
+
+model TenantWishFreeRequest {
+  id           String         @id @default(cuid())
+  key          String
+  date         String
+  status       String         @default("open")
+  reason       String         @default("")
+  rejectReason String         @default("")
+  decidedAt    DateTime?
+  decidedBy    String         @default("")
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  tenantId     String
+  employeeId   String
+  tenant       Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee     TenantEmployee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, key])
+  @@index([tenantId])
+  @@index([employeeId])
+  @@index([date])
   @@index([status])
 }

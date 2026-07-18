@@ -3,18 +3,14 @@ import AuditLogPanel from "@/components/AuditLogPanel";
 import PageHeader from "@/components/PageHeader";
 import {
   FileDownloadButton,
+  FileSoftDeleteButton,
   FileViewButton,
   VersionUploadButton,
 } from "@/components/FileActionButtons";
 import { makeFileAuditLogs } from "@/lib/audit";
 import {
-  fileFolders,
-  fileMetrics,
-  files,
-  getFileByPath,
-  getFileFolderByPath,
+  getFilesPageData,
   getFileVersions,
-  getFilesByFolderSlug,
   type FileItem,
 } from "@/lib/files";
 import { Archive, ArrowLeft, FileText, Lock } from "lucide-react";
@@ -43,7 +39,15 @@ function FileMetricCard({
   );
 }
 
-function FileInfoCard({ file }: { file: FileItem }) {
+function FileInfoCard({
+  file,
+  tenant,
+  returnPath,
+}: {
+  file: FileItem;
+  tenant: string;
+  returnPath: string;
+}) {
   const versions = getFileVersions(file);
 
   return (
@@ -63,14 +67,18 @@ function FileInfoCard({ file }: { file: FileItem }) {
           </div>
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
-          <FileViewButton file={file} />
-          <FileDownloadButton file={file} label="Aktuelle Version" />
-          <VersionUploadButton file={file} />
+          <FileViewButton file={file} tenant={tenant} />
+          <FileDownloadButton file={file} tenant={tenant} label="Aktuelle Version" />
+          <VersionUploadButton file={file} tenant={tenant} returnPath={returnPath} />
+          <FileSoftDeleteButton file={file} tenant={tenant} returnPath={returnPath} />
         </div>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {[
+          ["Hochgeladen von", file.uploadedByName],
+          ["Hochgeladen am", file.uploadedAt],
+          ["Dokumententyp", file.documentType],
           ["Verantwortlich", file.owner],
           ["Aktualisiert", file.updatedAt],
           ["Ablaufdatum", file.expiresAt ?? "Kein Ablaufdatum"],
@@ -87,36 +95,86 @@ function FileInfoCard({ file }: { file: FileItem }) {
 
       <div className="mt-5 grid gap-4 lg:grid-cols-2">
         <div className="rounded-xl border border-border bg-bg p-4">
-          <div className="mb-3 flex items-center gap-2 font-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-muted">
-            <Lock size={14} />
-            Zugriffsberechtigung
+          <div className="mb-3 font-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-muted">
+            Zuweisung
           </div>
-          <div className="flex flex-wrap gap-2">
-            {file.accessRoles.map((role) => (
-              <span key={role} className="rounded-[7px] border border-border-light bg-white px-2 py-[5px] text-[11.5px] text-ink">
-                {role}
+          <div className="space-y-2 text-[12.5px] text-muted">
+            <div>
+              Mitarbeiter:{" "}
+              <span className="font-semibold text-ink">
+                {file.assignedEmployee ?? "Nicht zugewiesen"}
               </span>
-            ))}
+            </div>
+            <div>
+              Standort:{" "}
+              <span className="font-semibold text-ink">
+                {file.assignedLocation ?? "Nicht zugewiesen"}
+              </span>
+            </div>
+            <div>
+              Gueltig ab:{" "}
+              <span className="font-semibold text-ink">
+                {file.validFrom ?? "Nicht gesetzt"}
+              </span>
+            </div>
           </div>
         </div>
 
         <div className="rounded-xl border border-border bg-bg p-4">
-          <div className="mb-3 font-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-muted">
-            Mitarbeiter-Override
+          <div className="mb-3 flex items-center gap-2 font-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-muted">
+            <Lock size={14} />
+            Zugriffsberechtigung
           </div>
-          {file.employeeOverrides.length > 0 ? (
+          {file.accessRoles.length > 0 ? (
             <div className="flex flex-wrap gap-2">
-              {file.employeeOverrides.map((employee) => (
-                <span key={employee} className="rounded-[7px] border border-success/25 bg-success/10 px-2 py-[5px] text-[11.5px] text-success">
-                  {employee}
+              {file.accessRoles.map((role) => (
+                <span key={role} className="rounded-[7px] border border-border-light bg-white px-2 py-[5px] text-[11.5px] text-ink">
+                  {role}
                 </span>
               ))}
             </div>
           ) : (
-            <div className="text-[12.5px] text-muted">Keine individuellen Freigaben.</div>
+            <div className="text-[12.5px] text-muted">Keine Rollen eingeschraenkt.</div>
+          )}
+        </div>
+
+        <div className="rounded-xl border border-border bg-bg p-4">
+          <div className="mb-3 font-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-muted">
+            Einzelzugriff
+          </div>
+          {file.accessUsers.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {file.accessUsers.map((user) => (
+                <span key={user} className="rounded-[7px] border border-border-light bg-white px-2 py-[5px] text-[11.5px] text-ink">
+                  {user}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <div className="text-[12.5px] text-muted">Keine einzelnen User eingeschraenkt.</div>
           )}
         </div>
       </div>
+
+      {(file.description || file.tags.length > 0) && (
+        <div className="mt-5 rounded-xl border border-border bg-bg p-4">
+          <div className="mb-3 font-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-muted">
+            Beschreibung & Tags
+          </div>
+          {file.description && (
+            <p className="text-[13px] leading-5 text-ink">{file.description}</p>
+          )}
+          {file.tags.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {file.tags.map((tag) => (
+                <span key={tag} className="rounded-[7px] border border-border-light bg-white px-2 py-[5px] text-[11.5px] text-muted">
+                  {tag}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="mt-5">
         <div className="mb-2 font-mono text-[9.5px] uppercase tracking-[0.6px] text-muted">
@@ -132,8 +190,8 @@ function FileInfoCard({ file }: { file: FileItem }) {
               {version.uploadedBy} · {version.uploadedAt}
             </div>
             <div className="flex gap-2">
-              <FileViewButton file={file} version={version} compact />
-              <FileDownloadButton file={file} version={version} compact />
+              <FileViewButton file={file} tenant={tenant} version={version} compact />
+              <FileDownloadButton file={file} tenant={tenant} version={version} compact />
             </div>
           </div>
         ))}
@@ -142,37 +200,45 @@ function FileInfoCard({ file }: { file: FileItem }) {
   );
 }
 
-export default function FilesPageContent({
+export default async function FilesPageContent({
   tenant,
   path = [],
 }: {
   tenant: string;
   path?: string[];
 }) {
-  const activeFile = getFileByPath(path);
-  const activeFolder = getFileFolderByPath(path);
+  const {
+    activeFile,
+    activeFolder,
+    currentFolderPath,
+    folderOptions,
+    folders,
+    files,
+    metrics,
+    uploadOptions,
+    visibleFiles,
+  } = await getFilesPageData(tenant, path);
 
-  if (path.length === 2 && !activeFile) {
+  if (path.length > 0 && !activeFile && !activeFolder) {
     notFound();
   }
 
-  if (path.length > 0 && path.length !== 2 && !activeFolder) {
-    notFound();
-  }
-
-  const visibleFiles = getFilesByFolderSlug(activeFolder?.slug);
   const baseHref = `/u/${tenant}/dateien`;
 
   if (activeFile) {
+    const returnPath = activeFile.folderSlug
+      ? `${baseHref}/${activeFile.folderSlug}`
+      : baseHref;
+
     return (
       <>
         <div className="mb-[18px]">
-          <Link href={`${baseHref}/${activeFile.folderSlug}`} className="btn btn-secondary btn-sm">
+          <Link href={returnPath} className="btn btn-secondary btn-sm">
             <ArrowLeft size={14} />
-            Zurück zum Ordner
+            {activeFile.folderSlug ? "Zurück zum Ordner" : "Zurück zur Ablage"}
           </Link>
         </div>
-        <FileInfoCard file={activeFile} />
+        <FileInfoCard file={activeFile} tenant={tenant} returnPath={returnPath} />
         <div className="mt-4">
           <AuditLogPanel entries={makeFileAuditLogs(activeFile.name)} title="Datei Audit Log" />
         </div>
@@ -185,7 +251,7 @@ export default function FilesPageContent({
       <PageHeader
         eyebrow="Dokumentenablage"
         title="Dateien"
-        subtitle={`${fileFolders.length} Ordner \u00b7 ${files.length} Dateien`}
+        subtitle={`${folders.length} Ordner \u00b7 ${files.length} Dateien`}
       >
         <button type="button" className="btn btn-primary">
           <Archive size={15} />
@@ -194,15 +260,19 @@ export default function FilesPageContent({
       </PageHeader>
 
       <section className="mb-7 grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(190px,1fr))]">
-        {fileMetrics.map((metric) => (
+        {metrics.map((metric) => (
           <FileMetricCard key={metric.label} {...metric} />
         ))}
       </section>
 
       <FilesBrowser
-        folders={fileFolders}
+        folders={folders}
+        tenant={tenant}
         files={visibleFiles}
         activeFolder={activeFolder}
+        currentFolderPath={currentFolderPath}
+        folderOptions={folderOptions}
+        uploadOptions={uploadOptions}
         baseHref={baseHref}
       />
     </>

@@ -4,6 +4,7 @@ import {
   getShiftFormOptions,
   getShiftPlanForTenant,
 } from "@/lib/shift-service";
+import { getWishFreeRequestsForTenant } from "@/lib/wish-free-service";
 import { notFound } from "next/navigation";
 
 export const metadata = {
@@ -38,6 +39,10 @@ export default async function ShiftPlanningPage({
     notFound();
   }
 
+  const wishFreeRequests = await getWishFreeRequestsForTenant({
+    tenantSlug: tenant,
+  });
+
   return (
     <ShiftPlanningClient
       tenant={tenant}
@@ -49,6 +54,7 @@ export default async function ShiftPlanningPage({
       days={plan.days}
       employees={options.employees}
       locations={options.locations}
+      wishFreeRequests={wishFreeRequests}
     />
   );
 }

@@ -1,6 +1,9 @@
 "use client";
 
 import { saveSettingsPopupAction } from "@/app/(dashboard)/u/[tenant]/einstellungen/actions";
+import AddressFields from "@/components/AddressFields";
+import type { AddressInput } from "@/lib/address";
+import FormSubmitButton from "@/components/FormSubmitButton";
 import {
   Bell,
   Building2,
@@ -10,6 +13,7 @@ import {
   ChevronsUpDown,
   CreditCard,
   KeyRound,
+  LogOut,
   Plug,
   Save,
   ShieldCheck,
@@ -47,7 +51,7 @@ type TenantItem = {
   plan?: string;
   billingCycle?: string;
   settings?: {
-    companyAddress: string;
+    companyAddress: AddressInput | null;
     taxId: string;
     defaultLocationId: string;
     weekStart: string;
@@ -92,7 +96,7 @@ const fallbackTenantItem: TenantItem = {
 };
 
 const defaultSettings: NonNullable<TenantItem["settings"]> = {
-  companyAddress: "",
+  companyAddress: null,
   taxId: "",
   defaultLocationId: "",
   weekStart: "monday",
@@ -114,6 +118,12 @@ const defaultSettings: NonNullable<TenantItem["settings"]> = {
 
 function tenantSlugFromHref(href: string) {
   return href.split("/").filter(Boolean).at(1) ?? "";
+}
+
+function tenantSlugFromPathname(pathname: string) {
+  const segments = pathname.split("/").filter(Boolean);
+
+  return segments[0] === "u" ? segments[1] : undefined;
 }
 
 function cx(...classes: Array<string | false | null | undefined>) {
@@ -317,15 +327,12 @@ function SettingsPanel({
                 defaultValue={tenant.slug ?? tenantSlugFromHref(tenant.href)}
               />
             </div>
-            <div className="field">
-              <label htmlFor="settings-company-address" className="label">
-                Rechnungsadresse
-              </label>
-              <input
-                id="settings-company-address"
-                name="companyAddress"
-                className="input bg-white"
-                defaultValue={settings.companyAddress}
+            <div className="sm:col-span-2">
+              <div className="mb-2 label">Rechnungsadresse</div>
+              <AddressFields
+                idPrefix="settings-company-address"
+                namePrefix="companyAddress"
+                defaults={settings.companyAddress}
               />
             </div>
             <div className="field">
@@ -942,10 +949,12 @@ function SettingsPopupForm({
         <button type="button" className="btn btn-secondary" onClick={onDone}>
           Abbrechen
         </button>
-        <button type="submit" className="btn btn-primary">
-          <Save size={15} />
+        <FormSubmitButton
+          Icon={Save}
+          pendingLabel="Wird gespeichert..."
+        >
           Speichern
-        </button>
+        </FormSubmitButton>
       </div>
     </form>
   );
@@ -1144,7 +1153,8 @@ export default function NavigationSidebar({
   const pathname = usePathname();
   const params = useParams<{ tenant?: string | string[] }>();
 
-  const tenant = Array.isArray(params.tenant) ? params.tenant[0] : params.tenant;
+  const routeTenant = Array.isArray(params.tenant) ? params.tenant[0] : params.tenant;
+  const tenant = routeTenant ?? tenantSlugFromPathname(pathname);
   const baseHref = tenant ? `/u/${tenant}` : "/u";
   const tenantItems = tenants.length > 0 ? tenants : [fallbackTenantItem];
   const toggleLabel = isCollapsed ? "Navigation ausklappen" : "Navigation einklappen";
@@ -1368,6 +1378,19 @@ export default function NavigationSidebar({
           <span className="sidebar-link-code">Eg</span>
           {!isCollapsed && <span className="sidebar-link-label">Einstellungen</span>}
         </button>
+
+        <form action="/logout" method="post">
+          <button
+            type="submit"
+            title="Abmelden"
+            className="sidebar-link w-full appearance-none border-0 bg-transparent text-left"
+          >
+            <span className="sidebar-link-code">
+              <LogOut size={14} strokeWidth={2} />
+            </span>
+            {!isCollapsed && <span className="sidebar-link-label">Abmelden</span>}
+          </button>
+        </form>
 
         <div className="sidebar-user-row">
           <div className="sidebar-user">
