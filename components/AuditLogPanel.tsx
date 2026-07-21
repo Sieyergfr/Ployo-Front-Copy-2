@@ -24,6 +24,11 @@ export default function AuditLogPanel({
         </div>
       </div>
       <div>
+        {entries.length === 0 && (
+          <div className="border-t border-border-soft py-4 text-[12.5px] text-muted">
+            Noch keine Audit-Einträge vorhanden.
+          </div>
+        )}
         {entries.map((entry) => (
           <div
             key={entry.id}

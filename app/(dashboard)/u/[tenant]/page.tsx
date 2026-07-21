@@ -5,7 +5,7 @@ import { files } from "@/lib/files";
 import { locations } from "@/lib/locations";
 import { getRemindersForTenant } from "@/lib/reminders";
 import { shiftConflictCount, shiftDays, shiftWeekLabel } from "@/lib/shifts";
-import { currentSickness, sicknessMetrics } from "@/lib/sickness";
+import { getSicknessForTenant } from "@/lib/sickness";
 import { vacationRequests } from "@/lib/vacations";
 import {
   AlertCircle,
@@ -82,7 +82,12 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
   const pendingVacations = vacationRequests.filter(
     (request) => request.status === "pending",
   );
-  const reminders = await getRemindersForTenant(tenant);
+  const [reminders, sickness] = await Promise.all([
+    getRemindersForTenant(tenant),
+    getSicknessForTenant(tenant),
+  ]);
+  const currentSickness = sickness.current;
+  const sicknessMetrics = sickness.metrics;
   const urgentReminders = reminders.filter(
     (reminder) => reminder.daysLeft <= 7,
   );

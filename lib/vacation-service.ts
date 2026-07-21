@@ -6,6 +6,7 @@ import {
   type VacationRequestStatus,
 } from "@/lib/vacations";
 import { headers } from "next/headers";
+import { requireTenantAccess } from "@/lib/tenant-access";
 
 type VacationRecord = {
   id: string;
@@ -158,12 +159,7 @@ async function getSessionUserId() {
 }
 
 export async function getTenantIdForVacation(tenantSlug: string) {
-  const tenant = await prisma.tenant.findUnique({
-    where: { slug: tenantSlug },
-    select: { id: true },
-  });
-
-  return tenant?.id ?? null;
+  return (await requireTenantAccess(tenantSlug, "vacation", "read")).tenantId;
 }
 
 export async function getVacationRequestsForTenant(tenantSlug: string) {
@@ -239,6 +235,7 @@ export function getVacationMetrics(
 }
 
 export async function requireVacationManager(tenantSlug: string) {
+  await requireTenantAccess(tenantSlug, "vacation", "write");
   const userId = await getSessionUserId();
 
   if (!userId) {

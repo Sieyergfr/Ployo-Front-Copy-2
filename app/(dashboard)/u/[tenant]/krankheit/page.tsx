@@ -2,14 +2,12 @@ import { SicknessReportButton } from "@/components/AbsenceActionButtons";
 import { SicknessDrawerButton } from "@/components/ActionDrawers";
 import PageHeader from "@/components/PageHeader";
 import {
-  currentSickness,
-  sicknessChart,
-  sicknessHistory,
-  sicknessMetrics,
+  getSicknessForTenant,
   type CurrentSickness,
   type SicknessHistoryItem,
   type SicknessMetric,
 } from "@/lib/sickness";
+import { getEmployeesForTenant } from "@/lib/employee-service";
 
 export const metadata = {
   title: "Krankheit",
@@ -82,11 +80,25 @@ function SicknessHistoryRow({ item }: { item: SicknessHistoryItem }) {
   );
 }
 
-export default function SicknessPage() {
+export default async function SicknessPage({ params }: PageProps<"/u/[tenant]/krankheit">) {
+  const { tenant } = await params;
+  const [sickness, employees] = await Promise.all([
+    getSicknessForTenant(tenant),
+    getEmployeesForTenant(tenant),
+  ]);
+  const sicknessMetrics = sickness.metrics;
+  const currentSickness = sickness.current;
+  const sicknessChart = sickness.chart;
+  const sicknessHistory = sickness.history;
+  const employeeOptions = (employees ?? []).map((employee) => ({
+    id: employee.dbId ?? employee.id,
+    name: employee.name,
+    location: employee.location,
+  }));
   return (
     <>
       <PageHeader eyebrow="Abwesenheitsstatistik" title="Krankheit">
-        <SicknessReportButton />
+        <SicknessReportButton tenant={tenant} employees={employeeOptions} />
       </PageHeader>
 
       <section className="mb-7 grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]">

@@ -7,7 +7,7 @@ import {
   FileViewButton,
   VersionUploadButton,
 } from "@/components/FileActionButtons";
-import { makeFileAuditLogs } from "@/lib/audit";
+import { getAuditLogsForEntity } from "@/lib/audit";
 import {
   getFilesPageData,
   getFileVersions,
@@ -226,6 +226,11 @@ export default async function FilesPageContent({
   const baseHref = `/u/${tenant}/dateien`;
 
   if (activeFile) {
+    const auditEntries = await getAuditLogsForEntity({
+      tenantSlug: tenant,
+      entityType: "file",
+      entityId: activeFile.storageFileId ?? activeFile.slug,
+    });
     const returnPath = activeFile.folderSlug
       ? `${baseHref}/${activeFile.folderSlug}`
       : baseHref;
@@ -240,7 +245,7 @@ export default async function FilesPageContent({
         </div>
         <FileInfoCard file={activeFile} tenant={tenant} returnPath={returnPath} />
         <div className="mt-4">
-          <AuditLogPanel entries={makeFileAuditLogs(activeFile.name)} title="Datei Audit Log" />
+          <AuditLogPanel entries={auditEntries} title="Datei Audit Log" />
         </div>
       </>
     );

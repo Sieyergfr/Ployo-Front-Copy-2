@@ -280,33 +280,27 @@ export async function getFileUploadOptions(
   tenantSlug: string,
 ): Promise<FileUploadOptions> {
   const { prisma } = await import("@/lib/prisma");
-  const tenant = await prisma.tenant.findUnique({
-    where: { slug: tenantSlug },
-    select: { id: true },
-  });
-
-  if (!tenant) {
-    return { employees: [], locations: [], roles: [], users: [] };
-  }
+  const { requireTenantAccess } = await import("@/lib/tenant-access");
+  const tenant = await requireTenantAccess(tenantSlug, "files", "read");
 
   const [employees, locations, roles, memberships] = await Promise.all([
     prisma.tenantEmployee.findMany({
-      where: { tenantId: tenant.id },
+      where: { tenantId: tenant.tenantId },
       orderBy: { name: "asc" },
       select: { id: true, name: true },
     }),
     prisma.tenantLocation.findMany({
-      where: { tenantId: tenant.id },
+      where: { tenantId: tenant.tenantId },
       orderBy: { name: "asc" },
       select: { id: true, name: true },
     }),
     prisma.tenantRole.findMany({
-      where: { tenantId: tenant.id },
+      where: { tenantId: tenant.tenantId },
       orderBy: { name: "asc" },
       select: { id: true, name: true },
     }),
     prisma.tenantMembership.findMany({
-      where: { tenantId: tenant.id },
+      where: { tenantId: tenant.tenantId },
       orderBy: { createdAt: "asc" },
       include: { user: { select: { id: true, name: true, email: true } } },
     }),
@@ -368,26 +362,22 @@ export async function getReminderFileBrowserData(
   tenantSlug: string,
 ): Promise<ReminderFileBrowserData> {
   const { prisma } = await import("@/lib/prisma");
-  const tenant = await prisma.tenant.findUnique({
-    where: { slug: tenantSlug },
-    select: { id: true },
-  });
-
-  if (!tenant) {
-    return { files: [], folders: [] };
-  }
+  const { requireTenantAccess } = await import("@/lib/tenant-access");
+  const { canAccessFileAcl } = await import("@/lib/file-access");
+  const tenant = await requireTenantAccess(tenantSlug, "files", "read");
 
   const [files, folders] = await Promise.all([
     prisma.tenantFile.findMany({
-      where: { tenantId: tenant.id, status: "active" },
+      where: { tenantId: tenant.tenantId, status: "active" },
       orderBy: { updatedAt: "desc" },
       include: {
         employee: { select: { name: true } },
         location: { select: { name: true } },
+        parent: { select: { accessRoleIdsJson: true, accessUserIdsJson: true } },
       },
     }),
     prisma.tenantFileFolder.findMany({
-      where: { tenantId: tenant.id, status: "active" },
+      where: { tenantId: tenant.tenantId, status: "active" },
       orderBy: { name: "asc" },
       include: {
         employee: { select: { name: true } },
@@ -396,7 +386,7 @@ export async function getReminderFileBrowserData(
     }),
   ]);
 
-  const browserFiles = files.map((file) => {
+  const browserFiles = files.filter((file) => canAccessFileAcl(file.parent ?? file, tenant)).map((file) => {
     const owner = getReminderFileOwner(file);
     const item = mapTenantFileToFileItem(file);
 
@@ -442,34 +432,34 @@ export async function getReminderFileBrowserData(
 
 export async function getFilesPageData(tenantSlug: string, path: string[] = []) {
   const { prisma } = await import("@/lib/prisma");
-  const tenant = await prisma.tenant.findUnique({
-    where: { slug: tenantSlug },
-    select: { id: true },
-  });
-  const tenantFiles = tenant
-    ? await prisma.tenantFile.findMany({
+  const { requireTenantAccess } = await import("@/lib/tenant-access");
+  const { canAccessFileAcl } = await import("@/lib/file-access");
+  const tenant = await requireTenantAccess(tenantSlug, "files", "read");
+  const tenantFileRecords = await prisma.tenantFile.findMany({
         where: {
-          tenantId: tenant.id,
+          tenantId: tenant.tenantId,
           employeeId: null,
           locationId: null,
           status: "active",
         },
         orderBy: { updatedAt: "desc" },
-      })
-    : [];
-  const tenantFolders: TenantFileFolderRecord[] = tenant
-    ? await prisma.tenantFileFolder.findMany({
+        include: {
+          parent: { select: { accessRoleIdsJson: true, accessUserIdsJson: true } },
+        },
+      });
+  const tenantFolders: TenantFileFolderRecord[] = await prisma.tenantFileFolder.findMany({
         where: {
-          tenantId: tenant.id,
+          tenantId: tenant.tenantId,
           employeeId: null,
           locationId: null,
           scope: "tenant",
           status: "active",
         },
         orderBy: { name: "asc" },
-      })
-    : [];
-  const storedFiles = tenantFiles.map(mapTenantFileToFileItem);
+      });
+  const storedFiles = tenantFileRecords
+    .filter((file) => canAccessFileAcl(file.parent ?? file, tenant))
+    .map(mapTenantFileToFileItem);
   const uploadOptions = await getFileUploadOptions(tenantSlug);
   const activeFile =
     path.length === 1

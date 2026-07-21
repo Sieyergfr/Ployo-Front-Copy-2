@@ -7,6 +7,8 @@ import { createReadSignedUrl } from "@/lib/storage/signed-url";
 import { uploadObject } from "@/lib/storage/upload";
 import { prisma } from "@/lib/prisma";
 import { headers } from "next/headers";
+import { requireTenantAccess } from "@/lib/tenant-access";
+import { requireFileAcl } from "@/lib/file-access";
 
 export type FileOwnerType = "tenant" | "employee" | "location";
 
@@ -109,6 +111,7 @@ async function findNamesById(input: {
 }
 
 async function requireTenantFileAccess(tenantSlug: string) {
+  await requireTenantAccess(tenantSlug, "files", "write");
   const session = await auth.api.getSession({
     headers: await headers(),
   });
@@ -466,7 +469,7 @@ export async function getTenantFileSignedUrl(input: {
   version?: number;
   disposition?: "inline" | "attachment";
 }) {
-  const access = await requireTenantFileAccess(input.tenantSlug);
+  const access = await requireTenantAccess(input.tenantSlug, "files", "read");
   const baseFile = await prisma.tenantFile.findFirst({
     where: {
       tenantId: access.tenantId,
@@ -480,6 +483,16 @@ export async function getTenantFileSignedUrl(input: {
   }
 
   const rootId = baseFile.parentId ?? baseFile.id;
+  const aclFile = baseFile.parentId
+    ? await prisma.tenantFile.findFirst({
+        where: { id: rootId, tenantId: access.tenantId, status: { not: "delete" } },
+        select: { accessRoleIdsJson: true, accessUserIdsJson: true },
+      })
+    : baseFile;
+
+  if (!aclFile) throw new Error("Datei nicht gefunden.");
+  requireFileAcl(aclFile, access);
+
   const file = input.version
     ? await prisma.tenantFile.findFirst({
         where: {

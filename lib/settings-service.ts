@@ -3,6 +3,7 @@ import { normalizeAddressInput, type AddressInput } from "@/lib/address";
 import { prisma } from "@/lib/prisma";
 import { isReservedTenantSlug, slugify } from "@/lib/tenants";
 import { headers } from "next/headers";
+import { requireTenantAccess } from "@/lib/tenant-access";
 
 export type TenantSettingsView = Awaited<ReturnType<typeof getTenantSettings>>;
 
@@ -58,6 +59,7 @@ async function getSessionUserId() {
 }
 
 export async function requireSettingsManager(tenantSlug: string) {
+  await requireTenantAccess(tenantSlug, "settings", "write");
   const userId = await getSessionUserId();
 
   if (!userId) {
@@ -118,8 +120,9 @@ async function ensureTenantSettings(tenantId: string) {
 }
 
 export async function getTenantSettings(tenantSlug: string) {
+  const access = await requireTenantAccess(tenantSlug, "settings", "read");
   const tenant = await prisma.tenant.findUnique({
-    where: { slug: tenantSlug },
+    where: { id: access.tenantId },
     include: {
       invitations: {
         orderBy: { createdAt: "desc" },

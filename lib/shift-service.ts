@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { type Shift, type ShiftDay } from "@/lib/shifts";
 import { headers } from "next/headers";
+import { requireTenantAccess } from "@/lib/tenant-access";
 
 export type ShiftEmployeeOption = {
   id: string;
@@ -171,12 +172,7 @@ async function getSessionUserId() {
 }
 
 export async function getTenantIdForShifts(tenantSlug: string) {
-  const tenant = await prisma.tenant.findUnique({
-    where: { slug: tenantSlug },
-    select: { id: true },
-  });
-
-  return tenant?.id ?? null;
+  return (await requireTenantAccess(tenantSlug, "shifts", "read")).tenantId;
 }
 
 export async function getShiftPlanForTenant(input: {
@@ -307,6 +303,7 @@ export async function getShiftFormOptions(tenantSlug: string) {
 }
 
 export async function requireShiftManager(tenantSlug: string) {
+  await requireTenantAccess(tenantSlug, "shifts", "write");
   const userId = await getSessionUserId();
 
   if (!userId) {

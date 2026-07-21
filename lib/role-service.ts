@@ -10,6 +10,7 @@ import {
   type PermissionRole,
 } from "@/lib/roles";
 import { headers } from "next/headers";
+import { requireTenantAccess } from "@/lib/tenant-access";
 
 type RoleRecord = {
   id: string;
@@ -56,27 +57,20 @@ function toPermissionRole(role: RoleRecord): PermissionRole {
 }
 
 export async function ensureTenantDefaultRoles(tenantSlug: string) {
-  const tenant = await prisma.tenant.findUnique({
-    where: { slug: tenantSlug },
-    select: { id: true },
-  });
-
-  if (!tenant) {
-    return null;
-  }
+  const access = await requireTenantAccess(tenantSlug, "roles", "admin");
 
   await prisma.$transaction(
     defaultPermissionRoles.map((role) =>
       prisma.tenantRole.upsert({
         where: {
           tenantId_key: {
-            tenantId: tenant.id,
+            tenantId: access.tenantId,
             key: role.key,
           },
         },
         update: {},
         create: {
-          tenantId: tenant.id,
+          tenantId: access.tenantId,
           key: role.key,
           name: role.name,
           description: role.description,
@@ -92,7 +86,7 @@ export async function ensureTenantDefaultRoles(tenantSlug: string) {
     ),
   );
 
-  return tenant.id;
+  return access.tenantId;
 }
 
 export async function getRolesForTenant(tenantSlug: string) {
@@ -153,6 +147,7 @@ export function permissionsFromFormData(formData: FormData) {
 }
 
 export async function requireRoleManager(tenantSlug: string) {
+  await requireTenantAccess(tenantSlug, "roles", "admin");
   const userId = await getSessionUserId();
 
   if (!userId) {

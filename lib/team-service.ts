@@ -1,9 +1,8 @@
-import { auth } from "@/lib/auth";
 import { getEmployeesForTenant } from "@/lib/employee-service";
 import { type Employee } from "@/lib/employees";
 import { prisma } from "@/lib/prisma";
 import { type Team, type TeamMember } from "@/lib/teams";
-import { headers } from "next/headers";
+import { requireTenantAccess } from "@/lib/tenant-access";
 
 export type TeamMetric = {
   label: string;
@@ -128,21 +127,8 @@ function toTeam(record: TeamRecord): Team {
   };
 }
 
-async function getSessionUserId() {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  });
-
-  return session?.user?.id ?? null;
-}
-
 export async function getTenantIdForTeams(tenantSlug: string) {
-  const tenant = await prisma.tenant.findUnique({
-    where: { slug: tenantSlug },
-    select: { id: true },
-  });
-
-  return tenant?.id ?? null;
+  return (await requireTenantAccess(tenantSlug, "teams", "read")).tenantId;
 }
 
 export async function getTeamsForTenant(tenantSlug: string) {
@@ -233,54 +219,7 @@ export async function getAssignableEmployees(tenantSlug: string, teamHandle: str
 }
 
 export async function requireTeamManager(tenantSlug: string) {
-  const userId = await getSessionUserId();
-
-  if (!userId) {
-    throw new Error("UNAUTHORIZED");
-  }
-
-  const membership = await prisma.tenantMembership.findFirst({
-    where: {
-      userId,
-      tenant: {
-        slug: tenantSlug,
-      },
-    },
-    include: {
-      roleRef: {
-        include: {
-          permissions: true,
-        },
-      },
-      tenant: {
-        select: {
-          id: true,
-          slug: true,
-        },
-      },
-    },
-  });
-
-  if (!membership) {
-    throw new Error("FORBIDDEN");
-  }
-
-  const tenantWideManager = ["OWNER", "ADMIN", "HR"].includes(membership.role);
-  const teamPermission = membership.roleRef?.permissions.find(
-    (permission) => permission.area === "teams",
-  );
-  const customTeamManager =
-    teamPermission?.level === "write" || teamPermission?.level === "admin";
-
-  if (!tenantWideManager && !customTeamManager) {
-    throw new Error("FORBIDDEN");
-  }
-
-  return {
-    tenantId: membership.tenant.id,
-    tenantSlug: membership.tenant.slug,
-    userId,
-  };
+  return requireTenantAccess(tenantSlug, "teams", "write");
 }
 
 export async function createTenantTeam(input: {

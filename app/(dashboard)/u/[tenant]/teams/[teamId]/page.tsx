@@ -15,7 +15,7 @@ import {
   TeamColorButtons,
 } from "@/components/TeamEditControls";
 import TeamRoleEditorButton from "@/components/TeamRoleEditorButton";
-import { makeAuditLogs } from "@/lib/audit";
+import { getAuditLogsForEntity } from "@/lib/audit";
 import {
   getAssignableEmployees,
   getTeamForTenant,
@@ -338,6 +338,11 @@ export default async function TeamDetailPage({
   ).length;
   const isEditing = edit === "1";
   const teamHref = `/u/${tenant}/teams/${team.id}`;
+  const auditEntries = await getAuditLogsForEntity({
+    tenantSlug: tenant,
+    entityType: "team",
+    entityId: team.dbId ?? team.id,
+  });
   const teamEditHref = `${teamHref}?edit=1`;
 
   return (
@@ -488,11 +493,7 @@ export default async function TeamDetailPage({
 
       <div className="mt-4">
         <AuditLogPanel
-          entries={makeAuditLogs({
-            id: team.id,
-            name: team.name,
-            source: "Teamdetail",
-          })}
+          entries={auditEntries}
         />
       </div>
 

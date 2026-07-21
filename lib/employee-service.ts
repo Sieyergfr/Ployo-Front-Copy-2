@@ -22,6 +22,8 @@ import {
 import { mapTenantFileToFileItem } from "@/lib/files";
 import { prisma } from "@/lib/prisma";
 import { headers } from "next/headers";
+import { requireTenantAccess } from "@/lib/tenant-access";
+import { canAccessFileAcl, getOptionalFileReadAccess } from "@/lib/file-access";
 
 type EmployeeRecord = {
   id: string;
@@ -92,6 +94,9 @@ type TenantFileRecord = {
   mimeType: string;
   extension: string;
   version: number;
+  accessRoleIdsJson: string;
+  accessUserIdsJson: string;
+  parent?: { accessRoleIdsJson: string; accessUserIdsJson: string } | null;
 };
 
 type TenantFileFolderRecord = {
@@ -405,16 +410,12 @@ async function getSessionUserId() {
 }
 
 export async function getTenantIdForEmployees(tenantSlug: string) {
-  const tenant = await prisma.tenant.findUnique({
-    where: { slug: tenantSlug },
-    select: { id: true },
-  });
-
-  return tenant?.id ?? null;
+  return (await requireTenantAccess(tenantSlug, "employees", "read")).tenantId;
 }
 
 export async function getEmployeesForTenant(tenantSlug: string) {
   const tenantId = await getTenantIdForEmployees(tenantSlug);
+  const fileAccess = await getOptionalFileReadAccess(tenantSlug);
 
   if (!tenantId) {
     return null;
@@ -429,6 +430,7 @@ export async function getEmployeesForTenant(tenantSlug: string) {
       storageFiles: {
         where: { status: "active" },
         orderBy: { updatedAt: "desc" },
+        include: { parent: { select: { accessRoleIdsJson: true, accessUserIdsJson: true } } },
       },
       storageFileFolders: {
         where: { status: "active" },
@@ -437,11 +439,17 @@ export async function getEmployeesForTenant(tenantSlug: string) {
     },
   });
 
-  return records.map(toEmployee);
+  return records.map((record) => toEmployee({
+    ...record,
+    storageFiles: fileAccess
+      ? record.storageFiles.filter((file) => canAccessFileAcl(file.parent ?? file, fileAccess))
+      : [],
+  }));
 }
 
 export async function getEmployeeForTenant(tenantSlug: string, employeeHandle: string) {
   const tenantId = await getTenantIdForEmployees(tenantSlug);
+  const fileAccess = await getOptionalFileReadAccess(tenantSlug);
 
   if (!tenantId) {
     return null;
@@ -458,6 +466,7 @@ export async function getEmployeeForTenant(tenantSlug: string, employeeHandle: s
       storageFiles: {
         where: { status: "active" },
         orderBy: { updatedAt: "desc" },
+        include: { parent: { select: { accessRoleIdsJson: true, accessUserIdsJson: true } } },
       },
       storageFileFolders: {
         where: { status: "active" },
@@ -466,10 +475,16 @@ export async function getEmployeeForTenant(tenantSlug: string, employeeHandle: s
     },
   });
 
-  return record ? toEmployee(record) : null;
+  return record ? toEmployee({
+    ...record,
+    storageFiles: fileAccess
+      ? record.storageFiles.filter((file) => canAccessFileAcl(file.parent ?? file, fileAccess))
+      : [],
+  }) : null;
 }
 
 export async function requireEmployeeManager(tenantSlug: string) {
+  await requireTenantAccess(tenantSlug, "employees", "write");
   const userId = await getSessionUserId();
 
   if (!userId) {

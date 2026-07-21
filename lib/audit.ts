@@ -1,3 +1,6 @@
+import { prisma } from "@/lib/prisma";
+import { requireTenantAccess } from "@/lib/tenant-access";
+
 export type AuditLogEntry = {
   id: string;
   actor: string;
@@ -8,68 +11,64 @@ export type AuditLogEntry = {
   detail?: string;
 };
 
-export function makeAuditLogs(entity: {
-  id: string;
-  name: string;
-  source: string;
-}): AuditLogEntry[] {
-  return [
-    {
-      id: `${entity.id}-view`,
-      actor: "Carla Brandt",
-      action: "Datensatz geöffnet",
-      source: entity.source,
-      timestamp: "30.06.2026 · 10:42",
-      ipAddress: "10.24.8.14",
-      detail: entity.name,
-    },
-    {
-      id: `${entity.id}-edit`,
-      actor: "Thomas Berger",
-      action: "Stammdaten aktualisiert",
-      source: "Web-App",
-      timestamp: "29.06.2026 · 16:08",
-      ipAddress: "10.24.8.22",
-      detail: "Änderung über Bearbeiten-Dialog",
-    },
-    {
-      id: `${entity.id}-export`,
-      actor: "System",
-      action: "Berechtigung geprüft",
-      source: "Policy Engine",
-      timestamp: "29.06.2026 · 16:08",
-      detail: "Rolle HR-Leitung erlaubt Lesen/Schreiben",
-    },
-  ];
+function formatTimestamp(value: Date) {
+  return new Intl.DateTimeFormat("de-DE", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Europe/Berlin",
+  }).format(value);
 }
 
-export function makeFileAuditLogs(fileName: string): AuditLogEntry[] {
-  return [
-    {
-      id: `${fileName}-opened`,
-      actor: "Carla Brandt",
-      action: "Datei geöffnet",
-      source: "Dateien",
-      timestamp: "30.06.2026 · 11:21",
-      ipAddress: "10.24.8.14",
-      detail: fileName,
+export async function getAuditLogsForEntity(input: {
+  tenantSlug: string;
+  entityType: string;
+  entityId: string;
+  take?: number;
+}): Promise<AuditLogEntry[]> {
+  const access = await requireTenantAccess(input.tenantSlug, "audit", "read");
+  const records = await prisma.tenantAuditLog.findMany({
+    where: {
+      tenantId: access.tenantId,
+      entityType: input.entityType,
+      entityId: input.entityId,
     },
-    {
-      id: `${fileName}-downloaded`,
-      actor: "Thomas Berger",
-      action: "Datei heruntergeladen",
-      source: "Preview",
-      timestamp: "30.06.2026 · 09:44",
-      ipAddress: "10.24.8.22",
-      detail: "Version v2",
+    orderBy: { createdAt: "desc" },
+    take: input.take ?? 25,
+  });
+
+  return records.map((record) => ({
+    id: record.id,
+    actor: record.actorName,
+    action: record.action,
+    source: record.source,
+    timestamp: formatTimestamp(record.createdAt),
+    ipAddress: record.ipAddress || undefined,
+    detail: record.detail || undefined,
+  }));
+}
+
+export async function recordTenantAudit(input: {
+  tenantId: string;
+  actorId: string;
+  actorName: string;
+  action: string;
+  source: string;
+  entityType: string;
+  entityId: string;
+  detail?: string;
+  ipAddress?: string;
+}) {
+  return prisma.tenantAuditLog.create({
+    data: {
+      tenantId: input.tenantId,
+      actorId: input.actorId,
+      actorName: input.actorName,
+      action: input.action,
+      source: input.source,
+      entityType: input.entityType,
+      entityId: input.entityId,
+      detail: input.detail ?? "",
+      ipAddress: input.ipAddress ?? "",
     },
-    {
-      id: `${fileName}-version`,
-      actor: "Carla Brandt",
-      action: "Neue Version hochgeladen",
-      source: "Upload",
-      timestamp: "28.06.2026 · 14:17",
-      detail: "Automatische Versionierung auf v3",
-    },
-  ];
+  });
 }

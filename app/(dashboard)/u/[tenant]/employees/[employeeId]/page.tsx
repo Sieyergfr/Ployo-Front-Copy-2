@@ -15,7 +15,7 @@ import {
   deleteEmployeeAction,
   updateEmployeeAction,
 } from "@/app/(dashboard)/u/[tenant]/employees/actions";
-import { makeAuditLogs } from "@/lib/audit";
+import { getAuditLogsForEntity } from "@/lib/audit";
 import { getEmployeeForTenant } from "@/lib/employee-service";
 import { getEmployeeContracts } from "@/lib/contract-service";
 import {
@@ -1048,10 +1048,10 @@ export default async function EmployeeDetailPage({
   const isEditing = edit === "1" && isEditableTab;
   const employeeHref = `/u/${tenant}/employees/${employee.id}`;
   const activeTabHref = isContractTab ? `${employeeHref}?tab=contract` : employeeHref;
-  const auditEntries = makeAuditLogs({
-    id: employee.id,
-    name: employee.name,
-    source: "Mitarbeiterakte",
+  const auditEntries = await getAuditLogsForEntity({
+    tenantSlug: tenant,
+    entityType: "employee",
+    entityId: employee.dbId ?? employee.id,
   });
   const employeeEditHref = isContractTab
     ? `${employeeHref}?tab=contract&edit=1`

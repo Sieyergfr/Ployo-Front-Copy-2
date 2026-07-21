@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/lib/auth";
+import { headers } from "next/headers";
 
 export const tenantRoles = {
   owner: "OWNER",
@@ -139,6 +141,10 @@ export async function createUniqueTenantSlug(name: string) {
 }
 
 export async function getTenantsForUser(userId: string) {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session?.user?.id) throw new Error("UNAUTHORIZED");
+  if (session.user.id !== userId) throw new Error("FORBIDDEN");
+
   return prisma.tenantMembership.findMany({
     where: { userId },
     orderBy: { createdAt: "asc" },

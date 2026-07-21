@@ -94,6 +94,8 @@ model Tenant {
   fileFolders  TenantFileFolder[]
   reminders    TenantReminder[]
   contracts    TenantEmployeeContract[]
+  sicknessReports TenantSicknessReport[]
+  auditLogs     TenantAuditLog[]
   settings     TenantSettings?
 }
 
@@ -328,9 +330,52 @@ model TenantEmployee {
   storageFiles             TenantFile[]
   storageFileFolders       TenantFileFolder[]
   contracts                TenantEmployeeContract[]
+  sicknessReports          TenantSicknessReport[]
 
   @@unique([tenantId, key])
   @@index([tenantId])
+}
+
+model TenantSicknessReport {
+  id                String         @id @default(cuid())
+  tenantId          String
+  employeeId        String
+  startDate         DateTime
+  endDate           DateTime?
+  status            String         @default("open")
+  certificateStatus String         @default("pending")
+  reportChannel     String         @default("app")
+  note              String         @default("")
+  reportedById      String         @default("")
+  reportedByName    String         @default("")
+  closedAt          DateTime?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  tenant            Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee          TenantEmployee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status])
+  @@index([tenantId, startDate])
+  @@index([employeeId])
+}
+
+model TenantAuditLog {
+  id         String   @id @default(cuid())
+  tenantId   String
+  actorId    String   @default("")
+  actorName  String
+  action     String
+  source     String
+  entityType String
+  entityId   String
+  detail     String   @default("")
+  ipAddress  String   @default("")
+  createdAt  DateTime @default(now())
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, entityType, entityId, createdAt])
+  @@index([actorId])
 }
 
 model TenantFile {

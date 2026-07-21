@@ -18,6 +18,8 @@ import {
 import { mapTenantFileToFileItem } from "@/lib/files";
 import { prisma } from "@/lib/prisma";
 import { headers } from "next/headers";
+import { requireTenantAccess } from "@/lib/tenant-access";
+import { canAccessFileAcl, getOptionalFileReadAccess } from "@/lib/file-access";
 
 type LocationRecord = {
   id: string;
@@ -66,6 +68,9 @@ type TenantFileRecord = {
   mimeType: string;
   extension: string;
   version: number;
+  accessRoleIdsJson: string;
+  accessUserIdsJson: string;
+  parent?: { accessRoleIdsJson: string; accessUserIdsJson: string } | null;
 };
 
 type TenantFileFolderRecord = {
@@ -257,16 +262,12 @@ async function getSessionUserId() {
 }
 
 export async function getTenantIdForLocations(tenantSlug: string) {
-  const tenant = await prisma.tenant.findUnique({
-    where: { slug: tenantSlug },
-    select: { id: true },
-  });
-
-  return tenant?.id ?? null;
+  return (await requireTenantAccess(tenantSlug, "locations", "read")).tenantId;
 }
 
 export async function getLocationsForTenant(tenantSlug: string) {
   const tenantId = await getTenantIdForLocations(tenantSlug);
+  const fileAccess = await getOptionalFileReadAccess(tenantSlug);
 
   if (!tenantId) {
     return null;
@@ -280,6 +281,7 @@ export async function getLocationsForTenant(tenantSlug: string) {
       storageFiles: {
         where: { status: "active" },
         orderBy: { updatedAt: "desc" },
+        include: { parent: { select: { accessRoleIdsJson: true, accessUserIdsJson: true } } },
       },
       storageFileFolders: {
         where: { status: "active" },
@@ -288,11 +290,17 @@ export async function getLocationsForTenant(tenantSlug: string) {
     },
   });
 
-  return records.map(toLocation);
+  return records.map((record) => toLocation({
+    ...record,
+    storageFiles: fileAccess
+      ? record.storageFiles.filter((file) => canAccessFileAcl(file.parent ?? file, fileAccess))
+      : [],
+  }));
 }
 
 export async function getLocationForTenant(tenantSlug: string, locationHandle: string) {
   const tenantId = await getTenantIdForLocations(tenantSlug);
+  const fileAccess = await getOptionalFileReadAccess(tenantSlug);
 
   if (!tenantId) {
     return null;
@@ -308,6 +316,7 @@ export async function getLocationForTenant(tenantSlug: string, locationHandle: s
       storageFiles: {
         where: { status: "active" },
         orderBy: { updatedAt: "desc" },
+        include: { parent: { select: { accessRoleIdsJson: true, accessUserIdsJson: true } } },
       },
       storageFileFolders: {
         where: { status: "active" },
@@ -316,7 +325,12 @@ export async function getLocationForTenant(tenantSlug: string, locationHandle: s
     },
   });
 
-  return record ? toLocation(record) : null;
+  return record ? toLocation({
+    ...record,
+    storageFiles: fileAccess
+      ? record.storageFiles.filter((file) => canAccessFileAcl(file.parent ?? file, fileAccess))
+      : [],
+  }) : null;
 }
 
 export function getLocationMetrics(locations: Location[]): LocationMetric[] {
@@ -357,6 +371,7 @@ export function getLocationMetrics(locations: Location[]): LocationMetric[] {
 }
 
 export async function requireLocationManager(tenantSlug: string) {
+  await requireTenantAccess(tenantSlug, "locations", "write");
   const userId = await getSessionUserId();
 
   if (!userId) {

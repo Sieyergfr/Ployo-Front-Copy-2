@@ -14,7 +14,7 @@ import {
   deleteLocationAction,
   updateLocationAction,
 } from "@/app/(dashboard)/u/[tenant]/standorte/actions";
-import { makeAuditLogs } from "@/lib/audit";
+import { getAuditLogsForEntity } from "@/lib/audit";
 import { getEmployeesForTenant } from "@/lib/employee-service";
 import { getLocationForTenant } from "@/lib/location-service";
 import {
@@ -680,10 +680,10 @@ export default async function LocationDetailPage({
   const locationHref = `/u/${tenant}/standorte/${location.id}`;
   const locationEditHref = `${locationHref}?edit=1`;
   const locationDbId = location.dbId ?? "";
-  const auditEntries = makeAuditLogs({
-    id: location.id,
-    name: location.name,
-    source: "Standortdetail",
+  const auditEntries = await getAuditLogsForEntity({
+    tenantSlug: tenant,
+    entityType: "location",
+    entityId: location.dbId ?? location.id,
   });
   const assignedEmployeeKeys = new Set(
     location.team.map((member) => member.employeeId ?? member.name),

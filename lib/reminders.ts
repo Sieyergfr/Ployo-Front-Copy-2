@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { headers } from "next/headers";
+import { requireTenantAccess } from "@/lib/tenant-access";
 
 export type ReminderPriority = "urgent" | "important" | "normal";
 
@@ -139,6 +140,7 @@ function toReminder(record: {
 }
 
 async function requireTenantReminderAccess(tenantSlug: string) {
+  await requireTenantAccess(tenantSlug, "reminders", "read");
   const session = await auth.api.getSession({
     headers: await headers(),
   });
@@ -310,6 +312,7 @@ export async function createTenantReminder(input: {
   notes?: string;
   linkedFiles?: string[];
 }) {
+  await requireTenantAccess(input.tenantSlug, "reminders", "write");
   const access = await requireTenantReminderAccess(input.tenantSlug);
 
   if (!access.canWrite) {
@@ -360,6 +363,7 @@ export async function updateTenantReminder(input: {
   notes?: string;
   linkedFiles?: string[];
 }) {
+  await requireTenantAccess(input.tenantSlug, "reminders", "write");
   const access = await requireTenantReminderAccess(input.tenantSlug);
 
   if (!access.canWrite) {
@@ -411,6 +415,7 @@ export async function completeTenantReminder(input: {
   tenantSlug: string;
   reminderId: string;
 }) {
+  await requireTenantAccess(input.tenantSlug, "reminders", "write");
   const access = await requireTenantReminderAccess(input.tenantSlug);
 
   if (!access.canWrite) {

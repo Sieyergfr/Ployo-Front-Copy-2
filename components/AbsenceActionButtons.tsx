@@ -1,11 +1,11 @@
 "use client";
 
 import { createVacationRequestAction } from "@/app/(dashboard)/u/[tenant]/urlaub/actions";
+import { createSicknessReportAction } from "@/app/(dashboard)/u/[tenant]/krankheit/actions";
 import DatePickerField from "@/components/DatePickerField";
 import FormSubmitButton from "@/components/FormSubmitButton";
 import { useUniversalPopup } from "@/components/UniversalPopup";
-import { employees as sampleEmployees } from "@/lib/employees";
-import { CalendarPlus, Plus, Stethoscope, Upload, X } from "lucide-react";
+import { CalendarPlus, Plus, Stethoscope, X } from "lucide-react";
 import { useState } from "react";
 
 type EmployeeOption = {
@@ -108,53 +108,30 @@ function VacationRequestForm({
   );
 }
 
-function SicknessReportForm({ onDone }: { onDone: () => void }) {
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const employees = sampleEmployees.map((employee) => ({
-    id: employee.id,
-    name: employee.name,
-    location: employee.location,
-  }));
-
+function SicknessReportForm({ tenant, employees, onDone }: { tenant: string; employees: EmployeeOption[]; onDone: () => void }) {
   return (
-    <form
-      className="flex flex-col gap-4"
-      onSubmit={(event) => {
-        event.preventDefault();
-        setIsSubmitting(true);
-        window.setTimeout(() => {
-          setIsSubmitting(false);
-          onDone();
-        }, 350);
-      }}
-    >
+    <form className="flex flex-col gap-4" action={createSicknessReportAction}>
+      <input type="hidden" name="tenant" value={tenant} />
       <div className="rounded-xl border border-border bg-bg p-3 text-[12.5px] leading-5 text-muted-2">
         Krankmeldung erfassen und optional direkt eine AU-Bescheinigung oder
         vorhandene Datei verknuepfen.
       </div>
 
-      <EmployeeSelect employees={employees} />
+      <EmployeeSelect employees={employees} name="employeeId" />
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="field">
           <label htmlFor="sick-start" className="label">
             Krank seit
           </label>
-          <DatePickerField id="sick-start" name="start" />
+          <DatePickerField id="sick-start" name="startDate" />
         </div>
         <div className="field">
           <label htmlFor="sick-end" className="label">
             Voraussichtlich bis
           </label>
-          <DatePickerField id="sick-end" name="end" />
+          <DatePickerField id="sick-end" name="endDate" />
         </div>
       </div>
-      <label className="checkbox-row">
-        <input type="checkbox" name="certificate" className="peer sr-only" />
-        <span className="checkbox" />
-        <span className="checkbox-label">
-          Arbeitsunfaehigkeitsbescheinigung liegt vor
-        </span>
-      </label>
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="field">
           <label htmlFor="sick-certificate-status" className="label">
@@ -189,30 +166,6 @@ function SicknessReportForm({ onDone }: { onDone: () => void }) {
         </div>
       </div>
 
-      <div className="rounded-xl border border-border bg-white p-3">
-        <label
-          htmlFor="sick-certificate-upload"
-          className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-border bg-bg px-4 py-4 transition-colors hover:border-muted"
-        >
-          <Upload size={18} className="text-muted-2" />
-          <span>
-            <span className="block text-[13px] font-semibold text-ink">
-              AU-Datei auswaehlen
-            </span>
-            <span className="mt-0.5 block text-[11.5px] text-muted">
-              PDF, PNG oder JPG
-            </span>
-          </span>
-        </label>
-        <input
-          id="sick-certificate-upload"
-          name="certificateFile"
-          type="file"
-          accept=".pdf,image/png,image/jpeg"
-          className="sr-only"
-        />
-      </div>
-
       <div className="field">
         <label htmlFor="sick-note" className="label">
           Notiz
@@ -228,25 +181,20 @@ function SicknessReportForm({ onDone }: { onDone: () => void }) {
         <button type="button" className="btn btn-secondary" onClick={onDone}>
           Abbrechen
         </button>
-        <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
-          {isSubmitting ? (
-            "Wird erfasst..."
-          ) : (
-            <>
-              <Stethoscope size={15} />
-              Krankmeldung erfassen
-            </>
-          )}
-        </button>
+        <FormSubmitButton Icon={Stethoscope} pendingLabel="Wird erfasst...">Krankmeldung erfassen</FormSubmitButton>
       </div>
     </form>
   );
 }
 
 function SicknessReportDrawer({
+  tenant,
+  employees,
   isOpen,
   onClose,
 }: {
+  tenant: string;
+  employees: EmployeeOption[];
   isOpen: boolean;
   onClose: () => void;
 }) {
@@ -293,7 +241,7 @@ function SicknessReportDrawer({
           </button>
         </div>
 
-        <SicknessReportForm onDone={onClose} />
+        <SicknessReportForm tenant={tenant} employees={employees} onDone={onClose} />
       </aside>
     </div>
   );
@@ -331,7 +279,7 @@ export function VacationRequestButton({
   );
 }
 
-export function SicknessReportButton() {
+export function SicknessReportButton({ tenant, employees }: { tenant: string; employees: EmployeeOption[] }) {
   const [isOpen, setIsOpen] = useState(false);
 
   return (
@@ -344,7 +292,7 @@ export function SicknessReportButton() {
         <Plus size={15} strokeWidth={2} />
         Krankmeldung erfassen
       </button>
-      <SicknessReportDrawer isOpen={isOpen} onClose={() => setIsOpen(false)} />
+      <SicknessReportDrawer tenant={tenant} employees={employees} isOpen={isOpen} onClose={() => setIsOpen(false)} />
     </>
   );
 }

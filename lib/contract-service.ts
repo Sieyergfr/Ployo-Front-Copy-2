@@ -1,7 +1,7 @@
-import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { uploadTenantFile } from "@/lib/storage/storage.service";
-import { headers } from "next/headers";
+import { requireTenantAccess } from "@/lib/tenant-access";
+import { canAccessFileAcl, getOptionalFileReadAccess } from "@/lib/file-access";
 
 export const contractStatuses = [
   "draft",
@@ -22,33 +22,27 @@ export const contractStatusLabels: Record<ContractStatus, string> = {
 };
 
 async function requireContractAccess(tenantSlug: string) {
-  const session = await auth.api.getSession({ headers: await headers() });
-
-  if (!session?.user?.id) {
-    throw new Error("UNAUTHORIZED");
-  }
-
-  const membership = await prisma.tenantMembership.findFirst({
-    where: { userId: session.user.id, tenant: { slug: tenantSlug } },
-    select: { tenantId: true },
-  });
-
-  if (!membership) {
-    throw new Error("FORBIDDEN");
-  }
-
-  return membership.tenantId;
+  return (await requireTenantAccess(tenantSlug, "payroll", "write")).tenantId;
 }
 
 export async function getEmployeeContracts(tenantSlug: string, employeeId: string) {
-  return prisma.tenantEmployeeContract.findMany({
+  const access = await requireTenantAccess(tenantSlug, "payroll", "read");
+  const fileAccess = await getOptionalFileReadAccess(tenantSlug);
+  const contracts = await prisma.tenantEmployeeContract.findMany({
     where: {
       employee: { OR: [{ id: employeeId }, { key: employeeId }] },
-      tenant: { slug: tenantSlug },
+      tenantId: access.tenantId,
     },
-    include: { file: true },
+    include: {
+      file: {
+        include: { parent: { select: { accessRoleIdsJson: true, accessUserIdsJson: true } } },
+      },
+    },
     orderBy: [{ startDate: "desc" }, { createdAt: "desc" }],
   });
+  return fileAccess
+    ? contracts.filter((contract) => canAccessFileAcl(contract.file.parent ?? contract.file, fileAccess))
+    : [];
 }
 
 export async function createEmployeeContract(input: {
