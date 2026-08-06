@@ -11,7 +11,14 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-export default function RegisterForm() {
+export default function RegisterForm({
+  next,
+  requiresEmailVerification = false,
+}: {
+  next?: string;
+  requiresEmailVerification?: boolean;
+}) {
+  const target = next ?? "/select";
   const router = useRouter();
   const { toast } = useToast();
   const [error, setError] = useState<string | null>(null);
@@ -33,7 +40,7 @@ export default function RegisterForm() {
         const termsAccepted = formData.get("terms") === "on";
 
         if (password !== passwordRepeat) {
-          const message = "Die Passwoerter stimmen nicht ueberein.";
+          const message = "Die Passwörter stimmen nicht überein.";
           setError(message);
           return;
         }
@@ -50,7 +57,7 @@ export default function RegisterForm() {
           email,
           password,
           name: `${firstName} ${lastName}`.trim(),
-          callbackURL: "/select",
+          callbackURL: target,
         });
 
         setIsPending(false);
@@ -66,12 +73,24 @@ export default function RegisterForm() {
           return;
         }
 
+        // Ist die Verifizierung aktiv, besteht noch keine Sitzung – der
+        // Nutzer muss zuerst den Link in der E-Mail bestätigen.
+        if (requiresEmailVerification) {
+          toast({
+            tone: "success",
+            title: "Konto erstellt",
+            subtitle: "Bitte bestätigen Sie Ihre E-Mail-Adresse.",
+          });
+          router.push(`/confirm?email=${encodeURIComponent(email)}`);
+          return;
+        }
+
         toast({
           tone: "success",
           title: "Konto erstellt",
-          subtitle: "Sie werden zur Unternehmensauswahl weitergeleitet.",
+          subtitle: "Sie werden weitergeleitet.",
         });
-        router.push("/select");
+        router.push(target);
         router.refresh();
       }}
     >
@@ -120,11 +139,11 @@ export default function RegisterForm() {
 
         <Checkbox id="terms" alignItems="start">
           Ich stimme den{" "}
-          <Link href="/terms" className="text-ink underline underline-offset-2">
+          <Link href="/agb" className="text-ink underline underline-offset-2">
             Nutzungsbedingungen
           </Link>{" "}
           und der{" "}
-          <Link href="/privacy" className="text-ink underline underline-offset-2">
+          <Link href="/datenschutz" className="text-ink underline underline-offset-2">
             Datenschutzerklärung
           </Link>{" "}
           zu.

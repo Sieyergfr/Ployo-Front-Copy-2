@@ -9,16 +9,20 @@ import {
 } from "@/components/FileActionButtons";
 import { FileReminderButton } from "@/components/ActionDrawers";
 import EmployeeContracts, { type EmployeeContractItem } from "@/components/EmployeeContracts";
+import EmployeeInfoRequestButton from "@/components/EmployeeInfoRequestButton";
 import { UnsavedChangesGuard } from "@/components/EditSafety";
 import FloatingEditBar from "@/components/FloatingEditBar";
 import {
   deleteEmployeeAction,
+  inviteEmployeeAction,
   updateEmployeeAction,
 } from "@/app/(dashboard)/u/[tenant]/employees/actions";
 import { getAuditLogsForEntity } from "@/lib/audit";
 import { getEmployeeForTenant } from "@/lib/employee-service";
+import { getInvitationStatusForEmail } from "@/lib/invitation-service";
 import { getEmployeeContracts } from "@/lib/contract-service";
 import {
+  CONTRACT_FILE_NOT_UPLOADED,
   employeeStatusConfig,
   type EmployeeStatus,
   type Employee,
@@ -37,11 +41,13 @@ import {
   Lock,
   MessageSquare,
   Pencil,
+  UserPlus,
 } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
-import { getFileUploadOptions, type FileFolder, type FileUploadOptions } from "@/lib/files";
+import { getFileUploadOptions } from "@/lib/files-server";
+import { type FileFolder, type FileUploadOptions } from "@/lib/files";
 
 export async function generateMetadata({
   params,
@@ -185,9 +191,35 @@ function PayrollTab({ employee }: { employee: Employee }) {
   );
 }
 
-function InfoRequestsCard({ employee }: { employee: Employee }) {
+function InfoRequestsCard({
+  employee,
+  tenant,
+  employeeHandle,
+}: {
+  employee: Employee;
+  tenant: string;
+  employeeHandle: string;
+}) {
   return (
-    <DetailCard title="Info-Anfragen" className="[&>h2]:mb-3.5">
+    <DetailCard
+      title={
+        <span className="flex flex-wrap items-center justify-between gap-2">
+          Info-Anfragen
+          <EmployeeInfoRequestButton
+            tenant={tenant}
+            employeeId={employee.dbId ?? ""}
+            employeeHandle={employeeHandle}
+            employeeName={employee.name}
+          />
+        </span>
+      }
+      className="[&>h2]:mb-3.5"
+    >
+      {employee.infoRequests.length === 0 && (
+        <p className="border-t border-border-soft pt-3 text-[12.5px] text-muted">
+          Noch keine Info-Anfragen erfasst.
+        </p>
+      )}
       {employee.infoRequests.map((request) => (
         <div key={request.id} className="border-t border-border-soft py-3">
           <div className="flex flex-wrap items-start justify-between gap-2">
@@ -574,7 +606,7 @@ function hasContractDetails(employee: Employee) {
   const contract = employee.contractDetails;
   const linkedFileMeta = contract.linkedFileMeta.trim().toLowerCase();
 
-  if (linkedFileMeta === "noch nicht hochgeladen") {
+  if (linkedFileMeta === CONTRACT_FILE_NOT_UPLOADED) {
     return false;
   }
 
@@ -599,7 +631,7 @@ function hasContractDetails(employee: Employee) {
 
     const normalized = value.trim().toLowerCase();
 
-    return normalized !== "" && normalized !== "noch nicht hochgeladen";
+    return normalized !== "" && normalized !== CONTRACT_FILE_NOT_UPLOADED;
   });
 }
 
@@ -1027,7 +1059,7 @@ export default async function EmployeeDetailPage({
   searchParams,
 }: PageProps<"/u/[tenant]/employees/[employeeId]">) {
   const { tenant, employeeId } = await params;
-  const { tab, edit } = await searchParams;
+  const { tab, edit, invited } = await searchParams;
   const [employee, roles, uploadOptions, contracts] = await Promise.all([
     getEmployeeForTenant(tenant, employeeId),
     getRolesForTenant(tenant),
@@ -1062,6 +1094,18 @@ export default async function EmployeeDetailPage({
     (employee.vacationTaken / employee.vacationTotal) * 100,
   );
   const statusOptions: EmployeeStatus[] = ["active", "vacation", "absent"];
+  const invitation =
+    employee.email && !employee.hasAccount
+      ? await getInvitationStatusForEmail(tenant, employee.email)
+      : null;
+  const hasPendingInvitation =
+    invitation?.status === "PENDING" && !invitation.expired;
+  const invitationHint = hasPendingInvitation
+    ? "Einladung ausstehend"
+    : invitation?.status === "PENDING" && invitation.expired
+      ? "Einladung abgelaufen"
+      : null;
+  const wasInvited = invited === "1" && Boolean(employee.email);
   const roleOptions = roles.length > 0
     ? roles.map((role) => role.name)
     : ["Mitarbeiter"];
@@ -1072,6 +1116,7 @@ export default async function EmployeeDetailPage({
       <form id="employee-edit-form" action={updateEmployeeAction}>
         <input type="hidden" name="tenant" value={tenant} />
         <input type="hidden" name="employeeId" value={employee.dbId ?? ""} />
+        <input type="hidden" name="employeeHandle" value={employee.id} />
         <input
           type="hidden"
           name="activeTab"
@@ -1115,6 +1160,15 @@ export default async function EmployeeDetailPage({
             <span className="font-mono text-[12px] text-muted">
               {employee.employeeNumber}
             </span>
+            {employee.hasAccount ? (
+              <span className="font-mono text-[12px] text-muted">
+                Account verknüpft
+              </span>
+            ) : invitationHint ? (
+              <span className="font-mono text-[12px] text-muted">
+                {invitationHint}
+              </span>
+            ) : null}
           </div>
         </div>
 
@@ -1134,6 +1188,27 @@ export default async function EmployeeDetailPage({
                 <MessageSquare size={14} />
                 Nachricht senden
               </button>
+              {!employee.hasAccount &&
+                (employee.email ? (
+                  <button
+                    type="submit"
+                    formAction={inviteEmployeeAction}
+                    className="btn btn-secondary btn-sm"
+                  >
+                    <UserPlus size={14} />
+                    {hasPendingInvitation ? "Erneut einladen" : "Einladen"}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    disabled
+                    title="Zum Einladen zuerst eine E-Mail-Adresse hinterlegen"
+                  >
+                    <UserPlus size={14} />
+                    Einladen
+                  </button>
+                ))}
               <Link href={employeeEditHref} className="btn btn-secondary btn-sm">
                 <Pencil size={14} />
                 Bearbeiten
@@ -1142,6 +1217,14 @@ export default async function EmployeeDetailPage({
           )}
         </div>
       </section>
+
+      {wasInvited && (
+        <div className="mb-4 rounded-card border border-success/25 bg-success/5 px-5 py-3.5 text-[13px] text-ink">
+          Einladung an <span className="font-medium">{employee.email}</span>{" "}
+          versendet. Sobald sie angenommen wurde, ist der Account mit dieser
+          Personalakte verknüpft.
+        </div>
+      )}
 
       <div className="mb-5 flex gap-[26px] border-b border-border">
         <Link
@@ -1477,7 +1560,11 @@ export default async function EmployeeDetailPage({
               </div>
             </DetailCard>
 
-              <InfoRequestsCard employee={employee} />
+              <InfoRequestsCard
+                employee={employee}
+                tenant={tenant}
+                employeeHandle={employee.id}
+              />
             </div>
 
             <div className="flex flex-col gap-4">

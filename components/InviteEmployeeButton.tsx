@@ -11,6 +11,7 @@ type InviteEmployeeButtonProps = {
   locations: string[];
   permissionRoles: string[];
   teams: string[];
+  employeeNumberRequired: boolean;
 };
 
 function InviteEmployeeForm({
@@ -18,6 +19,7 @@ function InviteEmployeeForm({
   locations,
   permissionRoles,
   teams,
+  employeeNumberRequired,
   onDone,
 }: InviteEmployeeButtonProps & { onDone: () => void }) {
   return (
@@ -148,11 +150,28 @@ function InviteEmployeeForm({
         </div>
       </div>
 
-      <div className="field">
-        <label htmlFor="invite-start-date" className="label">
-          Eintritt
-        </label>
-        <DatePickerField id="invite-start-date" name="startDate" />
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="field">
+          <label htmlFor="invite-start-date" className="label">
+            Eintritt
+          </label>
+          <DatePickerField id="invite-start-date" name="startDate" />
+        </div>
+
+        <div className="field">
+          <label htmlFor="invite-employee-number" className="label">
+            Personalnummer{employeeNumberRequired ? "" : " (optional)"}
+          </label>
+          <input
+            id="invite-employee-number"
+            name="employeeNumber"
+            className="input input-mono"
+            placeholder={
+              employeeNumberRequired ? "z. B. MA-0042" : "Wird automatisch vergeben"
+            }
+            required={employeeNumberRequired}
+          />
+        </div>
       </div>
 
       <p className="m-0 text-[12.5px] leading-[1.55] text-muted-2">

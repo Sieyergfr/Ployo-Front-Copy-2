@@ -8,6 +8,7 @@ import {
   updateTenantProfile,
   updateTenantSecurity,
 } from "@/lib/settings-service";
+import { updateAccountName } from "@/lib/account-service";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -164,6 +165,10 @@ export async function saveSettingsPopupAction(formData: FormData) {
     throw new Error("Einstellungen konnten nicht gespeichert werden.");
   }
 
+  if (category === "account") {
+    await updateAccountName(formString(formData, "accountName"));
+  }
+
   if (category === "company") {
     await updateTenantProfile({
       tenantSlug: tenant,
@@ -216,9 +221,7 @@ export async function saveSettingsPopupAction(formData: FormData) {
   if (category === "security") {
     await updateTenantSecurity({
       tenantSlug: tenant,
-      twoFactorRequired: formBool(formData, "twoFactor"),
-      sessionTimeout: formBool(formData, "sessionTimeout"),
-      auditRetentionMonths: formString(formData, "auditRetention"),
+      auditRetentionMonths: formString(formData, "auditRetentionMonths"),
     });
   }
 
@@ -234,7 +237,7 @@ export async function saveSettingsPopupAction(formData: FormData) {
       contactEmail: formString(formData, "receiptEmail"),
       logoUrl: formString(formData, "logoUrl"),
       primaryColor: formString(formData, "primaryColor"),
-      plan: formString(formData, "plan"),
+      plan: formString(formData, "planSelection") || formString(formData, "plan"),
       billingCycle: formString(formData, "paymentInterval"),
     });
   }

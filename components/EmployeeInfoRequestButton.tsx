@@ -1,34 +1,33 @@
 "use client";
 
+import { createEmployeeInfoRequestAction } from "@/app/(dashboard)/u/[tenant]/employees/actions";
+import DatePickerField from "@/components/DatePickerField";
+import FormSubmitButton from "@/components/FormSubmitButton";
 import { useUniversalPopup } from "@/components/UniversalPopup";
-import { FileUp, MessageSquarePlus, Send } from "lucide-react";
-import { useState } from "react";
+import { MessageSquarePlus, Send } from "lucide-react";
 
 function InfoRequestForm({
+  tenant,
+  employeeId,
+  employeeHandle,
   employeeName,
   onDone,
 }: {
+  tenant: string;
+  employeeId: string;
+  employeeHandle: string;
   employeeName: string;
   onDone: () => void;
 }) {
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
   return (
-    <form
-      className="flex flex-col gap-4"
-      onSubmit={(event) => {
-        event.preventDefault();
-        setIsSubmitting(true);
-        window.setTimeout(() => {
-          setIsSubmitting(false);
-          onDone();
-        }, 350);
-      }}
-    >
+    <form className="flex flex-col gap-4" action={createEmployeeInfoRequestAction}>
+      <input type="hidden" name="tenant" value={tenant} />
+      <input type="hidden" name="employeeId" value={employeeId} />
+      <input type="hidden" name="employeeHandle" value={employeeHandle} />
       <div className="rounded-xl border border-border bg-bg p-3 text-[12.5px] text-muted-2">
         Anfrage an <span className="font-semibold text-ink">{employeeName}</span>.
-        Dateien sind fuer Mitarbeiter optional, koennen aber ausdruecklich
-        angefordert werden.
+        Die Anfrage wird in der Personalakte dokumentiert. Eine automatische
+        Benachrichtigung an den Mitarbeiter erfolgt noch nicht.
       </div>
       <div className="field">
         <label htmlFor="info-request-title" className="label">
@@ -47,10 +46,10 @@ function InfoRequestForm({
           <label htmlFor="info-request-due" className="label">
             Frist
           </label>
-          <input id="info-request-due" name="due" type="date" className="input" />
+          <DatePickerField id="info-request-due" name="dueAt" />
         </div>
         <label className="checkbox-row mt-6">
-          <input type="checkbox" name="fileRequired" className="peer sr-only" />
+          <input type="checkbox" name="fileRequested" className="peer sr-only" />
           <span className="checkbox" />
           <span className="checkbox-label">Datei gewuenscht</span>
         </label>
@@ -66,43 +65,27 @@ function InfoRequestForm({
           placeholder="Kurz erklaeren, was hochgeladen oder bestaetigt werden soll"
         />
       </div>
-      <label
-        htmlFor="info-request-template"
-        className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-border bg-bg px-4 py-4 transition-colors hover:border-muted"
-      >
-        <FileUp size={18} className="text-muted-2" />
-        <span>
-          <span className="block text-[13px] font-semibold text-ink">
-            Vorlage anhaengen
-          </span>
-          <span className="mt-0.5 block text-[11.5px] text-muted">
-            Optional fuer Formulare oder Beispiele
-          </span>
-        </span>
-      </label>
-      <input id="info-request-template" type="file" className="sr-only" />
       <div className="mt-1 flex justify-end gap-2.5 border-t border-border-soft pt-4">
         <button type="button" className="btn btn-secondary" onClick={onDone}>
           Abbrechen
         </button>
-        <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
-          {isSubmitting ? (
-            "Wird gesendet..."
-          ) : (
-            <>
-              <Send size={15} />
-              Anfrage senden
-            </>
-          )}
-        </button>
+        <FormSubmitButton Icon={Send} pendingLabel="Wird gespeichert...">
+          Anfrage speichern
+        </FormSubmitButton>
       </div>
     </form>
   );
 }
 
 export default function EmployeeInfoRequestButton({
+  tenant,
+  employeeId,
+  employeeHandle,
   employeeName,
 }: {
+  tenant: string;
+  employeeId: string;
+  employeeHandle: string;
   employeeName: string;
 }) {
   const { openPopup, closePopup } = useUniversalPopup();
@@ -115,7 +98,13 @@ export default function EmployeeInfoRequestButton({
         openPopup({
           title: "Info anfragen",
           content: (
-            <InfoRequestForm employeeName={employeeName} onDone={closePopup} />
+            <InfoRequestForm
+              tenant={tenant}
+              employeeId={employeeId}
+              employeeHandle={employeeHandle}
+              employeeName={employeeName}
+              onDone={closePopup}
+            />
           ),
         })
       }

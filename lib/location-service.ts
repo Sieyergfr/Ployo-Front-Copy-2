@@ -15,6 +15,7 @@ import {
   type LocationStatus,
   type LocationTeamMember,
 } from "@/lib/locations";
+import { recordTenantAudit } from "@/lib/audit";
 import { mapTenantFileToFileItem } from "@/lib/files";
 import { prisma } from "@/lib/prisma";
 import { headers } from "next/headers";
@@ -422,6 +423,30 @@ export async function requireLocationManager(tenantSlug: string) {
   };
 }
 
+async function recordLocationAudit(
+  access: { tenantId: string; tenantSlug: string },
+  action: string,
+  locationId: string,
+  detail: string,
+) {
+  const tenantAccess = await requireTenantAccess(
+    access.tenantSlug,
+    "locations",
+    "write",
+  );
+
+  await recordTenantAudit({
+    tenantId: access.tenantId,
+    actorId: tenantAccess.userId,
+    actorName: tenantAccess.userName,
+    action,
+    source: "Standorte",
+    entityType: "location",
+    entityId: locationId,
+    detail,
+  });
+}
+
 export async function createTenantLocation(input: {
   tenantSlug: string;
   name: string;
@@ -442,7 +467,7 @@ export async function createTenantLocation(input: {
     employeeId: input.leadEmployeeId,
   });
 
-  return prisma.tenantLocation.create({
+  const location = await prisma.tenantLocation.create({
     data: {
       tenant: {
         connect: { id: access.tenantId },
@@ -463,6 +488,15 @@ export async function createTenantLocation(input: {
     },
     include: { address: true },
   });
+
+  await recordLocationAudit(
+    access,
+    "Standort angelegt",
+    location.id,
+    location.name,
+  );
+
+  return location;
 }
 
 export async function updateTenantLocation(input: {
@@ -491,7 +525,7 @@ export async function updateTenantLocation(input: {
     excludeLocationId: input.locationId,
   });
 
-  return prisma.tenantLocation.update({
+  const updated = await prisma.tenantLocation.update({
     where: {
       id: input.locationId,
       tenantId: access.tenantId,
@@ -521,6 +555,15 @@ export async function updateTenantLocation(input: {
     },
     include: { address: true },
   });
+
+  await recordLocationAudit(
+    access,
+    "Standort geändert",
+    updated.id,
+    updated.name,
+  );
+
+  return updated;
 }
 
 export async function addEmployeesToTenantLocation(input: {
@@ -598,6 +641,9 @@ export async function addEmployeesToTenantLocation(input: {
     employees: [...currentShiftPlan.employees, ...shiftEmployees],
   };
   const activity = parseJson<LocationActivity[]>(location.activityJson, []);
+  const actorName = (
+    await requireTenantAccess(input.tenantSlug, "locations", "write")
+  ).userName;
   const now = new Intl.DateTimeFormat("de-DE", {
     day: "2-digit",
     month: "2-digit",
@@ -620,7 +666,7 @@ export async function addEmployeesToTenantLocation(input: {
       ),
       activityJson: JSON.stringify([
         {
-          actor: "Carla Brandt",
+          actor: actorName,
           text:
             newMembers.length === 1
               ? `hat ${newMembers[0].name} dem Standort hinzugefügt`
@@ -632,6 +678,13 @@ export async function addEmployeesToTenantLocation(input: {
       ]),
     },
   });
+
+  await recordLocationAudit(
+    access,
+    "Mitarbeiter zu Standort hinzugefügt",
+    input.locationId,
+    newMembers.map((member) => member.name).join(", "),
+  );
 }
 
 export async function deleteTenantLocation(input: {
@@ -640,10 +693,17 @@ export async function deleteTenantLocation(input: {
 }) {
   const access = await requireLocationManager(input.tenantSlug);
 
-  await prisma.tenantLocation.delete({
+  const location = await prisma.tenantLocation.delete({
     where: {
       id: input.locationId,
       tenantId: access.tenantId,
     },
   });
+
+  await recordLocationAudit(
+    access,
+    "Standort gelöscht",
+    location.id,
+    location.name,
+  );
 }

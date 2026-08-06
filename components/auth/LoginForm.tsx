@@ -6,7 +6,7 @@ import PasswordInput from "@/components/inputs/password-input";
 import TextInput from "@/components/inputs/text-input";
 import { useToast } from "@/components/Toasts";
 import { authClient } from "@/lib/auth-client";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, MailCheck } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -16,11 +16,14 @@ type SocialProvider = "google" | "apple";
 
 type SocialProviderConfig = Record<SocialProvider, boolean>;
 
-export default function LoginForm() {
+export default function LoginForm({ next }: { next?: string }) {
+  const target = next ?? "/select";
   const router = useRouter();
   const { toast } = useToast();
   const [error, setError] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
+  const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
+  const [isResending, setIsResending] = useState(false);
   const [providerConfig, setProviderConfig] = useState<SocialProviderConfig>({
     apple: false,
     google: false,
@@ -55,6 +58,41 @@ export default function LoginForm() {
     };
   }, []);
 
+  async function handleResendVerification() {
+    if (!unverifiedEmail || isResending) {
+      return;
+    }
+
+    setIsResending(true);
+
+    const { error: resendError } = await authClient.sendVerificationEmail({
+      email: unverifiedEmail,
+      callbackURL: target,
+    });
+
+    setIsResending(false);
+
+    if (resendError) {
+      const message =
+        resendError.message ??
+        "Der Bestätigungslink konnte nicht versendet werden.";
+      setError(message);
+      toast({
+        tone: "error",
+        title: "Versand fehlgeschlagen",
+        subtitle: message,
+      });
+      return;
+    }
+
+    toast({
+      tone: "success",
+      title: "Bestätigungslink versendet",
+      subtitle: "Bitte prüfen Sie Ihr Postfach.",
+    });
+    router.push(`/confirm?email=${encodeURIComponent(unverifiedEmail)}`);
+  }
+
   async function handleSocialSignIn(provider: SocialProvider) {
     if (!providerConfig[provider]) {
       const message = `${provider === "google" ? "Google" : "Apple"} Login ist noch nicht konfiguriert.`;
@@ -67,7 +105,7 @@ export default function LoginForm() {
 
     const { error: signInError } = await authClient.signIn.social({
       provider,
-      callbackURL: "/select",
+      callbackURL: target,
       errorCallbackURL: "/login",
     });
 
@@ -90,6 +128,7 @@ export default function LoginForm() {
       onSubmit={async (event) => {
         event.preventDefault();
         setError(null);
+        setUnverifiedEmail(null);
         setIsPending(true);
 
         const formData = new FormData(event.currentTarget);
@@ -101,12 +140,23 @@ export default function LoginForm() {
           email,
           password,
           rememberMe,
-          callbackURL: "/select",
+          callbackURL: target,
         });
 
         setIsPending(false);
 
         if (signInError) {
+          if (signInError.code === "EMAIL_NOT_VERIFIED") {
+            setUnverifiedEmail(email);
+            toast({
+              tone: "error",
+              title: "E-Mail nicht bestätigt",
+              subtitle:
+                "Bitte bestätigen Sie Ihre E-Mail-Adresse, um sich anzumelden.",
+            });
+            return;
+          }
+
           const message = signInError.message ?? "Anmeldung fehlgeschlagen.";
           setError(message);
           toast({
@@ -119,10 +169,10 @@ export default function LoginForm() {
 
         toast({
           tone: "success",
-          title: "Willkommen zurueck",
-          subtitle: "Sie werden zur Unternehmensauswahl weitergeleitet.",
+          title: "Willkommen zurück",
+          subtitle: "Sie werden weitergeleitet.",
         });
-        router.push("/select");
+        router.push(target);
         router.refresh();
       }}
     >
@@ -152,6 +202,29 @@ export default function LoginForm() {
           Passwort vergessen?
         </Link>
       </div>
+
+      {unverifiedEmail && (
+        <div className="rounded-[10px] border border-danger/20 bg-danger/5 px-3 py-3 text-[12.5px] text-ink">
+          <div className="flex items-center gap-2 font-medium">
+            <MailCheck size={15} strokeWidth={2} />
+            E-Mail-Adresse noch nicht bestätigt
+          </div>
+          <p className="mt-1 text-muted">
+            {unverifiedEmail} wurde noch nicht bestätigt. Fordern Sie einen
+            neuen Bestätigungslink an, um sich anmelden zu können.
+          </p>
+          <button
+            type="button"
+            className="btn btn-secondary mt-3 w-full"
+            disabled={isResending}
+            onClick={handleResendVerification}
+          >
+            {isResending
+              ? "Wird versendet..."
+              : "Bestätigungslink erneut senden"}
+          </button>
+        </div>
+      )}
 
       {error && (
         <p className="rounded-[10px] border border-danger/20 bg-danger/5 px-3 py-2 text-[12.5px] text-danger">

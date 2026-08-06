@@ -1,3 +1,4 @@
+import { recordTenantAudit } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 import { uploadTenantFile } from "@/lib/storage/storage.service";
 import { requireTenantAccess } from "@/lib/tenant-access";
@@ -23,6 +24,26 @@ export const contractStatusLabels: Record<ContractStatus, string> = {
 
 async function requireContractAccess(tenantSlug: string) {
   return (await requireTenantAccess(tenantSlug, "payroll", "write")).tenantId;
+}
+
+async function recordContractAudit(input: {
+  tenantSlug: string;
+  action: string;
+  contractId: string;
+  detail: string;
+}) {
+  const access = await requireTenantAccess(input.tenantSlug, "payroll", "write");
+
+  await recordTenantAudit({
+    tenantId: access.tenantId,
+    actorId: access.userId,
+    actorName: access.userName,
+    action: input.action,
+    source: "Verträge",
+    entityType: "contract",
+    entityId: input.contractId,
+    detail: input.detail,
+  });
 }
 
 export async function getEmployeeContracts(tenantSlug: string, employeeId: string) {
@@ -97,7 +118,7 @@ export async function createEmployeeContract(input: {
     tags: ["Vertrag"],
   });
 
-  return prisma.$transaction(async (tx) => {
+  const created = await prisma.$transaction(async (tx) => {
     if (input.status === "active") {
       await tx.tenantEmployeeContract.updateMany({
         where: { tenantId, employeeId: employee.id, status: "active" },
@@ -140,6 +161,15 @@ export async function createEmployeeContract(input: {
 
     return contract;
   });
+
+  await recordContractAudit({
+    tenantSlug: input.tenantSlug,
+    action: "Vertrag hinterlegt",
+    contractId: created.id,
+    detail: `${employee.name}: ${input.title}`,
+  });
+
+  return created;
 }
 
 export async function updateEmployeeContractStatus(input: {
@@ -164,7 +194,7 @@ export async function updateEmployeeContractStatus(input: {
     throw new Error("Vertrag wurde nicht gefunden.");
   }
 
-  return prisma.$transaction(async (tx) => {
+  const updated = await prisma.$transaction(async (tx) => {
     if (input.status === "active") {
       await tx.tenantEmployeeContract.updateMany({
         where: { tenantId, employeeId: contract.employeeId, status: "active" },
@@ -181,4 +211,13 @@ export async function updateEmployeeContractStatus(input: {
       },
     });
   });
+
+  await recordContractAudit({
+    tenantSlug: input.tenantSlug,
+    action: "Vertragsstatus geändert",
+    contractId: updated.id,
+    detail: `${updated.title}: ${contractStatusLabels[input.status]}`,
+  });
+
+  return updated;
 }

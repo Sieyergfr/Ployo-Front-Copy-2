@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth";
+import { recordTenantAudit } from "@/lib/audit";
 import { fileFolders } from "@/lib/files";
 import { getStorageBucket, type StorageBucketId } from "@/lib/storage/buckets";
 import { buildStorageKey, getFileExtension } from "@/lib/storage/key-builder";
@@ -190,10 +191,46 @@ async function validateOwner(input: {
   return { ownerId: undefined, ownerName: "HR" };
 }
 
-async function fileToBuffer(file: File) {
+const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
+
+const allowedUploadExtensions = new Set([
+  "pdf",
+  "png",
+  "jpg",
+  "jpeg",
+  "webp",
+  "heic",
+  "doc",
+  "docx",
+  "xls",
+  "xlsx",
+  "ppt",
+  "pptx",
+  "txt",
+  "csv",
+  "zip",
+]);
+
+function validateUploadFile(file: File) {
   if (!file || file.size <= 0) {
     throw new Error("Bitte eine Datei auswählen.");
   }
+
+  if (file.size > MAX_UPLOAD_BYTES) {
+    throw new Error("Die Datei ist zu groß (maximal 15 MB).");
+  }
+
+  const extension = getFileExtension(file.name);
+
+  if (!extension || !allowedUploadExtensions.has(extension)) {
+    throw new Error(
+      "Dieser Dateityp wird nicht unterstützt (erlaubt: PDF, Bilder, Office-Dokumente, TXT, CSV, ZIP).",
+    );
+  }
+}
+
+async function fileToBuffer(file: File) {
+  validateUploadFile(file);
 
   return Buffer.from(await file.arrayBuffer());
 }
@@ -258,7 +295,7 @@ export async function uploadTenantFile(input: UploadTenantFileInput) {
     },
   });
 
-  return prisma.tenantFile.create({
+  const created = await prisma.tenantFile.create({
     data: {
       tenantId: access.tenantId,
       employeeId: ownerType === "employee" ? owner.ownerId : undefined,
@@ -294,6 +331,19 @@ export async function uploadTenantFile(input: UploadTenantFileInput) {
       provider: uploaded.provider,
     },
   });
+
+  await recordTenantAudit({
+    tenantId: access.tenantId,
+    actorId: access.userId,
+    actorName: access.userName,
+    action: "Datei hochgeladen",
+    source: "Dateien",
+    entityType: "file",
+    entityId: created.id,
+    detail: originalName,
+  });
+
+  return created;
 }
 
 export async function createTenantFileFolder(input: {
@@ -457,10 +507,23 @@ export async function softDeleteTenantFile(input: {
 }) {
   const access = await requireTenantFileAccess(input.tenantSlug);
 
-  return markObjectDeleted({
+  const deleted = await markObjectDeleted({
     tenantId: access.tenantId,
     fileId: input.fileId,
   });
+
+  await recordTenantAudit({
+    tenantId: access.tenantId,
+    actorId: access.userId,
+    actorName: access.userName,
+    action: "Datei gelöscht",
+    source: "Dateien",
+    entityType: "file",
+    entityId: deleted.id,
+    detail: deleted.displayName,
+  });
+
+  return deleted;
 }
 
 export async function getTenantFileSignedUrl(input: {
@@ -507,6 +570,17 @@ export async function getTenantFileSignedUrl(input: {
   if (!file) {
     throw new Error("Datei nicht gefunden.");
   }
+
+  await recordTenantAudit({
+    tenantId: access.tenantId,
+    actorId: access.userId,
+    actorName: access.userName,
+    action: "Datei abgerufen",
+    source: "Dateien",
+    entityType: "file",
+    entityId: file.id,
+    detail: file.displayName,
+  });
 
   return createReadSignedUrl({
     bucket: file.bucket,

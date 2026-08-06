@@ -98,7 +98,14 @@ export default async function AuthLayout ({
 
     return (
         <div className="fixed inset-0 flex w-full overflow-hidden">
-            <NavigationSidebar tenants={tenants} />
+            <NavigationSidebar
+                tenants={tenants}
+                user={{
+                    name: session.user.name || session.user.email,
+                    email: session.user.email,
+                    initials: getInitials(session.user.name || session.user.email),
+                }}
+            />
             <main className="main-content">
                 <div className="container">
                     {children}

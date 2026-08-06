@@ -3,7 +3,19 @@ import { recordTenantAudit } from "@/lib/audit";
 import { requireTenantAccess } from "@/lib/tenant-access";
 
 export type SicknessMetric = { label: string; value: string; caption: string; tone?: "danger" };
-export type CurrentSickness = { id: string; initials: string; name: string; location: string; since: string; days: string };
+export type CurrentSickness = {
+  id: string;
+  initials: string;
+  name: string;
+  location: string;
+  since: string;
+  days: string;
+  /** ISO-Werte + Detailfelder für das Bearbeitungsformular im Drawer. */
+  startDateIso: string;
+  endDateIso: string;
+  certificateStatus: string;
+  note: string;
+};
 export type SicknessChartItem = { month: string; count: number; height: number; current?: boolean };
 export type SicknessHistoryItem = { id: string; initials: string; name: string; location: string; startDate: string; endDate: string; days: string };
 export type SicknessDashboardData = {
@@ -53,7 +65,18 @@ export async function getSicknessForTenant(tenantSlug: string): Promise<Sickness
       { label: "Ø Dauer", value: average.toFixed(1), caption: "Tage je Krankmeldung" },
       { label: "Krankenquote", value: `${employeeCount ? ((active.length / employeeCount) * 100).toFixed(1) : "0.0"}%`, caption: "aller Mitarbeiter" },
     ],
-    current: active.map((record) => ({ id: record.id, initials: record.employee.initials, name: record.employee.name, location: record.employee.location, since: dateFormatter.format(record.startDate), days: String(inclusiveDays(record.startDate, now)) })),
+    current: active.map((record) => ({
+      id: record.id,
+      initials: record.employee.initials,
+      name: record.employee.name,
+      location: record.employee.location,
+      since: dateFormatter.format(record.startDate),
+      days: String(inclusiveDays(record.startDate, now)),
+      startDateIso: record.startDate.toISOString().slice(0, 10),
+      endDateIso: record.endDate ? record.endDate.toISOString().slice(0, 10) : "",
+      certificateStatus: record.certificateStatus,
+      note: record.note,
+    })),
     chart,
     history: finished.slice(0, 30).map((record) => ({ id: record.id, initials: record.employee.initials, name: record.employee.name, location: record.employee.location, startDate: shortDateFormatter.format(record.startDate), endDate: dateFormatter.format(record.endDate ?? record.updatedAt), days: `${inclusiveDays(record.startDate, record.endDate ?? record.updatedAt)} Tage` })),
   };
@@ -69,4 +92,59 @@ export async function createTenantSicknessReport(input: { tenantSlug: string; em
   const report = await prisma.tenantSicknessReport.create({ data: { tenantId: access.tenantId, employeeId: employee.id, startDate, endDate, certificateStatus: input.certificateStatus ?? "pending", reportChannel: input.reportChannel ?? "app", note: input.note?.trim() ?? "", reportedById: access.userId, reportedByName: access.userName } });
   await recordTenantAudit({ tenantId: access.tenantId, actorId: access.userId, actorName: access.userName, action: "Krankmeldung erfasst", source: "Krankheit", entityType: "sickness", entityId: report.id, detail: employee.name });
   return report;
+}
+
+async function requireSicknessReport(tenantSlug: string, reportId: string) {
+  const access = await requireTenantAccess(tenantSlug, "sickness", "write");
+  const report = await prisma.tenantSicknessReport.findFirst({
+    where: { id: reportId, tenantId: access.tenantId },
+    include: { employee: { select: { name: true } } },
+  });
+  if (!report) throw new Error("Krankmeldung nicht gefunden.");
+  return { access, report };
+}
+
+export async function updateTenantSicknessReport(input: {
+  tenantSlug: string;
+  reportId: string;
+  startDate: string;
+  endDate?: string;
+  certificateStatus?: string;
+  note?: string;
+}) {
+  const { access, report } = await requireSicknessReport(input.tenantSlug, input.reportId);
+  const startDate = new Date(`${input.startDate}T00:00:00.000Z`);
+  const endDate = input.endDate ? new Date(`${input.endDate}T00:00:00.000Z`) : null;
+  if (Number.isNaN(startDate.getTime()) || (endDate && endDate < startDate)) throw new Error("INVALID_SICKNESS_DATES");
+
+  const updated = await prisma.tenantSicknessReport.update({
+    where: { id: report.id },
+    data: {
+      startDate,
+      endDate,
+      certificateStatus: input.certificateStatus?.trim() || report.certificateStatus,
+      note: input.note?.trim() ?? report.note,
+    },
+  });
+
+  await recordTenantAudit({ tenantId: access.tenantId, actorId: access.userId, actorName: access.userName, action: "Krankmeldung aktualisiert", source: "Krankheit", entityType: "sickness", entityId: report.id, detail: report.employee.name });
+  return updated;
+}
+
+export async function closeTenantSicknessReport(input: {
+  tenantSlug: string;
+  reportId: string;
+  endDate?: string;
+}) {
+  const { access, report } = await requireSicknessReport(input.tenantSlug, input.reportId);
+  const endDate = input.endDate ? new Date(`${input.endDate}T00:00:00.000Z`) : startOfUtcDay();
+  if (Number.isNaN(endDate.getTime()) || endDate < startOfUtcDay(report.startDate)) throw new Error("INVALID_SICKNESS_DATES");
+
+  const updated = await prisma.tenantSicknessReport.update({
+    where: { id: report.id },
+    data: { status: "closed", endDate, closedAt: new Date() },
+  });
+
+  await recordTenantAudit({ tenantId: access.tenantId, actorId: access.userId, actorName: access.userName, action: "Krankmeldung beendet", source: "Krankheit", entityType: "sickness", entityId: report.id, detail: report.employee.name });
+  return updated;
 }

@@ -20,8 +20,9 @@ export default function SegmentedLinks({ links }: Props) {
 
                 return (
                     <Link key={link.href} href={link.href}
+                    aria-current={isActive ? "page" : undefined}
                     className={`segmented-link segmented-item ${
-                        pathname === link.href
+                        isActive
                             ? "segmented-item-active"
                             : "segmented-item-inactive"
                     }`}>

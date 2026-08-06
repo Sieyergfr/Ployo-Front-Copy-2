@@ -8,7 +8,10 @@ import {
   rejectWishFreeRequestAction,
   updateShiftAction,
 } from "@/app/(dashboard)/u/[tenant]/schichtplanung/actions";
-import { ShiftSettingsDrawerButton } from "@/components/ActionDrawers";
+import {
+  ShiftSettingsDrawerButton,
+  type ShiftPlanningSettings,
+} from "@/components/ActionDrawers";
 import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
 import DatePickerField from "@/components/DatePickerField";
 import FormSubmitButton from "@/components/FormSubmitButton";
@@ -49,6 +52,7 @@ type ShiftPlanningClientProps = {
   employees: ShiftEmployeeOption[];
   locations: ShiftLocationOption[];
   wishFreeRequests: WishFreeRequest[];
+  shiftSettings: ShiftPlanningSettings;
 };
 
 type DrawerState = {
@@ -528,6 +532,7 @@ function ShiftDrawer({
   drawer,
   employees,
   locations,
+  presets,
   onClose,
 }: {
   tenant: string;
@@ -536,6 +541,7 @@ function ShiftDrawer({
   drawer: DrawerState | null;
   employees: ShiftEmployeeOption[];
   locations: ShiftLocationOption[];
+  presets: ShiftPlanningSettings["presets"];
   onClose: () => void;
 }) {
   if (!drawer) {
@@ -544,6 +550,25 @@ function ShiftDrawer({
 
   const shift = drawer.shift;
   const action = shift?.dbId ? updateShiftAction : createShiftAction;
+
+  /** Übernimmt eine gespeicherte Standardschicht in die Zeitfelder. */
+  function applyPreset(preset: ShiftPlanningSettings["presets"][number]) {
+    const form = document.getElementById("shift-drawer-form");
+
+    if (!(form instanceof HTMLFormElement)) {
+      return;
+    }
+
+    const start = form.elements.namedItem("startTime");
+    const end = form.elements.namedItem("endTime");
+    const breakMinutes = form.elements.namedItem("breakMinutes");
+
+    if (start instanceof HTMLInputElement) start.value = preset.start;
+    if (end instanceof HTMLInputElement) end.value = preset.end;
+    if (breakMinutes instanceof HTMLInputElement) {
+      breakMinutes.value = String(Number.parseInt(preset.pause, 10) || 0);
+    }
+  }
 
   return (
     <div
@@ -590,6 +615,27 @@ function ShiftDrawer({
           <input type="hidden" name="week" value={week} />
           <input type="hidden" name="date" value={drawer.day.id} />
           {shift?.dbId && <input type="hidden" name="shiftId" value={shift.dbId} />}
+
+          {presets.length > 0 && (
+            <div className="field">
+              <span className="label">Standardschichten</span>
+              <div className="flex flex-wrap gap-2">
+                {presets.map((preset) => (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => applyPreset(preset)}
+                  >
+                    {preset.label}
+                    <span className="font-mono text-[10px] text-muted">
+                      {preset.start}-{preset.end}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="field">
@@ -738,6 +784,7 @@ export default function ShiftPlanningClient({
   employees,
   locations,
   wishFreeRequests,
+  shiftSettings,
 }: ShiftPlanningClientProps) {
   const router = useRouter();
   const [drawer, setDrawer] = useState<DrawerState | null>(null);
@@ -808,7 +855,12 @@ export default function ShiftPlanningClient({
               {conflictCount} Konflikte offen
             </span>
           </div>
-          <ShiftSettingsDrawerButton />
+          <ShiftSettingsDrawerButton
+            tenant={tenant}
+            year={year}
+            week={week}
+            settings={shiftSettings}
+          />
           <button
             type="button"
             className="relative inline-flex cursor-pointer items-center gap-2 rounded-[10px] border border-border bg-white px-3.5 py-2.5 text-[13px] font-semibold text-ink transition-colors hover:border-muted hover:bg-bg"
@@ -914,6 +966,7 @@ export default function ShiftPlanningClient({
         drawer={drawer}
         employees={employees}
         locations={locations}
+        presets={shiftSettings.presets}
         onClose={() => setDrawer(null)}
       />
 

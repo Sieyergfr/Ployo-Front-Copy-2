@@ -8,11 +8,8 @@ import {
   VersionUploadButton,
 } from "@/components/FileActionButtons";
 import { getAuditLogsForEntity } from "@/lib/audit";
-import {
-  getFilesPageData,
-  getFileVersions,
-  type FileItem,
-} from "@/lib/files";
+import { getFilesPageData } from "@/lib/files-server";
+import { getFileVersions, type FileItem } from "@/lib/files";
 import { Archive, ArrowLeft, FileText, Lock } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";

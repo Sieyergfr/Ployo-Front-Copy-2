@@ -47,7 +47,8 @@ import {
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
-import { getFileUploadOptions, type FileFolder, type FileUploadOptions } from "@/lib/files";
+import { getFileUploadOptions } from "@/lib/files-server";
+import { type FileFolder, type FileUploadOptions } from "@/lib/files";
 
 export async function generateMetadata({
   params,

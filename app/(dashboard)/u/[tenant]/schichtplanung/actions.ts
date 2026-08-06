@@ -9,6 +9,7 @@ import {
   createTenantWishFreeRequest,
   setTenantWishFreeRequestStatus,
 } from "@/lib/wish-free-service";
+import { updateTenantShiftSettings } from "@/lib/settings-service";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -48,6 +49,25 @@ function revalidateShiftViews(formData: FormData, tenant: string) {
   if (returnTo.startsWith(`/u/${tenant}/`)) {
     revalidatePath(returnTo.split("?")[0]);
   }
+}
+
+export async function updateShiftSettingsAction(formData: FormData) {
+  const tenant = formString(formData, "tenant");
+
+  if (!tenant) {
+    throw new Error("Planungseinstellungen konnten nicht gespeichert werden.");
+  }
+
+  await updateTenantShiftSettings({
+    tenantSlug: tenant,
+    weekStart: formString(formData, "weekStart"),
+    minStaffing: formString(formData, "minStaffing"),
+    breakRule: formString(formData, "breakRule"),
+    presetsJson: formString(formData, "presets", "[]"),
+  });
+
+  revalidateShiftViews(formData, tenant);
+  redirect(redirectPath(formData, tenant));
 }
 
 export async function createShiftAction(formData: FormData) {

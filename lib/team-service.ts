@@ -1,3 +1,4 @@
+import { recordTenantAudit } from "@/lib/audit";
 import { getEmployeesForTenant } from "@/lib/employee-service";
 import { type Employee } from "@/lib/employees";
 import { prisma } from "@/lib/prisma";
@@ -222,6 +223,24 @@ export async function requireTeamManager(tenantSlug: string) {
   return requireTenantAccess(tenantSlug, "teams", "write");
 }
 
+async function recordTeamAudit(
+  access: Awaited<ReturnType<typeof requireTeamManager>>,
+  action: string,
+  teamId: string,
+  detail: string,
+) {
+  await recordTenantAudit({
+    tenantId: access.tenantId,
+    actorId: access.userId,
+    actorName: access.userName,
+    action,
+    source: "Teams",
+    entityType: "team",
+    entityId: teamId,
+    detail,
+  });
+}
+
 export async function createTenantTeam(input: {
   tenantSlug: string;
   name: string;
@@ -242,7 +261,7 @@ export async function createTenantTeam(input: {
   );
   const leadMember = leadEmployee ? employeeToMember(leadEmployee, input.name) : null;
 
-  return prisma.tenantTeam.create({
+  const team = await prisma.tenantTeam.create({
     data: {
       tenantId: access.tenantId,
       key,
@@ -260,6 +279,10 @@ export async function createTenantTeam(input: {
         : undefined,
     },
   });
+
+  await recordTeamAudit(access, "Team angelegt", team.id, team.name);
+
+  return team;
 }
 
 export async function updateTenantTeam(input: {
@@ -276,7 +299,7 @@ export async function updateTenantTeam(input: {
     excludeTeamId: input.teamId,
   });
 
-  return prisma.tenantTeam.update({
+  const team = await prisma.tenantTeam.update({
     where: {
       id: input.teamId,
       tenantId: access.tenantId,
@@ -288,6 +311,10 @@ export async function updateTenantTeam(input: {
       colorClassName: input.colorClassName,
     },
   });
+
+  await recordTeamAudit(access, "Team geändert", team.id, team.name);
+
+  return team;
 }
 
 export async function deleteTenantTeam(input: {
@@ -296,12 +323,14 @@ export async function deleteTenantTeam(input: {
 }) {
   const access = await requireTeamManager(input.tenantSlug);
 
-  await prisma.tenantTeam.delete({
+  const team = await prisma.tenantTeam.delete({
     where: {
       id: input.teamId,
       tenantId: access.tenantId,
     },
   });
+
+  await recordTeamAudit(access, "Team gelöscht", team.id, team.name);
 }
 
 export async function setTenantTeamLead(input: {

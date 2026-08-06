@@ -55,6 +55,15 @@ model Account {
   @@map("account")
 }
 
+model RateLimit {
+  id          String  @id @default(cuid())
+  key         String?
+  count       Int?
+  lastRequest BigInt?
+
+  @@map("rateLimit")
+}
+
 model Verification {
   id         String    @id @default(cuid())
   identifier String
@@ -117,17 +126,22 @@ model TenantMembership {
 }
 
 model TenantInvitation {
-  id        String   @id @default(cuid())
-  email     String
-  role      String   @default("EMPLOYEE")
-  status    String   @default("PENDING")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  tenantId  String
-  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  id            String    @id @default(cuid())
+  email         String
+  role          String    @default("EMPLOYEE")
+  status        String    @default("PENDING")
+  token         String    @unique @default(cuid())
+  expiresAt     DateTime?
+  invitedByName String    @default("")
+  acceptedAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  tenantId      String
+  tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, email])
   @@index([email])
+  @@index([token])
 }
 
 model TenantSettings {
@@ -137,6 +151,9 @@ model TenantSettings {
   weekStart                  String   @default("monday")
   workHours                  String   @default("40 Stunden pro Woche")
   vacationDays               Int      @default(30)
+  shiftPresetsJson           String   @default("[]")
+  shiftMinStaffing           Int      @default(3)
+  shiftBreakRule             String   @default("30-6")
   employeeNumberRequired     Boolean  @default(true)
   archiveFormerEmployees     Boolean  @default(true)
   mailNotifications          Boolean  @default(true)
@@ -283,6 +300,7 @@ model TenantLocation {
 model TenantEmployee {
   id                       String   @id @default(cuid())
   key                      String
+  userId                   String?
   initials                 String
   name                     String
   employeeNumber           String
@@ -333,7 +351,9 @@ model TenantEmployee {
   sicknessReports          TenantSicknessReport[]
 
   @@unique([tenantId, key])
+  @@unique([tenantId, employeeNumber])
   @@index([tenantId])
+  @@index([userId])
 }
 
 model TenantSicknessReport {

@@ -1,26 +1,16 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import { ToastProvider } from "@/components/Toasts";
 import { UniversalPopupProvider } from "@/components/UniversalPopup";
 import "./globals.css";
 import { inter, jetbrainsMono, spaceGrotesk } from "./fonts";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
 
 export const metadata: Metadata = {
   title: {
     default: "Ployo",
     template: "Ployo | %s",
   },
-  description: "Ployo Personalakte",
+  description:
+    "Ployo – die digitale Personalakte für kleine und mittlere Unternehmen: Mitarbeiterverwaltung, Schichtplanung, Urlaub und Dokumente an einem Ort.",
 };
 
 export default function RootLayout({
@@ -30,7 +20,7 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="en"
+      lang="de"
       className={`${spaceGrotesk.variable} ${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">

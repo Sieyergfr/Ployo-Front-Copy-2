@@ -1,9 +1,15 @@
 import { auth } from "@/lib/auth";
 import { normalizeAddressInput, type AddressInput } from "@/lib/address";
+import { recordTenantAudit } from "@/lib/audit";
+import { isEmailConfigured, sendInvitationEmail } from "@/lib/email";
+import { buildInvitationUrl } from "@/lib/invitation-service";
 import { prisma } from "@/lib/prisma";
-import { isReservedTenantSlug, slugify } from "@/lib/tenants";
+import { parseShiftPresets } from "@/lib/shift-presets";
+import { isReservedTenantSlug, normalizeLogoUrl, slugify } from "@/lib/tenants";
 import { headers } from "next/headers";
 import { requireTenantAccess } from "@/lib/tenant-access";
+
+const INVITATION_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 
 export type TenantSettingsView = Awaited<ReturnType<typeof getTenantSettings>>;
 
@@ -56,6 +62,55 @@ async function getSessionUserId() {
   });
 
   return session?.user?.id ?? null;
+}
+
+/**
+ * Benachrichtigungs-Schalter für die In-App-Anzeige. Bewusst über die
+ * Mandantenmitgliedschaft geladen (kein settings-Recht nötig), da jeder
+ * Nutzer seine eigenen Hinweise sieht.
+ */
+export async function getNotificationPreferences(tenantSlug: string) {
+  const access = await requireTenantAccess(tenantSlug, "employees", "read");
+  const settings = await prisma.tenantSettings.findUnique({
+    where: { tenantId: access.tenantId },
+    select: {
+      inAppNotifications: true,
+      deadlineAlerts: true,
+      absenceAlerts: true,
+      shiftAlerts: true,
+    },
+  });
+
+  return {
+    inAppNotifications: settings?.inAppNotifications ?? true,
+    deadlineAlerts: settings?.deadlineAlerts ?? true,
+    absenceAlerts: settings?.absenceAlerts ?? true,
+    shiftAlerts: settings?.shiftAlerts ?? true,
+  };
+}
+
+export async function updateTenantShiftSettings(input: {
+  tenantSlug: string;
+  weekStart?: string;
+  minStaffing?: string;
+  breakRule?: string;
+  presetsJson?: string;
+}) {
+  const access = await requireSettingsManager(input.tenantSlug);
+
+  await ensureTenantSettings(access.tenantId);
+
+  const presets = parseShiftPresets(input.presetsJson ?? "[]");
+
+  return prisma.tenantSettings.update({
+    where: { tenantId: access.tenantId },
+    data: {
+      weekStart: input.weekStart === "sunday" ? "sunday" : "monday",
+      shiftMinStaffing: normalizeInt(input.minStaffing, 3),
+      shiftBreakRule: optionalString(input.breakRule, 16) || "30-6",
+      shiftPresetsJson: JSON.stringify(presets),
+    },
+  });
 }
 
 export async function requireSettingsManager(tenantSlug: string) {
@@ -194,7 +249,7 @@ export async function updateTenantProfile(input: {
       size: optionalNullableString(input.size, 64),
       industry: optionalNullableString(input.industry),
       contactEmail: normalizeEmail(input.contactEmail),
-      logoUrl: optionalNullableString(input.logoUrl, 250_000),
+      logoUrl: normalizeLogoUrl(input.logoUrl),
       primaryColor: optionalString(input.primaryColor, 16) || "#2A6FDB",
       plan: normalizePlan(input.plan),
       billingCycle: normalizeBillingCycle(input.billingCycle),
@@ -275,30 +330,58 @@ export async function updateTenantSecurity(input: {
 
   await ensureTenantSettings(access.tenantId);
 
-  return prisma.tenantSettings.update({
+  const updated = await prisma.tenantSettings.update({
     where: { tenantId: access.tenantId },
     data: {
-      twoFactorRequired: normalizeBool(input.twoFactorRequired),
-      sessionTimeout: normalizeBool(input.sessionTimeout),
+      // 2FA und Session-Timeout sind noch nicht implementiert; die Spalten
+      // werden hier bewusst nicht überschrieben, solange die Oberfläche
+      // keine Schalter dafür anbietet.
+      ...(input.twoFactorRequired === undefined
+        ? {}
+        : { twoFactorRequired: normalizeBool(input.twoFactorRequired) }),
+      ...(input.sessionTimeout === undefined
+        ? {}
+        : { sessionTimeout: normalizeBool(input.sessionTimeout) }),
       auditRetentionMonths: normalizeInt(input.auditRetentionMonths, 24),
     },
   });
+
+  const session = await auth.api.getSession({ headers: await headers() });
+
+  await recordTenantAudit({
+    tenantId: access.tenantId,
+    actorId: access.userId,
+    actorName: session?.user?.name || session?.user?.email || "System",
+    action: "Sicherheitseinstellungen geändert",
+    source: "Einstellungen",
+    entityType: "settings",
+    entityId: updated.id,
+    detail: `Audit-Aufbewahrung: ${updated.auditRetentionMonths} Monate`,
+  });
+
+  return updated;
 }
 
 export async function createTenantInvitation(input: {
   tenantSlug: string;
   email: string;
   role: string;
+  source?: string;
 }) {
   const access = await requireSettingsManager(input.tenantSlug);
   const email = normalizeEmail(input.email);
   const role = input.role === "ADMIN" || input.role === "HR" ? input.role : "EMPLOYEE";
 
   if (!email) {
-    throw new Error("Gueltige E-Mail ist erforderlich.");
+    throw new Error("Gültige E-Mail ist erforderlich.");
   }
 
-  return prisma.tenantInvitation.upsert({
+  const session = await auth.api.getSession({ headers: await headers() });
+  const invitedByName = session?.user?.name || session?.user?.email || "";
+  const expiresAt = new Date(Date.now() + INVITATION_TTL_MS);
+  const token = crypto.randomUUID();
+
+  const invitation = await prisma.tenantInvitation.upsert({
     where: {
       tenantId_email: {
         tenantId: access.tenantId,
@@ -310,12 +393,47 @@ export async function createTenantInvitation(input: {
       email,
       role,
       status: "PENDING",
+      token,
+      expiresAt,
+      invitedByName,
     },
     update: {
       role,
       status: "PENDING",
+      token,
+      expiresAt,
+      acceptedAt: null,
+      invitedByName,
+    },
+    include: {
+      tenant: { select: { name: true } },
     },
   });
+
+  if (isEmailConfigured()) {
+    try {
+      await sendInvitationEmail({
+        to: email,
+        tenantName: invitation.tenant.name,
+        url: buildInvitationUrl(invitation.token),
+      });
+    } catch (error) {
+      console.error("[invitation] E-Mail-Versand fehlgeschlagen:", error);
+    }
+  }
+
+  await recordTenantAudit({
+    tenantId: access.tenantId,
+    actorId: access.userId,
+    actorName: invitedByName || "System",
+    action: "Einladung erstellt",
+    source: input.source ?? "Einstellungen",
+    entityType: "invitation",
+    entityId: invitation.id,
+    detail: `${email} (${role})`,
+  });
+
+  return invitation;
 }
 
 export async function deleteTenantInvitation(input: {

@@ -1,6 +1,10 @@
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
+import { isEmailConfigured, sendInvitationEmail } from "@/lib/email";
+import { buildInvitationUrl } from "@/lib/invitation-service";
 import { headers } from "next/headers";
+
+const INVITATION_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 
 export const tenantRoles = {
   owner: "OWNER",
@@ -11,10 +15,15 @@ export type TenantRole = (typeof tenantRoles)[keyof typeof tenantRoles];
 
 const reservedTenantSlugs = new Set([
   "admin",
+  "agb",
   "api",
   "app",
   "auth",
+  "datenschutz",
+  "impressum",
+  "invite",
   "login",
+  "logout",
   "ployo",
   "register",
   "select",
@@ -105,6 +114,34 @@ function normalizeEmail(value: string | undefined) {
   return email.slice(0, 255);
 }
 
+/**
+ * Erlaubt nur https-URLs oder eingebettete Bilder (data:image/*),
+ * damit kein beliebiger String als <img src> gerendert wird.
+ */
+export function normalizeLogoUrl(value: string | undefined) {
+  const trimmed = value?.trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  if (trimmed.startsWith("data:image/")) {
+    return trimmed.slice(0, 250_000);
+  }
+
+  try {
+    const url = new URL(trimmed);
+
+    if (url.protocol === "https:") {
+      return trimmed.slice(0, 2_048);
+    }
+  } catch {
+    // kein gültiges URL-Format
+  }
+
+  return null;
+}
+
 export function isReservedTenantSlug(slug: string) {
   return reservedTenantSlugs.has(slug);
 }
@@ -184,7 +221,7 @@ export async function createTenantForOwner(input: CreateTenantInput) {
       .map((invitation) => [invitation.email, invitation]) ?? [],
   );
 
-  return prisma.tenant.create({
+  const tenant = await prisma.tenant.create({
     data: {
       name,
       slug,
@@ -193,12 +230,15 @@ export async function createTenantForOwner(input: CreateTenantInput) {
       size: optionalString(input.size, 64),
       industry: optionalString(input.industry),
       contactEmail: normalizeEmail(input.contactEmail),
-      logoUrl: optionalString(input.logoUrl, 250_000),
+      logoUrl: normalizeLogoUrl(input.logoUrl),
       primaryColor: normalizeCode(input.primaryColor, "#2A6FDB", 16),
       plan: normalizePlan(input.plan),
       billingCycle: normalizeBillingCycle(input.billingCycle),
       invitations: {
-        create: Array.from(invitationsByEmail.values()),
+        create: Array.from(invitationsByEmail.values()).map((invitation) => ({
+          ...invitation,
+          expiresAt: new Date(Date.now() + INVITATION_TTL_MS),
+        })),
       },
       memberships: {
         create: {
@@ -212,4 +252,20 @@ export async function createTenantForOwner(input: CreateTenantInput) {
       memberships: true,
     },
   });
+
+  if (isEmailConfigured()) {
+    for (const invitation of tenant.invitations) {
+      try {
+        await sendInvitationEmail({
+          to: invitation.email,
+          tenantName: tenant.name,
+          url: buildInvitationUrl(invitation.token),
+        });
+      } catch (error) {
+        console.error("[invitation] E-Mail-Versand fehlgeschlagen:", error);
+      }
+    }
+  }
+
+  return tenant;
 }

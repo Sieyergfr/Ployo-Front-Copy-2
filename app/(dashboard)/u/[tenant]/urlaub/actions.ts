@@ -4,6 +4,7 @@ import {
   createTenantVacationRequest,
   deleteTenantVacationRequest,
   setTenantVacationRequestStatus,
+  updateTenantVacationRequest,
 } from "@/lib/vacation-service";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -65,6 +66,28 @@ export async function createVacationRequestAction(formData: FormData) {
   await createTenantVacationRequest({
     tenantSlug: tenant,
     employeeId,
+    startDate,
+    endDate,
+    note: formString(formData, "note"),
+  });
+
+  revalidatePath(vacationPath(tenant));
+  redirect(vacationPath(tenant));
+}
+
+export async function updateVacationRequestAction(formData: FormData) {
+  const tenant = formString(formData, "tenant");
+  const requestId = formString(formData, "requestId");
+  const startDate = formString(formData, "startDate");
+  const endDate = formString(formData, "endDate");
+
+  if (!tenant || !requestId || !startDate || !endDate) {
+    throw new Error("Urlaubsantrag konnte nicht aktualisiert werden.");
+  }
+
+  await updateTenantVacationRequest({
+    tenantSlug: tenant,
+    requestId,
     startDate,
     endDate,
     note: formString(formData, "note"),

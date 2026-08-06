@@ -1,6 +1,5 @@
 "use client";
 
-import { employees } from "@/lib/employees";
 import { Check, ChevronDown, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 
@@ -32,7 +31,7 @@ export default function EmployeeSelector({
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [selectedIds, setSelectedIds] = useState(defaultSelectedIds);
-  const employeeOptions = options ?? employees;
+  const employeeOptions = useMemo(() => options ?? [], [options]);
   const selectedEmployees = employeeOptions.filter((employee) =>
     selectedIds.includes(employee.id),
   );

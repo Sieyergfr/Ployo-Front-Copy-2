@@ -6,8 +6,8 @@ import {
   type AddressInput,
 } from "@/lib/address";
 import {
-  employees as sampleEmployees,
   type Employee,
+  CONTRACT_FILE_NOT_UPLOADED,
   type EmployeeContractDetails,
   type EmployeeDocument,
   type EmployeeFile,
@@ -19,8 +19,10 @@ import {
   type InfoRequest,
   type PayrollStatement,
 } from "@/lib/employees";
+import { recordTenantAudit } from "@/lib/audit";
 import { mapTenantFileToFileItem } from "@/lib/files";
 import { prisma } from "@/lib/prisma";
+import { purgeTenantFiles } from "@/lib/storage/delete";
 import { headers } from "next/headers";
 import { requireTenantAccess } from "@/lib/tenant-access";
 import { canAccessFileAcl, getOptionalFileReadAccess } from "@/lib/file-access";
@@ -28,6 +30,7 @@ import { canAccessFileAcl, getOptionalFileReadAccess } from "@/lib/file-access";
 type EmployeeRecord = {
   id: string;
   key: string;
+  userId?: string | null;
   initials: string;
   name: string;
   employeeNumber: string;
@@ -156,8 +159,6 @@ type EmployeeMutationInput = {
   vacation?: string;
   contractDetailsSubmitted?: boolean;
 };
-
-const sampleEmployee = sampleEmployees[0];
 
 function parseJson<T>(value: string, fallback: T): T {
   try {
@@ -315,7 +316,7 @@ function toEmployee(record: EmployeeRecord): Employee {
   };
   const contractDetails =
     parsedContractDetails.linkedFileMeta.trim().toLowerCase() ===
-    "noch nicht hochgeladen"
+    CONTRACT_FILE_NOT_UPLOADED
       ? {
           ...parsedContractDetails,
           contractType: "",
@@ -384,6 +385,7 @@ function toEmployee(record: EmployeeRecord): Employee {
     status: normalizeStatus(record.status),
     email: record.email,
     phone: record.phone,
+    hasAccount: Boolean(record.userId),
     address: formatAddress(record.workAddress),
     addressFields: addressDefaults(record.workAddress),
     vacationRemaining: record.vacationRemaining,
@@ -411,6 +413,17 @@ async function getSessionUserId() {
 
 export async function getTenantIdForEmployees(tenantSlug: string) {
   return (await requireTenantAccess(tenantSlug, "employees", "read")).tenantId;
+}
+
+/** Steuert, ob beim Anlegen eine Personalnummer eingegeben werden muss. */
+export async function isEmployeeNumberRequired(tenantSlug: string) {
+  const tenantId = await getTenantIdForEmployees(tenantSlug);
+  const settings = await prisma.tenantSettings.findUnique({
+    where: { tenantId },
+    select: { employeeNumberRequired: true },
+  });
+
+  return settings?.employeeNumberRequired ?? false;
 }
 
 export async function getEmployeesForTenant(tenantSlug: string) {
@@ -548,6 +561,17 @@ async function nextEmployeeNumber(tenantId: string) {
   }
 }
 
+/** Prisma-Fehlercode für die Verletzung eines Unique-Constraints. */
+function isUniqueConstraintError(error: unknown, target: string) {
+  if (typeof error !== "object" || error === null) {
+    return false;
+  }
+
+  const { code, meta } = error as { code?: string; meta?: { target?: unknown } };
+
+  return code === "P2002" && JSON.stringify(meta?.target ?? "").includes(target);
+}
+
 async function syncTeamMemberSnapshots(employee: Employee) {
   if (!employee.dbId) {
     return;
@@ -569,7 +593,8 @@ async function syncTeamMemberSnapshots(employee: Employee) {
 export async function createTenantEmployee(input: EmployeeMutationInput) {
   await requireEmployeeManager(input.tenantSlug);
 
-  const tenantId = await getTenantIdForEmployees(input.tenantSlug);
+  const access = await requireTenantAccess(input.tenantSlug, "employees", "write");
+  const tenantId = access.tenantId;
 
   if (!tenantId) {
     throw new Error("Mandant nicht gefunden.");
@@ -583,10 +608,20 @@ export async function createTenantEmployee(input: EmployeeMutationInput) {
   const role = input.role?.trim() || "Mitarbeiter";
   const team = input.team?.trim() || "";
   const weeklyHours = input.weeklyHours?.trim() || "38 Std/Woche";
-  const employeeNumber =
-    input.employeeNumber?.trim() || (await nextEmployeeNumber(tenantId));
+  const explicitEmployeeNumber = input.employeeNumber?.trim() || "";
+  const settings = await prisma.tenantSettings.findUnique({
+    where: { tenantId },
+    select: { employeeNumberRequired: true },
+  });
 
-  const record = await prisma.tenantEmployee.create({
+  if (settings?.employeeNumberRequired && !explicitEmployeeNumber) {
+    throw new Error(
+      "Für diesen Mandanten ist eine Personalnummer verpflichtend. Bitte eine Personalnummer angeben.",
+    );
+  }
+
+  const createRecord = (employeeNumber: string) =>
+    prisma.tenantEmployee.create({
     data: {
       tenant: {
         connect: { id: tenantId },
@@ -595,7 +630,7 @@ export async function createTenantEmployee(input: EmployeeMutationInput) {
       initials,
       name,
       employeeNumber,
-      birthDate: input.birthDate?.trim() || sampleEmployee.birthDate,
+      birthDate: input.birthDate?.trim() || "",
       birthPlace: input.birthPlace?.trim() || "",
       nationality: input.nationality?.trim() || "",
       maritalStatus: input.maritalStatus?.trim() || "",
@@ -650,6 +685,46 @@ export async function createTenantEmployee(input: EmployeeMutationInput) {
         orderBy: { name: "asc" },
       },
     },
+    });
+
+  // Die automatische Personalnummer wird ohne Sperre ermittelt. Bei
+  // gleichzeitigen Anlagen greift der Unique-Constraint – dann neu vergeben.
+  let record: Awaited<ReturnType<typeof createRecord>> | null = null;
+
+  for (let attempt = 0; attempt < 5 && !record; attempt += 1) {
+    const employeeNumber =
+      explicitEmployeeNumber || (await nextEmployeeNumber(tenantId));
+
+    try {
+      record = await createRecord(employeeNumber);
+    } catch (error) {
+      const isCollision = isUniqueConstraintError(error, "employeeNumber");
+
+      if (!isCollision || explicitEmployeeNumber) {
+        if (isCollision) {
+          throw new Error(
+            `Die Personalnummer "${explicitEmployeeNumber}" ist bereits vergeben.`,
+          );
+        }
+
+        throw error;
+      }
+    }
+  }
+
+  if (!record) {
+    throw new Error("Personalnummer konnte nicht vergeben werden.");
+  }
+
+  await recordTenantAudit({
+    tenantId,
+    actorId: access.userId,
+    actorName: access.userName,
+    action: "Mitarbeiter angelegt",
+    source: "Mitarbeiter",
+    entityType: "employee",
+    entityId: record.id,
+    detail: record.name,
   });
 
   return toEmployee(record);
@@ -658,7 +733,8 @@ export async function createTenantEmployee(input: EmployeeMutationInput) {
 export async function updateTenantEmployee(input: EmployeeMutationInput & { employeeId: string }) {
   await requireEmployeeManager(input.tenantSlug);
 
-  const tenantId = await getTenantIdForEmployees(input.tenantSlug);
+  const access = await requireTenantAccess(input.tenantSlug, "employees", "write");
+  const tenantId = access.tenantId;
 
   if (!tenantId) {
     throw new Error("Mandant nicht gefunden.");
@@ -739,22 +815,19 @@ export async function updateTenantEmployee(input: EmployeeMutationInput & { empl
     ),
     vacation: contractValue(input.vacation, currentEmployee.contractDetails.vacation),
   };
-  const key =
-    name === current.name
-      ? current.key
-      : await createUniqueEmployeeKey({
-          tenantId,
-          name,
-          excludeEmployeeId: input.employeeId,
-        });
+  // Der Key bleibt bei Umbenennungen stabil, damit URLs und Verweise
+  // (Erinnerungen, Bookmarks) nicht brechen.
+  const key = current.key;
 
-  const record = await prisma.tenantEmployee.update({
+  const nextNumber = input.employeeNumber?.trim() || current.employeeNumber;
+  const record = await prisma.tenantEmployee
+    .update({
     where: { id: input.employeeId },
     data: {
       key,
       initials: initialsForName(name),
       name,
-      employeeNumber: input.employeeNumber?.trim() || current.employeeNumber,
+      employeeNumber: nextNumber,
       birthDate: input.birthDate?.trim() ?? current.birthDate,
       birthPlace: input.birthPlace?.trim() ?? current.birthPlace,
       nationality: input.nationality?.trim() ?? current.nationality,
@@ -795,37 +868,175 @@ export async function updateTenantEmployee(input: EmployeeMutationInput & { empl
       privateAddress: true,
       workAddress: true,
     },
-  });
+    })
+    .catch((error: unknown) => {
+      if (isUniqueConstraintError(error, "employeeNumber")) {
+        throw new Error(
+          `Die Personalnummer "${nextNumber}" ist bereits an einen anderen Mitarbeiter vergeben.`,
+        );
+      }
+
+      throw error;
+    });
   const employee = toEmployee(record);
 
   await syncTeamMemberSnapshots(employee);
 
+  const sensitiveChanges = [
+    input.iban !== undefined && input.iban !== current.iban ? "IBAN" : null,
+    input.socialSecurityNumber !== undefined &&
+    input.socialSecurityNumber !== current.socialSecurityNumber
+      ? "SV-Nummer"
+      : null,
+    input.taxId !== undefined && input.taxId !== current.taxId ? "Steuer-ID" : null,
+    input.healthInsurance !== undefined &&
+    input.healthInsurance !== current.healthInsurance
+      ? "Krankenkasse"
+      : null,
+  ].filter(Boolean);
+
+  await recordTenantAudit({
+    tenantId,
+    actorId: access.userId,
+    actorName: access.userName,
+    action: "Mitarbeiterdaten geändert",
+    source: "Mitarbeiter",
+    entityType: "employee",
+    entityId: record.id,
+    detail: sensitiveChanges.length
+      ? `${record.name} (sensibel: ${sensitiveChanges.join(", ")})`
+      : record.name,
+  });
+
   return employee;
 }
 
+/**
+ * Löscht einen Mitarbeiter vollständig (DSGVO-Löschkonzept):
+ * inkl. Adressen, Ordnern, Dateien und den zugehörigen S3-Objekten.
+ */
 export async function deleteTenantEmployee(input: {
   tenantSlug: string;
   employeeId: string;
 }) {
-  await requireEmployeeManager(input.tenantSlug);
-
-  const tenantId = await getTenantIdForEmployees(input.tenantSlug);
-
-  if (!tenantId) {
-    throw new Error("Mandant nicht gefunden.");
-  }
+  const access = await requireTenantAccess(input.tenantSlug, "employees", "write");
+  const tenantId = access.tenantId;
 
   const employee = await prisma.tenantEmployee.findFirst({
     where: { id: input.employeeId, tenantId },
-    select: { id: true },
+    select: {
+      id: true,
+      name: true,
+      privateAddressId: true,
+      workAddressId: true,
+    },
   });
 
   if (!employee) {
     throw new Error("Mitarbeiter nicht gefunden.");
   }
 
+  const files = await prisma.tenantFile.findMany({
+    where: { tenantId, employeeId: input.employeeId },
+    select: { id: true, bucket: true, storageKey: true },
+  });
+
   await prisma.$transaction([
+    // Verträge zuerst: deren fileId-Relation ist Restrict und würde das
+    // Löschen der Dateien blockieren.
+    prisma.tenantEmployeeContract.deleteMany({
+      where: { employeeId: input.employeeId },
+    }),
     prisma.tenantTeamMember.deleteMany({ where: { employeeId: input.employeeId } }),
+    prisma.tenantFileFolder.deleteMany({
+      where: { tenantId, employeeId: input.employeeId },
+    }),
     prisma.tenantEmployee.delete({ where: { id: input.employeeId } }),
   ]);
+
+  // Adressen sind über SetNull verknüpft und blieben sonst als PII-Waisen zurück.
+  const addressIds = [employee.privateAddressId, employee.workAddressId].filter(
+    (id): id is string => Boolean(id),
+  );
+
+  if (addressIds.length) {
+    await prisma.address.deleteMany({ where: { id: { in: addressIds } } });
+  }
+
+  await purgeTenantFiles(files);
+
+  await recordTenantAudit({
+    tenantId,
+    actorId: access.userId,
+    actorName: access.userName,
+    action: "Mitarbeiter gelöscht",
+    source: "Mitarbeiter",
+    entityType: "employee",
+    entityId: employee.id,
+    detail: `${employee.name} inkl. ${files.length} Datei(en)`,
+  });
+}
+
+export async function createEmployeeInfoRequest(input: {
+  tenantSlug: string;
+  employeeId: string;
+  title: string;
+  message?: string;
+  dueAt?: string;
+  fileRequested: boolean;
+}) {
+  await requireEmployeeManager(input.tenantSlug);
+
+  const access = await requireTenantAccess(input.tenantSlug, "employees", "write");
+  const title = input.title.trim();
+
+  if (!title) {
+    throw new Error("Bitte angeben, welche Information benötigt wird.");
+  }
+
+  const employee = await prisma.tenantEmployee.findFirst({
+    where: { id: input.employeeId, tenantId: access.tenantId },
+    select: { id: true, name: true, infoRequestsJson: true },
+  });
+
+  if (!employee) {
+    throw new Error("Mitarbeiter nicht gefunden.");
+  }
+
+  const dueAtIso = input.dueAt?.trim() ?? "";
+  const dueAt = /^\d{4}-\d{2}-\d{2}$/.test(dueAtIso)
+    ? new Intl.DateTimeFormat("de-DE").format(new Date(`${dueAtIso}T00:00:00`))
+    : "";
+  const request: InfoRequest = {
+    id: `info-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    title,
+    message: input.message?.trim() || undefined,
+    requestedBy: access.userName,
+    requestedAt: new Intl.DateTimeFormat("de-DE", {
+      dateStyle: "short",
+      timeStyle: "short",
+    }).format(new Date()),
+    dueAt,
+    fileRequested: input.fileRequested,
+    status: "open",
+  };
+  const existing = parseJson<InfoRequest[]>(employee.infoRequestsJson, []);
+
+  await prisma.tenantEmployee.update({
+    where: { id: employee.id },
+    data: { infoRequestsJson: JSON.stringify([request, ...existing]) },
+  });
+
+  await recordTenantAudit({
+    tenantId: access.tenantId,
+    actorId: access.userId,
+    actorName: access.userName,
+    action: "Info-Anfrage erstellt",
+    source: "Mitarbeiter",
+    entityType: "employee",
+    entityId: employee.id,
+    detail: `${employee.name}: ${title}`,
+  });
+
+  return request;
 }

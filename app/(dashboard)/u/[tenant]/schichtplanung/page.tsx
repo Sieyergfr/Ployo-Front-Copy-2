@@ -3,6 +3,7 @@ import {
   getISOWeekFromDate,
   getShiftFormOptions,
   getShiftPlanForTenant,
+  getShiftPlanningSettings,
 } from "@/lib/shift-service";
 import { getWishFreeRequestsForTenant } from "@/lib/wish-free-service";
 import { notFound } from "next/navigation";
@@ -30,9 +31,10 @@ export default async function ShiftPlanningPage({
   const currentWeek = getISOWeekFromDate(new Date());
   const year = searchParamNumber(query.year, currentWeek.year);
   const week = searchParamNumber(query.week, currentWeek.week);
-  const [plan, options] = await Promise.all([
+  const [plan, options, shiftSettings] = await Promise.all([
     getShiftPlanForTenant({ tenantSlug: tenant, year, week }),
     getShiftFormOptions(tenant),
+    getShiftPlanningSettings(tenant),
   ]);
 
   if (!plan || !options) {
@@ -55,6 +57,7 @@ export default async function ShiftPlanningPage({
       employees={options.employees}
       locations={options.locations}
       wishFreeRequests={wishFreeRequests}
+      shiftSettings={shiftSettings}
     />
   );
 }

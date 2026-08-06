@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { type Shift, type ShiftDay } from "@/lib/shifts";
 import { headers } from "next/headers";
 import { requireTenantAccess } from "@/lib/tenant-access";
+import { parseShiftPresets } from "@/lib/shift-presets";
 
 export type ShiftEmployeeOption = {
   id: string;
@@ -299,6 +300,33 @@ export async function getShiftFormOptions(tenantSlug: string) {
   return {
     employees: employees satisfies ShiftEmployeeOption[],
     locations: locations satisfies ShiftLocationOption[],
+  };
+}
+
+/**
+ * Planungseinstellungen für die Schichtansicht. Bewusst über die
+ * shifts-Berechtigung geladen (nicht settings), damit auch Planende ohne
+ * Einstellungs-Rechte ihre Standardschichten sehen.
+ */
+export async function getShiftPlanningSettings(tenantSlug: string) {
+  const tenantId = await getTenantIdForShifts(tenantSlug);
+  const settings = tenantId
+    ? await prisma.tenantSettings.findUnique({
+        where: { tenantId },
+        select: {
+          weekStart: true,
+          shiftMinStaffing: true,
+          shiftBreakRule: true,
+          shiftPresetsJson: true,
+        },
+      })
+    : null;
+
+  return {
+    weekStart: settings?.weekStart ?? "monday",
+    minStaffing: settings?.shiftMinStaffing ?? 3,
+    breakRule: settings?.shiftBreakRule ?? "30-6",
+    presets: parseShiftPresets(settings?.shiftPresetsJson ?? "[]"),
   };
 }
 

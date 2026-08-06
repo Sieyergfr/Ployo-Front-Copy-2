@@ -1,12 +1,15 @@
 import MetricCard from "@/components/MetricCard";
 import PageHeader from "@/components/PageHeader";
-import { employees, employeeStatusConfig } from "@/lib/employees";
-import { files } from "@/lib/files";
-import { locations } from "@/lib/locations";
+import { auth } from "@/lib/auth";
+import { employeeStatusConfig } from "@/lib/employees";
+import { getEmployeesForTenant } from "@/lib/employee-service";
+import { getRecentTenantFiles } from "@/lib/files-server";
+import { getLocationsForTenant } from "@/lib/location-service";
 import { getRemindersForTenant } from "@/lib/reminders";
-import { shiftConflictCount, shiftDays, shiftWeekLabel } from "@/lib/shifts";
+import { getISOWeekFromDate, getShiftPlanForTenant } from "@/lib/shift-service";
 import { getSicknessForTenant } from "@/lib/sickness";
-import { vacationRequests } from "@/lib/vacations";
+import { getTenantsForUser } from "@/lib/tenants";
+import { getVacationRequestsForTenant } from "@/lib/vacation-service";
 import {
   AlertCircle,
   ArrowRight,
@@ -17,6 +20,7 @@ import {
   Plus,
   UserPlus,
 } from "lucide-react";
+import { headers } from "next/headers";
 import Link from "next/link";
 
 export const metadata = {
@@ -26,6 +30,19 @@ export const metadata = {
 type DashboardHomeProps = {
   params: Promise<{ tenant: string }>;
 };
+
+/**
+ * Lädt einen Dashboard-Bereich tolerant: Wer für einen Bereich keine
+ * Berechtigung hat (FORBIDDEN aus requireTenantAccess), sieht die
+ * zugehörige Karte einfach nicht, statt einen Fehler zu bekommen.
+ */
+async function tryLoad<T>(promise: Promise<T>): Promise<T | null> {
+  try {
+    return await promise;
+  } catch {
+    return null;
+  }
+}
 
 function DashboardCard({
   title,
@@ -70,25 +87,73 @@ function AvatarBadge({ initials }: { initials: string }) {
   );
 }
 
+function EmptyHint({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="rounded-[10px] border border-border-light bg-bg px-3 py-2.5 text-[12.5px] text-muted">
+      {children}
+    </p>
+  );
+}
+
 export default async function DashboardHome({ params }: DashboardHomeProps) {
   const { tenant } = await params;
   const baseHref = `/u/${tenant}`;
+  const now = new Date();
+  const { year, week } = getISOWeekFromDate(now);
 
-  const activeEmployees = employees.filter((employee) => employee.status === "active");
-  const vacationEmployees = employees.filter(
+  const session = await auth.api.getSession({ headers: await headers() });
+  const [
+    employees,
+    vacationRequests,
+    reminders,
+    sickness,
+    locations,
+    shiftPlan,
+    recentFiles,
+    memberships,
+  ] = await Promise.all([
+    tryLoad(getEmployeesForTenant(tenant)),
+    tryLoad(getVacationRequestsForTenant(tenant)),
+    tryLoad(getRemindersForTenant(tenant)),
+    tryLoad(getSicknessForTenant(tenant)),
+    tryLoad(getLocationsForTenant(tenant)),
+    tryLoad(getShiftPlanForTenant({ tenantSlug: tenant, year, week })),
+    tryLoad(getRecentTenantFiles(tenant, 4)),
+    session?.user?.id
+      ? tryLoad(getTenantsForUser(session.user.id))
+      : Promise.resolve(null),
+  ]);
+
+  const employeeList = employees ?? [];
+  const vacationList = vacationRequests ?? [];
+  const reminderList = reminders ?? [];
+  const locationList = locations ?? [];
+  const currentSickness = sickness?.current ?? [];
+  const sicknessMetrics = sickness?.metrics ?? [];
+  const fileList = recentFiles ?? [];
+  const shiftDays = shiftPlan?.days ?? [];
+  const shiftConflictCount = shiftPlan?.conflictCount ?? 0;
+  const shiftWeekLabel = shiftPlan
+    ? `${shiftPlan.label} · ${shiftPlan.range}`
+    : `KW ${week}`;
+
+  const tenantName =
+    memberships?.find((membership) => membership.tenant.slug === tenant)?.tenant
+      .name ?? tenant;
+
+  const activeEmployees = employeeList.filter(
+    (employee) => employee.status === "active",
+  );
+  const vacationEmployees = employeeList.filter(
     (employee) => employee.status === "vacation",
   );
-  const absentEmployees = employees.filter((employee) => employee.status === "absent");
-  const pendingVacations = vacationRequests.filter(
+  const absentEmployees = employeeList.filter(
+    (employee) => employee.status === "absent",
+  );
+  const pendingVacations = vacationList.filter(
     (request) => request.status === "pending",
   );
-  const [reminders, sickness] = await Promise.all([
-    getRemindersForTenant(tenant),
-    getSicknessForTenant(tenant),
-  ]);
-  const currentSickness = sickness.current;
-  const sicknessMetrics = sickness.metrics;
-  const urgentReminders = reminders.filter(
+  const urgentReminders = reminderList.filter(
     (reminder) => reminder.daysLeft <= 7,
   );
   const openShiftCount = shiftDays.reduce(
@@ -96,16 +161,55 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
       total + day.shifts.filter((shift) => !shift.assignee).length,
     0,
   );
-  const activeLocations = locations.filter((location) => location.status === "active");
-  const activeToday = locations.reduce(
+  const activeLocations = locationList.filter(
+    (location) => location.status === "active",
+  );
+  const activeToday = locationList.reduce(
     (total, location) => total + location.activeToday,
     0,
   );
-  const employeeTotal = employees.length;
-  const averageVacationRemaining = Math.round(
-    employees.reduce((total, employee) => total + employee.vacationRemaining, 0) /
-      employeeTotal,
+  const employeeTotal = employeeList.length;
+  const averageVacationRemaining =
+    employeeTotal > 0
+      ? Math.round(
+          employeeList.reduce(
+            (total, employee) => total + employee.vacationRemaining,
+            0,
+          ) / employeeTotal,
+        )
+      : 0;
+
+  const contractCounts = new Map<string, number>();
+
+  for (const employee of employeeList) {
+    const label = employee.contract?.trim() || "Ohne Angabe";
+
+    contractCounts.set(label, (contractCounts.get(label) ?? 0) + 1);
+  }
+
+  const contractDistribution = [...contractCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 4);
+
+  // Intl liefert in de-DE "03 Uhr" – daher parseInt statt Number.
+  const berlinHour = Number.parseInt(
+    new Intl.DateTimeFormat("de-DE", {
+      hour: "numeric",
+      hourCycle: "h23",
+      timeZone: "Europe/Berlin",
+    }).format(now),
+    10,
   );
+  const greeting =
+    berlinHour < 11 ? "Guten Morgen" : berlinHour < 18 ? "Guten Tag" : "Guten Abend";
+  const firstName = session?.user?.name?.trim().split(/\s+/)[0];
+  const dateLabel = new Intl.DateTimeFormat("de-DE", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "Europe/Berlin",
+  }).format(now);
 
   const actionItems = [
     {
@@ -116,7 +220,7 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
     },
     {
       title: "Schichtkonflikte lösen",
-      detail: `${shiftConflictCount} Konflikte in ${shiftWeekLabel}`,
+      detail: `${shiftConflictCount} Konflikte in ${shiftPlan?.label ?? `KW ${week}`}`,
       href: `${baseHref}/schichtplanung`,
       tone: "bg-danger/10 text-danger",
     },
@@ -131,9 +235,9 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
   return (
     <>
       <PageHeader
-        eyebrow="Freitag, 26. Juni 2026 · KW 26"
-        title="Guten Morgen, Frau Brandt"
-        subtitle="Die wichtigsten HR-Signale für Müller & Partner auf einen Blick."
+        eyebrow={`${dateLabel} · KW ${week}`}
+        title={firstName ? `${greeting}, ${firstName}` : greeting}
+        subtitle={`Die wichtigsten HR-Signale für ${tenantName} auf einen Blick.`}
       >
         <Link href={`${baseHref}/employees`} className="btn btn-primary">
           <UserPlus size={15} />
@@ -149,9 +253,8 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
         <MetricCard
           label="Mitarbeiter aktiv"
           value={`${activeEmployees.length}/${employeeTotal}`}
-          trend="up"
-          change="+2"
-          caption="seit Monatsbeginn"
+          change={`${vacationEmployees.length} Urlaub`}
+          caption={`${absentEmployees.length} abwesend`}
         />
         <MetricCard
           label="Heute im Dienst"
@@ -163,14 +266,12 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
         <MetricCard
           label="Offene Freigaben"
           value={pendingVacations.length + urgentReminders.length}
-          trend="up"
           change={`${pendingVacations.length} Urlaub`}
           caption={`${urgentReminders.length} dringend`}
         />
         <MetricCard
           label="Schicht-Risiken"
           value={shiftConflictCount + openShiftCount}
-          trend="down"
           change={`${shiftConflictCount} Konflikte`}
           caption={`${openShiftCount} unbesetzt`}
         />
@@ -208,124 +309,132 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
             </div>
           </DashboardCard>
 
-          <DashboardCard
-            title="Schichtlage"
-            meta={shiftWeekLabel}
-            action={
-              <Link href={`${baseHref}/schichtplanung`} className="text-link">
-                Öffnen
-              </Link>
-            }
-          >
-            <div className="grid gap-2">
-              {shiftDays.map((day) => {
-                const assignedCount = day.shifts.filter((shift) => shift.assignee).length;
-                const emptyCount = day.shifts.filter((shift) => !shift.assignee).length;
-                const hasConflict = day.shifts.some((shift) => shift.conflict);
+          {shiftPlan && (
+            <DashboardCard
+              title="Schichtlage"
+              meta={shiftWeekLabel}
+              action={
+                <Link href={`${baseHref}/schichtplanung`} className="text-link">
+                  Öffnen
+                </Link>
+              }
+            >
+              <div className="grid gap-2">
+                {shiftDays.map((day) => {
+                  const assignedCount = day.shifts.filter((shift) => shift.assignee).length;
+                  const emptyCount = day.shifts.filter((shift) => !shift.assignee).length;
+                  const hasConflict = day.shifts.some((shift) => shift.conflict);
 
-                return (
-                  <div
-                    key={day.id}
-                    className="grid grid-cols-[54px_1fr_auto] items-center gap-3 rounded-[10px] border border-border-light bg-bg px-3 py-2.5"
-                  >
-                    <div>
-                      <div className="font-mono text-[11px] font-semibold text-ink">
-                        {day.weekday}
+                  return (
+                    <div
+                      key={day.id}
+                      className="grid grid-cols-[54px_1fr_auto] items-center gap-3 rounded-[10px] border border-border-light bg-bg px-3 py-2.5"
+                    >
+                      <div>
+                        <div className="font-mono text-[11px] font-semibold text-ink">
+                          {day.weekday}
+                        </div>
+                        <div className="mt-0.5 font-mono text-[10px] text-muted">
+                          {day.date}
+                        </div>
                       </div>
-                      <div className="mt-0.5 font-mono text-[10px] text-muted">
-                        {day.date}
+                      <div className="min-w-0">
+                        <div className="text-[12.5px] font-medium text-ink">
+                          {day.shifts.length === 0
+                            ? "Keine Schichten geplant"
+                            : `${assignedCount} besetzt · ${emptyCount} offen`}
+                        </div>
+                        <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-border">
+                          <div
+                            className={`h-full rounded-full ${
+                              hasConflict || emptyCount > 0 ? "bg-warning" : "bg-success"
+                            }`}
+                            style={{
+                              width:
+                                day.shifts.length === 0
+                                  ? "0%"
+                                  : `${Math.max(18, Math.round((assignedCount / day.shifts.length) * 100))}%`,
+                            }}
+                          />
+                        </div>
                       </div>
+                      {hasConflict ? (
+                        <StatusPill>Konflikt</StatusPill>
+                      ) : emptyCount > 0 ? (
+                        <StatusPill>Offen</StatusPill>
+                      ) : (
+                        <StatusPill>Stabil</StatusPill>
+                      )}
                     </div>
-                    <div className="min-w-0">
-                      <div className="text-[12.5px] font-medium text-ink">
-                        {day.shifts.length === 0
-                          ? "Keine Schichten geplant"
-                          : `${assignedCount} besetzt · ${emptyCount} offen`}
-                      </div>
-                      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-border">
-                        <div
-                          className={`h-full rounded-full ${
-                            hasConflict || emptyCount > 0 ? "bg-warning" : "bg-success"
-                          }`}
-                          style={{
-                            width:
-                              day.shifts.length === 0
-                                ? "0%"
-                                : `${Math.max(18, Math.round((assignedCount / day.shifts.length) * 100))}%`,
-                          }}
-                        />
-                      </div>
-                    </div>
-                    {hasConflict ? (
-                      <StatusPill>Konflikt</StatusPill>
-                    ) : emptyCount > 0 ? (
-                      <StatusPill>Offen</StatusPill>
-                    ) : (
-                      <StatusPill>Stabil</StatusPill>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </DashboardCard>
+                  );
+                })}
+              </div>
+            </DashboardCard>
+          )}
 
-          <DashboardCard
-            title="Standorte"
-            meta="Auslastung und offene Positionen heute"
-            action={
-              <Link href={`${baseHref}/standorte`} className="text-link">
-                Alle Standorte
-              </Link>
-            }
-          >
-            <div className="grid gap-3 md:grid-cols-2">
-              {locations.slice(0, 4).map((location) => (
-                <div
-                  key={location.id}
-                  className="rounded-[12px] border border-border-light bg-bg p-3"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="truncate text-[13.5px] font-semibold text-ink">
-                        {location.name}
+          {locations && (
+            <DashboardCard
+              title="Standorte"
+              meta="Auslastung und offene Positionen heute"
+              action={
+                <Link href={`${baseHref}/standorte`} className="text-link">
+                  Alle Standorte
+                </Link>
+              }
+            >
+              {locationList.length === 0 ? (
+                <EmptyHint>Noch keine Standorte angelegt.</EmptyHint>
+              ) : (
+                <div className="grid gap-3 md:grid-cols-2">
+                  {locationList.slice(0, 4).map((location) => (
+                    <div
+                      key={location.id}
+                      className="rounded-[12px] border border-border-light bg-bg p-3"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="truncate text-[13.5px] font-semibold text-ink">
+                            {location.name}
+                          </div>
+                          <div className="mt-1 flex items-center gap-1.5 text-[11.5px] text-muted">
+                            <MapPin size={12} />
+                            {location.kind}
+                          </div>
+                        </div>
+                        <StatusPill>{location.utilization}</StatusPill>
                       </div>
-                      <div className="mt-1 flex items-center gap-1.5 text-[11.5px] text-muted">
-                        <MapPin size={12} />
-                        {location.kind}
+                      <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+                        <div>
+                          <div className="font-display text-[18px] font-semibold text-ink">
+                            {location.employeeCount}
+                          </div>
+                          <div className="font-mono text-[9px] uppercase tracking-[0.06em] text-muted">
+                            Team
+                          </div>
+                        </div>
+                        <div>
+                          <div className="font-display text-[18px] font-semibold text-ink">
+                            {location.activeToday}
+                          </div>
+                          <div className="font-mono text-[9px] uppercase tracking-[0.06em] text-muted">
+                            Aktiv
+                          </div>
+                        </div>
+                        <div>
+                          <div className="font-display text-[18px] font-semibold text-danger">
+                            {location.openPositions}
+                          </div>
+                          <div className="font-mono text-[9px] uppercase tracking-[0.06em] text-muted">
+                            Offen
+                          </div>
+                        </div>
                       </div>
                     </div>
-                    <StatusPill>{location.utilization}</StatusPill>
-                  </div>
-                  <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-                    <div>
-                      <div className="font-display text-[18px] font-semibold text-ink">
-                        {location.employeeCount}
-                      </div>
-                      <div className="font-mono text-[9px] uppercase tracking-[0.06em] text-muted">
-                        Team
-                      </div>
-                    </div>
-                    <div>
-                      <div className="font-display text-[18px] font-semibold text-ink">
-                        {location.activeToday}
-                      </div>
-                      <div className="font-mono text-[9px] uppercase tracking-[0.06em] text-muted">
-                        Aktiv
-                      </div>
-                    </div>
-                    <div>
-                      <div className="font-display text-[18px] font-semibold text-danger">
-                        {location.openPositions}
-                      </div>
-                      <div className="font-mono text-[9px] uppercase tracking-[0.06em] text-muted">
-                        Offen
-                      </div>
-                    </div>
-                  </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </DashboardCard>
+              )}
+            </DashboardCard>
+          )}
         </div>
 
         <div className="flex flex-col gap-5">
@@ -352,28 +461,34 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
             </div>
 
             <div className="mt-4 grid gap-2">
-              {[...vacationEmployees, ...absentEmployees].slice(0, 5).map((employee) => {
-                const status = employeeStatusConfig[employee.status];
+              {employeeTotal === 0 ? (
+                <EmptyHint>Noch keine Mitarbeiter angelegt.</EmptyHint>
+              ) : vacationEmployees.length + absentEmployees.length === 0 ? (
+                <EmptyHint>Alle Mitarbeiter sind im Dienst.</EmptyHint>
+              ) : (
+                [...vacationEmployees, ...absentEmployees].slice(0, 5).map((employee) => {
+                  const status = employeeStatusConfig[employee.status];
 
-                return (
-                  <Link
-                    key={employee.id}
-                    href={`${baseHref}/employees/${employee.id}`}
-                    className="flex items-center gap-3 rounded-[10px] border border-border-light bg-bg p-2.5 no-underline transition-colors hover:border-muted"
-                  >
-                    <AvatarBadge initials={employee.initials} />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[13px] font-semibold text-ink">
-                        {employee.name}
+                  return (
+                    <Link
+                      key={employee.id}
+                      href={`${baseHref}/employees/${employee.id}`}
+                      className="flex items-center gap-3 rounded-[10px] border border-border-light bg-bg p-2.5 no-underline transition-colors hover:border-muted"
+                    >
+                      <AvatarBadge initials={employee.initials} />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[13px] font-semibold text-ink">
+                          {employee.name}
+                        </span>
+                        <span className="mt-0.5 block truncate text-[11.5px] text-muted">
+                          {employee.location} · {employee.team}
+                        </span>
                       </span>
-                      <span className="mt-0.5 block truncate text-[11.5px] text-muted">
-                        {employee.location} · {employee.team}
-                      </span>
-                    </span>
-                    <StatusPill>{status.label}</StatusPill>
-                  </Link>
-                );
-              })}
+                      <StatusPill>{status.label}</StatusPill>
+                    </Link>
+                  );
+                })
+              )}
             </div>
           </DashboardCard>
 
@@ -383,23 +498,27 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
             action={<CalendarCheck size={18} className="text-muted" />}
           >
             <div className="grid gap-3">
-              {pendingVacations.slice(0, 4).map((request) => (
-                <div
-                  key={request.id}
-                  className="flex items-center gap-3 rounded-[10px] border border-border-light bg-bg p-2.5"
-                >
-                  <AvatarBadge initials={request.initials} />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-[13px] font-semibold text-ink">
-                      {request.name}
+              {pendingVacations.length === 0 ? (
+                <EmptyHint>Keine offenen Urlaubsanträge.</EmptyHint>
+              ) : (
+                pendingVacations.slice(0, 4).map((request) => (
+                  <div
+                    key={request.id}
+                    className="flex items-center gap-3 rounded-[10px] border border-border-light bg-bg p-2.5"
+                  >
+                    <AvatarBadge initials={request.initials} />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-[13px] font-semibold text-ink">
+                        {request.name}
+                      </div>
+                      <div className="mt-0.5 truncate text-[11.5px] text-muted">
+                        {request.startDate}-{request.endDate} · {request.days}
+                      </div>
                     </div>
-                    <div className="mt-0.5 truncate text-[11.5px] text-muted">
-                      {request.startDate}-{request.endDate} · {request.days}
-                    </div>
+                    <StatusPill>Ausstehend</StatusPill>
                   </div>
-                  <StatusPill>Ausstehend</StatusPill>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </DashboardCard>
 
@@ -417,58 +536,70 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
               </div>
             </div>
             <div className="grid gap-2">
-              {currentSickness.map((item) => (
-                <div
-                  key={item.id}
-                  className="flex items-center gap-3 rounded-[10px] border border-border-light bg-bg p-2.5"
-                >
-                  <AvatarBadge initials={item.initials} />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-[13px] font-semibold text-ink">
-                      {item.name}
-                    </div>
-                    <div className="mt-0.5 truncate text-[11.5px] text-muted">
-                      seit {item.since} · {item.days} Tage
+              {currentSickness.length === 0 ? (
+                <EmptyHint>Keine aktuellen Krankmeldungen.</EmptyHint>
+              ) : (
+                currentSickness.map((item) => (
+                  <div
+                    key={item.id}
+                    className="flex items-center gap-3 rounded-[10px] border border-border-light bg-bg p-2.5"
+                  >
+                    <AvatarBadge initials={item.initials} />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-[13px] font-semibold text-ink">
+                        {item.name}
+                      </div>
+                      <div className="mt-0.5 truncate text-[11.5px] text-muted">
+                        seit {item.since} · {item.days} Tage
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </DashboardCard>
 
-          <DashboardCard
-            title="Zuletzt aktualisiert"
-            meta="Dokumente und Richtlinien"
-            action={<FileText size={18} className="text-muted" />}
-          >
-            <div className="grid gap-2">
-              {files.slice(0, 4).map((file) => (
-                <div
-                  key={file.name}
-                  className="flex items-center justify-between gap-3 rounded-[10px] border border-border-light bg-bg px-3 py-2.5"
-                >
-                  <div className="min-w-0">
-                    <div className="truncate text-[12.5px] font-semibold text-ink">
-                      {file.name}
+          {recentFiles && (
+            <DashboardCard
+              title="Zuletzt aktualisiert"
+              meta="Dokumente und Richtlinien"
+              action={<FileText size={18} className="text-muted" />}
+            >
+              <div className="grid gap-2">
+                {fileList.length === 0 ? (
+                  <EmptyHint>Noch keine Dateien hochgeladen.</EmptyHint>
+                ) : (
+                  fileList.map((file) => (
+                    <div
+                      key={file.slug || file.name}
+                      className="flex items-center justify-between gap-3 rounded-[10px] border border-border-light bg-bg px-3 py-2.5"
+                    >
+                      <div className="min-w-0">
+                        <div className="truncate text-[12.5px] font-semibold text-ink">
+                          {file.name}
+                        </div>
+                        <div className="mt-0.5 truncate text-[11px] text-muted">
+                          {file.owner} · {file.updatedAt}
+                        </div>
+                      </div>
+                      <StatusPill>{file.type}</StatusPill>
                     </div>
-                    <div className="mt-0.5 truncate text-[11px] text-muted">
-                      {file.owner} · {file.updatedAt}
-                    </div>
-                  </div>
-                  <StatusPill>{file.type}</StatusPill>
-                </div>
-              ))}
-            </div>
-          </DashboardCard>
+                  ))
+                )}
+              </div>
+            </DashboardCard>
+          )}
 
           <DashboardCard title="Personalstruktur" meta="Vertragsarten">
             <div className="grid gap-2">
-              {["Unbefristet", "Teilzeit", "Befristet", "Werkstudentin"].map(
-                (contract) => {
-                  const count = employees.filter(
-                    (employee) => employee.contract === contract,
-                  ).length;
-                  const percent = Math.round((count / employeeTotal) * 100);
+              {contractDistribution.length === 0 ? (
+                <EmptyHint>Noch keine Mitarbeiter angelegt.</EmptyHint>
+              ) : (
+                contractDistribution.map(([contract, count]) => {
+                  const percent =
+                    employeeTotal > 0
+                      ? Math.round((count / employeeTotal) * 100)
+                      : 0;
 
                   return (
                     <div key={contract}>
@@ -484,7 +615,7 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
                       </div>
                     </div>
                   );
-                },
+                })
               )}
             </div>
           </DashboardCard>

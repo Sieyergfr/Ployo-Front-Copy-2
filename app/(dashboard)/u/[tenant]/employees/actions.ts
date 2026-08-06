@@ -1,10 +1,13 @@
 "use server";
 
 import {
+  createEmployeeInfoRequest,
   createTenantEmployee,
   deleteTenantEmployee,
+  getEmployeeForTenant,
   updateTenantEmployee,
 } from "@/lib/employee-service";
+import { createTenantInvitation } from "@/lib/settings-service";
 import {
   contractStatuses,
   createEmployeeContract,
@@ -162,6 +165,62 @@ export async function updateEmployeeAction(formData: FormData) {
       ? `${employeePath(tenant, employee.key ?? employee.id)}?tab=contract`
       : employeePath(tenant, employee.key ?? employee.id),
   );
+}
+
+export async function inviteEmployeeAction(formData: FormData) {
+  const tenant = formString(formData, "tenant");
+  const employeeHandle = formString(formData, "employeeHandle");
+
+  if (!tenant || !employeeHandle) {
+    throw new Error("Einladung konnte nicht versendet werden.");
+  }
+
+  const employee = await getEmployeeForTenant(tenant, employeeHandle);
+
+  if (!employee) {
+    throw new Error("Mitarbeiter wurde nicht gefunden.");
+  }
+
+  if (!employee.email) {
+    throw new Error(
+      "Für diesen Mitarbeiter ist keine E-Mail-Adresse hinterlegt.",
+    );
+  }
+
+  await createTenantInvitation({
+    tenantSlug: tenant,
+    email: employee.email,
+    role: "EMPLOYEE",
+    source: "Personalakte",
+  });
+
+  const path = employeePath(tenant, employeeHandle);
+  revalidatePath(path);
+  redirect(`${path}?invited=1`);
+}
+
+export async function createEmployeeInfoRequestAction(formData: FormData) {
+  const tenant = formString(formData, "tenant");
+  const employeeId = formString(formData, "employeeId");
+  const employeeHandle = formString(formData, "employeeHandle");
+  const title = formString(formData, "title");
+
+  if (!tenant || !employeeId || !employeeHandle || !title) {
+    throw new Error("Bitte angeben, welche Information benoetigt wird.");
+  }
+
+  await createEmployeeInfoRequest({
+    tenantSlug: tenant,
+    employeeId,
+    title,
+    message: formString(formData, "message"),
+    dueAt: formString(formData, "dueAt"),
+    fileRequested: formData.get("fileRequested") === "on",
+  });
+
+  const path = employeePath(tenant, employeeHandle);
+  revalidatePath(path);
+  redirect(path);
 }
 
 export async function deleteEmployeeAction(formData: FormData) {

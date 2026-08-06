@@ -1,36 +1,49 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Ployo Frontend
 
-## Getting Started
+Digitale Personalakte für kleine und mittlere Unternehmen: Mitarbeiterverwaltung, Schicht- und Urlaubsplanung, Krankmeldungen, Dokumente und Erinnerungen — mandantenfähig (Multi-Tenant) auf Basis von Next.js 16.
 
-First, run the development server:
+## Stack
+
+- **Next.js 16** (App Router, Server Actions, `proxy.ts` statt Middleware)
+- **better-auth** (E-Mail/Passwort, Google/Apple optional, Rate-Limiting)
+- **Prisma** (SQLite in Entwicklung; für Produktion PostgreSQL vorgesehen)
+- **S3-kompatibler Objektspeicher** (OVH Frankfurt) für HR-Dokumente
+- **Tailwind CSS 4**
+
+## Lokale Entwicklung
 
 ```bash
+npm install
+cp .env.example .env       # Werte eintragen (siehe Kommentare in der Datei)
+npm run db:push            # Schema in die lokale SQLite-DB übertragen
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Ohne SMTP-Konfiguration werden E-Mails (Passwort-Reset, Einladungen) im Dev-Modus in die Server-Konsole geloggt; E-Mail-Verifizierung ist dann deaktiviert.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Wichtige Skripte
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Befehl | Zweck |
+| --- | --- |
+| `npm run dev` | Entwicklungsserver |
+| `npm run build` | Produktions-Build |
+| `npm run lint` | ESLint |
+| `npm test` | Unit-Tests (Vitest) |
+| `npm run test:watch` | Tests im Watch-Modus |
+| `npm run db:generate` | Prisma Client generieren |
+| `npm run db:migrate` | Migration erstellen/anwenden (Entwicklung) |
+| `npm run db:push` | Schema ohne Migration synchronisieren |
 
-## Learn More
+## Betrieb
 
-To learn more about Next.js, take a look at the following resources:
+- **Health-Check:** `GET /api/health`
+- **Retention-/Aufräumjob:** `GET /api/cron/cleanup` mit Header `Authorization: Bearer $CRON_SECRET` — täglich per externem Scheduler aufrufen (löscht abgelaufene Sessions, alte Audit-Logs gemäß Mandanten-Einstellung, endgültig zu löschende Dateien inkl. S3-Objekt).
+- **Datenexport (eigenes Konto):** `GET /api/me/export`
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Architektur-Notizen
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Autorisierung läuft zentral über `lib/tenant-access.ts` (`requireTenantAccess`) — jede tenant-bezogene DB-Operation muss dort durch.
+- Datei-Zugriffe werden zusätzlich über ACLs (`lib/file-access.ts`) geprüft; Downloads laufen über kurzlebige signierte S3-URLs.
+- Eigene API-Routen sind über `lib/rate-limit.ts` gedrosselt (prozesslokal); die Auth-Endpunkte über das Rate-Limit von better-auth.
+- Für LAN-Tests (Handy im eigenen WLAN) `DEV_LAN_ORIGINS` und `DEV_LAN_HOSTS` in der `.env` setzen — im Repository stehen keine IPs.
+- Offene Aufgaben: **`To-Do-Offen.md`** (aktueller Stand, offen wie erledigt). `TODO-USER.md` listet die Punkte, die Zugangsdaten oder Entscheidungen brauchen; `To-Do-All.md` ist das ursprüngliche Analyse-Protokoll.

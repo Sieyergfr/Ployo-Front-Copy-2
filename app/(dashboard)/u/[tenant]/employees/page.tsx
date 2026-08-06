@@ -9,7 +9,10 @@ import EmployeeQuickView from "@/components/EmployeeQuickView";
 import InviteEmployeeButton from "@/components/InviteEmployeeButton";
 import PageHeader from "@/components/PageHeader";
 import SearchInput from "@/components/inputs/SearchInput";
-import { getEmployeesForTenant } from "@/lib/employee-service";
+import {
+  getEmployeesForTenant,
+  isEmployeeNumberRequired,
+} from "@/lib/employee-service";
 import { employeeStatusConfig, type Employee } from "@/lib/employees";
 import { getLocationsForTenant } from "@/lib/location-service";
 import { getRolesForTenant } from "@/lib/role-service";
@@ -98,12 +101,14 @@ export default async function EmployeesPage({
   params,
 }: PageProps<"/u/[tenant]/employees">) {
   const { tenant } = await params;
-  const [employees, locations, teams, roles] = await Promise.all([
-    getEmployeesForTenant(tenant),
-    getLocationsForTenant(tenant),
-    getTeamsForTenant(tenant),
-    getRolesForTenant(tenant),
-  ]);
+  const [employees, locations, teams, roles, employeeNumberRequired] =
+    await Promise.all([
+      getEmployeesForTenant(tenant),
+      getLocationsForTenant(tenant),
+      getTeamsForTenant(tenant),
+      getRolesForTenant(tenant),
+      isEmployeeNumberRequired(tenant),
+    ]);
 
   if (!employees || !locations || !teams || !roles) {
     notFound();
@@ -153,6 +158,7 @@ export default async function EmployeesPage({
           locations={locationNames}
           permissionRoles={permissionRoleNames}
           teams={teamNames}
+          employeeNumberRequired={employeeNumberRequired}
         />
       </PageHeader>
 

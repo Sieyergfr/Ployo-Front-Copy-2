@@ -1,5 +1,6 @@
 import { auth } from "@/lib/auth";
 import { createTenantForOwner, getTenantsForUser } from "@/lib/tenants";
+import { checkRateLimit, tooManyRequests } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -38,6 +39,17 @@ export async function POST(request: Request) {
 
   if (!userId) {
     return Response.json({ error: "Nicht angemeldet." }, { status: 401 });
+  }
+
+  // Legt Mandanten an – eng begrenzen.
+  const limit = checkRateLimit({
+    key: `tenant-create:${userId}`,
+    limit: 10,
+    windowSeconds: 3600,
+  });
+
+  if (!limit.allowed) {
+    return tooManyRequests(limit);
   }
 
   const body = (await request.json().catch(() => null)) as {

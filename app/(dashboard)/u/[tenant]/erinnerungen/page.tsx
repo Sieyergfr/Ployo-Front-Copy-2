@@ -2,10 +2,8 @@ import { completeReminderAction } from "@/app/(dashboard)/u/[tenant]/erinnerunge
 import CreateReminderButton from "@/components/CreateReminderButton";
 import { ReminderRowButton } from "@/components/ActionDrawers";
 import PageHeader from "@/components/PageHeader";
-import {
-  getReminderFileBrowserData,
-  type ReminderFileBrowserData,
-} from "@/lib/files";
+import { getReminderFileBrowserData } from "@/lib/files-server";
+import { type ReminderFileBrowserData } from "@/lib/files";
 import {
   buildReminderFilters,
   buildReminderMetrics,

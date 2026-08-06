@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth";
+import { recordTenantAudit } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 import {
   type VacationMetric,
@@ -144,6 +145,8 @@ function toVacationRequest(record: VacationRecord): VacationRequest {
     team: record.employee.team,
     startDate: formatDate(record.startDate),
     endDate: formatDate(record.endDate),
+    startDateIso: record.startDate,
+    endDateIso: record.endDate,
     days: daysLabel(record.days),
     note: record.note,
     status: normalizeStatus(record.status),
@@ -346,7 +349,7 @@ export async function setTenantVacationRequestStatus(input: {
       id: input.requestId,
       tenantId,
     },
-    select: { id: true },
+    select: { id: true, employee: { select: { name: true } } },
   });
 
   if (!request) {
@@ -360,6 +363,78 @@ export async function setTenantVacationRequestStatus(input: {
       decidedAt: new Date(),
       decidedBy: access.userId,
     },
+  });
+
+  const tenantAccess = await requireTenantAccess(input.tenantSlug, "vacation", "write");
+
+  await recordTenantAudit({
+    tenantId,
+    actorId: tenantAccess.userId,
+    actorName: tenantAccess.userName,
+    action:
+      input.status === "approved"
+        ? "Urlaubsantrag genehmigt"
+        : "Urlaubsantrag abgelehnt",
+    source: "Urlaub",
+    entityType: "vacation",
+    entityId: request.id,
+    detail: request.employee.name,
+  });
+}
+
+export async function updateTenantVacationRequest(input: {
+  tenantSlug: string;
+  requestId: string;
+  startDate: string;
+  endDate: string;
+  note: string;
+}) {
+  await requireVacationManager(input.tenantSlug);
+  const access = await requireTenantAccess(input.tenantSlug, "vacation", "write");
+  const tenantId = access.tenantId;
+
+  const request = await prisma.tenantVacationRequest.findFirst({
+    where: { id: input.requestId, tenantId },
+    select: { id: true, employee: { select: { name: true } } },
+  });
+
+  if (!request) {
+    throw new Error("Urlaubsantrag nicht gefunden.");
+  }
+
+  // Bestehende Anträge dürfen auch auf vergangene Zeiträume korrigiert
+  // werden (z. B. nachträgliche Erfassung) – nur das Format und die
+  // Reihenfolge der Daten werden geprüft.
+  const parsedStartDate = parseDateOnly(input.startDate);
+  const parsedEndDate = parseDateOnly(input.endDate);
+
+  if (!parsedStartDate || !parsedEndDate) {
+    throw new Error("Bitte gueltige Datumswerte auswaehlen.");
+  }
+
+  if (parsedEndDate < parsedStartDate) {
+    throw new Error("Das Enddatum darf nicht vor dem Startdatum liegen.");
+  }
+
+  await prisma.tenantVacationRequest.update({
+    where: { id: input.requestId },
+    data: {
+      startDate: input.startDate,
+      endDate: input.endDate,
+      days: calculateVacationDays(input.startDate, input.endDate),
+      note: input.note.trim(),
+    },
+  });
+
+  await recordTenantAudit({
+    tenantId,
+    actorId: access.userId,
+    actorName: access.userName,
+    action: "Urlaubsantrag aktualisiert",
+    source: "Urlaub",
+    entityType: "vacation",
+    entityId: request.id,
+    detail: `${request.employee.name}: ${formatDate(input.startDate)} – ${formatDate(input.endDate)}`,
   });
 }
 

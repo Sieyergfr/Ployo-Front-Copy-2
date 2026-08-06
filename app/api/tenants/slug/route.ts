@@ -1,5 +1,6 @@
 import { auth } from "@/lib/auth";
 import { isReservedTenantSlug, isTenantSlugAvailable, slugify } from "@/lib/tenants";
+import { checkRateLimit, tooManyRequests } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -14,6 +15,17 @@ export async function GET(request: Request) {
 
   if (!session?.user?.id) {
     return Response.json({ error: "Nicht angemeldet." }, { status: 401 });
+  }
+
+  // Läuft bei jedem Tastendruck im Anlege-Assistenten.
+  const limit = checkRateLimit({
+    key: `tenant-slug:${session.user.id}`,
+    limit: 60,
+    windowSeconds: 60,
+  });
+
+  if (!limit.allowed) {
+    return tooManyRequests(limit);
   }
 
   const url = new URL(request.url);

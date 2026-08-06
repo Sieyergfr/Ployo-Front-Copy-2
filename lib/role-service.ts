@@ -11,6 +11,7 @@ import {
 } from "@/lib/roles";
 import { headers } from "next/headers";
 import { requireTenantAccess } from "@/lib/tenant-access";
+import { recordTenantAudit } from "@/lib/audit";
 
 type RoleRecord = {
   id: string;
@@ -197,6 +198,26 @@ export async function requireRoleManager(tenantSlug: string) {
   };
 }
 
+async function recordRoleAudit(
+  access: { tenantId: string; tenantSlug: string; userId: string },
+  action: string,
+  roleId: string,
+  detail: string,
+) {
+  const tenantAccess = await requireTenantAccess(access.tenantSlug, "roles", "admin");
+
+  await recordTenantAudit({
+    tenantId: access.tenantId,
+    actorId: tenantAccess.userId,
+    actorName: tenantAccess.userName,
+    action,
+    source: "Rollen",
+    entityType: "role",
+    entityId: roleId,
+    detail,
+  });
+}
+
 export async function createTenantRole(input: {
   tenantSlug: string;
   name: string;
@@ -223,7 +244,7 @@ export async function createTenantRole(input: {
     suffix += 1;
   }
 
-  return prisma.tenantRole.create({
+  const role = await prisma.tenantRole.create({
     data: {
       tenantId: access.tenantId,
       key,
@@ -237,6 +258,10 @@ export async function createTenantRole(input: {
       },
     },
   });
+
+  await recordRoleAudit(access, "Rolle angelegt", role.id, role.name);
+
+  return role;
 }
 
 export async function updateTenantRole(input: {
@@ -252,7 +277,7 @@ export async function updateTenantRole(input: {
       id: input.roleId,
       tenantId: access.tenantId,
     },
-    select: { id: true },
+    select: { id: true, name: true },
   });
 
   if (!role) {
@@ -286,6 +311,13 @@ export async function updateTenantRole(input: {
       }),
     ),
   ]);
+
+  await recordRoleAudit(
+    access,
+    "Rolle geändert",
+    role.id,
+    input.name.trim() || role.name,
+  );
 }
 
 export async function deleteTenantRole(input: {
@@ -300,6 +332,7 @@ export async function deleteTenantRole(input: {
     },
     select: {
       id: true,
+      name: true,
       isSystem: true,
       _count: {
         select: {
@@ -324,4 +357,6 @@ export async function deleteTenantRole(input: {
   await prisma.tenantRole.delete({
     where: { id: input.roleId },
   });
+
+  await recordRoleAudit(access, "Rolle gelöscht", role.id, role.name);
 }
