@@ -14,7 +14,7 @@ export default function CreateCompanyPage() {
         </div>
         <CompanyCreateWizard />
         <footer className="footer">
-          <span className="footer-text">© 2026 Ployo GmbH · </span>
+          <span className="footer-text">© {new Date().getFullYear()} Ployo · </span>
           <a href="/datenschutz" className="footer-link">
             Datenschutz
           </a>

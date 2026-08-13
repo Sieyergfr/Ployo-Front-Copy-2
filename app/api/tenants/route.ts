@@ -42,7 +42,7 @@ export async function POST(request: Request) {
   }
 
   // Legt Mandanten an – eng begrenzen.
-  const limit = checkRateLimit({
+  const limit = await checkRateLimit({
     key: `tenant-create:${userId}`,
     limit: 10,
     windowSeconds: 3600,

@@ -17,10 +17,14 @@ import {
 import { getAuditLogsForEntity } from "@/lib/audit";
 import { getEmployeesForTenant } from "@/lib/employee-service";
 import { getLocationForTenant } from "@/lib/location-service";
+import { locationColorPalette, locationKinds } from "@/lib/org-options";
+import { hasPermissionLevel } from "@/lib/roles";
+import { getTenantCapabilities, withAccessRedirect } from "@/lib/tenant-access";
 import {
   getISOWeekFromDate,
   getShiftFormOptions,
   getShiftPlanForTenant,
+  getShiftPlanningSettings,
 } from "@/lib/shift-service";
 import { getWishFreeRequestsForTenant } from "@/lib/wish-free-service";
 import {
@@ -28,21 +32,14 @@ import {
   type LocationActivity,
   type LocationFile,
   type LocationFileFolder,
-  type LocationShiftCell,
-  type LocationShiftEmployee,
-  type LocationShiftRow,
-  type LocationShiftTone,
   type LocationStatus,
 } from "@/lib/locations";
 import {
   ArrowLeft,
-  ChevronLeft,
-  ChevronRight,
   FileText,
   Folder,
   Lock,
   Pencil,
-  Plus,
 } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -194,16 +191,7 @@ function EditableSelectField({
   );
 }
 
-const locationColorOptions = [
-  { value: "bg-ink", className: "bg-ink", label: "Schwarz" },
-  { value: "bg-[#2A6FDB]", className: "bg-[#2A6FDB]", label: "Blau" },
-  { value: "bg-success", className: "bg-success", label: "Gruen" },
-  { value: "bg-[#8B6ED4]", className: "bg-[#8B6ED4]", label: "Violett" },
-  { value: "bg-[#C9622A]", className: "bg-[#C9622A]", label: "Orange" },
-  { value: "bg-danger", className: "bg-danger", label: "Rot" },
-  { value: "bg-[#168A8A]", className: "bg-[#168A8A]", label: "Tuerkis" },
-  { value: "bg-[#5C6B7A]", className: "bg-[#5C6B7A]", label: "Schiefer" },
-];
+const locationColorOptions = locationColorPalette;
 
 function EditableColorField({ value }: { value: string }) {
   const options = locationColorOptions.some((color) => color.value === value)
@@ -299,10 +287,12 @@ function FileFolderCard({
   folder,
   tenant,
   returnPath,
+  canManageReminders,
 }: {
   folder: LocationFileFolder;
   tenant: string;
   returnPath: string;
+  canManageReminders: boolean;
 }) {
   return (
     <div className="flex w-full cursor-pointer items-center gap-[13px] rounded-xl border border-border bg-white p-[15px] text-left font-sans transition-colors hover:bg-bg">
@@ -324,6 +314,7 @@ function FileFolderCard({
         compact
         name={folder.name}
         context={`Standortordner \u00b7 ${folder.name}`}
+        canManage={canManageReminders}
       />
     </div>
   );
@@ -333,10 +324,12 @@ function FileRow({
   file,
   tenant,
   returnPath,
+  canManageReminders,
 }: {
   file: LocationFile;
   tenant: string;
   returnPath: string;
+  canManageReminders: boolean;
 }) {
   return (
     <div className="flex w-full cursor-pointer items-center gap-3.5 border-t border-border-soft py-3 text-left font-sans transition-colors hover:bg-bg">
@@ -364,6 +357,7 @@ function FileRow({
         compact
         name={file.name}
         context={`${file.folder} \u00b7 Standortdatei`}
+        canManage={canManageReminders}
       />
     </div>
   );
@@ -396,11 +390,15 @@ function FilesTab({
   tenant,
   locationHref,
   uploadOptions,
+  canManageFiles,
+  canManageReminders,
 }: {
   location: Location;
   tenant: string;
   locationHref: string;
   uploadOptions: FileUploadOptions;
+  canManageFiles: boolean;
+  canManageReminders: boolean;
 }) {
   const folderOptions = locationFolderOptions(location);
 
@@ -425,22 +423,24 @@ function FilesTab({
           {location.fileFolders.length} Ordner {"\u00b7"} {location.files.length}{" "}
           Dateien
         </span>
-        <div className="flex flex-wrap gap-2">
-          <CreateFolderButton
-            tenant={tenant}
-            returnPath={`${locationHref}?tab=files`}
-            ownerType="location"
-            ownerId={location.dbId}
-          />
-          <UploadFileButton
-            tenant={tenant}
-            returnPath={`${locationHref}?tab=files`}
-            ownerType="location"
-            ownerId={location.dbId}
-            folderOptions={folderOptions}
-            uploadOptions={uploadOptions}
-          />
-        </div>
+        {canManageFiles && (
+          <div className="flex flex-wrap gap-2">
+            <CreateFolderButton
+              tenant={tenant}
+              returnPath={`${locationHref}?tab=files`}
+              ownerType="location"
+              ownerId={location.dbId}
+            />
+            <UploadFileButton
+              tenant={tenant}
+              returnPath={`${locationHref}?tab=files`}
+              ownerType="location"
+              ownerId={location.dbId}
+              folderOptions={folderOptions}
+              uploadOptions={uploadOptions}
+            />
+          </div>
+        )}
       </div>
 
       <div className="grid gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(210px,1fr))]">
@@ -450,6 +450,7 @@ function FilesTab({
               folder={folder}
               tenant={tenant}
               returnPath={`${locationHref}?tab=files`}
+              canManageReminders={canManageReminders}
             />
         ))}
       </div>
@@ -464,193 +465,13 @@ function FilesTab({
               file={file}
               tenant={tenant}
               returnPath={`${locationHref}?tab=files`}
+              canManageReminders={canManageReminders}
             />
         ))}
       </div>
     </DetailPanel>
   );
 }
-
-function ShiftToneMark({ tone }: { tone: LocationShiftTone }) {
-  const color = {
-    blue: "bg-[#2A6FDB]",
-    muted: "bg-muted-2",
-    success: "bg-success",
-  }[tone];
-
-  return <span className={`size-[9px] shrink-0 rounded-[2px] ${color}`} />;
-}
-
-function ShiftCell({ cell }: { cell: LocationShiftCell }) {
-  if (cell.state === "empty") {
-    return (
-      <div className="flex min-h-[54px] items-center justify-center rounded-[9px] bg-border-soft" />
-    );
-  }
-
-  const isWarning = cell.state === "warning";
-
-  return (
-    <button
-      type="button"
-      className={`flex min-h-[54px] cursor-pointer flex-col items-center justify-center rounded-[9px] px-1 py-2 font-mono transition-colors ${
-        isWarning
-          ? "border border-danger/35 bg-danger/15 text-danger hover:bg-danger/20"
-          : "bg-ink text-white hover:bg-muted-2"
-      }`}
-    >
-      <span className="text-[11px] font-semibold">{cell.staffing}</span>
-      <span
-        className={`mt-0.5 text-[9px] ${
-          isWarning ? "text-danger/80" : "text-white/60"
-        }`}
-      >
-        {cell.time}
-      </span>
-    </button>
-  );
-}
-
-function ShiftRow({ row }: { row: LocationShiftRow }) {
-  return (
-    <div className="mb-[7px] grid items-center gap-1.5 [grid-template-columns:130px_repeat(7,1fr)]">
-      <div className="flex items-center gap-[7px] px-1 py-0.5">
-        <ShiftToneMark tone={row.tone} />
-        <span className="text-[12.5px] font-semibold text-ink">{row.label}</span>
-      </div>
-      {row.cells.map((cell, index) => (
-        <ShiftCell key={`${row.label}-${index}`} cell={cell} />
-      ))}
-    </div>
-  );
-}
-
-function EmployeeShiftMark({
-  value,
-}: {
-  value: LocationShiftEmployee["days"][number];
-}) {
-  if (!value) {
-    return (
-      <div className="flex h-[26px] items-center justify-center rounded-md bg-border-soft" />
-    );
-  }
-
-  return (
-    <button
-      type="button"
-      className="flex h-[30px] w-full cursor-pointer items-center justify-center rounded-md bg-ink px-1 font-mono text-[10px] font-semibold text-white transition-colors hover:bg-muted-2"
-      title="Schicht bearbeiten"
-    >
-      {value}
-    </button>
-  );
-}
-
-function EmployeeShiftRow({ employee }: { employee: LocationShiftEmployee }) {
-  return (
-    <div className="grid items-center gap-1.5 border-t border-border-soft py-[7px] [grid-template-columns:180px_repeat(7,1fr)]">
-      <div className="flex min-w-0 items-center gap-2">
-        <span className="flex size-[26px] shrink-0 items-center justify-center rounded-full bg-ink text-[9.5px] font-semibold text-white">
-          {employee.initials}
-        </span>
-        <span className="truncate text-[12.5px] font-semibold text-ink">
-          {employee.name}
-        </span>
-      </div>
-      {employee.days.map((day, index) => (
-        <EmployeeShiftMark key={`${employee.initials}-${index}`} value={day} />
-      ))}
-    </div>
-  );
-}
-
-function ShiftsTab({ location }: { location: Location }) {
-  const { shiftPlan } = location;
-
-  return (
-    <section className="overflow-hidden rounded-card border border-border bg-white">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-[22px] pt-5 pb-4">
-        <div>
-          <h2 className="m-0 font-display text-[17px] font-semibold tracking-[-0.3px] text-ink">
-            Schichtplan {"\u00b7"} {shiftPlan.week}
-          </h2>
-          <div className="mt-1 text-[12.5px] text-muted">{location.name}</div>
-        </div>
-        <button type="button" className="btn btn-secondary btn-sm">
-          <Plus size={14} />
-          Schicht planen
-        </button>
-      </div>
-
-      <div className="overflow-x-auto px-[22px] pt-4 pb-[22px]">
-        <div className="min-w-[680px]">
-          <div className="mb-2 grid gap-1.5 [grid-template-columns:130px_repeat(7,1fr)]">
-            <div />
-            {shiftPlan.days.map((day) => (
-              <div
-                key={day.label}
-                className={`text-center font-mono text-[11px] font-medium ${
-                  day.weekend ? "text-danger" : "text-ink"
-                }`}
-              >
-                <div>{day.label}</div>
-                <div className="mt-0.5 text-[9px] text-[#B0B0AB]">
-                  {day.date}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {shiftPlan.rows.map((row) => (
-            <ShiftRow key={row.label} row={row} />
-          ))}
-        </div>
-      </div>
-
-      <div className="border-t border-border px-[22px] py-[18px]">
-        <div className="mb-3.5 flex flex-wrap items-center justify-between gap-3">
-          <div className="font-mono text-[9px] uppercase tracking-[0.5px] text-muted">
-            Eingeplante Mitarbeiter
-          </div>
-          <div className="flex items-center gap-1 rounded-[10px] border border-border bg-bg p-1">
-            <button type="button" className="flex size-7 items-center justify-center rounded-[8px] bg-white text-muted">
-              <ChevronLeft size={14} />
-            </button>
-            <span className="px-2 font-mono text-[11px] font-semibold text-ink">
-              {shiftPlan.week}
-            </span>
-            <button type="button" className="flex size-7 items-center justify-center rounded-[8px] bg-white text-muted">
-              <ChevronRight size={14} />
-            </button>
-          </div>
-        </div>
-        <div className="overflow-x-auto">
-          <div className="min-w-[760px]">
-            <div className="grid items-center gap-1.5 pb-2 [grid-template-columns:180px_repeat(7,1fr)]">
-              <div />
-              {shiftPlan.days.map((day) => (
-                <div
-                  key={`employee-head-${day.label}`}
-                  className={`text-center font-mono text-[10px] font-semibold ${
-                    day.weekend ? "text-danger" : "text-muted"
-                  }`}
-                >
-                  {day.label}
-                </div>
-              ))}
-            </div>
-            {shiftPlan.employees.map((employee) => (
-              <EmployeeShiftRow key={employee.initials} employee={employee} />
-            ))}
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-void ShiftsTab;
 
 export default async function LocationDetailPage({
   params,
@@ -662,30 +483,45 @@ export default async function LocationDetailPage({
   const currentWeek = getISOWeekFromDate(new Date());
   const year = searchParamNumber(query.year, currentWeek.year);
   const week = searchParamNumber(query.week, currentWeek.week);
-  const [location, employees, shiftPlan, shiftOptions, uploadOptions] = await Promise.all([
-    getLocationForTenant(tenant, locationId),
-    getEmployeesForTenant(tenant),
-    getShiftPlanForTenant({ tenantSlug: tenant, year, week }),
-    getShiftFormOptions(tenant),
-    getFileUploadOptions(tenant),
-  ]);
+  const [location, employees, shiftPlan, shiftOptions, uploadOptions, shiftSettings] =
+    await withAccessRedirect(tenant, () =>
+      Promise.all([
+        getLocationForTenant(tenant, locationId),
+        getEmployeesForTenant(tenant),
+        getShiftPlanForTenant({ tenantSlug: tenant, year, week }),
+        getShiftFormOptions(tenant),
+        getFileUploadOptions(tenant),
+        getShiftPlanningSettings(tenant),
+      ]),
+    );
 
   if (!location || !employees || !shiftPlan || !shiftOptions) {
     notFound();
   }
 
+  const capabilities = await getTenantCapabilities(tenant);
+  const canEditLocation = hasPermissionLevel(capabilities.locations.level, "write");
+  const canDeleteLocation = capabilities.locations.canDelete;
+  const canManageShifts = hasPermissionLevel(capabilities.locations.shiftsLevel ?? "none", "write");
+  const canManageFiles = capabilities.locations.canUploadFiles;
+  const canManageReminders = hasPermissionLevel(capabilities.reminders.level, "write");
+  const canViewAudit = capabilities.locations.canViewAudit;
+
   const isFilesTab = tab === "files";
   const isShiftsTab = tab === "shifts";
   const isHomeTab = !isFilesTab && !isShiftsTab;
-  const isEditing = edit === "1" && isHomeTab;
+  const isEditing = edit === "1" && isHomeTab && canEditLocation;
   const locationHref = `/u/${tenant}/standorte/${location.id}`;
   const locationEditHref = `${locationHref}?edit=1`;
   const locationDbId = location.dbId ?? "";
-  const auditEntries = await getAuditLogsForEntity({
-    tenantSlug: tenant,
-    entityType: "location",
-    entityId: location.dbId ?? location.id,
-  });
+  const auditEntries = canViewAudit
+    ? await getAuditLogsForEntity({
+        tenantSlug: tenant,
+        area: "locations",
+        entityType: "location",
+        entityId: location.dbId ?? location.id,
+      })
+    : [];
   const assignedEmployeeKeys = new Set(
     location.team.map((member) => member.employeeId ?? member.name),
   );
@@ -759,7 +595,7 @@ export default async function LocationDetailPage({
                   label="Typ"
                   name="kind"
                   value={location.kind}
-                  options={["Filiale", "Lager", "Verwaltung"]}
+                  options={[...locationKinds]}
                 />
                 <div className="sm:col-span-2">
                   <div className="mb-2 label">Adresse</div>
@@ -797,16 +633,18 @@ export default async function LocationDetailPage({
           </div>
 
           <div className="flex flex-wrap gap-2.5">
-            {!isEditing && (
+            {!isEditing && canDeleteLocation && (
+              <ConfirmSubmitButton
+                form="location-edit-form"
+                formAction={deleteLocationAction}
+                className="btn btn-secondary btn-sm border-danger/25 text-danger hover:border-danger/40 hover:bg-danger/5"
+                description={`Der Standort "${location.name}" wird dauerhaft gelöscht.`}
+              >
+                Löschen
+              </ConfirmSubmitButton>
+            )}
+            {!isEditing && canEditLocation && (
               <>
-                <ConfirmSubmitButton
-                  form="location-edit-form"
-                  formAction={deleteLocationAction}
-                  className="btn btn-secondary btn-sm border-danger/25 text-danger hover:border-danger/40 hover:bg-danger/5"
-                  description={`Der Standort "${location.name}" wird dauerhaft geloescht.`}
-                >
-                  Loeschen
-                </ConfirmSubmitButton>
                 <Link href={locationEditHref} className="btn btn-secondary btn-sm">
                   <Pencil size={14} />
                   Bearbeiten
@@ -864,6 +702,8 @@ export default async function LocationDetailPage({
           tenant={tenant}
           locationHref={locationHref}
           uploadOptions={uploadOptions}
+          canManageFiles={canManageFiles}
+          canManageReminders={canManageReminders}
         />
       ) : isShiftsTab ? (
         <LocationShiftPlanner
@@ -879,6 +719,8 @@ export default async function LocationDetailPage({
           }))}
           employees={locationShiftEmployees}
           wishFreeRequests={wishFreeRequests}
+          breakRule={shiftSettings.breakRule}
+          canManage={canManageShifts}
         />
       ) : (
         <>
@@ -998,9 +840,11 @@ export default async function LocationDetailPage({
           </div>
         </>
       )}
-      <div className="mt-4">
-        <AuditLogPanel entries={auditEntries} />
-      </div>
+      {canViewAudit && (
+        <div className="mt-4">
+          <AuditLogPanel entries={auditEntries} />
+        </div>
+      )}
 
       {isEditing && (
         <FloatingEditBar cancelHref={locationHref} formId="location-edit-form" />

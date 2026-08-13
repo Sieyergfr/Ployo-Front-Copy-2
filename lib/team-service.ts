@@ -1,15 +1,125 @@
 import { recordTenantAudit } from "@/lib/audit";
 import { getEmployeesForTenant } from "@/lib/employee-service";
 import { type Employee } from "@/lib/employees";
+import { canAccessFileAcl, getOptionalAreaFileAccess } from "@/lib/file-access";
+import { mapTenantFileToFileItem } from "@/lib/files";
+import { isKnownTeamColor } from "@/lib/org-options";
 import { prisma } from "@/lib/prisma";
-import { type Team, type TeamMember } from "@/lib/teams";
-import { requireTenantAccess } from "@/lib/tenant-access";
+import { type Team, type TeamFile, type TeamFileFolder, type TeamMember } from "@/lib/teams";
+import {
+  requireTenantAccess,
+  resolveScopeFilter,
+  type TenantAccess,
+} from "@/lib/tenant-access";
+
+function assertKnownTeamColor(colorClassName: string) {
+  if (colorClassName && !isKnownTeamColor(colorClassName)) {
+    throw new Error("Unbekannte Teamfarbe.");
+  }
+}
+
+/**
+ * Löst den "files"-Scope (own/team/all) für die am Team-Entity hängenden
+ * Dateien auf — unabhängig vom "teams"-Bereich (dessen `canViewFiles`
+ * weiterhin bestimmt, OB überhaupt Team-Dateien sichtbar sind; dieser Scope
+ * bestimmt zusätzlich, für WELCHE Teams). "own" zeigt keine Team-Dateien
+ * (das sind keine eigenen Daten), "team" nur die des eigenen Teams
+ * (Namensabgleich wie beim "team"-Scope anderer Bereiche), "all" alle.
+ */
+async function resolveFilesAreaScope(tenantSlug: string) {
+  try {
+    const access = await requireTenantAccess(tenantSlug, "files", "read");
+
+    return await resolveScopeFilter(access);
+  } catch (error) {
+    if (error instanceof Error && error.message === "FORBIDDEN") {
+      return null;
+    }
+
+    throw error;
+  }
+}
+
+function teamFilesVisible(
+  filesScope: Awaited<ReturnType<typeof resolveFilesAreaScope>>,
+  teamName: string,
+) {
+  if (!filesScope) {
+    return false;
+  }
+
+  if (filesScope.type === "all") {
+    return true;
+  }
+
+  if (filesScope.type === "team") {
+    return Boolean(teamName) && filesScope.team === teamName;
+  }
+
+  return false;
+}
+
+/**
+ * `TenantTeam.locations` ist eine Freitext-Liste (keine Relation) — ohne
+ * diese Prüfung könnte ein direkter Server-Action-Aufruf beliebige Strings
+ * setzen. Bewusst scope-frei (kein `requireTenantAccess` auf "locations"),
+ * damit ein Team-Manager ohne Leserecht auf Standorte weiterhin Teams
+ * anlegen/bearbeiten kann — nur zur Validierung, nicht für die Anzeige.
+ */
+async function assertKnownLocations(tenantId: string, locationNames: string[]) {
+  const names = Array.from(
+    new Set(locationNames.map((name) => name.trim()).filter(Boolean)),
+  );
+
+  if (names.length === 0) {
+    return;
+  }
+
+  const found = await prisma.tenantLocation.findMany({
+    where: { tenantId, name: { in: names } },
+    select: { name: true },
+  });
+  const foundNames = new Set(found.map((location) => location.name));
+  const unknown = names.filter((name) => !foundNames.has(name));
+
+  if (unknown.length > 0) {
+    throw new Error(`Unbekannte Standorte: ${unknown.join(", ")}.`);
+  }
+}
 
 export type TeamMetric = {
   label: string;
   value: string;
   caption: string;
   tone?: "danger";
+};
+
+type TenantFileRecord = {
+  id: string;
+  displayName: string;
+  originalName: string;
+  folderName: string;
+  folderSlug: string;
+  ownerName: string;
+  updatedAt: Date;
+  createdAt: Date;
+  sizeBytes: number;
+  mimeType: string;
+  extension: string;
+  version: number;
+  accessRoleIdsJson: unknown;
+  accessUserIdsJson: unknown;
+  parent?: { accessRoleIdsJson: unknown; accessUserIdsJson: unknown } | null;
+};
+
+type TenantFileFolderRecord = {
+  id: string;
+  name: string;
+  path: string;
+  ownerName: string;
+  locked: boolean;
+  updatedAt: Date;
+  createdAt: Date;
 };
 
 type TeamRecord = {
@@ -30,6 +140,8 @@ type TeamRecord = {
     status: string;
     isLead: boolean;
   }>;
+  storageFiles?: TenantFileRecord[];
+  storageFileFolders?: TenantFileFolderRecord[];
 };
 
 function normalizeTeamKey(value: string) {
@@ -92,6 +204,45 @@ function employeeToMember(employee: Employee, role = employee.role): Omit<TeamMe
 }
 
 function toTeam(record: TeamRecord): Team {
+  const storedFiles: TeamFile[] = (record.storageFiles ?? []).map((file) => {
+    const mapped = mapTenantFileToFileItem(file);
+
+    return {
+      name: mapped.name,
+      folder: mapped.folder,
+      updatedAt: mapped.updatedAt,
+      size: mapped.size,
+      type: mapped.type,
+      locked: true,
+      storageFileId: mapped.storageFileId,
+    };
+  });
+  const files = storedFiles;
+  const folderMap = new Map<string, TeamFileFolder>();
+
+  for (const folder of record.storageFileFolders ?? []) {
+    folderMap.set(folder.name, {
+      name: folder.name,
+      path: folder.path,
+      fileCount: 0,
+      locked: folder.locked,
+    });
+  }
+
+  for (const file of storedFiles) {
+    const current = folderMap.get(file.folder);
+
+    if (current) {
+      current.fileCount += 1;
+    } else {
+      folderMap.set(file.folder, {
+        name: file.folder,
+        fileCount: 1,
+        locked: true,
+      });
+    }
+  }
+
   const members = record.members.map((member) => ({
     id: member.id,
     employeeId: member.employeeId,
@@ -125,6 +276,8 @@ function toTeam(record: TeamRecord): Team {
     colorClassName: record.colorClassName,
     members,
     lead,
+    fileFolders: Array.from(folderMap.values()),
+    files,
   };
 }
 
@@ -132,46 +285,104 @@ export async function getTenantIdForTeams(tenantSlug: string) {
   return (await requireTenantAccess(tenantSlug, "teams", "read")).tenantId;
 }
 
-export async function getTeamsForTenant(tenantSlug: string) {
-  const tenantId = await getTenantIdForTeams(tenantSlug);
+/**
+ * "assigned"-Scope für Teams: nur die Teams, denen die eigene
+ * Personalakte über `TenantTeamMember` zugeordnet ist. "own"/"team" ergeben
+ * für Teams (bisher) keinen Sinn — sicherheitshalber nichts treffen statt zu
+ * raten, welches Team gemeint sein könnte.
+ */
+async function teamScopeWhere(access: TenantAccess) {
+  const scopeFilter = await resolveScopeFilter(access);
 
-  if (!tenantId) {
-    return null;
+  if (scopeFilter.type === "all") {
+    return { tenantId: access.tenantId };
   }
 
+  if (scopeFilter.type === "assigned" && scopeFilter.area === "teams") {
+    return { tenantId: access.tenantId, id: { in: scopeFilter.teamIds } };
+  }
+
+  return { tenantId: access.tenantId, id: "__none__" };
+}
+
+export async function getTeamsForTenant(tenantSlug: string) {
+  const access = await requireTenantAccess(tenantSlug, "teams", "read");
+  const where = await teamScopeWhere(access);
+  const fileAccess = await getOptionalAreaFileAccess(tenantSlug, "teams");
+  const filesScope = await resolveFilesAreaScope(tenantSlug);
+
   const records = await prisma.tenantTeam.findMany({
-    where: { tenantId },
+    where,
     orderBy: { createdAt: "asc" },
     include: {
       members: {
         orderBy: [{ isLead: "desc" }, { createdAt: "asc" }],
       },
+      files: {
+        where: { status: "active" },
+        orderBy: { updatedAt: "desc" },
+        include: { parent: { select: { accessRoleIdsJson: true, accessUserIdsJson: true } } },
+      },
+      fileFolders: {
+        where: { status: "active" },
+        orderBy: { name: "asc" },
+      },
     },
   });
 
-  return records.map(toTeam);
+  return records.map((record) => {
+    const filesVisible = fileAccess && teamFilesVisible(filesScope, record.name);
+
+    return toTeam({
+      ...record,
+      storageFiles: filesVisible
+        ? record.files.filter((file) => canAccessFileAcl(file.parent ?? file, fileAccess))
+        : [],
+      storageFileFolders: filesVisible ? record.fileFolders : [],
+    });
+  });
 }
 
 export async function getTeamForTenant(tenantSlug: string, teamHandle: string) {
-  const tenantId = await getTenantIdForTeams(tenantSlug);
-
-  if (!tenantId) {
-    return null;
-  }
+  const access = await requireTenantAccess(tenantSlug, "teams", "read");
+  const where = await teamScopeWhere(access);
+  const fileAccess = await getOptionalAreaFileAccess(tenantSlug, "teams");
+  const filesScope = await resolveFilesAreaScope(tenantSlug);
 
   const record = await prisma.tenantTeam.findFirst({
     where: {
+      ...where,
       key: teamHandle,
-      tenantId,
     },
     include: {
       members: {
         orderBy: [{ isLead: "desc" }, { createdAt: "asc" }],
       },
+      files: {
+        where: { status: "active" },
+        orderBy: { updatedAt: "desc" },
+        include: { parent: { select: { accessRoleIdsJson: true, accessUserIdsJson: true } } },
+      },
+      fileFolders: {
+        where: { status: "active" },
+        orderBy: { name: "asc" },
+      },
     },
   });
 
-  return record ? toTeam(record) : null;
+  if (!record) {
+    return null;
+  }
+
+  const filesVisible = fileAccess && teamFilesVisible(filesScope, record.name);
+
+  return toTeam({
+    ...record,
+    storageFiles: filesVisible
+      ? record.files.filter((file) => canAccessFileAcl(file.parent ?? file, fileAccess))
+      : [],
+    storageFileFolders: filesVisible ? record.fileFolders : [],
+  });
 }
 
 export function getTeamMetrics(teams: Team[]): TeamMetric[] {
@@ -197,7 +408,7 @@ export function getTeamMetrics(teams: Team[]): TeamMetric[] {
     {
       label: "Vakante Stellen",
       value: "2",
-      caption: "Muenchen - Fruehschicht",
+      caption: "München - Frühschicht",
       tone: "danger",
     },
   ];
@@ -249,7 +460,10 @@ export async function createTenantTeam(input: {
   colorClassName: string;
   leadEmployeeId?: string;
 }) {
+  assertKnownTeamColor(input.colorClassName);
+
   const access = await requireTeamManager(input.tenantSlug);
+  await assertKnownLocations(access.tenantId, input.locations);
   const key = await createUniqueTeamKey({
     tenantId: access.tenantId,
     name: input.name,
@@ -292,12 +506,20 @@ export async function updateTenantTeam(input: {
   locations: string[];
   colorClassName: string;
 }) {
+  assertKnownTeamColor(input.colorClassName);
+
   const access = await requireTeamManager(input.tenantSlug);
+  await assertKnownLocations(access.tenantId, input.locations);
   const key = await createUniqueTeamKey({
     tenantId: access.tenantId,
     name: input.name,
     excludeTeamId: input.teamId,
   });
+  const current = await prisma.tenantTeam.findFirst({
+    where: { id: input.teamId, tenantId: access.tenantId },
+    select: { name: true },
+  });
+  const nextName = input.name.trim();
 
   const team = await prisma.tenantTeam.update({
     where: {
@@ -306,11 +528,20 @@ export async function updateTenantTeam(input: {
     },
     data: {
       key,
-      name: input.name.trim(),
+      name: nextName,
       locations: input.locations.join(", "),
       colorClassName: input.colorClassName,
     },
   });
+
+  // TenantEmployee.team ist eine Freitext-Kopie des Teamnamens (keine
+  // Relation) — bei Umbenennung überall nachziehen.
+  if (current && current.name !== nextName) {
+    await prisma.tenantEmployee.updateMany({
+      where: { tenantId: access.tenantId, team: current.name },
+      data: { team: nextName },
+    });
+  }
 
   await recordTeamAudit(access, "Team geändert", team.id, team.name);
 
@@ -321,7 +552,11 @@ export async function deleteTenantTeam(input: {
   tenantSlug: string;
   teamId: string;
 }) {
-  const access = await requireTeamManager(input.tenantSlug);
+  const access = await requireTenantAccess(input.tenantSlug, "teams", "read");
+
+  if (!access.canDelete) {
+    throw new Error("FORBIDDEN");
+  }
 
   const team = await prisma.tenantTeam.delete({
     where: {
@@ -330,7 +565,16 @@ export async function deleteTenantTeam(input: {
     },
   });
 
-  await recordTeamAudit(access, "Team gelöscht", team.id, team.name);
+  await recordTenantAudit({
+    tenantId: access.tenantId,
+    actorId: access.userId,
+    actorName: access.userName,
+    action: "Team gelöscht",
+    source: "Teams",
+    entityType: "team",
+    entityId: team.id,
+    detail: team.name,
+  });
 }
 
 export async function setTenantTeamLead(input: {

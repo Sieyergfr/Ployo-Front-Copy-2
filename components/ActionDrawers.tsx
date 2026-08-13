@@ -229,7 +229,7 @@ export function LinkedFileBrowser({
           </span>
         </div>
         <span className="rounded-[7px] border border-border bg-white px-2 py-[3px] font-mono text-[10px] text-muted">
-          {selectedIds.length} gewaehlt
+          {selectedIds.length} gewählt
         </span>
       </div>
 
@@ -304,7 +304,7 @@ export function LinkedFileBrowser({
             <span className="flex size-8 shrink-0 items-center justify-center rounded-[9px] bg-bg text-muted">
               <Folder size={14} />
             </span>
-            <span className="text-[13px] font-semibold text-ink">Zurueck</span>
+            <span className="text-[13px] font-semibold text-ink">Zurück</span>
           </button>
         )}
 
@@ -408,6 +408,7 @@ function ReminderFields({
   defaultLinkedFiles = [],
   fileBrowserData,
   onCancel,
+  canManage = true,
 }: {
   tenant: string;
   returnPath: string;
@@ -421,6 +422,7 @@ function ReminderFields({
   defaultLinkedFiles?: string[];
   fileBrowserData?: ReminderFileBrowserData;
   onCancel: () => void;
+  canManage?: boolean;
 }) {
   const [linkedFiles, setLinkedFiles] = useState<string[]>(defaultLinkedFiles);
 
@@ -435,56 +437,60 @@ function ReminderFields({
       {linkedFiles.map((fileId) => (
         <input key={fileId} type="hidden" name="linkedFiles" value={fileId} />
       ))}
-      <Field label="Titel">
-        <input name="title" className="input" defaultValue={defaultTitle} required />
-      </Field>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Ablaufdatum">
-          <DatePickerField
-            name="dueDate"
-            defaultValue={defaultDueDate}
-            placeholder="Datum auswaehlen"
+      <fieldset disabled={!canManage} className="flex flex-col gap-4 border-0 p-0">
+        <Field label="Titel">
+          <input name="title" className="input" defaultValue={defaultTitle} required />
+        </Field>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Ablaufdatum">
+            <DatePickerField
+              name="dueDate"
+              defaultValue={defaultDueDate}
+              placeholder="Datum auswählen"
+            />
+          </Field>
+          <Field label="Priorität">
+            <select
+              name="priority"
+              className="input cursor-pointer bg-bg"
+              defaultValue={defaultPriority}
+            >
+              <option value="urgent">Dringend</option>
+              <option value="important">Wichtig</option>
+              <option value="normal">Normal</option>
+            </select>
+          </Field>
+        </div>
+        <Field label="Bezug">
+          <input name="subject" className="input" defaultValue={defaultContext} />
+        </Field>
+        <Field label="Kategorie">
+          <input name="category" className="input" defaultValue={defaultCategory} />
+        </Field>
+        <Field label="Hinweise">
+          <textarea
+            name="notes"
+            className="input min-h-28 resize-none"
+            placeholder="Interne Hinweise, nächste Schritte oder Kontext ergänzen"
+            defaultValue={defaultNotes}
           />
         </Field>
-        <Field label="Priorität">
-          <select
-            name="priority"
-            className="input cursor-pointer bg-bg"
-            defaultValue={defaultPriority}
-          >
-            <option value="urgent">Dringend</option>
-            <option value="important">Wichtig</option>
-            <option value="normal">Normal</option>
-          </select>
-        </Field>
-      </div>
-      <Field label="Bezug">
-        <input name="subject" className="input" defaultValue={defaultContext} />
-      </Field>
-      <Field label="Kategorie">
-        <input name="category" className="input" defaultValue={defaultCategory} />
-      </Field>
-      <Field label="Hinweise">
-        <textarea
-          name="notes"
-          className="input min-h-28 resize-none"
-          placeholder="Interne Hinweise, nächste Schritte oder Kontext ergänzen"
-          defaultValue={defaultNotes}
+        <LinkedFileBrowser
+          selectedIds={linkedFiles}
+          setSelectedIds={setLinkedFiles}
+          fileBrowserData={fileBrowserData}
         />
-      </Field>
-      <LinkedFileBrowser
-        selectedIds={linkedFiles}
-        setSelectedIds={setLinkedFiles}
-        fileBrowserData={fileBrowserData}
-      />
+      </fieldset>
       <div className="mt-1 flex justify-end gap-2.5 border-t border-border-soft pt-4">
         <button type="button" className="btn btn-secondary" onClick={onCancel}>
-          Abbrechen
+          {canManage ? "Abbrechen" : "Schließen"}
         </button>
-        <button type="submit" className="btn btn-primary">
-          <Save size={15} />
-          Speichern
-        </button>
+        {canManage && (
+          <button type="submit" className="btn btn-primary">
+            <Save size={15} />
+            Speichern
+          </button>
+        )}
       </div>
     </form>
   );
@@ -495,11 +501,13 @@ export function ReminderDrawerButton({
   tenant,
   returnPath,
   fileBrowserData,
+  canManage = true,
 }: {
   reminder: Reminder;
   tenant: string;
   returnPath: string;
   fileBrowserData?: ReminderFileBrowserData;
+  canManage?: boolean;
 }) {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -531,6 +539,7 @@ export function ReminderDrawerButton({
             defaultLinkedFiles={reminder.linkedFiles}
             fileBrowserData={fileBrowserData}
             onCancel={() => setIsOpen(false)}
+            canManage={canManage}
           />
         </RightDrawer>
       )}
@@ -545,6 +554,7 @@ export function ReminderRowButton({
   fileBrowserData,
   className,
   children,
+  canManage = true,
 }: {
   reminder: Reminder;
   tenant: string;
@@ -552,6 +562,7 @@ export function ReminderRowButton({
   fileBrowserData?: ReminderFileBrowserData;
   className: string;
   children: ReactNode;
+  canManage?: boolean;
 }) {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -579,6 +590,7 @@ export function ReminderRowButton({
             defaultLinkedFiles={reminder.linkedFiles}
             fileBrowserData={fileBrowserData}
             onCancel={() => setIsOpen(false)}
+            canManage={canManage}
           />
         </RightDrawer>
       )}
@@ -592,14 +604,20 @@ export function FileReminderButton({
   name,
   context,
   compact = false,
+  canManage = true,
 }: {
   tenant: string;
   returnPath: string;
   name: string;
   context: string;
   compact?: boolean;
+  canManage?: boolean;
 }) {
   const [isOpen, setIsOpen] = useState(false);
+
+  if (!canManage) {
+    return null;
+  }
 
   return (
     <>
@@ -643,9 +661,13 @@ export function FileReminderButton({
 export function SicknessDrawerButton({
   tenant,
   item,
+  canManage = true,
+  canDelete = canManage,
 }: {
   tenant: string;
   item: CurrentSickness | SicknessHistoryItem;
+  canManage?: boolean;
+  canDelete?: boolean;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const isCurrent = "since" in item;
@@ -677,7 +699,7 @@ export function SicknessDrawerButton({
                 {item.location} · {isCurrent ? `seit ${item.since}` : `${item.startDate}-${item.endDate}`}
               </div>
             </div>
-            {isCurrent ? (
+            {isCurrent && canManage ? (
               <form action={updateSicknessReportAction} className="flex flex-col gap-4">
                 <input type="hidden" name="tenant" value={tenant} />
                 <input type="hidden" name="reportId" value={item.id} />
@@ -726,14 +748,16 @@ export function SicknessDrawerButton({
                   >
                     Abbrechen
                   </button>
-                  <FormSubmitButton
-                    formAction={closeSicknessReportAction}
-                    Icon={Check}
-                    className="btn btn-secondary"
-                    pendingLabel="Wird gespeichert..."
-                  >
-                    Krankheit beenden
-                  </FormSubmitButton>
+                  {canDelete && (
+                    <FormSubmitButton
+                      formAction={closeSicknessReportAction}
+                      Icon={Check}
+                      className="btn btn-secondary"
+                      pendingLabel="Wird gespeichert..."
+                    >
+                      Krankheit beenden
+                    </FormSubmitButton>
+                  )}
                   <FormSubmitButton Icon={Save} pendingLabel="Wird gespeichert...">
                     Speichern
                   </FormSubmitButton>
@@ -741,9 +765,9 @@ export function SicknessDrawerButton({
               </form>
             ) : (
               <div className="rounded-xl border border-border bg-bg p-4 text-[13px] leading-[1.55] text-muted-2">
-                Diese Krankmeldung ist abgeschlossen und kann nicht mehr bearbeitet
-                werden. Neue Dokumente oder Korrekturen müssen als neuer Vorgang
-                erfasst werden.
+                {isCurrent
+                  ? "Sie haben keine Berechtigung, diese Krankmeldung zu bearbeiten."
+                  : "Diese Krankmeldung ist abgeschlossen und kann nicht mehr bearbeitet werden. Neue Dokumente oder Korrekturen müssen als neuer Vorgang erfasst werden."}
               </div>
             )}
           </div>
@@ -756,9 +780,13 @@ export function SicknessDrawerButton({
 export function VacationDrawerButton({
   tenant,
   request,
+  canManage = true,
+  canDelete = canManage,
 }: {
   tenant: string;
   request: VacationRequest;
+  canManage?: boolean;
+  canDelete?: boolean;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const deleteFormId = `vacation-delete-${request.dbId ?? request.id}`;
@@ -778,76 +806,91 @@ export function VacationDrawerButton({
           title={request.name}
           onClose={() => setIsOpen(false)}
         >
+          {!canManage && (
+            <div className="mb-4 rounded-xl border border-border bg-bg p-4 text-[13px] leading-[1.55] text-muted-2">
+              Sie haben keine Berechtigung, diesen Urlaubsantrag zu bearbeiten.
+            </div>
+          )}
           <form action={updateVacationRequestAction} className="flex flex-col gap-4">
             <input type="hidden" name="tenant" value={tenant} />
             <input type="hidden" name="requestId" value={request.dbId ?? ""} />
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Von">
-                <DatePickerField
-                  name="startDate"
-                  defaultValue={request.startDateIso ?? request.startDate}
+            <fieldset disabled={!canManage} className="flex flex-col gap-4 border-0 p-0">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="Von">
+                  <DatePickerField
+                    name="startDate"
+                    defaultValue={request.startDateIso ?? request.startDate}
+                  />
+                </Field>
+                <Field label="Bis">
+                  <DatePickerField
+                    name="endDate"
+                    defaultValue={request.endDateIso ?? request.endDate}
+                  />
+                </Field>
+              </div>
+              <div className="rounded-xl border border-border bg-bg p-3 text-[12.5px] text-muted-2">
+                Aktuell erfasst: <span className="font-semibold text-ink">{request.days}</span>.
+                Die Dauer wird beim Speichern aus dem Zeitraum neu berechnet.
+              </div>
+              <Field label="Hinweise">
+                <textarea
+                  name="note"
+                  className="input min-h-24 resize-none"
+                  defaultValue={request.note ?? ""}
+                  placeholder="Vertretung, Übergaben oder Entscheidung dokumentieren"
                 />
               </Field>
-              <Field label="Bis">
-                <DatePickerField
-                  name="endDate"
-                  defaultValue={request.endDateIso ?? request.endDate}
-                />
-              </Field>
-            </div>
-            <div className="rounded-xl border border-border bg-bg p-3 text-[12.5px] text-muted-2">
-              Aktuell erfasst: <span className="font-semibold text-ink">{request.days}</span>.
-              Die Dauer wird beim Speichern aus dem Zeitraum neu berechnet.
-            </div>
-            <Field label="Hinweise">
-              <textarea
-                name="note"
-                className="input min-h-24 resize-none"
-                defaultValue={request.note ?? ""}
-                placeholder="Vertretung, Übergaben oder Entscheidung dokumentieren"
-              />
-            </Field>
-            <div className="flex flex-wrap gap-2 border-t border-border-soft pt-4">
-              <FormSubmitButton
-                formAction={approveVacationRequestAction}
-                Icon={Check}
-                className="btn btn-primary btn-sm"
-                pendingLabel="Laeuft..."
-              >
-                Genehmigen
-              </FormSubmitButton>
-              <FormSubmitButton
-                formAction={rejectVacationRequestAction}
-                className="btn btn-secondary btn-sm border-danger/25 text-danger hover:border-danger/40 hover:bg-danger/5"
-                pendingLabel="Laeuft..."
-              >
-                Ablehnen
-              </FormSubmitButton>
-              <ConfirmSubmitButton
-                form={deleteFormId}
-                className="btn btn-secondary btn-sm"
-                description={`Der Urlaubsantrag von ${request.name} wird geloescht.`}
-              >
-                Loeschen
-              </ConfirmSubmitButton>
-            </div>
+            </fieldset>
+            {canManage && (
+              <div className="flex flex-wrap gap-2 border-t border-border-soft pt-4">
+                <FormSubmitButton
+                  formAction={approveVacationRequestAction}
+                  Icon={Check}
+                  className="btn btn-primary btn-sm"
+                  pendingLabel="Läuft..."
+                >
+                  Genehmigen
+                </FormSubmitButton>
+                <FormSubmitButton
+                  formAction={rejectVacationRequestAction}
+                  className="btn btn-secondary btn-sm border-danger/25 text-danger hover:border-danger/40 hover:bg-danger/5"
+                  pendingLabel="Läuft..."
+                >
+                  Ablehnen
+                </FormSubmitButton>
+                {canDelete && (
+                  <ConfirmSubmitButton
+                    form={deleteFormId}
+                    className="btn btn-secondary btn-sm"
+                    description={`Der Urlaubsantrag von ${request.name} wird gelöscht.`}
+                  >
+                    Löschen
+                  </ConfirmSubmitButton>
+                )}
+              </div>
+            )}
             <div className="mt-1 flex justify-end gap-2.5 border-t border-border-soft pt-4">
               <button
                 type="button"
                 className="btn btn-secondary"
                 onClick={() => setIsOpen(false)}
               >
-                Abbrechen
+                {canManage ? "Abbrechen" : "Schließen"}
               </button>
-              <FormSubmitButton Icon={Save} pendingLabel="Wird gespeichert...">
-                Zeitraum speichern
-              </FormSubmitButton>
+              {canManage && (
+                <FormSubmitButton Icon={Save} pendingLabel="Wird gespeichert...">
+                  Zeitraum speichern
+                </FormSubmitButton>
+              )}
             </div>
           </form>
-          <form id={deleteFormId} action={deleteVacationRequestAction}>
-            <input type="hidden" name="tenant" value={tenant} />
-            <input type="hidden" name="requestId" value={request.dbId ?? ""} />
-          </form>
+          {canDelete && (
+            <form id={deleteFormId} action={deleteVacationRequestAction}>
+              <input type="hidden" name="tenant" value={tenant} />
+              <input type="hidden" name="requestId" value={request.dbId ?? ""} />
+            </form>
+          )}
         </RightDrawer>
       )}
     </>
@@ -859,16 +902,22 @@ export function ShiftSettingsDrawerButton({
   year,
   week,
   settings,
+  canManage = true,
 }: {
   tenant: string;
   year: number;
   week: number;
   settings: ShiftPlanningSettings;
+  canManage?: boolean;
 }) {
   const { openPopup, closePopup } = useUniversalPopup();
   const [isOpen, setIsOpen] = useState(false);
   const [editingShiftId, setEditingShiftId] = useState<string | null>(null);
   const [shiftPresets, setShiftPresets] = useState<ShiftPreset[]>(settings.presets);
+
+  if (!canManage) {
+    return null;
+  }
 
   function updateShiftPreset(
     id: string,
@@ -902,11 +951,11 @@ export function ShiftSettingsDrawerButton({
 
   function confirmRemoveShiftPreset(shift: ShiftPreset) {
     openPopup({
-      title: "Schichtvorlage loeschen",
+      title: "Schichtvorlage löschen",
       content: (
         <div>
           <p className="m-0 text-[13px] leading-[1.55] text-muted-2">
-            {`Die Vorlage "${shift.label}" wird entfernt. Das Speichern uebernimmt die Aenderung.`}
+            {`Die Vorlage "${shift.label}" wird entfernt. Das Speichern übernimmt die Änderung.`}
           </p>
           <div className="mt-5 flex justify-end gap-2.5 border-t border-border-soft pt-4">
             <button type="button" className="btn btn-secondary" onClick={closePopup}>
@@ -1043,6 +1092,7 @@ export function ShiftSettingsDrawerButton({
                                 )
                               }
                               aria-label="Schichtname"
+                              maxLength={64}
                             />
                             <input
                               type="time"

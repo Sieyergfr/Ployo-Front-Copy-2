@@ -58,6 +58,8 @@ export default function RegisterForm({
           password,
           name: `${firstName} ${lastName}`.trim(),
           callbackURL: target,
+          // @ts-expect-error – zusätzliches Feld, wird im auth.ts-Hook geprüft
+          terms: termsAccepted,
         });
 
         setIsPending(false);
@@ -127,6 +129,7 @@ export default function RegisterForm({
           label="Passwort"
           placeholder="password"
           autoComplete="new-password"
+          minLength={12}
           required
         />
         <PasswordInput

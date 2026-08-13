@@ -1,0 +1,19 @@
+{
+  "AccountPreferences": {
+    "cardTitle": "Persönliche Einstellungen",
+    "startPageLabel": "Startseite nach der Anmeldung",
+    "startPageOverview": "Übersicht",
+    "startPageMeinBereich": "Mein Bereich",
+    "startPageEmployees": "Mitarbeiter",
+    "startPageUrlaub": "Urlaub",
+    "startPageSchichtplanung": "Schichtplanung",
+    "languageLabel": "Sprache",
+    "languageDe": "Deutsch",
+    "languageEn": "Englisch",
+    "dateFormatLabel": "Datumsformat",
+    "timezoneLabel": "Zeitzone",
+    "disclaimer": "Sprache wirkt sich bereits auf diesen Bereich aus — die restliche Oberfläche folgt schrittweise. Datumsformat und Zeitzone werden gespeichert, aber noch nicht angewendet.",
+    "save": "Speichern",
+    "saving": "Wird gespeichert..."
+  }
+}

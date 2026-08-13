@@ -3,18 +3,22 @@ import { normalizeAddressInput, type AddressInput } from "@/lib/address";
 import { recordTenantAudit } from "@/lib/audit";
 import { isEmailConfigured, sendInvitationEmail } from "@/lib/email";
 import { buildInvitationUrl } from "@/lib/invitation-service";
+import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import { parseShiftPresets } from "@/lib/shift-presets";
-import { isReservedTenantSlug, normalizeLogoUrl, slugify } from "@/lib/tenants";
+import {
+  isReservedTenantSlug,
+  normalizeBillingCycle,
+  normalizeLogoUrl,
+  normalizePlan,
+  slugify,
+} from "@/lib/tenants";
 import { headers } from "next/headers";
 import { requireTenantAccess } from "@/lib/tenant-access";
 
 const INVITATION_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 
 export type TenantSettingsView = Awaited<ReturnType<typeof getTenantSettings>>;
-
-const plans = ["starter", "professional", "business"];
-const billingCycles = ["monthly", "yearly"];
 
 function optionalString(value: string | undefined, maxLength = 255) {
   const trimmed = value?.trim();
@@ -38,14 +42,6 @@ function normalizeEmail(value: string | undefined) {
   return email.slice(0, 255);
 }
 
-function normalizePlan(value: string | undefined) {
-  return plans.includes(value ?? "") ? value : "professional";
-}
-
-function normalizeBillingCycle(value: string | undefined) {
-  return billingCycles.includes(value ?? "") ? value : "monthly";
-}
-
 function normalizeBool(value: boolean | undefined) {
   return Boolean(value);
 }
@@ -54,6 +50,38 @@ function normalizeInt(value: string | undefined, fallback: number) {
   const parsed = Number.parseInt(value ?? "", 10);
 
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+// Muss mit den <option>-Werten in components/Navigation.tsx übereinstimmen.
+const digestTimeOptions = new Set(["monday-0800", "friday-1600", "disabled"]);
+const auditRetentionMonthOptions = new Set([12, 24, 60]);
+
+function normalizeDigestTime(value: string | undefined) {
+  const trimmed = value?.trim() ?? "";
+
+  return digestTimeOptions.has(trimmed) ? trimmed : "monday-0800";
+}
+
+function normalizeAuditRetentionMonths(value: string | undefined) {
+  const parsed = Number.parseInt(value ?? "", 10);
+
+  return auditRetentionMonthOptions.has(parsed) ? parsed : 24;
+}
+
+// Format "<Minuten>-<Schwellenstunden>" (z. B. "30-6"), siehe lib/shift-break-rule.ts.
+// "none" deaktiviert die automatische Pause. Deckt auch Kombinationen ab, die
+// das Formular (aktuell 4 Presets) nicht anbietet, damit die Regel-Logik
+// generisch bleibt — nur die Form wird geprüft, nicht eine feste Werteliste.
+const BREAK_RULE_PATTERN = /^\d{1,3}-\d{1,3}$/;
+
+function normalizeBreakRule(value: string | undefined) {
+  const trimmed = value?.trim() ?? "";
+
+  if (trimmed === "none" || BREAK_RULE_PATTERN.test(trimmed)) {
+    return trimmed;
+  }
+
+  return "30-6";
 }
 
 async function getSessionUserId() {
@@ -100,15 +128,23 @@ export async function updateTenantShiftSettings(input: {
 
   await ensureTenantSettings(access.tenantId);
 
-  const presets = parseShiftPresets(input.presetsJson ?? "[]");
+  let rawPresets: unknown = [];
+
+  try {
+    rawPresets = JSON.parse(input.presetsJson ?? "[]");
+  } catch {
+    rawPresets = [];
+  }
+
+  const presets = parseShiftPresets(rawPresets);
 
   return prisma.tenantSettings.update({
     where: { tenantId: access.tenantId },
     data: {
       weekStart: input.weekStart === "sunday" ? "sunday" : "monday",
       shiftMinStaffing: normalizeInt(input.minStaffing, 3),
-      shiftBreakRule: optionalString(input.breakRule, 16) || "30-6",
-      shiftPresetsJson: JSON.stringify(presets),
+      shiftBreakRule: normalizeBreakRule(input.breakRule),
+      shiftPresetsJson: presets,
     },
   });
 }
@@ -141,15 +177,15 @@ export async function requireSettingsManager(tenantSlug: string) {
   });
 
   if (!membership) {
-    throw new Error("Keine Berechtigung fuer diesen Mandanten.");
+    throw new Error("Keine Berechtigung für diesen Mandanten.");
   }
 
-  const legacyRole = membership.role.toUpperCase();
+  const role = membership.role;
   const permission = membership.roleRef?.permissions[0]?.level ?? "none";
 
   if (
-    legacyRole === "OWNER" ||
-    legacyRole === "ADMIN" ||
+    role === "OWNER" ||
+    role === "ADMIN" ||
     permission === "write" ||
     permission === "admin"
   ) {
@@ -266,6 +302,8 @@ export async function updateTenantDefaults(input: {
   workHours?: string;
   vacationDays?: string;
   employeeNumberRequired?: boolean;
+  employeeNumberPrefix?: string;
+  employeeNumberSuffix?: string;
   archiveFormerEmployees?: boolean;
 }) {
   const access = await requireSettingsManager(input.tenantSlug);
@@ -287,6 +325,8 @@ export async function updateTenantDefaults(input: {
       workHours: optionalString(input.workHours, 64) || "40 Stunden pro Woche",
       vacationDays: normalizeInt(input.vacationDays, 30),
       employeeNumberRequired: normalizeBool(input.employeeNumberRequired),
+      employeeNumberPrefix: optionalString(input.employeeNumberPrefix, 16) || "MA-",
+      employeeNumberSuffix: optionalString(input.employeeNumberSuffix, 16),
       archiveFormerEmployees: normalizeBool(input.archiveFormerEmployees),
     },
   });
@@ -315,7 +355,7 @@ export async function updateTenantNotifications(input: {
       deadlineAlerts: normalizeBool(input.deadlineAlerts),
       absenceAlerts: normalizeBool(input.absenceAlerts),
       shiftAlerts: normalizeBool(input.shiftAlerts),
-      digestTime: optionalString(input.digestTime, 64) || "monday-0800",
+      digestTime: normalizeDigestTime(input.digestTime),
     },
   });
 }
@@ -333,16 +373,17 @@ export async function updateTenantSecurity(input: {
   const updated = await prisma.tenantSettings.update({
     where: { tenantId: access.tenantId },
     data: {
-      // 2FA und Session-Timeout sind noch nicht implementiert; die Spalten
-      // werden hier bewusst nicht überschrieben, solange die Oberfläche
-      // keine Schalter dafür anbietet.
+      // Session-Timeout ist noch nicht implementiert; die Spalte wird hier
+      // bewusst nicht überschrieben, solange die Oberfläche keinen Schalter
+      // dafür anbietet. twoFactorRequired wird dagegen tatsächlich
+      // durchgesetzt (siehe lib/tenant-access.ts).
       ...(input.twoFactorRequired === undefined
         ? {}
         : { twoFactorRequired: normalizeBool(input.twoFactorRequired) }),
       ...(input.sessionTimeout === undefined
         ? {}
         : { sessionTimeout: normalizeBool(input.sessionTimeout) }),
-      auditRetentionMonths: normalizeInt(input.auditRetentionMonths, 24),
+      auditRetentionMonths: normalizeAuditRetentionMonths(input.auditRetentionMonths),
     },
   });
 
@@ -418,7 +459,10 @@ export async function createTenantInvitation(input: {
         url: buildInvitationUrl(invitation.token),
       });
     } catch (error) {
-      console.error("[invitation] E-Mail-Versand fehlgeschlagen:", error);
+      logger.error("Einladungs-E-Mail-Versand fehlgeschlagen.", {
+        to: email,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 

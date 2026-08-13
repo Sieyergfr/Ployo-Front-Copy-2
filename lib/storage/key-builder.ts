@@ -3,7 +3,7 @@ import type { StorageBucketConfig } from "@/lib/storage/buckets";
 type BuildStorageKeyInput = {
   tenantId: string;
   fileName: string;
-  ownerType?: "tenant" | "employee" | "location";
+  ownerType?: "tenant" | "employee" | "location" | "team";
   ownerId?: string;
   version?: number;
   now?: Date;

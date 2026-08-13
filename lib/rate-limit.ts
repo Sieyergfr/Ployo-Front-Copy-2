@@ -1,29 +1,13 @@
 import "server-only";
+import { prisma } from "@/lib/prisma";
 
 /**
- * Schlankes In-Memory-Rate-Limit für die eigenen API-Routen.
- * better-auth deckt nur die Auth-Endpunkte ab.
- *
- * Bewusst prozesslokal: schützt eine Instanz vor Dauerabfragen, ersetzt aber
- * kein verteiltes Limit. Bei mehreren Instanzen zusätzlich am Reverse Proxy
- * begrenzen.
+ * DB-gestütztes Rate-Limit für die eigenen API-Routen (better-auth deckt
+ * nur die Auth-Endpunkte ab). Läuft über die Postgres-Tabelle
+ * `AppRateLimit`, damit das Limit über mehrere Instanzen hinweg gilt statt
+ * nur pro Prozess. Das Fenster wird atomar per Upsert fortgeschrieben
+ * (kein Read-then-write-Race zwischen parallelen Requests).
  */
-
-type Bucket = {
-  count: number;
-  resetAt: number;
-};
-
-const buckets = new Map<string, Bucket>();
-const MAX_BUCKETS = 10_000;
-
-function sweep(now: number) {
-  for (const [key, bucket] of buckets) {
-    if (bucket.resetAt <= now) {
-      buckets.delete(key);
-    }
-  }
-}
 
 export type RateLimitResult = {
   allowed: boolean;
@@ -31,40 +15,38 @@ export type RateLimitResult = {
   retryAfterSeconds: number;
 };
 
-export function checkRateLimit(input: {
+export async function checkRateLimit(input: {
   key: string;
   limit: number;
   windowSeconds: number;
-}): RateLimitResult {
-  const now = Date.now();
+}): Promise<RateLimitResult> {
   const windowMs = input.windowSeconds * 1000;
+  const initialResetAt = new Date(Date.now() + windowMs);
 
-  if (buckets.size > MAX_BUCKETS) {
-    sweep(now);
-  }
+  const rows = await prisma.$queryRaw<{ count: number; resetAt: Date }[]>`
+    INSERT INTO "AppRateLimit" ("key", "count", "resetAt")
+    VALUES (${input.key}, 1, ${initialResetAt})
+    ON CONFLICT ("key") DO UPDATE SET
+      "count" = CASE
+        WHEN "AppRateLimit"."resetAt" <= NOW() THEN 1
+        ELSE "AppRateLimit"."count" + 1
+      END,
+      "resetAt" = CASE
+        WHEN "AppRateLimit"."resetAt" <= NOW() THEN ${initialResetAt}
+        ELSE "AppRateLimit"."resetAt"
+      END
+    RETURNING "count", "resetAt"
+  `;
 
-  const existing = buckets.get(input.key);
-
-  if (!existing || existing.resetAt <= now) {
-    buckets.set(input.key, { count: 1, resetAt: now + windowMs });
-
-    return {
-      allowed: true,
-      remaining: input.limit - 1,
-      retryAfterSeconds: input.windowSeconds,
-    };
-  }
-
-  existing.count += 1;
-
+  const row = rows[0];
   const retryAfterSeconds = Math.max(
     1,
-    Math.ceil((existing.resetAt - now) / 1000),
+    Math.ceil((row.resetAt.getTime() - Date.now()) / 1000),
   );
 
   return {
-    allowed: existing.count <= input.limit,
-    remaining: Math.max(0, input.limit - existing.count),
+    allowed: row.count <= input.limit,
+    remaining: Math.max(0, input.limit - row.count),
     retryAfterSeconds,
   };
 }

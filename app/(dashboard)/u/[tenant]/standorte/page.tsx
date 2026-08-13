@@ -10,6 +10,8 @@ import {
   type LocationMetric,
   type LocationStatus,
 } from "@/lib/locations";
+import { hasPermissionLevel } from "@/lib/roles";
+import { getTenantPermissions, withAccessRedirect } from "@/lib/tenant-access";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -126,32 +128,41 @@ export default async function LocationsPage({
   params,
 }: PageProps<"/u/[tenant]/standorte">) {
   const { tenant } = await params;
-  const [locations, employees] = await Promise.all([
+  const locations = await withAccessRedirect(tenant, () =>
     getLocationsForTenant(tenant),
-    getEmployeesForTenant(tenant),
-  ]);
+  );
 
-  if (!locations || !employees) {
+  if (!locations) {
     notFound();
   }
+
+  // Nur für den Mitarbeiter-Picker im "Standort anlegen"-Dialog — fehlende
+  // Berechtigung dafür soll die Standortliste selbst nicht sperren.
+  const employees = await getEmployeesForTenant(tenant)
+    .catch(() => null)
+    .then((v) => v ?? []);
+  const permissions = await getTenantPermissions(tenant);
+  const canCreateLocation = hasPermissionLevel(permissions.locations, "write");
 
   const locationMetrics = getLocationMetrics(locations);
 
   return (
     <>
       <PageHeader eyebrow="Unternehmensstruktur" title="Standorte">
-        <CreateLocationButton
-          tenant={tenant}
-          employees={employees.map((employee) => ({
-            id: employee.dbId ?? employee.id,
-            initials: employee.initials,
-            name: employee.name,
-            employeeNumber: employee.employeeNumber,
-            location: employee.location,
-            team: employee.team,
-            role: employee.role,
-          }))}
-        />
+        {canCreateLocation && (
+          <CreateLocationButton
+            tenant={tenant}
+            employees={employees.map((employee) => ({
+              id: employee.dbId ?? employee.id,
+              initials: employee.initials,
+              name: employee.name,
+              employeeNumber: employee.employeeNumber,
+              location: employee.location,
+              team: employee.team,
+              role: employee.role,
+            }))}
+          />
+        )}
       </PageHeader>
 
       <section className="mb-7 grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(190px,1fr))]">

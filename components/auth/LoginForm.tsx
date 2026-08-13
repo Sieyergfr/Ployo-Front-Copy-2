@@ -136,7 +136,7 @@ export default function LoginForm({ next }: { next?: string }) {
         const password = String(formData.get("password") ?? "");
         const rememberMe = formData.get("stay_logged") === "on";
 
-        const { error: signInError } = await authClient.signIn.email({
+        const { data: signInData, error: signInError } = await authClient.signIn.email({
           email,
           password,
           rememberMe,
@@ -144,6 +144,17 @@ export default function LoginForm({ next }: { next?: string }) {
         });
 
         setIsPending(false);
+
+        // Bei aktivem 2FA liefert better-auth statt einer Session ein
+        // `twoFactorRedirect`-Signal — nicht Teil des generierten Typs für
+        // signIn.email, da signIn selbst nicht zum two-factor-Plugin gehört.
+        const twoFactorRedirect = (signInData as { twoFactorRedirect?: boolean } | null)
+          ?.twoFactorRedirect;
+
+        if (!signInError && twoFactorRedirect) {
+          router.push(`/login/2fa?next=${encodeURIComponent(target)}`);
+          return;
+        }
 
         if (signInError) {
           if (signInError.code === "EMAIL_NOT_VERIFIED") {

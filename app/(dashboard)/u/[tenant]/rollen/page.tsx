@@ -1,6 +1,7 @@
 import CreateRoleButton from "@/components/CreateRoleButton";
 import PageHeader from "@/components/PageHeader";
 import { getRolesForTenant } from "@/lib/role-service";
+import { withAccessRedirect } from "@/lib/tenant-access";
 import { ArrowRight, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -13,7 +14,7 @@ export default async function RolesPage({
   params,
 }: PageProps<"/u/[tenant]/rollen">) {
   const { tenant } = await params;
-  const roles = await getRolesForTenant(tenant);
+  const roles = await withAccessRedirect(tenant, () => getRolesForTenant(tenant));
 
   if (!roles) {
     notFound();

@@ -52,7 +52,7 @@ export async function createVacationRequestAction(formData: FormData) {
   const today = todayDateOnly();
 
   if (!parsedStartDate || !parsedEndDate) {
-    throw new Error("Bitte gueltige Datumswerte auswaehlen.");
+    throw new Error("Bitte gültige Datumswerte auswählen.");
   }
 
   if (parsedStartDate < today || parsedEndDate < today) {
@@ -138,7 +138,7 @@ export async function deleteVacationRequestAction(formData: FormData) {
   const requestId = formString(formData, "requestId");
 
   if (!tenant || !requestId) {
-    throw new Error("Urlaubsantrag konnte nicht geloescht werden.");
+    throw new Error("Urlaubsantrag konnte nicht gelöscht werden.");
   }
 
   await deleteTenantVacationRequest({ tenantSlug: tenant, requestId });

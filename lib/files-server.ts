@@ -10,7 +10,7 @@ import {
   type ReminderFileBrowserSource,
 } from "@/lib/files";
 import { prisma } from "@/lib/prisma";
-import { requireTenantAccess } from "@/lib/tenant-access";
+import { requireTenantAccess, resolveScopeFilter } from "@/lib/tenant-access";
 
 type TenantFileFolderRecord = {
   id: string;
@@ -197,14 +197,54 @@ export async function getReminderFileBrowserData(
   };
 }
 
+/**
+ * Übersetzt den "files"-Scope (own/team/all) für das eigenständige
+ * Dateien-Modul in einen zusätzlichen `where`-Filter auf `uploadedById`.
+ * "own" zeigt nur selbst hochgeladene Dateien, "team" nur Dateien, die von
+ * jemandem aus dem eigenen Team hochgeladen wurden (analog zum "team"-Scope
+ * anderer Bereiche — Namensabgleich über die eigene Personalakte). Team-
+ * *gebundene* Dateien (TenantFile.teamId, z. B. über die Team-Detailseite
+ * hochgeladen) laufen separat über `team-service.ts` und werden hier
+ * bewusst ausgeklammert (employeeId/locationId/teamId alle null), analog zum
+ * bestehenden Verhalten für Personalakte-/Standort-Dateien.
+ */
+async function filesUploaderScopeWhere(tenant: Awaited<ReturnType<typeof requireTenantAccess>>) {
+  const scopeFilter = await resolveScopeFilter(tenant);
+
+  if (scopeFilter.type === "own") {
+    return { uploadedById: tenant.userId };
+  }
+
+  if (scopeFilter.type === "team") {
+    if (!scopeFilter.team) {
+      return { uploadedById: "__none__" };
+    }
+
+    const teammates = await prisma.tenantEmployee.findMany({
+      where: { tenantId: tenant.tenantId, team: scopeFilter.team, userId: { not: null } },
+      select: { userId: true },
+    });
+    const teammateUserIds = teammates
+      .map((employee) => employee.userId)
+      .filter((id): id is string => Boolean(id));
+
+    return { uploadedById: { in: teammateUserIds.length ? teammateUserIds : ["__none__"] } };
+  }
+
+  return {};
+}
+
 export async function getFilesPageData(tenantSlug: string, path: string[] = []) {
   const tenant = await requireTenantAccess(tenantSlug, "files", "read");
+  const uploaderScopeWhere = await filesUploaderScopeWhere(tenant);
   const tenantFileRecords = await prisma.tenantFile.findMany({
         where: {
           tenantId: tenant.tenantId,
           employeeId: null,
           locationId: null,
+          teamId: null,
           status: "active",
+          ...uploaderScopeWhere,
         },
         orderBy: { updatedAt: "desc" },
         include: {
@@ -216,6 +256,7 @@ export async function getFilesPageData(tenantSlug: string, path: string[] = []) 
           tenantId: tenant.tenantId,
           employeeId: null,
           locationId: null,
+          teamId: null,
           scope: "tenant",
           status: "active",
         },
@@ -306,9 +347,9 @@ export async function getFilesPageData(tenantSlug: string, path: string[] = []) 
       caption: "aktive Dateien",
     },
     {
-      label: "Geschuetzt",
+      label: "Geschützt",
       value: storedFiles.filter((file) => file.locked || file.storageFileId).length.toString(),
-      caption: "eingeschraenkte Zugriffe",
+      caption: "eingeschränkte Zugriffe",
     },
     {
       label: "Uploads",

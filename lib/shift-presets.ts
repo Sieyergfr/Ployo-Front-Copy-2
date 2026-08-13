@@ -13,22 +13,17 @@ export type ShiftPreset = {
 
 const timePattern = /^([01]\d|2[0-3]):[0-5]\d$/;
 
+// Muss mit den <option>-Werten im Presets-Formular (ActionDrawers.tsx) übereinstimmen.
+const allowedPauses = new Set(["0m", "15m", "30m", "45m", "60m"]);
+
 const MAX_PRESETS = 20;
 
-export function parseShiftPresets(value: string): ShiftPreset[] {
-  let parsed: unknown;
-
-  try {
-    parsed = JSON.parse(value);
-  } catch {
+export function parseShiftPresets(value: unknown): ShiftPreset[] {
+  if (!Array.isArray(value)) {
     return [];
   }
 
-  if (!Array.isArray(parsed)) {
-    return [];
-  }
-
-  return parsed
+  return value
     .filter(
       (item): item is Record<string, unknown> =>
         typeof item === "object" && item !== null,
@@ -38,7 +33,10 @@ export function parseShiftPresets(value: string): ShiftPreset[] {
       label: typeof item.label === "string" ? item.label.slice(0, 64) : "",
       start: typeof item.start === "string" ? item.start : "",
       end: typeof item.end === "string" ? item.end : "",
-      pause: typeof item.pause === "string" ? item.pause : "0m",
+      pause:
+        typeof item.pause === "string" && allowedPauses.has(item.pause)
+          ? item.pause
+          : "0m",
     }))
     .filter(
       (preset) =>

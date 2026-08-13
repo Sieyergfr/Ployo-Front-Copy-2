@@ -2,10 +2,6 @@ export const metadata = {
   title: "Impressum",
 };
 
-/**
- * WICHTIG: Die Platzhalter in eckigen Klammern müssen vor dem Livegang mit
- * den echten Unternehmensangaben gefüllt werden (siehe TODO-USER.md).
- */
 export default function ImpressumPage() {
   return (
     <article className="flex flex-col gap-6 text-sm leading-7 text-ink">
@@ -14,43 +10,29 @@ export default function ImpressumPage() {
       <section className="flex flex-col gap-1">
         <h2 className="text-base font-semibold">Angaben gemäß § 5 DDG</h2>
         <p>
-          [FIRMENNAME UND RECHTSFORM, z. B. Ployo GmbH]
+          Ployo, Inhaber: Sieyer Ghafoori
           <br />
-          [STRASSE HAUSNUMMER]
+          Rupertigaustraße 17
           <br />
-          [PLZ ORT]
+          81671 München
           <br />
           Deutschland
         </p>
       </section>
 
       <section className="flex flex-col gap-1">
-        <h2 className="text-base font-semibold">Vertreten durch</h2>
-        <p>[GESCHÄFTSFÜHRER/IN]</p>
-      </section>
-
-      <section className="flex flex-col gap-1">
         <h2 className="text-base font-semibold">Kontakt</h2>
         <p>
-          Telefon: [TELEFONNUMMER]
+          Telefon: +49 152 08733320
           <br />
-          E-Mail: [KONTAKT-E-MAIL]
-        </p>
-      </section>
-
-      <section className="flex flex-col gap-1">
-        <h2 className="text-base font-semibold">Registereintrag</h2>
-        <p>
-          Registergericht: [AMTSGERICHT]
-          <br />
-          Registernummer: [HRB-NUMMER]
+          E-Mail: info@ployo.io
         </p>
       </section>
 
       <section className="flex flex-col gap-1">
         <h2 className="text-base font-semibold">Umsatzsteuer-ID</h2>
         <p>
-          Umsatzsteuer-Identifikationsnummer gemäß § 27a UStG: [USt-IdNr.]
+          Umsatzsteuer-Identifikationsnummer gemäß § 27a UStG: DE342236060
         </p>
       </section>
 
@@ -59,9 +41,9 @@ export default function ImpressumPage() {
           Verantwortlich für den Inhalt nach § 18 Abs. 2 MStV
         </h2>
         <p>
-          [NAME]
+          Sieyer Ghafoori
           <br />
-          [ANSCHRIFT]
+          Rupertigaustraße 17, 81671 München
         </p>
       </section>
 

@@ -6,8 +6,10 @@ export const metadata = {
 
 export default async function FilesRootPage({
   params,
+  searchParams,
 }: PageProps<"/u/[tenant]/dateien">) {
   const { tenant } = await params;
+  const query = await searchParams;
 
-  return <FilesPageContent tenant={tenant} />;
+  return <FilesPageContent tenant={tenant} page={query.page} />;
 }

@@ -7,7 +7,15 @@ import {
   type VacationRequestStatus,
 } from "@/lib/vacations";
 import { headers } from "next/headers";
-import { requireTenantAccess } from "@/lib/tenant-access";
+import {
+  requireTenantAccess,
+  requireTenantMembership,
+  resolveScopeFilter,
+} from "@/lib/tenant-access";
+import {
+  notifyManagersOfNewVacationRequest,
+  notifyVacationRequestDecided,
+} from "@/lib/notifications/events";
 
 type VacationRecord = {
   id: string;
@@ -121,7 +129,7 @@ function validateVacationDateRange(startDate: string, endDate: string) {
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
   if (!parsedStartDate || !parsedEndDate) {
-    throw new Error("Bitte gueltige Datumswerte auswaehlen.");
+    throw new Error("Bitte gültige Datumswerte auswählen.");
   }
 
   if (parsedStartDate < today || parsedEndDate < today) {
@@ -165,15 +173,42 @@ export async function getTenantIdForVacation(tenantSlug: string) {
   return (await requireTenantAccess(tenantSlug, "vacation", "read")).tenantId;
 }
 
-export async function getVacationRequestsForTenant(tenantSlug: string) {
-  const tenantId = await getTenantIdForVacation(tenantSlug);
+/**
+ * Übersetzt den konfigurierten Scope (own/team/all) der "vacation"-
+ * Berechtigung in einen zusätzlichen `where`-Filter. "own"/"team" ohne
+ * verknüpften eigenen Mitarbeiterdatensatz liefert einen Filter, der nichts
+ * trifft — nie stillschweigend auf "alles sehen" zurückfallen.
+ */
+async function vacationScopeWhere(tenantSlug: string) {
+  const access = await requireTenantAccess(tenantSlug, "vacation", "read");
+  const scopeFilter = await resolveScopeFilter(access);
 
-  if (!tenantId) {
+  if (scopeFilter.type === "all") {
+    return { tenantId: access.tenantId };
+  }
+
+  if (scopeFilter.type === "own") {
+    return { tenantId: access.tenantId, employeeId: scopeFilter.employeeId ?? "__none__" };
+  }
+
+  if (scopeFilter.type === "team") {
+    return { tenantId: access.tenantId, employee: { team: scopeFilter.team } };
+  }
+
+  // "vacation" unterstützt (bisher) keinen "assigned"-Scope — sollte er
+  // dennoch auftreten, nichts treffen statt stillschweigend alles zu zeigen.
+  return { tenantId: access.tenantId, employeeId: "__none__" };
+}
+
+export async function getVacationRequestsForTenant(tenantSlug: string) {
+  const where = await vacationScopeWhere(tenantSlug);
+
+  if (!where.tenantId) {
     return null;
   }
 
   const records = await prisma.tenantVacationRequest.findMany({
-    where: { tenantId },
+    where,
     orderBy: [{ status: "desc" }, { createdAt: "desc" }],
     include: {
       employee: {
@@ -264,16 +299,16 @@ export async function requireVacationManager(tenantSlug: string) {
   });
 
   if (!membership) {
-    throw new Error("Keine Berechtigung fuer diesen Mandanten.");
+    throw new Error("Keine Berechtigung für diesen Mandanten.");
   }
 
-  const legacyRole = membership.role.toUpperCase();
+  const role = membership.role;
   const permission = membership.roleRef?.permissions[0]?.level ?? "none";
 
   if (
-    legacyRole === "OWNER" ||
-    legacyRole === "ADMIN" ||
-    legacyRole === "HR" ||
+    role === "OWNER" ||
+    role === "ADMIN" ||
+    role === "HR" ||
     permission === "write" ||
     permission === "admin"
   ) {
@@ -332,6 +367,78 @@ export async function createTenantVacationRequest(input: {
   });
 }
 
+/**
+ * Self-Service-Variante: ein Mitarbeiter beantragt Urlaub für sich selbst.
+ * Braucht anders als `createTenantVacationRequest` keine "vacation:write"-
+ * Berechtigung auf den gesamten Mandanten — nur eine gültige Mitgliedschaft
+ * und eine verknüpfte Personalakte.
+ */
+export async function createMyVacationRequest(input: {
+  tenantSlug: string;
+  startDate: string;
+  endDate: string;
+  note: string;
+}) {
+  const access = await requireTenantMembership(input.tenantSlug);
+  const employee = await prisma.tenantEmployee.findFirst({
+    where: { tenantId: access.tenantId, userId: access.userId },
+    select: { id: true, name: true },
+  });
+
+  if (!employee) {
+    throw new Error(
+      "Ihr Konto ist noch keiner Personalakte zugeordnet. Bitte an HR wenden.",
+    );
+  }
+
+  validateVacationDateRange(input.startDate, input.endDate);
+
+  const key = await createUniqueVacationKey({
+    tenantId: access.tenantId,
+    employeeName: employee.name,
+    startDate: input.startDate,
+  });
+
+  const request = await prisma.tenantVacationRequest.create({
+    data: {
+      tenantId: access.tenantId,
+      employeeId: employee.id,
+      key,
+      startDate: input.startDate,
+      endDate: input.endDate,
+      days: calculateVacationDays(input.startDate, input.endDate),
+      note: input.note.trim(),
+      status: "pending",
+    },
+  });
+
+  await recordTenantAudit({
+    tenantId: access.tenantId,
+    actorId: access.userId,
+    actorName: access.userName,
+    action: "Urlaubsantrag gestellt (Self-Service)",
+    source: "Urlaub",
+    entityType: "vacation",
+    entityId: request.id,
+    detail: employee.name,
+  });
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: access.tenantId },
+    select: { name: true },
+  });
+
+  await notifyManagersOfNewVacationRequest({
+    tenantId: access.tenantId,
+    tenantName: tenant?.name ?? input.tenantSlug,
+    employeeName: employee.name,
+    startDate: input.startDate,
+    endDate: input.endDate,
+  });
+
+  return request;
+}
+
 export async function setTenantVacationRequestStatus(input: {
   tenantSlug: string;
   requestId: string;
@@ -349,7 +456,13 @@ export async function setTenantVacationRequestStatus(input: {
       id: input.requestId,
       tenantId,
     },
-    select: { id: true, employee: { select: { name: true } } },
+    select: {
+      id: true,
+      employeeId: true,
+      startDate: true,
+      endDate: true,
+      employee: { select: { name: true } },
+    },
   });
 
   if (!request) {
@@ -380,6 +493,20 @@ export async function setTenantVacationRequestStatus(input: {
     entityId: request.id,
     detail: request.employee.name,
   });
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { name: true },
+  });
+
+  await notifyVacationRequestDecided({
+    tenantId,
+    tenantName: tenant?.name ?? input.tenantSlug,
+    employeeId: request.employeeId,
+    status: input.status,
+    startDate: request.startDate,
+    endDate: request.endDate,
+  });
 }
 
 export async function updateTenantVacationRequest(input: {
@@ -409,7 +536,7 @@ export async function updateTenantVacationRequest(input: {
   const parsedEndDate = parseDateOnly(input.endDate);
 
   if (!parsedStartDate || !parsedEndDate) {
-    throw new Error("Bitte gueltige Datumswerte auswaehlen.");
+    throw new Error("Bitte gültige Datumswerte auswählen.");
   }
 
   if (parsedEndDate < parsedStartDate) {
@@ -442,12 +569,13 @@ export async function deleteTenantVacationRequest(input: {
   tenantSlug: string;
   requestId: string;
 }) {
-  await requireVacationManager(input.tenantSlug);
-  const tenantId = await getTenantIdForVacation(input.tenantSlug);
+  const access = await requireTenantAccess(input.tenantSlug, "vacation", "read");
 
-  if (!tenantId) {
-    throw new Error("Mandant nicht gefunden.");
+  if (!access.canDelete) {
+    throw new Error("FORBIDDEN");
   }
+
+  const tenantId = access.tenantId;
 
   const request = await prisma.tenantVacationRequest.findFirst({
     where: {

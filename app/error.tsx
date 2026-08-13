@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect } from "react";
+import * as Sentry from "@sentry/nextjs";
 
 const knownMessages: Record<string, string> = {
   UNAUTHORIZED: "Bitte melden Sie sich an, um fortzufahren.",
@@ -17,6 +18,11 @@ export default function ErrorPage({
 }) {
   useEffect(() => {
     console.error(error);
+    // Next.js catches error.tsx boundary errors before Sentry can; known
+    // control-flow errors (auth/permission redirects) aren't real bugs.
+    if (!(error.message in knownMessages)) {
+      Sentry.captureException(error);
+    }
   }, [error]);
 
   const message =

@@ -102,9 +102,9 @@ export const fileMetrics = [
     caption: "aktive Dateien",
   },
   {
-    label: "Geschuetzt",
+    label: "Geschützt",
     value: "0",
-    caption: "eingeschraenkte Zugriffe",
+    caption: "eingeschränkte Zugriffe",
   },
   {
     label: "Uploads",
@@ -187,11 +187,11 @@ type TenantFileRecord = {
   expiresAt?: string;
   reminderAt?: string;
   description?: string;
-  tagsJson?: string;
+  tagsJson?: unknown;
   assignedEmployeeName?: string;
   assignedLocationName?: string;
-  accessRoleNamesJson?: string;
-  accessUserNamesJson?: string;
+  accessRoleNamesJson?: unknown;
+  accessUserNamesJson?: unknown;
 };
 
 function formatBytes(bytes: number) {
@@ -215,20 +215,10 @@ export function formatUpdatedAt(value: Date) {
   }).format(value);
 }
 
-function parseStringArray(value?: string) {
-  if (!value) {
-    return [];
-  }
-
-  try {
-    const parsed = JSON.parse(value) as unknown;
-
-    return Array.isArray(parsed)
-      ? parsed.filter((item): item is string => typeof item === "string")
-      : [];
-  } catch {
-    return [];
-  }
+function parseStringArray(value?: unknown) {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
 }
 
 export function mapTenantFileToFileItem(record: TenantFileRecord): FileItem {

@@ -8,17 +8,28 @@ import DataTable, {
 import EmployeeQuickView from "@/components/EmployeeQuickView";
 import InviteEmployeeButton from "@/components/InviteEmployeeButton";
 import PageHeader from "@/components/PageHeader";
+import PaginationControls from "@/components/PaginationControls";
 import SearchInput from "@/components/inputs/SearchInput";
 import {
   getEmployeesForTenant,
+  getMyEmployeeHandle,
   isEmployeeNumberRequired,
 } from "@/lib/employee-service";
 import { employeeStatusConfig, type Employee } from "@/lib/employees";
 import { getLocationsForTenant } from "@/lib/location-service";
+import { paginate, searchParamPage } from "@/lib/pagination";
+import { hasPermissionLevel } from "@/lib/roles";
 import { getRolesForTenant } from "@/lib/role-service";
+import {
+  getOptionalTenantAccess,
+  getTenantPermissions,
+  withAccessRedirect,
+} from "@/lib/tenant-access";
 import { getTeamsForTenant } from "@/lib/team-service";
 import { ChevronDown } from "lucide-react";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
+
+const PAGE_SIZE = 25;
 
 export const metadata = {
   title: "Mitarbeiter",
@@ -99,20 +110,42 @@ function getColumns(tenant: string): Array<DataTableColumn<Employee>> {
 
 export default async function EmployeesPage({
   params,
+  searchParams,
 }: PageProps<"/u/[tenant]/employees">) {
   const { tenant } = await params;
-  const [employees, locations, teams, roles, employeeNumberRequired] =
-    await Promise.all([
-      getEmployeesForTenant(tenant),
-      getLocationsForTenant(tenant),
-      getTeamsForTenant(tenant),
-      getRolesForTenant(tenant),
-      isEmployeeNumberRequired(tenant),
-    ]);
+  const query = await searchParams;
 
-  if (!employees || !locations || !teams || !roles) {
+  // Bei "own"-Sichtbarkeit (z. B. einfaches Mitgliedskonto) gibt es keine
+  // Mitarbeiterliste zu zeigen — direkt auf das eigene Profil weiterleiten.
+  const employeesAccess = await getOptionalTenantAccess(tenant, "employees", "read");
+
+  if (employeesAccess && employeesAccess.scope === "own") {
+    const ownHandle = await getMyEmployeeHandle(tenant);
+
+    redirect(
+      ownHandle ? `/u/${tenant}/employees/${ownHandle}` : `/u/${tenant}/mein-bereich`,
+    );
+  }
+
+  const employees = await withAccessRedirect(tenant, () =>
+    getEmployeesForTenant(tenant),
+  );
+
+  if (!employees) {
     notFound();
   }
+
+  // Standorte/Teams/Rollen sind hier nur Zusatzinfo für Filter und Dropdowns —
+  // fehlt dafür die Berechtigung (z. B. "Rollen" ist admin-only), wird das
+  // tolerant übergangen statt die ganze Mitarbeiterliste zu sperren.
+  const [locations, teams, roles, employeeNumberRequired, permissions] = await Promise.all([
+    getLocationsForTenant(tenant).catch(() => null).then((v) => v ?? []),
+    getTeamsForTenant(tenant).catch(() => null).then((v) => v ?? []),
+    getRolesForTenant(tenant).catch(() => null).then((v) => v ?? []),
+    isEmployeeNumberRequired(tenant),
+    getTenantPermissions(tenant),
+  ]);
+  const canCreateEmployee = hasPermissionLevel(permissions.employees, "write");
 
   const columns = getColumns(tenant);
   const locationNames = locations.map((location) => location.name);
@@ -120,13 +153,14 @@ export default async function EmployeesPage({
     ? roles.map((role) => role.name)
     : ["Mitarbeiter"];
   const teamNames = teams.map((team) => team.name);
+  const page = paginate(employees, searchParamPage(query.page), PAGE_SIZE);
 
   return (
     <>
       <PageHeader
         eyebrow="Personalverzeichnis"
         title="Mitarbeiter"
-        subtitle={`${employees.length} Eintraege \u00b7 alle Standorte`}
+        subtitle={`${employees.length} Eintr\u00e4ge \u00b7 alle Standorte`}
       >
         <SearchInput
           placeholder="Name, Personal-Nr. oder Team"
@@ -153,21 +187,30 @@ export default async function EmployeesPage({
           />
         </div>
 
-        <InviteEmployeeButton
-          tenant={tenant}
-          locations={locationNames}
-          permissionRoles={permissionRoleNames}
-          teams={teamNames}
-          employeeNumberRequired={employeeNumberRequired}
-        />
+        {canCreateEmployee && (
+          <InviteEmployeeButton
+            tenant={tenant}
+            locations={locationNames}
+            permissionRoles={permissionRoleNames}
+            teams={teamNames}
+            employeeNumberRequired={employeeNumberRequired}
+          />
+        )}
       </PageHeader>
 
       <DataTable
         columns={columns}
-        rows={employees}
+        rows={page.items}
         getRowKey={(employee) => employee.id}
         getRowHref={(employee) => `/u/${tenant}/employees/${employee.id}`}
         minWidth={980}
+      />
+      <PaginationControls
+        page={page.page}
+        pageCount={page.pageCount}
+        total={page.total}
+        pageSize={page.pageSize}
+        basePath={`/u/${tenant}/employees`}
       />
     </>
   );

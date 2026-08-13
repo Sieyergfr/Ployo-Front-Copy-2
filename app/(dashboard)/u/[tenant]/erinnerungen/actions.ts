@@ -54,6 +54,7 @@ export async function createReminderAction(formData: FormData) {
     category: formString(formData, "category", "Allgemein"),
     notes: formString(formData, "notes"),
     linkedFiles: formStrings(formData, "linkedFiles"),
+    teamId: formString(formData, "teamId") || undefined,
   });
 
   revalidateReminderAreas(tenant, returnPath);

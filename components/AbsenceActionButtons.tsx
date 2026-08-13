@@ -41,7 +41,7 @@ function EmployeeSelect({
         required
       >
         <option value="" disabled>
-          Auswaehlen
+          Auswählen
         </option>
         {employees.map((employee) => (
           <option key={employee.id} value={employee.id}>

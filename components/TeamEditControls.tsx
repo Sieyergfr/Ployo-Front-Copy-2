@@ -1,22 +1,14 @@
 "use client";
 
+import { teamColorPalette } from "@/lib/org-options";
 import { Check, ChevronDown } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-type TeamColorOption = {
-  value: string;
-  label: string;
-  swatch: string;
-};
-
-const teamColorOptions: TeamColorOption[] = [
-  { value: "bg-[#C9622A]", label: "Orange", swatch: "bg-[#C9622A]" },
-  { value: "bg-[#2A5BC9]", label: "Blau", swatch: "bg-[#2A5BC9]" },
-  { value: "bg-[#1D8A65]", label: "Gruen", swatch: "bg-[#1D8A65]" },
-  { value: "bg-[#7A3C9C]", label: "Violett", swatch: "bg-[#7A3C9C]" },
-  { value: "bg-[#B4332A]", label: "Rot", swatch: "bg-[#B4332A]" },
-  { value: "bg-[#168A8A]", label: "Tuerkis", swatch: "bg-[#168A8A]" },
-];
+const teamColorOptions = teamColorPalette.map((color) => ({
+  value: color.value,
+  label: color.label,
+  swatch: color.className,
+}));
 
 export function TeamColorButtons({ defaultValue }: { defaultValue: string }) {
   const [selectedColor, setSelectedColor] = useState(defaultValue);
@@ -73,10 +65,10 @@ export function LocationMultiSelectDropdown({
   } | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const locationOptions = options ?? ["Muenchen", "Berlin", "Hamburg"];
+  const locationOptions = options ?? ["München", "Berlin", "Hamburg"];
   const summary = useMemo(() => {
     if (selectedLocations.length === 0) {
-      return "Standorte auswaehlen";
+      return "Standorte auswählen";
     }
 
     return selectedLocations.join(", ");

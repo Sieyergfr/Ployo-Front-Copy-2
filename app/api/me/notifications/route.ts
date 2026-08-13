@@ -1,5 +1,5 @@
 import { auth } from "@/lib/auth";
-import { getEmployeesForTenant } from "@/lib/employee-service";
+import { getEmployeesForTenant, getEmployeeLimitForTenant } from "@/lib/employee-service";
 import { getRemindersForTenant } from "@/lib/reminders";
 import { getISOWeekFromDate, getShiftPlanForTenant } from "@/lib/shift-service";
 import { getVacationRequestsForTenant } from "@/lib/vacation-service";
@@ -34,7 +34,7 @@ export async function GET(request: Request) {
   }
 
   // Wird bei jedem Seitenwechsel aus der Sidebar aufgerufen.
-  const limit = checkRateLimit({
+  const limit = await checkRateLimit({
     key: `me-notifications:${session.user.id}`,
     limit: 120,
     windowSeconds: 60,
@@ -45,13 +45,14 @@ export async function GET(request: Request) {
   }
 
   const { year, week } = getISOWeekFromDate(new Date());
-  const [vacations, reminders, shiftPlan, employees, preferences] =
+  const [vacations, reminders, shiftPlan, employees, preferences, employeeLimit] =
     await Promise.all([
       tryLoad(getVacationRequestsForTenant(tenant)),
       tryLoad(getRemindersForTenant(tenant)),
       tryLoad(getShiftPlanForTenant({ tenantSlug: tenant, year, week })),
       tryLoad(getEmployeesForTenant(tenant)),
       tryLoad(getNotificationPreferences(tenant)),
+      tryLoad(getEmployeeLimitForTenant(tenant)),
     ]);
 
   const notifications: Array<{
@@ -112,6 +113,7 @@ export async function GET(request: Request) {
         activeEmployees: employees.filter(
           (employee) => employee.status === "active",
         ).length,
+        employeeLimit: employeeLimit ?? null,
       }
     : null;
 

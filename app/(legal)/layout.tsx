@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import { CookieSettingsLink } from "@/components/CookieSettingsLink";
 
 export default function LegalLayout({
   children,
@@ -31,6 +32,7 @@ export default function LegalLayout({
             <Link href="/agb" className="hover:text-ink">
               AGB
             </Link>
+            <CookieSettingsLink className="cursor-pointer hover:text-ink" />
           </nav>
         </div>
       </footer>

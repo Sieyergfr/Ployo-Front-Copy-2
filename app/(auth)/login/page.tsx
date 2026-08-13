@@ -16,9 +16,10 @@ function sanitizeNext(value: string | string[] | undefined) {
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string | string[] }>;
+  searchParams: Promise<{ next?: string | string[]; accountDeletionScheduled?: string }>;
 }) {
-  const next = sanitizeNext((await searchParams).next);
+  const params = await searchParams;
+  const next = sanitizeNext(params.next);
 
   return (
     <>
@@ -26,6 +27,13 @@ export default async function LoginPage({
         title="Willkommen zurück"
         subtitle="Bitte melden Sie sich mit Ihrem Konto an."
       />
+      {params.accountDeletionScheduled === "1" && (
+        <p className="mb-4 rounded-[10px] border border-warning/25 bg-warning/10 px-3 py-2.5 text-[12.5px] text-[#7A4E00]">
+          Ihr Konto wurde zur Löschung vorgemerkt und endgültig in 30 Tagen
+          gelöscht. Melden Sie sich innerhalb dieser Frist erneut an, um die
+          Löschung abzubrechen.
+        </p>
+      )}
       <LoginForm next={next} />
     </>
   );

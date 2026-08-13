@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { headers } from "next/headers";
-import { requireTenantAccess } from "@/lib/tenant-access";
+import { requireTenantAccess, resolveScopeFilter, type TenantAccess } from "@/lib/tenant-access";
 
 export type ReminderPriority = "urgent" | "important" | "normal";
 
@@ -24,6 +24,8 @@ export type Reminder = {
   notes: string;
   linkedFiles: string[];
   createdByName: string;
+  teamId: string | null;
+  teamName: string | null;
 };
 
 export const reminderPriorityConfig = {
@@ -61,16 +63,10 @@ function normalizeLinkedFiles(value?: string[]) {
   );
 }
 
-function parseStringArray(value: string) {
-  try {
-    const parsed = JSON.parse(value) as unknown;
-
-    return Array.isArray(parsed)
-      ? parsed.filter((item): item is string => typeof item === "string")
-      : [];
-  } catch {
-    return [];
-  }
+function parseStringArray(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
 }
 
 function normalizePriority(value?: string): ReminderPriority {
@@ -98,7 +94,7 @@ function todayStart() {
   return new Date(now.getFullYear(), now.getMonth(), now.getDate());
 }
 
-function daysUntil(dateValue: string) {
+export function daysUntil(dateValue: string) {
   const [year, month, day] = dateValue.split("-").map(Number);
 
   if (!year || !month || !day) {
@@ -121,8 +117,9 @@ function toReminder(record: {
   priority: string;
   status: string;
   notes: string;
-  linkedFilesJson: string;
+  linkedFilesJson: unknown;
   createdByName: string;
+  team?: { id: string; name: string } | null;
 }): Reminder {
   return {
     id: record.id,
@@ -136,11 +133,13 @@ function toReminder(record: {
     notes: record.notes,
     linkedFiles: parseStringArray(record.linkedFilesJson),
     createdByName: record.createdByName,
+    teamId: record.team?.id ?? null,
+    teamName: record.team?.name ?? null,
   };
 }
 
 async function requireTenantReminderAccess(tenantSlug: string) {
-  await requireTenantAccess(tenantSlug, "reminders", "read");
+  const tenantAccess = await requireTenantAccess(tenantSlug, "reminders", "read");
   const session = await auth.api.getSession({
     headers: await headers(),
   });
@@ -165,7 +164,7 @@ async function requireTenantReminderAccess(tenantSlug: string) {
     throw new Error("FORBIDDEN");
   }
 
-  const role = membership.role.toUpperCase();
+  const role = membership.role;
   const permission = membership.roleRef?.permissions.find(
     (item) => item.area === "reminders",
   );
@@ -180,7 +179,38 @@ async function requireTenantReminderAccess(tenantSlug: string) {
     userId: membership.user.id,
     userName: membership.user.name || membership.user.email,
     canWrite,
+    tenantAccess,
   };
+}
+
+/**
+ * Übersetzt den "reminders"-Scope (own/team/all) in einen zusätzlichen
+ * `where`-Filter. "own" zeigt nur selbst erstellte Erinnerungen, "team" nur
+ * die, die am eigenen Team hängen (TenantReminder.teamId, über die
+ * Team-Detailseite oder beim Anlegen gesetzt) — nicht zu verwechseln mit
+ * "von jemandem aus meinem Team erstellt". "all" zeigt alles (bisheriges
+ * Verhalten).
+ */
+async function reminderScopeWhere(access: {
+  tenantId: string;
+  userId: string;
+  tenantAccess: TenantAccess;
+}) {
+  const scopeFilter = await resolveScopeFilter(access.tenantAccess);
+
+  if (scopeFilter.type === "own") {
+    return { tenantId: access.tenantId, createdById: access.userId };
+  }
+
+  if (scopeFilter.type === "team") {
+    if (!scopeFilter.team) {
+      return { tenantId: access.tenantId, id: "__none__" };
+    }
+
+    return { tenantId: access.tenantId, team: { name: scopeFilter.team } };
+  }
+
+  return { tenantId: access.tenantId };
 }
 
 async function createUniqueReminderKey(input: {
@@ -234,9 +264,11 @@ async function getAllowedLinkedFileIds(input: {
 
 export async function getRemindersForTenant(tenantSlug: string) {
   const access = await requireTenantReminderAccess(tenantSlug);
+  const where = await reminderScopeWhere(access);
   const records = await prisma.tenantReminder.findMany({
-    where: { tenantId: access.tenantId, status: "open" },
+    where: { ...where, status: "open" },
     orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
+    include: { team: { select: { id: true, name: true } } },
   });
 
   return records.map(toReminder);
@@ -258,13 +290,13 @@ export function buildReminderMetrics(reminders: Reminder[]): ReminderMetric[] {
     {
       label: "Dringend",
       value: urgent.length.toString(),
-      caption: "< 7 Tage faellig",
+      caption: "< 7 Tage fällig",
       tone: urgent.length > 0 ? "danger" : undefined,
     },
     {
       label: "Abgelaufen",
       value: expired.length.toString(),
-      caption: "ueberfaellige Fristen",
+      caption: "überfällige Fristen",
       tone: expired.length > 0 ? "danger" : undefined,
     },
     {
@@ -274,10 +306,10 @@ export function buildReminderMetrics(reminders: Reminder[]): ReminderMetric[] {
       tone: "success",
     },
     {
-      label: "Naechste Frist",
+      label: "N\u00e4chste Frist",
       value: next ? String(nextIsExpired ? Math.abs(next.daysLeft) : next.daysLeft) : "-",
       caption: next
-        ? `${nextIsExpired ? "Tage ueberfaellig" : "Tage"} \u00b7 ${next.title}`
+        ? `${nextIsExpired ? "Tage \u00fcberf\u00e4llig" : "Tage"} \u00b7 ${next.title}`
         : "keine offene Frist",
       tone: next && next.daysLeft <= 7 ? "danger" : undefined,
     },
@@ -302,6 +334,28 @@ export function buildReminderFilters(reminders: Reminder[]) {
   ];
 }
 
+/**
+ * `TenantReminder.teamId` verweist auf ein echtes Team — ohne diese Prüfung
+ * könnte ein direkter Server-Action-Aufruf eine beliebige ID setzen.
+ * Bewusst scope-frei (kein `requireTenantAccess` auf "teams"), damit ein
+ * Nutzer mit `reminders:write`, aber ohne Leserecht auf Teams, weiterhin
+ * Erinnerungen anlegen kann — nur zur Validierung, nicht für die Anzeige.
+ */
+async function assertKnownTeam(tenantId: string, teamId?: string) {
+  if (!teamId) {
+    return;
+  }
+
+  const team = await prisma.tenantTeam.findFirst({
+    where: { id: teamId, tenantId },
+    select: { id: true },
+  });
+
+  if (!team) {
+    throw new Error("Unbekanntes Team.");
+  }
+}
+
 export async function createTenantReminder(input: {
   tenantSlug: string;
   title: string;
@@ -311,6 +365,7 @@ export async function createTenantReminder(input: {
   category?: string;
   notes?: string;
   linkedFiles?: string[];
+  teamId?: string;
 }) {
   await requireTenantAccess(input.tenantSlug, "reminders", "write");
   const access = await requireTenantReminderAccess(input.tenantSlug);
@@ -323,8 +378,10 @@ export async function createTenantReminder(input: {
   const dueDate = input.dueDate.trim();
 
   if (!title || !dueDate) {
-    throw new Error("Titel und Faelligkeit sind erforderlich.");
+    throw new Error("Titel und Fälligkeit sind erforderlich.");
   }
+
+  await assertKnownTeam(access.tenantId, input.teamId);
 
   const key = await createUniqueReminderKey({
     tenantId: access.tenantId,
@@ -345,9 +402,10 @@ export async function createTenantReminder(input: {
       subject: input.subject?.trim() ?? "",
       category: input.category?.trim() || "Allgemein",
       notes: input.notes?.trim() ?? "",
-      linkedFilesJson: JSON.stringify(linkedFiles),
+      linkedFilesJson: linkedFiles,
       createdById: access.userId,
       createdByName: access.userName,
+      teamId: input.teamId?.trim() || undefined,
     },
   });
 }
@@ -383,7 +441,7 @@ export async function updateTenantReminder(input: {
   const dueDate = input.dueDate.trim();
 
   if (!title || !dueDate) {
-    throw new Error("Titel und Faelligkeit sind erforderlich.");
+    throw new Error("Titel und Fälligkeit sind erforderlich.");
   }
 
   const key = await createUniqueReminderKey({
@@ -406,7 +464,7 @@ export async function updateTenantReminder(input: {
       subject: input.subject?.trim() ?? "",
       category: input.category?.trim() || "Allgemein",
       notes: input.notes?.trim() ?? "",
-      linkedFilesJson: JSON.stringify(linkedFiles),
+      linkedFilesJson: linkedFiles,
     },
   });
 }
@@ -415,10 +473,9 @@ export async function completeTenantReminder(input: {
   tenantSlug: string;
   reminderId: string;
 }) {
-  await requireTenantAccess(input.tenantSlug, "reminders", "write");
-  const access = await requireTenantReminderAccess(input.tenantSlug);
+  const access = await requireTenantAccess(input.tenantSlug, "reminders", "read");
 
-  if (!access.canWrite) {
+  if (!access.canDelete) {
     throw new Error("FORBIDDEN");
   }
 

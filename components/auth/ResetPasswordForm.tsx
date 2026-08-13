@@ -80,6 +80,7 @@ export default function ResetPasswordForm() {
           label="Neues Passwort"
           placeholder="password"
           autoComplete="new-password"
+          minLength={12}
           required
         />
         <PasswordInput

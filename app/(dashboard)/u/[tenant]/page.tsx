@@ -1,10 +1,18 @@
 import MetricCard from "@/components/MetricCard";
 import PageHeader from "@/components/PageHeader";
 import { auth } from "@/lib/auth";
+import {
+  getOptionalTenantAccess,
+  getTenantPermissions,
+  isUnassignedEmployee,
+  requireTenantMembership,
+  withAccessRedirect,
+} from "@/lib/tenant-access";
 import { employeeStatusConfig } from "@/lib/employees";
 import { getEmployeesForTenant } from "@/lib/employee-service";
 import { getRecentTenantFiles } from "@/lib/files-server";
 import { getLocationsForTenant } from "@/lib/location-service";
+import { hasPermissionLevel } from "@/lib/roles";
 import { getRemindersForTenant } from "@/lib/reminders";
 import { getISOWeekFromDate, getShiftPlanForTenant } from "@/lib/shift-service";
 import { getSicknessForTenant } from "@/lib/sickness";
@@ -22,6 +30,7 @@ import {
 } from "lucide-react";
 import { headers } from "next/headers";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
 export const metadata = {
   title: "Übersicht",
@@ -97,6 +106,16 @@ function EmptyHint({ children }: { children: React.ReactNode }) {
 
 export default async function DashboardHome({ params }: DashboardHomeProps) {
   const { tenant } = await params;
+
+  if (await isUnassignedEmployee(tenant)) {
+    redirect(`/u/${tenant}/mein-bereich`);
+  }
+
+  // Die restlichen Datenladungen unten sind absichtlich tolerant (tryLoad /
+  // getOptionalTenantAccess) und würden TWO_FACTOR_REQUIRED sonst still
+  // schlucken statt sauber umzuleiten — deshalb hier einmal explizit prüfen.
+  await withAccessRedirect(tenant, () => requireTenantMembership(tenant));
+
   const baseHref = `/u/${tenant}`;
   const now = new Date();
   const { year, week } = getISOWeekFromDate(now);
@@ -111,6 +130,11 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
     shiftPlan,
     recentFiles,
     memberships,
+    employeesAccess,
+    vacationAccess,
+    sicknessAccess,
+    shiftsAccess,
+    permissions,
   ] = await Promise.all([
     tryLoad(getEmployeesForTenant(tenant)),
     tryLoad(getVacationRequestsForTenant(tenant)),
@@ -122,7 +146,21 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
     session?.user?.id
       ? tryLoad(getTenantsForUser(session.user.id))
       : Promise.resolve(null),
+    getOptionalTenantAccess(tenant, "employees"),
+    getOptionalTenantAccess(tenant, "vacation"),
+    getOptionalTenantAccess(tenant, "sickness"),
+    getOptionalTenantAccess(tenant, "shifts"),
+    getTenantPermissions(tenant),
   ]);
+
+  // Karten mit Daten anderer Mitarbeiter sind fuer Rollen mit
+  // "own"-Sichtbarkeit (z. B. einfache Mitgliedskonten) irrelevant bzw.
+  // wuerden ohnehin leer bleiben — dort gar nicht erst anzeigen.
+  const employeesTeamWide = employeesAccess !== null && employeesAccess.scope !== "own";
+  const vacationTeamWide = vacationAccess !== null && vacationAccess.scope !== "own";
+  const sicknessTeamWide = sicknessAccess !== null && sicknessAccess.scope !== "own";
+  const shiftsTeamWide = shiftsAccess !== null && shiftsAccess.scope !== "own";
+  const canInviteEmployees = hasPermissionLevel(permissions.employees, "write");
 
   const employeeList = employees ?? [];
   const vacationList = vacationRequests ?? [];
@@ -218,12 +256,16 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
       href: `${baseHref}/urlaub`,
       tone: "bg-warning/10 text-[#7A4E00]",
     },
-    {
-      title: "Schichtkonflikte lösen",
-      detail: `${shiftConflictCount} Konflikte in ${shiftPlan?.label ?? `KW ${week}`}`,
-      href: `${baseHref}/schichtplanung`,
-      tone: "bg-danger/10 text-danger",
-    },
+    ...(shiftsTeamWide
+      ? [
+          {
+            title: "Schichtkonflikte lösen",
+            detail: `${shiftConflictCount} Konflikte in ${shiftPlan?.label ?? `KW ${week}`}`,
+            href: `${baseHref}/schichtplanung`,
+            tone: "bg-danger/10 text-danger",
+          },
+        ]
+      : []),
     {
       title: "Dringende Erinnerungen",
       detail: `${urgentReminders.length} Fristen laufen in weniger als 7 Tagen ab`,
@@ -239,10 +281,12 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
         title={firstName ? `${greeting}, ${firstName}` : greeting}
         subtitle={`Die wichtigsten HR-Signale für ${tenantName} auf einen Blick.`}
       >
-        <Link href={`${baseHref}/employees`} className="btn btn-primary">
-          <UserPlus size={15} />
-          Mitarbeiter einladen
-        </Link>
+        {canInviteEmployees && (
+          <Link href={`${baseHref}/employees`} className="btn btn-primary">
+            <UserPlus size={15} />
+            Mitarbeiter einladen
+          </Link>
+        )}
         <Link href={`${baseHref}/schichtplanung`} className="btn btn-secondary">
           <Plus size={15} />
           Schicht planen
@@ -309,7 +353,7 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
             </div>
           </DashboardCard>
 
-          {shiftPlan && (
+          {shiftPlan && shiftsTeamWide && (
             <DashboardCard
               title="Schichtlage"
               meta={shiftWeekLabel}
@@ -438,6 +482,7 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
         </div>
 
         <div className="flex flex-col gap-5">
+          {employeesTeamWide && (
           <DashboardCard title="Teamstatus" meta="Anwesenheit heute">
             <div className="grid grid-cols-3 gap-2">
               <div className="rounded-[10px] bg-success/10 p-3">
@@ -491,7 +536,9 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
               )}
             </div>
           </DashboardCard>
+          )}
 
+          {vacationTeamWide && (
           <DashboardCard
             title="Abwesenheiten"
             meta={`${averageVacationRemaining} Tage Ø Resturlaub`}
@@ -521,7 +568,9 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
               )}
             </div>
           </DashboardCard>
+          )}
 
+          {sicknessTeamWide && (
           <DashboardCard
             title="Krankmeldungen"
             meta={sicknessMetrics[1]?.caption}
@@ -558,6 +607,7 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
               )}
             </div>
           </DashboardCard>
+          )}
 
           {recentFiles && (
             <DashboardCard
@@ -590,6 +640,7 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
             </DashboardCard>
           )}
 
+          {employeesTeamWide && (
           <DashboardCard title="Personalstruktur" meta="Vertragsarten">
             <div className="grid gap-2">
               {contractDistribution.length === 0 ? (
@@ -619,6 +670,7 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
               )}
             </div>
           </DashboardCard>
+          )}
         </div>
       </div>
     </>

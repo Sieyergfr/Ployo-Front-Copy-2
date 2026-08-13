@@ -4,7 +4,9 @@ import { createRoleAction } from "@/app/(dashboard)/u/[tenant]/rollen/actions";
 import FormSubmitButton from "@/components/FormSubmitButton";
 import { useUniversalPopup } from "@/components/UniversalPopup";
 import {
+  emptyBooleanCapabilitySet,
   emptyPermissionSet,
+  emptyShiftsLevelSet,
   permissionAreas,
   permissionLevelLabels,
   permissionLevels,
@@ -116,6 +118,51 @@ function permissionsForTemplate(template: RoleTemplate): Record<string, Permissi
   return permissions;
 }
 
+type RoleCapabilities = {
+  canDelete: Record<string, boolean>;
+  canUploadFiles: Record<string, boolean>;
+  canEditFiles: Record<string, boolean>;
+  canViewFiles: Record<string, boolean>;
+  canViewAudit: Record<string, boolean>;
+  shiftsLevel: Record<string, PermissionLevel | null>;
+};
+
+function emptyCapabilities(): RoleCapabilities {
+  return {
+    canDelete: emptyBooleanCapabilitySet(),
+    canUploadFiles: emptyBooleanCapabilitySet(),
+    canEditFiles: emptyBooleanCapabilitySet(),
+    canViewFiles: emptyBooleanCapabilitySet(),
+    canViewAudit: emptyBooleanCapabilitySet(),
+    shiftsLevel: emptyShiftsLevelSet(),
+  };
+}
+
+function ToggleChip({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={[
+        "h-7 rounded-full border px-2.5 text-[11px] font-semibold transition-colors",
+        active
+          ? "border-ink bg-ink text-white"
+          : "border-border bg-white text-muted hover:border-muted hover:text-ink",
+      ].join(" ")}
+    >
+      {children}
+    </button>
+  );
+}
+
 function CreateRoleForm({
   tenant,
   onClose,
@@ -128,6 +175,7 @@ function CreateRoleForm({
   const [permissions, setPermissions] = useState<Record<string, PermissionLevel>>(
     () => permissionsForTemplate(defaultTemplate),
   );
+  const [capabilities, setCapabilities] = useState<RoleCapabilities>(emptyCapabilities);
   const [query, setQuery] = useState("");
 
   const filteredAreas = useMemo(() => {
@@ -167,6 +215,62 @@ function CreateRoleForm({
           value={permissions[area.id] ?? "none"}
         />
       ))}
+      {permissionAreas.map((area) => (
+        <input
+          key={`can-delete-${area.id}`}
+          type="hidden"
+          name={`can-delete-${area.id}`}
+          value={capabilities.canDelete[area.id] ? "on" : ""}
+        />
+      ))}
+      {permissionAreas.map((area) => (
+        <input
+          key={`can-view-audit-${area.id}`}
+          type="hidden"
+          name={`can-view-audit-${area.id}`}
+          value={capabilities.canViewAudit[area.id] ? "on" : ""}
+        />
+      ))}
+      {permissionAreas
+        .filter((area) => area.fileRelevant)
+        .map((area) => (
+          <input
+            key={`can-upload-files-${area.id}`}
+            type="hidden"
+            name={`can-upload-files-${area.id}`}
+            value={capabilities.canUploadFiles[area.id] ? "on" : ""}
+          />
+        ))}
+      {permissionAreas
+        .filter((area) => area.fileRelevant)
+        .map((area) => (
+          <input
+            key={`can-edit-files-${area.id}`}
+            type="hidden"
+            name={`can-edit-files-${area.id}`}
+            value={capabilities.canEditFiles[area.id] ? "on" : ""}
+          />
+        ))}
+      {permissionAreas
+        .filter((area) => area.fileRelevant)
+        .map((area) => (
+          <input
+            key={`can-view-files-${area.id}`}
+            type="hidden"
+            name={`can-view-files-${area.id}`}
+            value={capabilities.canViewFiles[area.id] ? "on" : ""}
+          />
+        ))}
+      {permissionAreas
+        .filter((area) => area.supportsAssignedScope && capabilities.shiftsLevel[area.id])
+        .map((area) => (
+          <input
+            key={`shifts-level-${area.id}`}
+            type="hidden"
+            name={`shifts-level-${area.id}`}
+            value={capabilities.shiftsLevel[area.id] ?? ""}
+          />
+        ))}
 
       <div className="flex items-start justify-between gap-4 border-b border-border px-6 py-5">
         <div>
@@ -238,6 +342,7 @@ function CreateRoleForm({
                   onClick={() => {
                     setActiveTemplateId(template.id);
                     setPermissions(permissionsForTemplate(template));
+                    setCapabilities(emptyCapabilities());
                   }}
                 >
                   {template.label}
@@ -276,6 +381,7 @@ function CreateRoleForm({
                 onClick={() => {
                   setActiveTemplateId("");
                   setPermissions(emptyPermissionSet());
+                  setCapabilities(emptyCapabilities());
                 }}
               >
                 <RotateCcw size={14} />
@@ -289,57 +395,163 @@ function CreateRoleForm({
               filteredAreas.map((area) => {
                 const Icon = areaIcons[area.id] ?? ShieldCheck;
                 const selectedPermission = permissions[area.id] ?? "none";
+                const hasAccess = selectedPermission !== "none";
 
                 return (
                   <div
                     key={area.id}
-                    className="flex flex-col gap-3 border-t border-border-soft px-4 py-3 first:border-t-0 md:flex-row md:items-center md:justify-between"
+                    className="flex flex-col gap-3 border-t border-border-soft px-4 py-3 first:border-t-0"
                   >
-                    <div className="flex min-w-0 items-center gap-3">
-                      <div className="flex size-10 shrink-0 items-center justify-center rounded-[12px] border border-border bg-bg text-ink">
-                        <Icon size={17} strokeWidth={2} />
+                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className="flex size-10 shrink-0 items-center justify-center rounded-[12px] border border-border bg-bg text-ink">
+                          <Icon size={17} strokeWidth={2} />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-[13.5px] font-semibold text-ink">
+                            {area.label}
+                          </div>
+                          <div className="mt-0.5 text-[12px] leading-[1.35] text-muted">
+                            {area.description}
+                          </div>
+                        </div>
                       </div>
-                      <div className="min-w-0">
-                        <div className="text-[13.5px] font-semibold text-ink">
-                          {area.label}
-                        </div>
-                        <div className="mt-0.5 text-[12px] leading-[1.35] text-muted">
-                          {area.description}
-                        </div>
+
+                      <div className="grid w-full grid-cols-4 rounded-[12px] border border-border bg-bg p-1 md:w-[336px]">
+                        {permissionLevels.map((level) => {
+                          const isSelected = selectedPermission === level;
+
+                          return (
+                            <button
+                              key={level}
+                              type="button"
+                              className={[
+                                "h-8 rounded-[9px] px-2 text-[11.5px] font-semibold transition-colors",
+                                isSelected
+                                  ? `bg-white shadow-sm ${permissionTone[level]}`
+                                  : "text-muted hover:bg-white/70 hover:text-ink",
+                              ]
+                                .filter(Boolean)
+                                .join(" ")}
+                              onClick={() => {
+                                setActiveTemplateId("");
+                                setPermissions((current) => ({
+                                  ...current,
+                                  [area.id]: level,
+                                }));
+                              }}
+                            >
+                              {level === "none"
+                                ? "Kein"
+                                : permissionLevelLabels[level]}
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
 
-                    <div className="grid w-full grid-cols-4 rounded-[12px] border border-border bg-bg p-1 md:w-[336px]">
-                      {permissionLevels.map((level) => {
-                        const isSelected = selectedPermission === level;
-
-                        return (
-                          <button
-                            key={level}
-                            type="button"
-                            className={[
-                              "h-8 rounded-[9px] px-2 text-[11.5px] font-semibold transition-colors",
-                              isSelected
-                                ? `bg-white shadow-sm ${permissionTone[level]}`
-                                : "text-muted hover:bg-white/70 hover:text-ink",
-                            ]
-                              .filter(Boolean)
-                              .join(" ")}
-                            onClick={() => {
-                              setActiveTemplateId("");
-                              setPermissions((current) => ({
+                    {hasAccess && (
+                      <div className="flex flex-wrap items-center gap-1.5 md:pl-[52px]">
+                        <ToggleChip
+                          active={capabilities.canDelete[area.id] ?? false}
+                          onClick={() =>
+                            setCapabilities((current) => ({
+                              ...current,
+                              canDelete: {
+                                ...current.canDelete,
+                                [area.id]: !current.canDelete[area.id],
+                              },
+                            }))
+                          }
+                        >
+                          Löschen erlaubt
+                        </ToggleChip>
+                        <ToggleChip
+                          active={capabilities.canViewAudit[area.id] ?? false}
+                          onClick={() =>
+                            setCapabilities((current) => ({
+                              ...current,
+                              canViewAudit: {
+                                ...current.canViewAudit,
+                                [area.id]: !current.canViewAudit[area.id],
+                              },
+                            }))
+                          }
+                        >
+                          Audit-Log sichtbar
+                        </ToggleChip>
+                        {area.fileRelevant && (
+                          <>
+                            <ToggleChip
+                              active={capabilities.canUploadFiles[area.id] ?? false}
+                              onClick={() =>
+                                setCapabilities((current) => ({
+                                  ...current,
+                                  canUploadFiles: {
+                                    ...current.canUploadFiles,
+                                    [area.id]: !current.canUploadFiles[area.id],
+                                  },
+                                }))
+                              }
+                            >
+                              Hochladen
+                            </ToggleChip>
+                            <ToggleChip
+                              active={capabilities.canEditFiles[area.id] ?? false}
+                              onClick={() =>
+                                setCapabilities((current) => ({
+                                  ...current,
+                                  canEditFiles: {
+                                    ...current.canEditFiles,
+                                    [area.id]: !current.canEditFiles[area.id],
+                                  },
+                                }))
+                              }
+                            >
+                              Bearbeiten
+                            </ToggleChip>
+                            <ToggleChip
+                              active={capabilities.canViewFiles[area.id] ?? false}
+                              onClick={() =>
+                                setCapabilities((current) => ({
+                                  ...current,
+                                  canViewFiles: {
+                                    ...current.canViewFiles,
+                                    [area.id]: !current.canViewFiles[area.id],
+                                  },
+                                }))
+                              }
+                            >
+                              Dateien sehen
+                            </ToggleChip>
+                          </>
+                        )}
+                        {area.supportsAssignedScope && (
+                          <select
+                            value={capabilities.shiftsLevel[area.id] ?? "none"}
+                            onChange={(event) =>
+                              setCapabilities((current) => ({
                                 ...current,
-                                [area.id]: level,
-                              }));
-                            }}
+                                shiftsLevel: {
+                                  ...current.shiftsLevel,
+                                  [area.id]:
+                                    event.target.value === "none"
+                                      ? null
+                                      : (event.target.value as PermissionLevel),
+                                },
+                              }))
+                            }
+                            className="h-7 cursor-pointer rounded-full border border-border bg-white px-2.5 text-[11px] font-semibold text-ink outline-none"
                           >
-                            {level === "none"
-                              ? "Kein"
-                              : permissionLevelLabels[level]}
-                          </button>
-                        );
-                      })}
-                    </div>
+                            {permissionLevels.map((level) => (
+                              <option key={level} value={level}>
+                                Schichten: {permissionLevelLabels[level]}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })

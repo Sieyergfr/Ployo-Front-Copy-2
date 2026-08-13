@@ -81,7 +81,7 @@ export async function deleteTeamAction(formData: FormData) {
   const teamId = formString(formData, "teamId");
 
   if (!tenant || !teamId) {
-    throw new Error("Team konnte nicht geloescht werden.");
+    throw new Error("Team konnte nicht gelöscht werden.");
   }
 
   await deleteTenantTeam({ tenantSlug: tenant, teamId });
@@ -113,7 +113,7 @@ export async function addTeamMemberAction(formData: FormData) {
   const employeeId = formString(formData, "employeeId");
 
   if (!tenant || !teamId || !teamHandle || !employeeId) {
-    throw new Error("Mitarbeiter konnte nicht hinzugefuegt werden.");
+    throw new Error("Mitarbeiter konnte nicht hinzugefügt werden.");
   }
 
   await addTenantTeamMember({

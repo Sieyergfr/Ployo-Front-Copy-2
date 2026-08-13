@@ -2,11 +2,13 @@ import { VacationRequestButton } from "@/components/AbsenceActionButtons";
 import { VacationDrawerButton } from "@/components/ActionDrawers";
 import FormSubmitButton from "@/components/FormSubmitButton";
 import PageHeader from "@/components/PageHeader";
+import PaginationControls from "@/components/PaginationControls";
 import {
   approveVacationRequestAction,
   rejectVacationRequestAction,
 } from "@/app/(dashboard)/u/[tenant]/urlaub/actions";
 import { getEmployeesForTenant } from "@/lib/employee-service";
+import { paginate, searchParamPage } from "@/lib/pagination";
 import {
   getVacationMetrics,
   getVacationRequestsForTenant,
@@ -16,12 +18,16 @@ import {
   type VacationMetric,
   type VacationRequest,
 } from "@/lib/vacations";
+import { hasPermissionLevel } from "@/lib/roles";
+import { getTenantCapabilities, withAccessRedirect } from "@/lib/tenant-access";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 
 export const metadata = {
   title: "Urlaub",
 };
+
+const PAGE_SIZE = 20;
 
 const filters = ["Alle", "Ausstehend", "Genehmigt", "Abgelehnt"];
 
@@ -79,7 +85,7 @@ function DecisionForm({
       <input type="hidden" name="requestId" value={request.dbId ?? ""} />
       <FormSubmitButton
         className={className}
-        pendingLabel="Laeuft..."
+        pendingLabel="Läuft..."
       >
         {children}
       </FormSubmitButton>
@@ -90,9 +96,13 @@ function DecisionForm({
 function VacationRequestRow({
   tenant,
   request,
+  canManage,
+  canDelete,
 }: {
   tenant: string;
   request: VacationRequest;
+  canManage: boolean;
+  canDelete: boolean;
 }) {
   const isPending = request.status === "pending";
 
@@ -122,9 +132,9 @@ function VacationRequestRow({
         <VacationStatusBadge status={request.status} />
       </div>
 
-      <VacationDrawerButton tenant={tenant} request={request} />
+      <VacationDrawerButton tenant={tenant} request={request} canManage={canManage} canDelete={canDelete} />
 
-      {isPending && (
+      {isPending && canManage && (
         <div className="flex shrink-0 gap-[7px]">
           <DecisionForm
             tenant={tenant}
@@ -150,18 +160,29 @@ function VacationRequestRow({
 
 export default async function VacationPage({
   params,
+  searchParams,
 }: PageProps<"/u/[tenant]/urlaub">) {
   const { tenant } = await params;
-  const [vacationRequests, employees] = await Promise.all([
+  const query = await searchParams;
+  const vacationRequests = await withAccessRedirect(tenant, () =>
     getVacationRequestsForTenant(tenant),
-    getEmployeesForTenant(tenant),
-  ]);
+  );
 
-  if (!vacationRequests || !employees) {
+  if (!vacationRequests) {
     notFound();
   }
 
+  // Nur für Namen/Standort im Antrags-Dialog und die Metrik-Berechnung —
+  // fehlende Berechtigung dafür soll die Urlaubsliste selbst nicht sperren.
+  const employees = await getEmployeesForTenant(tenant)
+    .catch(() => null)
+    .then((v) => v ?? []);
+  const capabilities = await getTenantCapabilities(tenant);
+  const canManage = hasPermissionLevel(capabilities.vacation.level, "write");
+  const canDelete = capabilities.vacation.canDelete;
+
   const vacationMetrics = getVacationMetrics(vacationRequests, employees);
+  const page = paginate(vacationRequests, searchParamPage(query.page), PAGE_SIZE);
   const employeeOptions = employees
     .filter((employee) => employee.dbId)
     .map((employee) => ({
@@ -173,7 +194,9 @@ export default async function VacationPage({
   return (
     <>
       <PageHeader eyebrow="Abwesenheitsverwaltung" title="Urlaub">
-        <VacationRequestButton tenant={tenant} employees={employeeOptions} />
+        {canManage && (
+          <VacationRequestButton tenant={tenant} employees={employeeOptions} />
+        )}
       </PageHeader>
 
       <section className="mb-7 grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]">
@@ -201,26 +224,35 @@ export default async function VacationPage({
       <section className="overflow-hidden rounded-card border border-border bg-white">
         <div className="flex items-center justify-between gap-4 border-b border-border px-6 pt-5 pb-3.5">
           <h2 className="m-0 font-display text-[18px] font-semibold tracking-[-0.4px] text-ink">
-            Urlaubsantraege
+            Urlaubsanträge
           </h2>
           <span className="shrink-0 font-mono text-[11px] text-muted">
-            {vacationRequests.length} Eintraege
+            {vacationRequests.length} Einträge
           </span>
         </div>
 
-        {vacationRequests.length > 0 ? (
-          vacationRequests.map((request) => (
+        {page.items.length > 0 ? (
+          page.items.map((request) => (
             <VacationRequestRow
               key={request.dbId ?? request.id}
               tenant={tenant}
               request={request}
+              canManage={canManage}
+              canDelete={canDelete}
             />
           ))
         ) : (
           <div className="border-t border-border-soft px-6 py-10 text-[13px] text-muted">
-            Noch keine Urlaubsantraege erfasst.
+            Noch keine Urlaubsanträge erfasst.
           </div>
         )}
+        <PaginationControls
+          page={page.page}
+          pageCount={page.pageCount}
+          total={page.total}
+          pageSize={page.pageSize}
+          basePath={`/u/${tenant}/urlaub`}
+        />
       </section>
     </>
   );

@@ -17,7 +17,7 @@ export async function GET(request: Request) {
   }
 
   // Der Export ist teuer; wenige Aufrufe pro Stunde genügen.
-  const limit = checkRateLimit({
+  const limit = await checkRateLimit({
     key: `me-export:${session.user.id}`,
     limit: 5,
     windowSeconds: 3600,

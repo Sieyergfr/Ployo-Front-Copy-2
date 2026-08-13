@@ -1,5 +1,4 @@
 import { ReactNode } from "react";
-import { Check } from "lucide-react";
 
 type CheckboxProps = {
   id: string;
@@ -34,9 +33,7 @@ export default function Checkbox({
           peer-focus-visible:ring-ink/20
           ${alignItems == "start" && " mt-0.5"}
         `}
-      >
-        <Check size={12} strokeWidth={4} />
-      </div>
+      />
 
       <span className="checkbox-label">
         {children}

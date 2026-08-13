@@ -12,7 +12,10 @@ import {
   type Reminder,
   type ReminderMetric,
 } from "@/lib/reminders";
-import { Check } from "lucide-react";
+import { hasPermissionLevel } from "@/lib/roles";
+import { getTeamsForTenant } from "@/lib/team-service";
+import { getTenantCapabilities, withAccessRedirect } from "@/lib/tenant-access";
+import { Check, UsersRound } from "lucide-react";
 
 export const metadata = {
   title: "Erinnerungen",
@@ -45,11 +48,17 @@ function ReminderCompleteButton({
   reminder,
   tenant,
   returnPath,
+  canDelete,
 }: {
   reminder: Reminder;
   tenant: string;
   returnPath: string;
+  canDelete: boolean;
 }) {
+  if (!canDelete) {
+    return null;
+  }
+
   return (
     <form action={completeReminderAction} className="shrink-0">
       <input type="hidden" name="tenant" value={tenant} />
@@ -72,11 +81,15 @@ function ReminderRow({
   tenant,
   returnPath,
   fileBrowserData,
+  canManage,
+  canDelete,
 }: {
   reminder: Reminder;
   tenant: string;
   returnPath: string;
   fileBrowserData: ReminderFileBrowserData;
+  canManage: boolean;
+  canDelete: boolean;
 }) {
   const priority = reminderPriorityConfig[reminder.priority];
   const isExpired = reminder.daysLeft < 0;
@@ -91,6 +104,7 @@ function ReminderRow({
         tenant={tenant}
         returnPath={returnPath}
         fileBrowserData={fileBrowserData}
+        canManage={canManage}
         className="flex min-w-0 flex-1 cursor-pointer flex-wrap items-center gap-4 text-left"
       >
         <div className="w-[54px] shrink-0 text-center">
@@ -100,7 +114,7 @@ function ReminderRow({
             {daysLabel}
           </span>
           <div className="mt-0.5 font-mono text-[8px] uppercase tracking-[0.5px] text-muted">
-            {isExpired ? "ueberfaellig" : "Tage"}
+            {isExpired ? "überfällig" : "Tage"}
           </div>
         </div>
 
@@ -117,6 +131,12 @@ function ReminderRow({
             {isExpired && (
               <span className="rounded-md bg-danger/10 px-[7px] py-0.5 font-mono text-[10px] font-semibold text-danger">
                 Abgelaufen
+              </span>
+            )}
+            {reminder.teamName && (
+              <span className="inline-flex items-center gap-1 rounded-md bg-border-soft px-[7px] py-0.5 font-mono text-[10px] text-muted-2">
+                <UsersRound size={10} />
+                {reminder.teamName}
               </span>
             )}
           </div>
@@ -136,6 +156,7 @@ function ReminderRow({
         reminder={reminder}
         tenant={tenant}
         returnPath={returnPath}
+        canDelete={canDelete}
       />
     </div>
   );
@@ -148,21 +169,33 @@ export default async function RemindersPage({
 }) {
   const { tenant } = await params;
   const returnPath = `/u/${tenant}/erinnerungen`;
-  const [reminders, fileBrowserData] = await Promise.all([
-    getRemindersForTenant(tenant),
-    getReminderFileBrowserData(tenant),
-  ]);
+  const reminders = await withAccessRedirect(tenant, () => getRemindersForTenant(tenant));
+  // Nur für den "Datei anhängen"-Picker im Erinnerung-anlegen-Dialog —
+  // fehlende Berechtigung dafür soll die Erinnerungsliste selbst nicht sperren.
+  const fileBrowserData = await getReminderFileBrowserData(tenant).catch(
+    () => ({ folders: [], files: [] }) as ReminderFileBrowserData,
+  );
+  // Nur für die "Team"-Auswahl im Anlege-Dialog — fehlende Berechtigung
+  // dafür soll die Erinnerungsliste selbst nicht sperren.
+  const teams = await getTeamsForTenant(tenant).catch(() => []);
+  const teamOptions = teams.map((team) => ({ id: team.dbId ?? team.id, name: team.name }));
+  const capabilities = await getTenantCapabilities(tenant);
+  const canManage = hasPermissionLevel(capabilities.reminders.level, "write");
+  const canDelete = capabilities.reminders.canDelete;
   const reminderMetrics = buildReminderMetrics(reminders);
   const reminderFilters = buildReminderFilters(reminders);
 
   return (
     <>
       <PageHeader eyebrow="Aufgaben & Fristen" title="Erinnerungen">
-        <CreateReminderButton
-          tenant={tenant}
-          returnPath={returnPath}
-          fileBrowserData={fileBrowserData}
-        />
+        {canManage && (
+          <CreateReminderButton
+            tenant={tenant}
+            returnPath={returnPath}
+            fileBrowserData={fileBrowserData}
+            teamOptions={teamOptions}
+          />
+        )}
       </PageHeader>
 
       <section className="mb-7 grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]">
@@ -196,6 +229,8 @@ export default async function RemindersPage({
               tenant={tenant}
               returnPath={returnPath}
               fileBrowserData={fileBrowserData}
+              canManage={canManage}
+              canDelete={canDelete}
             />
           ))
         ) : (

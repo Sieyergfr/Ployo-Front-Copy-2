@@ -10,6 +10,8 @@ import {
   X,
 } from "lucide-react";
 import { useToast } from "@/components/Toasts";
+import { slugify } from "@/lib/slug";
+import { tenantIndustries, tenantSizes } from "@/lib/tenant-options";
 import Link from "next/link";
 import { type ChangeEvent, useEffect, useState } from "react";
 
@@ -50,21 +52,9 @@ const timezones = [
   "Europe/London",
 ];
 
-const sizes = ["1-10", "11-50", "51-200", "201-1000", "1000+"];
+const sizes = tenantSizes;
 
-const industries = [
-  "Technologie & Software",
-  "Einzelhandel & E-Commerce",
-  "Produktion",
-  "Gesundheit",
-  "Bau",
-  "Logistik & Transport",
-  "Dienstleistungen",
-  "Hotellerie & Gastronomie",
-  "Finanzen & Versicherung",
-  "Bildung",
-  "Sonstiges",
-];
+const industries = tenantIndustries;
 
 const colorPresets = ["#0E0E0E", "#2A6FDB", "#357A52", "#B4332A", "#7C3AED", "#D97706"];
 
@@ -73,11 +63,11 @@ const plans: Plan[] = [
     id: "starter",
     name: "Starter",
     monthlyPrice: 29,
-    included: "Inklusive 10 Mitarbeiter",
-    extra: "danach +3 € pro weiterem Mitarbeiter",
+    included: "Bis zu 5 Mitarbeiter",
+    extra: "Danach Upgrade auf Professional nötig",
     audience: "Für kleine Unternehmen mit einem Standort.",
     features: [
-      "1 Standort, bis max. 25 Mitarbeiter",
+      "1 Standort, bis zu 5 Mitarbeiter",
       "Digitale Personalakten mit Stammdaten, Vertragsdaten und Dokumenten",
       "Dateiablage mit Versionierung (10 GB Speicher)",
       "Urlaubs- und Krankheitsverwaltung inkl. Genehmigungsworkflow",
@@ -89,9 +79,9 @@ const plans: Plan[] = [
   {
     id: "professional",
     name: "Professional",
-    monthlyPrice: 79,
-    included: "Inklusive 20 Mitarbeiter",
-    extra: "danach +2,50 € pro weiterem Mitarbeiter",
+    monthlyPrice: 59,
+    included: "Bis zu 25 Mitarbeiter",
+    extra: "Danach Upgrade auf Business nötig",
     audience: "Für wachsende Unternehmen mit mehreren Standorten und Teams.",
     recommended: true,
     features: [
@@ -109,9 +99,9 @@ const plans: Plan[] = [
   {
     id: "business",
     name: "Business",
-    monthlyPrice: 199,
-    included: "Inklusive 40 Mitarbeiter",
-    extra: "danach +2 € pro weiterem Mitarbeiter",
+    monthlyPrice: 99,
+    included: "Bis zu 50 Mitarbeiter",
+    extra: "Höhere Limits auf Anfrage",
     audience: "Für Unternehmen mit Compliance-Anforderungen und Integrationsbedarf.",
     features: [
       "Alles aus Professional",
@@ -157,22 +147,6 @@ const stepCopy = {
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
-}
-
-function slugify(value: string) {
-  return value
-    .toLowerCase()
-    .trim()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/ä/g, "ae")
-    .replace(/ö/g, "oe")
-    .replace(/ü/g, "ue")
-    .replace(/ß/g, "ss")
-    .replace(/[^a-z0-9\s-]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
 }
 
 export default function CompanyCreateWizard() {
@@ -262,10 +236,25 @@ export default function CompanyCreateWizard() {
     };
   }
 
+  // lib/tenants.ts (normalizeLogoUrl) speichert data:-URLs nur bis 250.000
+  // Zeichen — größere Bilder dort abzuschneiden würde die Bilddaten
+  // beschädigen, statt sie sauber abzulehnen. Deshalb hier vorab prüfen.
+  const MAX_LOGO_FILE_BYTES = 180_000;
+
   function readLogo(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
 
     if (!file) {
+      return;
+    }
+
+    if (file.size > MAX_LOGO_FILE_BYTES) {
+      toast({
+        tone: "error",
+        title: "Logo zu groß",
+        subtitle: "Bitte ein Bild unter 180 KB verwenden.",
+      });
+      event.target.value = "";
       return;
     }
 

@@ -17,11 +17,11 @@ type ConfirmSubmitButtonProps = {
 export default function ConfirmSubmitButton({
   children,
   className = "btn btn-secondary text-danger",
-  confirmLabel = "Loeschen",
-  description = "Diese Aktion kann nicht automatisch rueckgaengig gemacht werden.",
+  confirmLabel = "Löschen",
+  description = "Diese Aktion kann nicht automatisch rückgängig gemacht werden.",
   form,
   formAction,
-  title = "Loeschen bestaetigen",
+  title = "Löschen bestätigen",
 }: ConfirmSubmitButtonProps) {
   const { openPopup, closePopup } = useUniversalPopup();
 

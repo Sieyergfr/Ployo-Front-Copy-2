@@ -57,18 +57,23 @@ export default function FloatingEditBar({
               Abbrechen
             </Link>
             <button
-              type="submit"
-              form={formId}
+              type="button"
               className="btn btn-primary btn-sm"
               disabled={isSubmitting}
               onClick={() => {
                 const form = document.getElementById(formId);
 
-                if (form instanceof HTMLFormElement && !form.checkValidity()) {
+                if (!(form instanceof HTMLFormElement)) {
+                  return;
+                }
+
+                if (!form.checkValidity()) {
+                  form.reportValidity();
                   return;
                 }
 
                 setIsSubmitting(true);
+                form.requestSubmit();
               }}
             >
               {isSubmitting ? (

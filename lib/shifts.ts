@@ -4,6 +4,8 @@ export type ShiftDay = {
   date: string;
   isWeekend?: boolean;
   shifts: Shift[];
+  staffedCount?: number;
+  understaffed?: boolean;
 };
 
 export type Shift = {

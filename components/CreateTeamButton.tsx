@@ -4,6 +4,7 @@ import { createTeamAction } from "@/app/(dashboard)/u/[tenant]/teams/actions";
 import FormSubmitButton from "@/components/FormSubmitButton";
 import { LocationMultiSelectDropdown } from "@/components/TeamEditControls";
 import { useUniversalPopup } from "@/components/UniversalPopup";
+import { teamColorPalette } from "@/lib/org-options";
 import { Check, ChevronDown, Plus, Users } from "lucide-react";
 import { useState } from "react";
 
@@ -13,18 +14,7 @@ type DropdownOption = {
   meta?: string;
 };
 
-const teamColors = [
-  { value: "bg-[#C9622A]", className: "bg-[#C9622A]", label: "Orange" },
-  { value: "bg-[#2A5BC9]", className: "bg-[#2A5BC9]", label: "Blau" },
-  { value: "bg-[#1D8A65]", className: "bg-[#1D8A65]", label: "Gruen" },
-  { value: "bg-[#7A3C9C]", className: "bg-[#7A3C9C]", label: "Violett" },
-  { value: "bg-[#B4332A]", className: "bg-[#B4332A]", label: "Rot" },
-  { value: "bg-[#168A8A]", className: "bg-[#168A8A]", label: "Tuerkis" },
-  { value: "bg-[#B7791F]", className: "bg-[#B7791F]", label: "Gold" },
-  { value: "bg-[#4A5568]", className: "bg-[#4A5568]", label: "Schiefer" },
-  { value: "bg-[#C23B7A]", className: "bg-[#C23B7A]", label: "Pink" },
-  { value: "bg-[#6B8E23]", className: "bg-[#6B8E23]", label: "Limette" },
-];
+const teamColors = teamColorPalette;
 
 function CustomDropdownField({
   label,
@@ -126,7 +116,7 @@ function CustomDropdownField({
 }
 
 function TeamColorPicker() {
-  const [selectedColor, setSelectedColor] = useState(teamColors[0].value);
+  const [selectedColor, setSelectedColor] = useState<string>(teamColors[0].value);
 
   return (
     <div className="field">
@@ -189,7 +179,7 @@ function CreateTeamForm({
         <CustomDropdownField
           label="Teamleitung"
           name="lead"
-          placeholder="Mitarbeiter auswaehlen"
+          placeholder="Mitarbeiter auswählen"
           options={employees}
         />
       </div>
@@ -202,15 +192,15 @@ function CreateTeamForm({
           id="team-description"
           name="description"
           className="input min-h-24 resize-none"
-          placeholder="Kurzer Zweck oder Zustaendigkeitsbereich"
+          placeholder="Kurzer Zweck oder Zuständigkeitsbereich"
         />
       </div>
 
       <TeamColorPicker />
 
       <p className="m-0 text-[12.5px] leading-[1.55] text-muted-2">
-        Mitglieder koennen nach dem Erstellen direkt ueber die Teamdetailseite
-        hinzugefuegt werden.
+        Mitglieder können nach dem Erstellen direkt über die Teamdetailseite
+        hinzugefügt werden.
       </p>
 
       <div className="mt-1 flex justify-end gap-2.5 border-t border-border-soft pt-4">

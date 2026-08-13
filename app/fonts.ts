@@ -13,7 +13,7 @@ export const inter = localFont({
 });
 
 export const jetbrainsMono = localFont({
-  src: "../public/fonts/jetBrainsMono-VariableFont.ttf",
+  src: "../public/fonts/JetBrainsMono-VariableFont.ttf",
   variable: "--font-jetbrains-mono",
   display: "swap",
 });

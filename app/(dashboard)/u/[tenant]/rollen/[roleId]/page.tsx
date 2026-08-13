@@ -1,15 +1,20 @@
 import { deleteRoleAction, updateRoleAction } from "@/app/(dashboard)/u/[tenant]/rollen/actions";
 import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
+import { UnsavedChangesGuard } from "@/components/EditSafety";
 import FloatingEditBar from "@/components/FloatingEditBar";
+import Checkbox from "@/components/inputs/checkbox";
 import PageHeader from "@/components/PageHeader";
+import RolePermissionAreaFields from "@/components/RolePermissionAreaFields";
 import { getRoleForTenant } from "@/lib/role-service";
 import {
   permissionAreas,
   permissionLevelLabels,
   permissionLevels,
+  permissionScopeLabels,
   type PermissionLevel,
 } from "@/lib/roles";
-import { ArrowLeft, EyeOff, ShieldCheck } from "lucide-react";
+import { getTenantCapabilities, withAccessRedirect } from "@/lib/tenant-access";
+import { ArrowLeft, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -37,7 +42,7 @@ export default async function RoleDetailPage({
 }: PageProps<"/u/[tenant]/rollen/[roleId]">) {
   const { tenant, roleId } = await params;
   const { edit } = await searchParams;
-  const role = await getRoleForTenant(tenant, roleId);
+  const role = await withAccessRedirect(tenant, () => getRoleForTenant(tenant, roleId));
 
   if (!role) {
     notFound();
@@ -45,10 +50,12 @@ export default async function RoleDetailPage({
 
   const isEditing = edit === "1";
   const roleHref = `/u/${tenant}/rollen/${role.id}`;
-  const canDelete = !role.isSystem && role.members === 0;
+  const capabilities = await getTenantCapabilities(tenant);
+  const canDelete = capabilities.roles.canDelete && !role.isSystem && role.members === 0;
 
   return (
     <>
+      <UnsavedChangesGuard active={isEditing} />
       <div className="mb-[18px]">
         <Link href={`/u/${tenant}/rollen`} className="btn btn-secondary btn-sm">
           <ArrowLeft size={14} />
@@ -70,9 +77,9 @@ export default async function RoleDetailPage({
                 <ConfirmSubmitButton
                   form="role-delete-form"
                   className="btn btn-secondary border-danger/25 text-danger hover:border-danger/40 hover:bg-danger/5"
-                  description={`Die Rolle "${role.name}" wird dauerhaft geloescht.`}
+                  description={`Die Rolle "${role.name}" wird dauerhaft gelöscht.`}
                 >
-                  Loeschen
+                  Löschen
                 </ConfirmSubmitButton>
               </form>
             )}
@@ -118,6 +125,7 @@ export default async function RoleDetailPage({
           {permissionAreas.map((area) => {
             const level = role.permissions[area.id] ?? "none";
             const hasAccess = level !== "none";
+            const scope = role.scopes[area.id] ?? "all";
 
             return (
               <div
@@ -140,66 +148,91 @@ export default async function RoleDetailPage({
                   </span>
                 </div>
 
-                <div className="grid min-w-0 gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-                  <div className="min-w-0 rounded-xl border border-border-soft bg-bg p-3">
-                    <div className="mb-3 font-mono text-[9.5px] uppercase tracking-[0.6px] text-muted">
-                      Rechte
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      {permissionLevels.map((permission) => (
-                        <label
-                          key={permission}
-                          className="checkbox-row relative cursor-pointer"
-                        >
-                          <input
-                            type="radio"
-                            name={`permission-${area.id}`}
-                            value={permission}
-                            className="peer absolute inset-0 cursor-pointer opacity-0"
-                            defaultChecked={permission === level}
-                          />
-                          <span className="checkbox" />
-                          <span className="checkbox-label">
-                            {permissionLevelLabels[permission]}
-                          </span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
+                <RolePermissionAreaFields
+                  area={area}
+                  defaultLevel={level}
+                  defaultScope={scope}
+                />
 
-                  <div className="min-w-0 rounded-xl border border-border-soft bg-bg p-3">
-                    <div className="mb-3 font-mono text-[9.5px] uppercase tracking-[0.6px] text-muted">
-                      Sichtbarkeit
+                {hasAccess && (
+                  <div className="mt-4 grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                    <div className="min-w-0 rounded-xl border border-border-soft bg-bg p-3">
+                      <div className="mb-3 font-mono text-[9.5px] uppercase tracking-[0.6px] text-muted">
+                        Zusätzliche Rechte
+                      </div>
+                      <div className="grid gap-2">
+                        <Checkbox
+                          id={`can-delete-${area.id}`}
+                          defaultChecked={role.canDelete[area.id] ?? false}
+                        >
+                          Löschen erlaubt
+                        </Checkbox>
+                        <Checkbox
+                          id={`can-view-audit-${area.id}`}
+                          defaultChecked={role.canViewAudit[area.id] ?? false}
+                        >
+                          Audit-Log sichtbar
+                        </Checkbox>
+                      </div>
                     </div>
-                    <div className="flex flex-wrap gap-x-4 gap-y-2">
-                      <label className="checkbox-row relative cursor-pointer">
-                        <input
-                          type="checkbox"
-                          className="peer absolute inset-0 cursor-pointer opacity-0"
-                          defaultChecked={!hasAccess}
-                          disabled
-                        />
-                        <span className="checkbox" />
-                        <span className="checkbox-label">
-                          <span className="inline-flex items-center gap-1.5">
-                            <EyeOff size={13} />
-                            Navigation ausblenden
-                          </span>
-                        </span>
-                      </label>
-                      <label className="checkbox-row relative cursor-pointer">
-                        <input
-                          type="checkbox"
-                          className="peer absolute inset-0 cursor-pointer opacity-0"
-                          defaultChecked={!hasAccess}
-                          disabled
-                        />
-                        <span className="checkbox" />
-                        <span className="checkbox-label">Route sperren</span>
-                      </label>
-                    </div>
+
+                    {area.fileRelevant && (
+                      <div className="min-w-0 rounded-xl border border-border-soft bg-bg p-3">
+                        <div className="mb-3 font-mono text-[9.5px] uppercase tracking-[0.6px] text-muted">
+                          Dateien
+                        </div>
+                        <div className="grid gap-2">
+                          <Checkbox
+                            id={`can-upload-files-${area.id}`}
+                            defaultChecked={role.canUploadFiles[area.id] ?? false}
+                          >
+                            Hochladen
+                          </Checkbox>
+                          <Checkbox
+                            id={`can-edit-files-${area.id}`}
+                            defaultChecked={role.canEditFiles[area.id] ?? false}
+                          >
+                            Bearbeiten
+                          </Checkbox>
+                          <Checkbox
+                            id={`can-view-files-${area.id}`}
+                            defaultChecked={role.canViewFiles[area.id] ?? false}
+                          >
+                            Sehen
+                          </Checkbox>
+                        </div>
+                      </div>
+                    )}
+
+                    {area.supportsAssignedScope && (
+                      <div className="min-w-0 rounded-xl border border-border-soft bg-bg p-3">
+                        <div className="mb-3 font-mono text-[9.5px] uppercase tracking-[0.6px] text-muted">
+                          Schichten
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          {permissionLevels.map((shiftLevel) => (
+                            <label
+                              key={shiftLevel}
+                              className="checkbox-row relative cursor-pointer"
+                            >
+                              <input
+                                type="radio"
+                                name={`shifts-level-${area.id}`}
+                                value={shiftLevel}
+                                className="peer absolute inset-0 cursor-pointer opacity-0"
+                                defaultChecked={(role.shiftsLevel[area.id] ?? "none") === shiftLevel}
+                              />
+                              <span className="checkbox" />
+                              <span className="checkbox-label">
+                                {permissionLevelLabels[shiftLevel]}
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
+                )}
               </div>
             );
           })}
@@ -208,18 +241,21 @@ export default async function RoleDetailPage({
         <section className="overflow-hidden rounded-card border border-border bg-white">
           <div className="overflow-x-auto">
             <div className="min-w-[760px]">
-              <div className="grid grid-cols-[260px_minmax(260px,1fr)_160px] border-b border-border px-6 py-4 font-mono text-[9.5px] uppercase tracking-[0.6px] text-muted">
+              <div className="grid grid-cols-[220px_minmax(200px,1fr)_130px_130px] border-b border-border px-6 py-4 font-mono text-[9.5px] uppercase tracking-[0.6px] text-muted">
                 <div>Bereich</div>
                 <div>Beschreibung</div>
                 <div>Recht</div>
+                <div>Sichtbarkeit</div>
               </div>
               {permissionAreas.map((area) => {
                 const level = role.permissions[area.id] ?? "none";
+                const scope = role.scopes[area.id] ?? "all";
+                const hasAccess = level !== "none";
 
                 return (
                   <div
                     key={area.id}
-                    className="grid grid-cols-[260px_minmax(260px,1fr)_160px] items-center gap-3 border-t border-border-soft px-6 py-3.5"
+                    className="grid grid-cols-[220px_minmax(200px,1fr)_130px_130px] items-center gap-3 border-t border-border-soft px-6 py-3.5"
                   >
                     <div className="text-[13.5px] font-semibold text-ink">
                       {area.label}
@@ -231,6 +267,9 @@ export default async function RoleDetailPage({
                       className={`inline-flex w-fit rounded-[9px] border px-2.5 py-1.5 font-mono text-[10.5px] font-semibold ${levelTone[level]}`}
                     >
                       {permissionLevelLabels[level]}
+                    </span>
+                    <span className="text-[12px] text-muted-2">
+                      {hasAccess && area.supportsScope ? permissionScopeLabels[scope] : "—"}
                     </span>
                   </div>
                 );

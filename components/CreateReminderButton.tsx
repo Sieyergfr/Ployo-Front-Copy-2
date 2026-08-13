@@ -8,15 +8,19 @@ import type { ReminderFileBrowserData } from "@/lib/files";
 import { BellPlus, Plus } from "lucide-react";
 import { useState } from "react";
 
+type TeamOption = { id: string; name: string };
+
 function CreateReminderForm({
   tenant,
   returnPath,
   fileBrowserData,
+  teamOptions,
   onDone,
 }: {
   tenant: string;
   returnPath: string;
   fileBrowserData: ReminderFileBrowserData;
+  teamOptions: TeamOption[];
   onDone: () => void;
 }) {
   const [linkedFiles, setLinkedFiles] = useState<string[]>([]);
@@ -37,20 +41,20 @@ function CreateReminderForm({
           id="reminder-title"
           name="title"
           className="input"
-          placeholder="z. B. Vertrag pruefen"
+          placeholder="z. B. Vertrag prüfen"
           required
         />
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="field">
           <label htmlFor="reminder-date" className="label">
-            Faellig am
+            Fällig am
           </label>
           <DatePickerField id="reminder-date" name="dueDate" />
         </div>
         <div className="field">
           <label htmlFor="reminder-priority" className="label">
-            Prioritaet
+            Priorität
           </label>
           <select
             id="reminder-priority"
@@ -89,6 +93,26 @@ function CreateReminderForm({
           />
         </div>
       </div>
+      {teamOptions.length > 0 && (
+        <div className="field">
+          <label htmlFor="reminder-team" className="label">
+            Team (optional)
+          </label>
+          <select
+            id="reminder-team"
+            name="teamId"
+            className="input cursor-pointer bg-bg"
+            defaultValue=""
+          >
+            <option value="">Keinem Team zugeordnet</option>
+            {teamOptions.map((team) => (
+              <option key={team.id} value={team.id}>
+                {team.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
       <div className="field">
         <label htmlFor="reminder-notes" className="label">
           Hinweise
@@ -97,7 +121,7 @@ function CreateReminderForm({
           id="reminder-notes"
           name="notes"
           className="input min-h-24 resize-y py-3"
-          placeholder="Interne Hinweise oder naechste Schritte"
+          placeholder="Interne Hinweise oder nächste Schritte"
         />
       </div>
       <LinkedFileBrowser
@@ -122,10 +146,12 @@ export default function CreateReminderButton({
   tenant,
   returnPath,
   fileBrowserData,
+  teamOptions = [],
 }: {
   tenant: string;
   returnPath: string;
   fileBrowserData: ReminderFileBrowserData;
+  teamOptions?: TeamOption[];
 }) {
   const { openPopup, closePopup } = useUniversalPopup();
 
@@ -141,6 +167,7 @@ export default function CreateReminderButton({
               tenant={tenant}
               returnPath={returnPath}
               fileBrowserData={fileBrowserData}
+              teamOptions={teamOptions}
               onDone={closePopup}
             />
           ),

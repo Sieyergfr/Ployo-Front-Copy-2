@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { CookieConsent } from "@/components/CookieConsent";
 import { ToastProvider } from "@/components/Toasts";
 import { UniversalPopupProvider } from "@/components/UniversalPopup";
 import "./globals.css";
@@ -27,6 +28,7 @@ export default function RootLayout({
         <ToastProvider>
           <UniversalPopupProvider>{children}</UniversalPopupProvider>
         </ToastProvider>
+        <CookieConsent />
       </body>
     </html>
   );

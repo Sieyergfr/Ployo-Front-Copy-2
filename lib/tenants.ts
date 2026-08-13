@@ -2,7 +2,12 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { isEmailConfigured, sendInvitationEmail } from "@/lib/email";
 import { buildInvitationUrl } from "@/lib/invitation-service";
+import { logger } from "@/lib/logger";
+import { slugify } from "@/lib/slug";
+import { isKnownTenantIndustry, isKnownTenantSize } from "@/lib/tenant-options";
 import { headers } from "next/headers";
+
+export { slugify };
 
 const INVITATION_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 
@@ -29,8 +34,8 @@ const reservedTenantSlugs = new Set([
   "select",
 ]);
 
-const tenantPlans = ["starter", "professional", "business"] as const;
-const billingCycles = ["monthly", "yearly"] as const;
+export const tenantPlans = ["starter", "professional", "business"] as const;
+export const billingCycles = ["monthly", "yearly"] as const;
 
 export type TenantPlan = (typeof tenantPlans)[number];
 export type BillingCycle = (typeof billingCycles)[number];
@@ -55,17 +60,6 @@ export type CreateTenantInput = {
   }>;
 };
 
-export function slugify(value: string) {
-  return value
-    .toLowerCase()
-    .trim()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 64);
-}
-
 function optionalString(value: string | undefined, maxLength = 255) {
   const trimmed = value?.trim();
 
@@ -78,13 +72,25 @@ function normalizeCode(value: string | undefined, fallback: string, maxLength = 
   return normalized ?? fallback;
 }
 
-function normalizePlan(value: string | undefined): TenantPlan {
+function normalizeTenantSize(value: string | undefined) {
+  const trimmed = value?.trim();
+
+  return trimmed && isKnownTenantSize(trimmed) ? trimmed : null;
+}
+
+function normalizeTenantIndustry(value: string | undefined) {
+  const trimmed = value?.trim();
+
+  return trimmed && isKnownTenantIndustry(trimmed) ? trimmed : null;
+}
+
+export function normalizePlan(value: string | undefined): TenantPlan {
   return tenantPlans.includes(value as TenantPlan)
     ? (value as TenantPlan)
     : "professional";
 }
 
-function normalizeBillingCycle(value: string | undefined): BillingCycle {
+export function normalizeBillingCycle(value: string | undefined): BillingCycle {
   return billingCycles.includes(value as BillingCycle)
     ? (value as BillingCycle)
     : "monthly";
@@ -126,7 +132,9 @@ export function normalizeLogoUrl(value: string | undefined) {
   }
 
   if (trimmed.startsWith("data:image/")) {
-    return trimmed.slice(0, 250_000);
+    // Abschneiden würde die Bilddaten beschädigen — bei Überlänge lieber
+    // ganz ablehnen (siehe MAX_LOGO_FILE_BYTES im CompanyCreateWizard).
+    return trimmed.length <= 250_000 ? trimmed : null;
   }
 
   try {
@@ -185,12 +193,66 @@ export async function getTenantsForUser(userId: string) {
   return prisma.tenantMembership.findMany({
     where: { userId },
     orderBy: { createdAt: "asc" },
-    include: {
+    select: {
+      role: true,
+      roleRef: {
+        select: {
+          permissions: { select: { area: true, level: true } },
+        },
+      },
       tenant: {
-        include: {
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          country: true,
+          timezone: true,
+          size: true,
+          industry: true,
+          contactEmail: true,
+          logoUrl: true,
+          primaryColor: true,
+          plan: true,
+          billingCycle: true,
+          stripeSubscriptionStatus: true,
+          stripeCancelAtPeriodEnd: true,
+          stripeCurrentPeriodEnd: true,
+          locations: {
+            where: { status: "active" },
+            orderBy: { name: "asc" },
+            select: { id: true, name: true },
+          },
           settings: {
-            include: {
-              companyAddress: true,
+            select: {
+              taxId: true,
+              defaultLocationId: true,
+              weekStart: true,
+              workHours: true,
+              vacationDays: true,
+              employeeNumberRequired: true,
+              employeeNumberPrefix: true,
+              employeeNumberSuffix: true,
+              archiveFormerEmployees: true,
+              mailNotifications: true,
+              inAppNotifications: true,
+              mobilePush: true,
+              deadlineAlerts: true,
+              absenceAlerts: true,
+              shiftAlerts: true,
+              digestTime: true,
+              twoFactorRequired: true,
+              sessionTimeout: true,
+              auditRetentionMonths: true,
+              companyAddress: {
+                select: {
+                  street: true,
+                  houseNumber: true,
+                  postalCode: true,
+                  city: true,
+                  careOf: true,
+                  country: true,
+                },
+              },
             },
           },
         },
@@ -227,8 +289,8 @@ export async function createTenantForOwner(input: CreateTenantInput) {
       slug,
       country: normalizeCode(input.country, "DE"),
       timezone: normalizeCode(input.timezone, "Europe/Berlin"),
-      size: optionalString(input.size, 64),
-      industry: optionalString(input.industry),
+      size: normalizeTenantSize(input.size),
+      industry: normalizeTenantIndustry(input.industry),
       contactEmail: normalizeEmail(input.contactEmail),
       logoUrl: normalizeLogoUrl(input.logoUrl),
       primaryColor: normalizeCode(input.primaryColor, "#2A6FDB", 16),
@@ -262,7 +324,10 @@ export async function createTenantForOwner(input: CreateTenantInput) {
           url: buildInvitationUrl(invitation.token),
         });
       } catch (error) {
-        console.error("[invitation] E-Mail-Versand fehlgeschlagen:", error);
+        logger.error("Einladungs-E-Mail-Versand fehlgeschlagen.", {
+          to: invitation.email,
+          error: error instanceof Error ? error.message : String(error),
+        });
       }
     }
   }

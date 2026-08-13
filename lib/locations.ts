@@ -37,35 +37,6 @@ export type LocationFile = {
   storageFileId?: string;
 };
 
-export type LocationShiftTone = "blue" | "success" | "muted";
-
-export type LocationShiftCell = {
-  staffing?: string;
-  time?: string;
-  state: "filled" | "warning" | "empty";
-};
-
-export type LocationShiftRow = {
-  label: string;
-  tone: LocationShiftTone;
-  cells: LocationShiftCell[];
-};
-
-export type LocationShiftEmployee = LocationTeamMember & {
-  days: Array<string | null>;
-};
-
-export type LocationShiftPlan = {
-  week: string;
-  days: Array<{
-    label: string;
-    date: string;
-    weekend?: boolean;
-  }>;
-  rows: LocationShiftRow[];
-  employees: LocationShiftEmployee[];
-};
-
 export type Location = {
   id: string;
   dbId?: string;
@@ -99,6 +70,5 @@ export type Location = {
   activity: LocationActivity[];
   fileFolders: LocationFileFolder[];
   files: LocationFile[];
-  shiftPlan: LocationShiftPlan;
 };
 

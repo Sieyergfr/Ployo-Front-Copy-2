@@ -11,7 +11,7 @@ import { headers } from "next/headers";
 import { requireTenantAccess } from "@/lib/tenant-access";
 import { requireFileAcl } from "@/lib/file-access";
 
-export type FileOwnerType = "tenant" | "employee" | "location";
+export type FileOwnerType = "tenant" | "employee" | "location" | "team";
 
 export type UploadTenantFileInput = {
   tenantSlug: string;
@@ -111,8 +111,31 @@ async function findNamesById(input: {
   };
 }
 
-async function requireTenantFileAccess(tenantSlug: string) {
+/**
+ * Für Uploads/Ordner, die an einen Fachbereich hängen (Personalakte-/
+ * Standort-Dokumente), zusätzlich zum bestehenden "files:write" das
+ * `canUploadFiles` des jeweiligen Bereichs prüfen — sonst würde ein Konto
+ * ohne diese Fähigkeit weiterhin über die Server Action hochladen können,
+ * auch wenn der Button in der UI ausgeblendet ist. Generische Uploads ins
+ * eigenständige Dateien-Modul (ownerType "tenant") bleiben unverändert nur
+ * an "files:write" gebunden.
+ */
+async function requireTenantFileAccess(
+  tenantSlug: string,
+  ownerType: FileOwnerType = "tenant",
+) {
   await requireTenantAccess(tenantSlug, "files", "write");
+
+  if (ownerType === "employee" || ownerType === "location" || ownerType === "team") {
+    const area =
+      ownerType === "employee" ? "employees" : ownerType === "location" ? "locations" : "teams";
+    const areaAccess = await requireTenantAccess(tenantSlug, area, "read");
+
+    if (!areaAccess.canUploadFiles) {
+      throw new Error("FORBIDDEN");
+    }
+  }
+
   const session = await auth.api.getSession({
     headers: await headers(),
   });
@@ -136,7 +159,7 @@ async function requireTenantFileAccess(tenantSlug: string) {
     throw new Error("FORBIDDEN");
   }
 
-  const role = membership.role.toUpperCase();
+  const role = membership.role;
   const filesPermission = membership.roleRef?.permissions.find(
     (permission) => permission.area === "files",
   );
@@ -188,6 +211,19 @@ async function validateOwner(input: {
     return { ownerId: location.id, ownerName: location.name };
   }
 
+  if (input.ownerType === "team" && input.ownerId) {
+    const team = await prisma.tenantTeam.findFirst({
+      where: { id: input.ownerId, tenantId: input.tenantId },
+      select: { id: true, name: true },
+    });
+
+    if (!team) {
+      throw new Error("Team nicht gefunden.");
+    }
+
+    return { ownerId: team.id, ownerName: team.name };
+  }
+
   return { ownerId: undefined, ownerName: "HR" };
 }
 
@@ -236,8 +272,8 @@ async function fileToBuffer(file: File) {
 }
 
 export async function uploadTenantFile(input: UploadTenantFileInput) {
-  const access = await requireTenantFileAccess(input.tenantSlug);
   const ownerType = input.ownerType ?? "tenant";
+  const access = await requireTenantFileAccess(input.tenantSlug, ownerType);
   const owner = await validateOwner({
     tenantId: access.tenantId,
     ownerType,
@@ -300,6 +336,7 @@ export async function uploadTenantFile(input: UploadTenantFileInput) {
       tenantId: access.tenantId,
       employeeId: ownerType === "employee" ? owner.ownerId : undefined,
       locationId: ownerType === "location" ? owner.ownerId : undefined,
+      teamId: ownerType === "team" ? owner.ownerId : undefined,
       bucket: uploaded.bucket,
       storageKey: uploaded.key,
       originalName,
@@ -317,17 +354,15 @@ export async function uploadTenantFile(input: UploadTenantFileInput) {
       expiresAt: input.expiresAt?.trim() ?? "",
       reminderAt: input.reminderAt?.trim() ?? "",
       description: input.description?.trim() ?? "",
-      tagsJson: JSON.stringify(tags),
+      tagsJson: tags,
       assignedEmployeeId: linked.employee?.id ?? "",
       assignedEmployeeName: linked.employee?.name ?? "",
       assignedLocationId: linked.location?.id ?? "",
       assignedLocationName: linked.location?.name ?? "",
-      accessRoleIdsJson: JSON.stringify(linked.roles.map((role) => role.id)),
-      accessRoleNamesJson: JSON.stringify(linked.roles.map((role) => role.name)),
-      accessUserIdsJson: JSON.stringify(linked.users.map((user) => user.id)),
-      accessUserNamesJson: JSON.stringify(
-        linked.users.map((user) => user.name || user.email),
-      ),
+      accessRoleIdsJson: linked.roles.map((role) => role.id),
+      accessRoleNamesJson: linked.roles.map((role) => role.name),
+      accessUserIdsJson: linked.users.map((user) => user.id),
+      accessUserNamesJson: linked.users.map((user) => user.name || user.email),
       provider: uploaded.provider,
     },
   });
@@ -355,9 +390,9 @@ export async function createTenantFileFolder(input: {
   ownerName?: string;
   locked?: boolean;
 }) {
-  const access = await requireTenantFileAccess(input.tenantSlug);
-  const name = input.name.trim();
   const ownerType = input.ownerType ?? "tenant";
+  const access = await requireTenantFileAccess(input.tenantSlug, ownerType);
+  const name = input.name.trim();
   const owner = await validateOwner({
     tenantId: access.tenantId,
     ownerType,
@@ -408,6 +443,7 @@ export async function createTenantFileFolder(input: {
       tenantId: access.tenantId,
       employeeId: ownerType === "employee" ? owner.ownerId : undefined,
       locationId: ownerType === "location" ? owner.ownerId : undefined,
+      teamId: ownerType === "team" ? owner.ownerId : undefined,
       parentId: parent?.id,
       scope,
       name,
@@ -435,7 +471,7 @@ export async function uploadTenantFileVersion(input: {
     where: {
       id: input.fileId,
       tenantId: access.tenantId,
-      status: { not: "delete" },
+      status: { not: "deleted" },
     },
   });
 
@@ -451,8 +487,10 @@ export async function uploadTenantFileVersion(input: {
     ? "employee"
     : current.locationId
       ? "location"
-      : "tenant";
-  const ownerId = current.employeeId ?? current.locationId ?? undefined;
+      : current.teamId
+        ? "team"
+        : "tenant";
+  const ownerId = current.employeeId ?? current.locationId ?? current.teamId ?? undefined;
   const storageKey = buildStorageKey(bucketConfig, {
     tenantId: access.tenantId,
     fileName: originalName,
@@ -482,6 +520,7 @@ export async function uploadTenantFileVersion(input: {
         tenantId: access.tenantId,
         employeeId: current.employeeId,
         locationId: current.locationId,
+        teamId: current.teamId,
         parentId: rootId,
         bucket: uploaded.bucket,
         storageKey: uploaded.key,
@@ -536,7 +575,7 @@ export async function getTenantFileSignedUrl(input: {
   const baseFile = await prisma.tenantFile.findFirst({
     where: {
       tenantId: access.tenantId,
-      status: { not: "delete" },
+      status: { not: "deleted" },
       id: input.fileId,
     },
   });
@@ -548,7 +587,7 @@ export async function getTenantFileSignedUrl(input: {
   const rootId = baseFile.parentId ?? baseFile.id;
   const aclFile = baseFile.parentId
     ? await prisma.tenantFile.findFirst({
-        where: { id: rootId, tenantId: access.tenantId, status: { not: "delete" } },
+        where: { id: rootId, tenantId: access.tenantId, status: { not: "deleted" } },
         select: { accessRoleIdsJson: true, accessUserIdsJson: true },
       })
     : baseFile;
@@ -560,7 +599,7 @@ export async function getTenantFileSignedUrl(input: {
     ? await prisma.tenantFile.findFirst({
         where: {
           tenantId: access.tenantId,
-          status: { not: "delete" },
+          status: { not: "deleted" },
           version: input.version,
           OR: [{ id: rootId }, { parentId: rootId }],
         },

@@ -25,6 +25,22 @@ export function normalizeAddressInput(input: AddressInput = {}) {
   };
 }
 
+/** Wirft, wenn eines der im Formular als Pflichtfeld markierten Adressfelder fehlt. */
+export function assertRequiredAddress(input: AddressInput = {}) {
+  const normalized = normalizeAddressInput(input);
+
+  if (
+    !normalized.street ||
+    !normalized.houseNumber ||
+    !normalized.postalCode ||
+    !normalized.city
+  ) {
+    throw new Error("Bitte die vollständige Adresse angeben.");
+  }
+
+  return normalized;
+}
+
 export function hasAddressInput(input: AddressInput = {}) {
   const normalized = normalizeAddressInput(input);
 

@@ -18,7 +18,7 @@ export async function GET(request: Request) {
   }
 
   // Läuft bei jedem Tastendruck im Anlege-Assistenten.
-  const limit = checkRateLimit({
+  const limit = await checkRateLimit({
     key: `tenant-slug:${session.user.id}`,
     limit: 60,
     windowSeconds: 60,

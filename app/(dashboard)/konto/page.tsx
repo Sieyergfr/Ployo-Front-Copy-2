@@ -1,22 +1,47 @@
 import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
 import FormSubmitButton from "@/components/FormSubmitButton";
 import PageHeader from "@/components/PageHeader";
-import { getAccountOverview } from "@/lib/account-service";
-import { KeyRound, Save, ShieldAlert, UserCog } from "lucide-react";
+import AvatarUploadForm from "@/components/auth/AvatarUploadForm";
+import ChangeEmailForm from "@/components/auth/ChangeEmailForm";
+import TwoFactorSettingsCard from "@/components/auth/TwoFactorSettingsCard";
+import { getAccountOverview, getOwnPreferences } from "@/lib/account-service";
+import { isEmailConfigured } from "@/lib/email";
+import {
+  KeyRound,
+  Save,
+  ShieldAlert,
+  ShieldCheck,
+  SlidersHorizontal,
+  UserCog,
+} from "lucide-react";
 import Link from "next/link";
+import { getTranslations } from "next-intl/server";
 import {
   changePasswordAction,
   deleteAccountAction,
   updateAccountNameAction,
+  updatePreferencesAction,
 } from "@/app/(dashboard)/konto/actions";
 
 export const metadata = {
   title: "Konto",
 };
 
+function getInitials(name: string) {
+  const initials = name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
+
+  return initials || "U";
+}
+
 const savedMessages: Record<string, string> = {
   name: "Anzeigename gespeichert.",
   password: "Passwort geändert.",
+  preferences: "Einstellungen gespeichert.",
 };
 
 function Card({
@@ -44,7 +69,11 @@ export default async function AccountPage({
 }: {
   searchParams: Promise<{ saved?: string | string[] }>;
 }) {
-  const account = await getAccountOverview();
+  const [account, preferences, t] = await Promise.all([
+    getAccountOverview(),
+    getOwnPreferences(),
+    getTranslations("AccountPreferences"),
+  ]);
   const savedParam = (await searchParams).saved;
   const saved = Array.isArray(savedParam) ? savedParam[0] : savedParam;
   const savedMessage = saved ? savedMessages[saved] : undefined;
@@ -66,6 +95,9 @@ export default async function AccountPage({
       <div className="grid items-start gap-4 [grid-template-columns:repeat(auto-fit,minmax(340px,1fr))]">
         <div className="flex flex-col gap-4">
           <Card title="Profil" icon={UserCog}>
+            <div className="mb-4 border-b border-border-soft pb-4">
+              <AvatarUploadForm image={account.image} initials={getInitials(account.name)} />
+            </div>
             <form action={updateAccountNameAction} className="flex flex-col gap-3">
               <div className="field">
                 <label htmlFor="account-name" className="label">
@@ -78,25 +110,14 @@ export default async function AccountPage({
                   defaultValue={account.name}
                   required
                   minLength={2}
+                  maxLength={120}
                 />
               </div>
-              <div className="field">
-                <label htmlFor="account-email" className="label">
-                  E-Mail
-                </label>
-                <input
-                  id="account-email"
-                  className="input bg-bg"
-                  defaultValue={account.email}
-                  readOnly
-                />
-                <p className="mt-1 text-[11.5px] text-muted">
-                  {account.emailVerified
-                    ? "Bestätigt."
-                    : "Noch nicht bestätigt."}{" "}
-                  Eine Änderung der Anmelde-E-Mail ist derzeit nicht möglich.
-                </p>
-              </div>
+              <ChangeEmailForm
+                currentEmail={account.email}
+                emailVerified={account.emailVerified}
+                smtpConfigured={isEmailConfigured()}
+              />
               <div className="flex justify-end border-t border-border-soft pt-4">
                 <FormSubmitButton Icon={Save} pendingLabel="Wird gespeichert...">
                   Speichern
@@ -131,6 +152,86 @@ export default async function AccountPage({
             <p className="mt-3 text-[11.5px] text-muted">
               Aktive Sitzungen: {account.sessionCount}
             </p>
+            <div className="mt-3 border-t border-border-soft pt-3">
+              <a href="/api/me/export" className="text-link">
+                Eigene Daten exportieren (JSON)
+              </a>
+            </div>
+          </Card>
+
+          <Card title={t("cardTitle")} icon={SlidersHorizontal}>
+            <form action={updatePreferencesAction} className="flex flex-col gap-3">
+              <div className="field">
+                <label htmlFor="pref-start-page" className="label">
+                  {t("startPageLabel")}
+                </label>
+                <select
+                  id="pref-start-page"
+                  name="startPage"
+                  className="input cursor-pointer bg-white"
+                  defaultValue={preferences.startPage}
+                >
+                  <option value="overview">{t("startPageOverview")}</option>
+                  <option value="mein-bereich">{t("startPageMeinBereich")}</option>
+                  <option value="employees">{t("startPageEmployees")}</option>
+                  <option value="urlaub">{t("startPageUrlaub")}</option>
+                  <option value="schichtplanung">{t("startPageSchichtplanung")}</option>
+                </select>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="field">
+                  <label htmlFor="pref-language" className="label">
+                    {t("languageLabel")}
+                  </label>
+                  <select
+                    id="pref-language"
+                    name="language"
+                    className="input cursor-pointer bg-white"
+                    defaultValue={preferences.language}
+                  >
+                    <option value="de">{t("languageDe")}</option>
+                    <option value="en">{t("languageEn")}</option>
+                  </select>
+                </div>
+                <div className="field">
+                  <label htmlFor="pref-date-format" className="label">
+                    {t("dateFormatLabel")}
+                  </label>
+                  <select
+                    id="pref-date-format"
+                    name="dateFormat"
+                    className="input cursor-pointer bg-white"
+                    defaultValue={preferences.dateFormat}
+                  >
+                    <option value="dd.mm.yyyy">31.12.2026</option>
+                    <option value="yyyy-mm-dd">2026-12-31</option>
+                    <option value="mm/dd/yyyy">12/31/2026</option>
+                  </select>
+                </div>
+              </div>
+              <div className="field">
+                <label htmlFor="pref-timezone" className="label">
+                  {t("timezoneLabel")}
+                </label>
+                <select
+                  id="pref-timezone"
+                  name="timezone"
+                  className="input cursor-pointer bg-white"
+                  defaultValue={preferences.timezone}
+                >
+                  <option value="Europe/Berlin">Europe/Berlin</option>
+                  <option value="Europe/London">Europe/London</option>
+                  <option value="Europe/Vienna">Europe/Vienna</option>
+                  <option value="Europe/Zurich">Europe/Zurich</option>
+                </select>
+              </div>
+              <p className="text-[11px] text-muted-2">{t("disclaimer")}</p>
+              <div className="flex justify-end border-t border-border-soft pt-4">
+                <FormSubmitButton Icon={Save} pendingLabel={t("saving")}>
+                  {t("save")}
+                </FormSubmitButton>
+              </div>
+            </form>
           </Card>
         </div>
 
@@ -201,10 +302,17 @@ export default async function AccountPage({
             </form>
           </Card>
 
+          <Card title="Zwei-Faktor-Authentifizierung" icon={ShieldCheck}>
+            <TwoFactorSettingsCard initialEnabled={account.twoFactorEnabled} />
+          </Card>
+
           <Card title="Konto löschen" icon={ShieldAlert}>
             <p className="text-[12.5px] leading-5 text-muted">
-              Das Konto wird endgültig gelöscht, inklusive aller Sitzungen und
-              Mandanten-Zugehörigkeiten. Personalakten des Unternehmens bleiben
+              Das Konto wird zur Löschung vorgemerkt und Sie werden sofort
+              abgemeldet. Innerhalb von 30 Tagen können Sie sich erneut
+              anmelden, um die Löschung abzubrechen — danach wird das Konto
+              inklusive aller Sitzungen und Mandanten-Zugehörigkeiten
+              endgültig gelöscht. Personalakten des Unternehmens bleiben
               bestehen. Sind Sie alleinige/r Inhaber/in eines Unternehmens,
               muss zuvor eine andere Person als Inhaber/in eingetragen werden.
             </p>
@@ -231,9 +339,9 @@ export default async function AccountPage({
               <ConfirmSubmitButton
                 form="delete-account-form"
                 className="btn btn-secondary border-danger/25 text-danger hover:border-danger/40 hover:bg-danger/5"
-                title="Konto endgültig löschen"
+                title="Konto zur Löschung vormerken?"
                 confirmLabel="Konto löschen"
-                description="Ihr Konto und alle Sitzungen werden endgültig gelöscht. Dieser Schritt kann nicht rückgängig gemacht werden."
+                description="Sie werden sofort abgemeldet. Innerhalb von 30 Tagen können Sie sich erneut anmelden, um die Löschung abzubrechen."
               >
                 Konto löschen
               </ConfirmSubmitButton>

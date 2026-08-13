@@ -1,9 +1,16 @@
 "use server";
 
 import {
+  canDeleteFromFormData,
+  canEditFilesFromFormData,
+  canUploadFilesFromFormData,
+  canViewAuditFromFormData,
+  canViewFilesFromFormData,
   createTenantRole,
   deleteTenantRole,
   permissionsFromFormData,
+  scopesFromFormData,
+  shiftsLevelFromFormData,
   updateTenantRole,
 } from "@/lib/role-service";
 import { revalidatePath } from "next/cache";
@@ -33,6 +40,13 @@ export async function createRoleAction(formData: FormData) {
     name,
     description,
     permissions: permissionsFromFormData(formData),
+    scopes: scopesFromFormData(formData),
+    canDelete: canDeleteFromFormData(formData),
+    canUploadFiles: canUploadFilesFromFormData(formData),
+    canEditFiles: canEditFilesFromFormData(formData),
+    canViewFiles: canViewFilesFromFormData(formData),
+    canViewAudit: canViewAuditFromFormData(formData),
+    shiftsLevel: shiftsLevelFromFormData(formData),
   });
 
   revalidatePath(rolesPath(tenant));
@@ -55,6 +69,13 @@ export async function updateRoleAction(formData: FormData) {
     name,
     description,
     permissions: permissionsFromFormData(formData),
+    scopes: scopesFromFormData(formData),
+    canDelete: canDeleteFromFormData(formData),
+    canUploadFiles: canUploadFilesFromFormData(formData),
+    canEditFiles: canEditFilesFromFormData(formData),
+    canViewFiles: canViewFilesFromFormData(formData),
+    canViewAudit: canViewAuditFromFormData(formData),
+    shiftsLevel: shiftsLevelFromFormData(formData),
   });
 
   revalidatePath(rolesPath(tenant));
@@ -67,7 +88,7 @@ export async function deleteRoleAction(formData: FormData) {
   const roleId = formString(formData, "roleId");
 
   if (!tenant || !roleId) {
-    throw new Error("Rolle konnte nicht geloescht werden.");
+    throw new Error("Rolle konnte nicht gelöscht werden.");
   }
 
   await deleteTenantRole({

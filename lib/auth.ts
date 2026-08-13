@@ -1,15 +1,22 @@
 import { betterAuth } from "better-auth";
+import { APIError, createAuthMiddleware } from "better-auth/api";
+import { twoFactor } from "better-auth/plugins";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { nextCookies } from "better-auth/next-js";
 import { importPKCS8, SignJWT } from "jose";
 import {
   isEmailConfigured,
+  sendChangeEmailConfirmationEmail,
   sendPasswordResetEmail,
   sendVerificationEmail,
 } from "@/lib/email";
 import { prisma } from "@/lib/prisma";
 
 const DEV_FALLBACK_SECRET = "development-only-change-this-secret-before-production";
+
+// Gleiches Muster wie die client- und serverseitigen E-Mail-Checks in
+// lib/tenants.ts und lib/settings-service.ts (normalizeEmail).
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const isProductionRuntime =
   process.env.NODE_ENV === "production" &&
@@ -112,7 +119,7 @@ export const auth = betterAuth({
     ...configuredTrustedOrigins,
   ],
   database: prismaAdapter(prisma, {
-    provider: "sqlite",
+    provider: "postgresql",
   }),
   rateLimit: {
     enabled: true,
@@ -125,11 +132,43 @@ export const auth = betterAuth({
       "/sign-up/email": { window: 60, max: 5 },
       "/request-password-reset": { window: 300, max: 5 },
       "/send-verification-email": { window: 300, max: 5 },
+      // TOTP/Backup-Code-Verifizierung: 6-stelliger Code bzw. Backup-Code
+      // ist brute-forcebar unter dem generischen 60-Requests/60s-Limit.
+      "/two-factor/verify-totp": { window: 300, max: 5 },
+      "/two-factor/verify-backup-code": { window: 300, max: 5 },
+    },
+  },
+  // Explizit statt implizit auf SDK-Defaults zu vertrauen: 7 Tage Sitzungsdauer,
+  // täglicher Refresh, 5-Minuten-Cookie-Cache (weniger DB-Lookups pro Request).
+  session: {
+    expiresIn: 60 * 60 * 24 * 7,
+    updateAge: 60 * 60 * 24,
+    freshAge: 60 * 60 * 24,
+    cookieCache: {
+      enabled: true,
+      maxAge: 5 * 60,
+    },
+  },
+  advanced: {
+    useSecureCookies: isProductionRuntime,
+    defaultCookieAttributes: {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: isProductionRuntime,
     },
   },
   user: {
     deleteUser: {
       enabled: true,
+    },
+    changeEmail: {
+      enabled: true,
+      // Bestätigungslink geht an die ALTE Adresse (Schutz gegen Account-
+      // Übernahme über eine kompromittierte neue Adresse). Nutzt die
+      // gleiche requestType-Logik wie die Registrierungsverifizierung.
+      sendChangeEmailConfirmation: async ({ user, newEmail, url }) => {
+        await sendChangeEmailConfirmationEmail({ to: user.email, newEmail, url });
+      },
     },
   },
   emailAndPassword: {
@@ -153,7 +192,63 @@ export const auth = betterAuth({
     ...googleProvider,
     ...appleProvider,
   },
-  // Muss letztes Plugin bleiben, damit Set-Cookie aus Server Actions
-  // in die Next-Cookies übernommen wird.
-  plugins: [nextCookies()],
+  // Die RegisterForm erzwingt bereits Vorname/Nachname und die AGB-Checkbox
+  // im Browser – dieser Hook spiegelt beide Regeln serverseitig, damit ein
+  // direkter Aufruf von /sign-up/email sie nicht umgehen kann. Zusätzlich
+  // wird hier — sofern `terms: true` im Request-Body steht — der Zeitpunkt
+  // der Zustimmung persistiert (Audit-Trail für Compliance-Zwecke, siehe
+  // `User.termsAcceptedAt`). Sign-ups über Social-Provider haben kein
+  // `terms`-Feld im Body und bleiben bewusst unangetastet (kein AGB-Flow
+  // dort).
+  databaseHooks: {
+    user: {
+      create: {
+        before: async (user, context) => {
+          const trimmedName = typeof user.name === "string" ? user.name.trim() : "";
+          if (!trimmedName) {
+            throw new APIError("BAD_REQUEST", {
+              message: "Name ist erforderlich.",
+            });
+          }
+
+          const termsAccepted = context?.body?.terms === true;
+
+          if (trimmedName !== user.name || termsAccepted) {
+            return {
+              data: {
+                ...user,
+                name: trimmedName,
+                ...(termsAccepted ? { termsAcceptedAt: new Date() } : {}),
+              },
+            };
+          }
+        },
+      },
+    },
+  },
+  hooks: {
+    before: createAuthMiddleware(async (ctx) => {
+      if (ctx.path === "/sign-in/email") {
+        const email = typeof ctx.body?.email === "string" ? ctx.body.email : "";
+        if (!EMAIL_PATTERN.test(email)) {
+          throw new APIError("BAD_REQUEST", {
+            message: "Bitte eine gültige E-Mail-Adresse angeben.",
+          });
+        }
+      }
+      if (ctx.path === "/sign-up/email" && ctx.body?.terms !== true) {
+        throw new APIError("BAD_REQUEST", {
+          message: "Den Nutzungsbedingungen muss zugestimmt werden.",
+        });
+      }
+    }),
+  },
+  // nextCookies() muss letztes Plugin bleiben, damit Set-Cookie aus Server
+  // Actions in die Next-Cookies übernommen wird.
+  plugins: [
+    twoFactor({
+      issuer: "Ployo",
+    }),
+    nextCookies(),
+  ],
 });

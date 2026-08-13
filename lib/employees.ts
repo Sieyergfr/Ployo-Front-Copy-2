@@ -6,12 +6,6 @@ export type EmployeeStatus = "active" | "vacation" | "absent";
  */
 export const CONTRACT_FILE_NOT_UPLOADED = "noch nicht hochgeladen";
 
-export type EmployeeDocument = {
-  title: string;
-  meta: string;
-  state: string;
-};
-
 export type EmployeeFileFolder = {
   name: string;
   fileCount: number;
@@ -45,6 +39,7 @@ export type PayrollStatement = {
   gross: string;
   net: string;
   fileName: string;
+  storageFileId: string;
   status: "available" | "corrected";
 };
 
@@ -139,7 +134,6 @@ export type Employee = {
   vacationRemaining: number;
   vacationTotal: number;
   vacationTaken: number;
-  documents: EmployeeDocument[];
   fileFolders: EmployeeFileFolder[];
   files: EmployeeFile[];
   emergencyContacts: EmergencyContact[];

@@ -1,10 +1,15 @@
 "use server";
 
 import {
+  applyShiftTemplateToWeek,
   createTenantShift,
+  deleteShiftTemplate,
   deleteTenantShift,
+  saveShiftTemplateFromWeek,
+  updateShiftTemplate,
   updateTenantShift,
 } from "@/lib/shift-service";
+import type { ShiftTemplateEntry, TemplateWeekday } from "@/lib/shift-templates";
 import {
   createTenantWishFreeRequest,
   setTenantWishFreeRequestStatus,
@@ -23,6 +28,12 @@ function formInt(formData: FormData, key: string, fallback = 0) {
   const parsed = Number.parseInt(formString(formData, key), 10);
 
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+function formStrings(formData: FormData, key: string) {
+  return formData
+    .getAll(key)
+    .filter((value): value is string => typeof value === "string");
 }
 
 function shiftsPath(tenant: string, year?: string, week?: string) {
@@ -129,10 +140,86 @@ export async function deleteShiftAction(formData: FormData) {
   const shiftId = formString(formData, "shiftId");
 
   if (!tenant || !shiftId) {
-    throw new Error("Schicht konnte nicht geloescht werden.");
+    throw new Error("Schicht konnte nicht gelöscht werden.");
   }
 
   await deleteTenantShift({ tenantSlug: tenant, shiftId });
+
+  revalidateShiftViews(formData, tenant);
+  redirect(redirectPath(formData, tenant));
+}
+
+export async function saveShiftTemplateAction(formData: FormData) {
+  const tenant = formString(formData, "tenant");
+  const year = Number.parseInt(formString(formData, "year"), 10);
+  const week = Number.parseInt(formString(formData, "week"), 10);
+  const name = formString(formData, "templateName");
+
+  if (!tenant || !year || !week || !name) {
+    throw new Error("Vorlage konnte nicht gespeichert werden.");
+  }
+
+  await saveShiftTemplateFromWeek({ tenantSlug: tenant, year, week, name });
+
+  revalidateShiftViews(formData, tenant);
+  redirect(redirectPath(formData, tenant));
+}
+
+export async function applyShiftTemplateAction(formData: FormData) {
+  const tenant = formString(formData, "tenant");
+  const year = Number.parseInt(formString(formData, "year"), 10);
+  const week = Number.parseInt(formString(formData, "week"), 10);
+  const templateId = formString(formData, "templateId");
+
+  if (!tenant || !year || !week || !templateId) {
+    throw new Error("Vorlage konnte nicht angewendet werden.");
+  }
+
+  await applyShiftTemplateToWeek({ tenantSlug: tenant, templateId, year, week });
+
+  revalidateShiftViews(formData, tenant);
+  redirect(redirectPath(formData, tenant));
+}
+
+export async function updateShiftTemplateAction(formData: FormData) {
+  const tenant = formString(formData, "tenant");
+  const templateId = formString(formData, "templateId");
+  const name = formString(formData, "templateName");
+
+  if (!tenant || !templateId || !name) {
+    throw new Error("Vorlage konnte nicht gespeichert werden.");
+  }
+
+  const weekdays = formStrings(formData, "entryWeekday");
+  const startTimes = formStrings(formData, "entryStartTime");
+  const endTimes = formStrings(formData, "entryEndTime");
+  const breakMinutes = formStrings(formData, "entryBreakMinutes");
+  const teams = formStrings(formData, "entryTeam");
+  const locationIds = formStrings(formData, "entryLocationId");
+  const entries: ShiftTemplateEntry[] = weekdays.map((weekday, index) => ({
+    weekday: weekday as TemplateWeekday,
+    startTime: startTimes[index] ?? "",
+    endTime: endTimes[index] ?? "",
+    breakMinutes: Number.parseInt(breakMinutes[index] ?? "0", 10) || 0,
+    team: teams[index] ?? "",
+    locationId: locationIds[index] ?? "",
+  }));
+
+  await updateShiftTemplate({ tenantSlug: tenant, templateId, name, entries });
+
+  revalidateShiftViews(formData, tenant);
+  redirect(redirectPath(formData, tenant));
+}
+
+export async function deleteShiftTemplateAction(formData: FormData) {
+  const tenant = formString(formData, "tenant");
+  const templateId = formString(formData, "templateId");
+
+  if (!tenant || !templateId) {
+    throw new Error("Vorlage konnte nicht gelöscht werden.");
+  }
+
+  await deleteShiftTemplate({ tenantSlug: tenant, templateId });
 
   revalidateShiftViews(formData, tenant);
   redirect(redirectPath(formData, tenant));

@@ -5,9 +5,11 @@ import {
   setTeamLeadAction,
   updateTeamAction,
 } from "@/app/(dashboard)/u/[tenant]/teams/actions";
+import { FileReminderButton } from "@/components/ActionDrawers";
 import AuditLogPanel from "@/components/AuditLogPanel";
 import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
 import { UnsavedChangesGuard } from "@/components/EditSafety";
+import { CreateFolderButton, UploadFileButton } from "@/components/FileActionButtons";
 import FormSubmitButton from "@/components/FormSubmitButton";
 import FloatingEditBar from "@/components/FloatingEditBar";
 import {
@@ -16,15 +18,22 @@ import {
 } from "@/components/TeamEditControls";
 import TeamRoleEditorButton from "@/components/TeamRoleEditorButton";
 import { getAuditLogsForEntity } from "@/lib/audit";
+import { type FileFolder, type FileUploadOptions } from "@/lib/files";
+import { getFileUploadOptions } from "@/lib/files-server";
 import {
   getAssignableEmployees,
   getTeamForTenant,
   getTeamMetrics,
   getTeamsForTenant,
 } from "@/lib/team-service";
-import { type Team, type TeamMember } from "@/lib/teams";
+import { type Team, type TeamFile, type TeamFileFolder, type TeamMember } from "@/lib/teams";
+import { hasPermissionLevel } from "@/lib/roles";
+import { getTenantCapabilities, withAccessRedirect } from "@/lib/tenant-access";
 import {
   ArrowLeft,
+  FileText,
+  Folder,
+  Lock,
   Pencil,
   Plus,
   UserRoundCheck,
@@ -270,7 +279,7 @@ function TeamMemberAssignment({
             htmlFor="team-member-add"
             className="mb-2 block font-mono text-[9.5px] uppercase tracking-[0.6px] text-muted"
           >
-            Mitarbeiter zum Team hinzufuegen
+            Mitarbeiter zum Team hinzufügen
           </label>
           <select
             id="team-member-add"
@@ -280,7 +289,7 @@ function TeamMemberAssignment({
             required
           >
             <option value="" disabled>
-              Mitarbeiter auswaehlen
+              Mitarbeiter auswählen
             </option>
             {assignableEmployees.map((employee) => (
               <option key={employee.employeeId ?? employee.initials} value={employee.employeeId}>
@@ -307,12 +316,205 @@ function TeamMemberAssignment({
 
         <FormSubmitButton
           Icon={Plus}
-          pendingLabel="Wird hinzugefuegt..."
+          pendingLabel="Wird hinzugefügt..."
         >
-          Hinzufuegen
+          Hinzufügen
         </FormSubmitButton>
       </div>
     </form>
+  );
+}
+
+function teamFolderOptionSlug(value: string) {
+  return value
+    .toLowerCase()
+    .trim()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function teamFolderOptions(team: Team): FileFolder[] {
+  return team.fileFolders.map((folder) => ({
+    slug: folder.path ?? teamFolderOptionSlug(folder.name),
+    path: folder.path ?? teamFolderOptionSlug(folder.name),
+    name: folder.name,
+    fileCount: folder.fileCount,
+    owner: "HR",
+    updatedAt: "",
+    locked: folder.locked,
+  }));
+}
+
+function TeamFileFolderCard({
+  folder,
+  tenant,
+  returnPath,
+  canManageReminders,
+}: {
+  folder: TeamFileFolder;
+  tenant: string;
+  returnPath: string;
+  canManageReminders: boolean;
+}) {
+  return (
+    <div className="flex w-full cursor-pointer items-center gap-[13px] rounded-xl border border-border bg-white p-[15px] text-left font-sans transition-colors hover:bg-bg">
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-border-soft text-muted-2">
+        <Folder size={19} />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[13.5px] font-semibold text-ink">
+          {folder.name}
+        </span>
+        <span className="mt-[3px] block font-mono text-[10.5px] text-muted">
+          {folder.fileCount} Dateien
+        </span>
+      </span>
+      {folder.locked && <Lock size={13} className="shrink-0 text-muted" />}
+      <FileReminderButton
+        tenant={tenant}
+        returnPath={returnPath}
+        compact
+        name={folder.name}
+        context={`Teamordner · ${folder.name}`}
+        canManage={canManageReminders}
+      />
+    </div>
+  );
+}
+
+function TeamFileRow({
+  file,
+  tenant,
+  returnPath,
+  canManageReminders,
+}: {
+  file: TeamFile;
+  tenant: string;
+  returnPath: string;
+  canManageReminders: boolean;
+}) {
+  return (
+    <div className="flex w-full cursor-pointer items-center gap-3.5 border-t border-border-soft py-3 text-left font-sans transition-colors hover:bg-bg">
+      <span className="flex size-[30px] shrink-0 items-center justify-center rounded-lg bg-border-soft text-muted-2">
+        <FileText size={14} />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[13.5px] font-medium text-ink">
+          {file.name}
+        </span>
+        <span className="mt-0.5 block truncate font-mono text-[10.5px] text-muted">
+          {file.folder} {"·"} {file.updatedAt}
+        </span>
+      </span>
+      <span className="hidden font-mono text-[10.5px] text-muted md:block">
+        {file.size}
+      </span>
+      <span className="rounded-[7px] border border-border-light px-2 py-[3px] font-mono text-[10px] text-muted-2">
+        {file.type}
+      </span>
+      {file.locked && <Lock size={13} className="shrink-0 text-muted" />}
+      <FileReminderButton
+        tenant={tenant}
+        returnPath={returnPath}
+        compact
+        name={file.name}
+        context={`${file.folder} · Teamdatei`}
+        canManage={canManageReminders}
+      />
+    </div>
+  );
+}
+
+function TeamFilesSection({
+  team,
+  tenant,
+  teamHref,
+  uploadOptions,
+  canManageFiles,
+  canManageReminders,
+}: {
+  team: Team;
+  tenant: string;
+  teamHref: string;
+  uploadOptions: FileUploadOptions;
+  canManageFiles: boolean;
+  canManageReminders: boolean;
+}) {
+  const folderOptions = teamFolderOptions(team);
+  const returnPath = `${teamHref}?tab=files`;
+
+  return (
+    <section className="mt-3.5 overflow-hidden rounded-card border border-border bg-white">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-6 pt-5 pb-3.5">
+        <div>
+          <h2 className="m-0 font-display text-[16px] font-semibold tracking-[-0.3px] text-ink">
+            Dateien
+          </h2>
+          <span className="mt-0.5 block font-mono text-[10.5px] text-muted">
+            {team.fileFolders.length} Ordner {"·"} {team.files.length} Dateien
+          </span>
+        </div>
+        {canManageFiles && (
+          <div className="flex flex-wrap gap-2">
+            <CreateFolderButton
+              tenant={tenant}
+              returnPath={returnPath}
+              ownerType="team"
+              ownerId={team.dbId}
+            />
+            <UploadFileButton
+              tenant={tenant}
+              returnPath={returnPath}
+              ownerType="team"
+              ownerId={team.dbId}
+              folderOptions={folderOptions}
+              uploadOptions={uploadOptions}
+            />
+          </div>
+        )}
+      </div>
+
+      <div className="px-6 py-5">
+        {team.fileFolders.length === 0 && team.files.length === 0 ? (
+          <p className="text-[12.5px] text-muted">
+            Noch keine Dateien am Team hinterlegt.
+          </p>
+        ) : (
+          <>
+            <div className="grid gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(210px,1fr))]">
+              {team.fileFolders.map((folder) => (
+                <TeamFileFolderCard
+                  key={folder.name}
+                  folder={folder}
+                  tenant={tenant}
+                  returnPath={returnPath}
+                  canManageReminders={canManageReminders}
+                />
+              ))}
+            </div>
+
+            {team.files.length > 0 && (
+              <div className="mt-5">
+                <div className="mb-2 font-mono text-[9.5px] uppercase tracking-[0.6px] text-muted">
+                  Dateien
+                </div>
+                {team.files.map((file) => (
+                  <TeamFileRow
+                    key={`${file.folder}-${file.name}`}
+                    file={file}
+                    tenant={tenant}
+                    returnPath={returnPath}
+                    canManageReminders={canManageReminders}
+                  />
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -322,27 +524,38 @@ export default async function TeamDetailPage({
 }: PageProps<"/u/[tenant]/teams/[teamId]">) {
   const { tenant, teamId } = await params;
   const { edit } = await searchParams;
-  const [team, teams] = await Promise.all([
-    getTeamForTenant(tenant, teamId),
-    getTeamsForTenant(tenant),
-  ]);
+  const [team, teams] = await withAccessRedirect(tenant, () =>
+    Promise.all([getTeamForTenant(tenant, teamId), getTeamsForTenant(tenant)]),
+  );
 
   if (!team || !teams) {
     notFound();
   }
 
-  const assignableEmployees = await getAssignableEmployees(tenant, team.id);
+  const [assignableEmployees, capabilities, uploadOptions] = await Promise.all([
+    getAssignableEmployees(tenant, team.id),
+    getTenantCapabilities(tenant),
+    getFileUploadOptions(tenant),
+  ]);
+  const canManage = hasPermissionLevel(capabilities.teams.level, "write");
+  const canDeleteTeam = capabilities.teams.canDelete;
+  const canViewAudit = capabilities.teams.canViewAudit;
+  const canManageFiles = capabilities.teams.canUploadFiles;
+  const canManageReminders = hasPermissionLevel(capabilities.reminders.level, "write");
   const teamMetrics = getTeamMetrics(teams);
   const onDutyCount = team.members.filter(
     (member) => member.status === "on-duty",
   ).length;
-  const isEditing = edit === "1";
+  const isEditing = edit === "1" && canManage;
   const teamHref = `/u/${tenant}/teams/${team.id}`;
-  const auditEntries = await getAuditLogsForEntity({
-    tenantSlug: tenant,
-    entityType: "team",
-    entityId: team.dbId ?? team.id,
-  });
+  const auditEntries = canViewAudit
+    ? await getAuditLogsForEntity({
+        tenantSlug: tenant,
+        area: "teams",
+        entityType: "team",
+        entityId: team.dbId ?? team.id,
+      })
+    : [];
   const teamEditHref = `${teamHref}?edit=1`;
 
   return (
@@ -418,20 +631,24 @@ export default async function TeamDetailPage({
                 </div>
               </div>
 
-              {!isEditing && (
+              {!isEditing && (canManage || canDeleteTeam) && (
                 <div className="flex gap-2">
-                  <ConfirmSubmitButton
-                    form="team-edit-form"
-                    formAction={deleteTeamAction}
-                    className="btn btn-secondary btn-sm border-danger/25 text-danger hover:border-danger/40 hover:bg-danger/5"
-                    description={`Das Team "${team.name}" wird dauerhaft entfernt.`}
-                  >
-                    Loeschen
-                  </ConfirmSubmitButton>
-                  <Link href={teamEditHref} className="btn btn-secondary btn-sm">
-                    <Pencil size={14} />
-                    Bearbeiten
-                  </Link>
+                  {canDeleteTeam && (
+                    <ConfirmSubmitButton
+                      form="team-edit-form"
+                      formAction={deleteTeamAction}
+                      className="btn btn-secondary btn-sm border-danger/25 text-danger hover:border-danger/40 hover:bg-danger/5"
+                      description={`Das Team "${team.name}" wird dauerhaft entfernt.`}
+                    >
+                      Löschen
+                    </ConfirmSubmitButton>
+                  )}
+                  {canManage && (
+                    <Link href={teamEditHref} className="btn btn-secondary btn-sm">
+                      <Pencil size={14} />
+                      Bearbeiten
+                    </Link>
+                  )}
                 </div>
               )}
             </div>
@@ -454,7 +671,7 @@ export default async function TeamDetailPage({
           <h2 className="m-0 font-display text-[16px] font-semibold tracking-[-0.3px] text-ink">
             Teammitglieder
           </h2>
-          {!isEditing && (
+          {!isEditing && canManage && (
             <Link href={teamEditHref} className="btn btn-secondary btn-sm">
               <Pencil size={14} />
               Mitglieder anpassen
@@ -491,11 +708,20 @@ export default async function TeamDetailPage({
         </div>
       </section>
 
-      <div className="mt-4">
-        <AuditLogPanel
-          entries={auditEntries}
-        />
-      </div>
+      <TeamFilesSection
+        team={team}
+        tenant={tenant}
+        teamHref={teamHref}
+        uploadOptions={uploadOptions}
+        canManageFiles={canManageFiles}
+        canManageReminders={canManageReminders}
+      />
+
+      {canViewAudit && (
+        <div className="mt-4">
+          <AuditLogPanel entries={auditEntries} />
+        </div>
+      )}
 
       {isEditing && (
         <FloatingEditBar cancelHref={teamHref} formId="team-edit-form" />

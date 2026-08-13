@@ -19,6 +19,11 @@ import {
   type FileVersion,
 } from "@/lib/files";
 import {
+  isAllowedUploadFile,
+  MAX_UPLOAD_BYTES,
+  uploadAcceptAttribute,
+} from "@/lib/upload-constraints";
+import {
   Check,
   ChevronDown,
   Download,
@@ -47,6 +52,18 @@ const documentTypes = [
   "Sonstiges",
 ];
 
+function validateUploadFileClientSide(file: File) {
+  if (!isAllowedUploadFile(file)) {
+    return "Dieser Dateityp wird nicht unterstützt (erlaubt: PDF, Bilder, Office-Dokumente, TXT, CSV, ZIP).";
+  }
+
+  if (file.size > MAX_UPLOAD_BYTES) {
+    return "Die Datei ist zu groß (maximal 15 MB).";
+  }
+
+  return null;
+}
+
 const emptyUploadOptions: FileUploadOptions = {
   employees: [],
   locations: [],
@@ -64,7 +81,7 @@ function CreateFolderForm({
 }: {
   tenant: string;
   returnPath: string;
-  ownerType?: "tenant" | "employee" | "location";
+  ownerType?: "tenant" | "employee" | "location" | "team";
   ownerId?: string;
   parentPath?: string;
   onDone: () => void;
@@ -303,7 +320,7 @@ function UploadFileForm({
 }: {
   tenant: string;
   returnPath: string;
-  ownerType?: "tenant" | "employee" | "location";
+  ownerType?: "tenant" | "employee" | "location" | "team";
   ownerId?: string;
   folderSlug?: string;
   folderName?: string;
@@ -315,6 +332,7 @@ function UploadFileForm({
   const [selectedFolderName, setSelectedFolderName] = useState("");
   const [hasExpiry, setHasExpiry] = useState(false);
   const [hasReminder, setHasReminder] = useState(false);
+  const [fileError, setFileError] = useState("");
   const needsFolderSelection = !folderSlug;
 
   return (
@@ -342,15 +360,30 @@ function UploadFileForm({
           {selectedFileName || "PDF, DOCX, PNG oder JPG"}
         </span>
       </label>
+      {fileError && (
+        <p className="-mt-2 text-[12px] text-danger">{fileError}</p>
+      )}
       <input
         id="file-upload"
         name="file"
         type="file"
         className="sr-only"
+        accept={uploadAcceptAttribute}
         required
-        onChange={(event) =>
-          setSelectedFileName(event.currentTarget.files?.[0]?.name ?? "")
-        }
+        onChange={(event) => {
+          const file = event.currentTarget.files?.[0];
+          const validationError = file ? validateUploadFileClientSide(file) : null;
+
+          if (validationError) {
+            setFileError(validationError);
+            setSelectedFileName("");
+            event.currentTarget.value = "";
+            return;
+          }
+
+          setFileError("");
+          setSelectedFileName(file?.name ?? "");
+        }}
       />
 
       <div className="grid gap-3 sm:grid-cols-2">
@@ -407,7 +440,7 @@ function UploadFileForm({
           <span className="h-px flex-1 bg-border-soft" />
         </div>
 
-        <UploadSettingsGroup title="Dokument & Gueltigkeit">
+        <UploadSettingsGroup title="Dokument & Gültigkeit">
           <div className="grid gap-3 px-4 py-3 sm:grid-cols-2">
           <div className="field">
             <label htmlFor="file-document-type" className="label">
@@ -429,7 +462,7 @@ function UploadFileForm({
 
           <div className="field">
             <label htmlFor="file-valid-from" className="label">
-              Gueltig ab
+              Gültig ab
             </label>
             <DatePickerField
               id="file-valid-from"
@@ -524,7 +557,7 @@ function UploadFileForm({
               <DatePickerField
                 id="file-expires-at"
                 name="expiresAt"
-                placeholder="Datum auswaehlen"
+                placeholder="Datum auswählen"
               />
             </div>
 
@@ -540,7 +573,7 @@ function UploadFileForm({
                 <DatePickerField
                   id="file-reminder-at"
                   name="reminderAt"
-                  placeholder="Datum auswaehlen"
+                  placeholder="Datum auswählen"
                 />
               ) : (
                 <input className="input" value="" readOnly placeholder="Optional" />
@@ -631,6 +664,8 @@ function UploadVersionForm({
   returnPath: string;
   onDone: () => void;
 }) {
+  const [fileError, setFileError] = useState("");
+
   return (
     <form className="flex flex-col gap-4" action={uploadHrFileVersionAction}>
       <input type="hidden" name="tenant" value={tenant} />
@@ -654,12 +689,30 @@ function UploadVersionForm({
           Ersetzt die aktuelle Datei als v{file.version + 1}
         </span>
       </label>
+      {fileError && (
+        <p className="-mt-2 text-[12px] text-danger">{fileError}</p>
+      )}
       <input
         id={`version-upload-${file.slug}`}
         name="file"
         type="file"
         className="sr-only"
+        accept={uploadAcceptAttribute}
         required
+        onChange={(event) => {
+          const selected = event.currentTarget.files?.[0];
+          const validationError = selected
+            ? validateUploadFileClientSide(selected)
+            : null;
+
+          if (validationError) {
+            setFileError(validationError);
+            event.currentTarget.value = "";
+            return;
+          }
+
+          setFileError("");
+        }}
       />
 
       <div className="field">
@@ -974,7 +1027,7 @@ function DeleteFileConfirmForm({
         </div>
         <p className="mt-1 text-[12.5px] leading-5 text-muted">
           Die Datei wird aus der Ansicht entfernt, aber nicht aus dem Storage
-          geloescht.
+          gelöscht.
         </p>
       </div>
 
@@ -1047,7 +1100,7 @@ export function CreateFolderButton({
 }: {
   tenant?: string;
   returnPath?: string;
-  ownerType?: "tenant" | "employee" | "location";
+  ownerType?: "tenant" | "employee" | "location" | "team";
   ownerId?: string;
   parentPath?: string;
 }) {
@@ -1092,7 +1145,7 @@ export function UploadFileButton({
 }: {
   tenant?: string;
   returnPath?: string;
-  ownerType?: "tenant" | "employee" | "location";
+  ownerType?: "tenant" | "employee" | "location" | "team";
   ownerId?: string;
   folderSlug?: string;
   folderName?: string;

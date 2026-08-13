@@ -42,7 +42,7 @@ function AddLocationEmployeesForm({
         </button>
         <FormSubmitButton
           Icon={UserPlus}
-          pendingLabel="Wird hinzugefuegt..."
+          pendingLabel="Wird hinzugefügt..."
         >
           Hinzufügen
         </FormSubmitButton>

@@ -1,0 +1,53 @@
+import { auth } from "@/lib/auth";
+import { checkRateLimit, tooManyRequests } from "@/lib/rate-limit";
+import { buildTenantExport } from "@/lib/tenant-export";
+import { headers } from "next/headers";
+
+export const runtime = "nodejs";
+
+/**
+ * Vollständiger Mandanten-Datenexport (AGB §6). Nur für Mitglieder mit
+ * Schreibrecht auf "settings" (OWNER/ADMIN oder explizite Rolle) — geprüft
+ * in buildTenantExport()/requireSettingsManager().
+ */
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ tenant: string }> },
+) {
+  const session = await auth.api.getSession({ headers: await headers() });
+
+  if (!session?.user?.id) {
+    return Response.json({ error: "Nicht angemeldet." }, { status: 401 });
+  }
+
+  const { tenant } = await params;
+
+  // Der Export ist teuer; wenige Aufrufe pro Stunde genügen.
+  const limit = await checkRateLimit({
+    key: `tenant-export:${session.user.id}`,
+    limit: 5,
+    windowSeconds: 3600,
+  });
+
+  if (!limit.allowed) {
+    return tooManyRequests(limit);
+  }
+
+  let payload: Awaited<ReturnType<typeof buildTenantExport>>;
+
+  try {
+    payload = await buildTenantExport(tenant);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Export fehlgeschlagen.";
+    const status = message === "Nicht angemeldet." ? 401 : 403;
+
+    return Response.json({ error: message }, { status });
+  }
+
+  return new Response(JSON.stringify(payload, null, 2), {
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      "content-disposition": `attachment; filename="ployo-export-${tenant}.json"`,
+    },
+  });
+}

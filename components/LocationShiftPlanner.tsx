@@ -12,6 +12,7 @@ import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
 import DatePickerField from "@/components/DatePickerField";
 import FormSubmitButton from "@/components/FormSubmitButton";
 import type { Location } from "@/lib/locations";
+import { calculateBreakMinutes } from "@/lib/shift-break-rule";
 import type { ShiftEmployeeOption } from "@/lib/shift-service";
 import type { Shift, ShiftDay } from "@/lib/shifts";
 import {
@@ -50,6 +51,8 @@ type LocationShiftPlannerProps = {
   days: ShiftDay[];
   employees: ShiftEmployeeOption[];
   wishFreeRequests: WishFreeRequest[];
+  breakRule: string;
+  canManage?: boolean;
 };
 
 const wishFreeStatusLabels: Record<WishFreeRequestStatus, string> = {
@@ -191,6 +194,7 @@ function WishFreeDrawer({
   onSelectRequest,
   onCreateRequest,
   onClose,
+  canManage,
 }: {
   tenant: string;
   location: Location;
@@ -205,6 +209,7 @@ function WishFreeDrawer({
   onSelectRequest: (requestId: string) => void;
   onCreateRequest: () => void;
   onClose: () => void;
+  canManage: boolean;
 }) {
   const returnTo = `/u/${tenant}/standorte/${location.id}?tab=shifts&year=${year}&week=${week}`;
   const filteredRequests =
@@ -246,18 +251,20 @@ function WishFreeDrawer({
               </h2>
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              <button
-                type="button"
-                className={`inline-flex cursor-pointer items-center gap-2 rounded-[9px] border px-3 py-2 text-[12px] font-semibold transition-colors ${
-                  isCreating
-                    ? "border-ink bg-ink text-white"
-                    : "border-border bg-bg text-ink hover:border-muted"
-                }`}
-                onClick={onCreateRequest}
-              >
-                <Plus size={14} />
-                Neue Anfrage
-              </button>
+              {canManage && (
+                <button
+                  type="button"
+                  className={`inline-flex cursor-pointer items-center gap-2 rounded-[9px] border px-3 py-2 text-[12px] font-semibold transition-colors ${
+                    isCreating
+                      ? "border-ink bg-ink text-white"
+                      : "border-border bg-bg text-ink hover:border-muted"
+                  }`}
+                  onClick={onCreateRequest}
+                >
+                  <Plus size={14} />
+                  Neue Anfrage
+                </button>
+              )}
               <button
                 type="button"
                 aria-label="Drawer schliessen"
@@ -305,7 +312,7 @@ function WishFreeDrawer({
 
         <div className="grid min-h-0 flex-1 grid-cols-[minmax(220px,0.85fr)_minmax(280px,1fr)] max-md:grid-cols-1">
           <div className="min-h-0 overflow-y-auto border-r border-border bg-bg p-3 max-md:max-h-[42svh] max-md:border-r-0 max-md:border-b">
-            {isCreating && (
+            {isCreating && canManage && (
               <button
                 type="button"
                 className="mb-2 w-full cursor-pointer rounded-xl border border-ink bg-white p-3 text-left"
@@ -389,7 +396,7 @@ function WishFreeDrawer({
                       defaultValue=""
                     >
                       <option value="" disabled>
-                        Mitarbeiter auswaehlen
+                        Mitarbeiter auswählen
                       </option>
                       {employees.map((employee) => (
                         <option key={employee.id} value={employee.id}>
@@ -406,13 +413,13 @@ function WishFreeDrawer({
 
                   <div className="field mt-4">
                     <label htmlFor="location-wishfree-reason" className="label">
-                      Begruendung
+                      Begründung
                     </label>
                     <textarea
                       id="location-wishfree-reason"
                       name="reason"
                       className="input min-h-28 resize-none"
-                      placeholder="Optionaler Grund fuer den Wunschfrei Antrag"
+                      placeholder="Optionaler Grund für den Wunschfrei Antrag"
                     />
                   </div>
                 </div>
@@ -472,46 +479,50 @@ function WishFreeDrawer({
                   </div>
 
                   <div className="mt-4 rounded-xl border border-border bg-white px-4 py-3">
-                    <div className="label">Begruendung</div>
+                    <div className="label">Begründung</div>
                     <p className="mt-2 text-[13px] leading-6 text-muted-2">
-                      {selectedRequest.reason || "Keine Begruendung angegeben."}
+                      {selectedRequest.reason || "Keine Begründung angegeben."}
                     </p>
                   </div>
 
-                  <div className="field mt-4">
-                    <label htmlFor="location-wishfree-reject-reason" className="label">
-                      Grund bei Ablehnung optional
-                    </label>
-                    <textarea
-                      id="location-wishfree-reject-reason"
-                      name="rejectReason"
-                      className="input min-h-24 resize-none"
-                      defaultValue={selectedRequest.rejectReason ?? ""}
-                      placeholder="Optionaler Hinweis fuer die Ablehnung"
-                    />
-                  </div>
+                  {canManage && (
+                    <div className="field mt-4">
+                      <label htmlFor="location-wishfree-reject-reason" className="label">
+                        Grund bei Ablehnung optional
+                      </label>
+                      <textarea
+                        id="location-wishfree-reject-reason"
+                        name="rejectReason"
+                        className="input min-h-24 resize-none"
+                        defaultValue={selectedRequest.rejectReason ?? ""}
+                        placeholder="Optionaler Hinweis für die Ablehnung"
+                      />
+                    </div>
+                  )}
                 </div>
 
-                <div className="mt-6 flex justify-end gap-2.5 border-t border-border-soft pt-4">
-                  <button
-                    type="submit"
-                    formAction={rejectWishFreeRequestAction}
-                    className="btn btn-secondary text-danger"
-                  >
-                    Ablehnen
-                  </button>
-                  <FormSubmitButton
-                    formAction={approveWishFreeRequestAction}
-                    className="btn btn-primary"
-                  >
-                    <Check size={15} />
-                    Annehmen
-                  </FormSubmitButton>
-                </div>
+                {canManage && (
+                  <div className="mt-6 flex justify-end gap-2.5 border-t border-border-soft pt-4">
+                    <button
+                      type="submit"
+                      formAction={rejectWishFreeRequestAction}
+                      className="btn btn-secondary text-danger"
+                    >
+                      Ablehnen
+                    </button>
+                    <FormSubmitButton
+                      formAction={approveWishFreeRequestAction}
+                      className="btn btn-primary"
+                    >
+                      <Check size={15} />
+                      Annehmen
+                    </FormSubmitButton>
+                  </div>
+                )}
               </form>
             ) : (
               <div className="flex h-full items-center justify-center text-[13px] text-muted">
-                Keine Anfrage ausgewaehlt.
+                Keine Anfrage ausgewählt.
               </div>
             )}
           </div>
@@ -528,7 +539,9 @@ function ShiftDrawer({
   week,
   drawer,
   employees,
+  breakRule,
   onClose,
+  canManage,
 }: {
   tenant: string;
   location: Location;
@@ -536,7 +549,9 @@ function ShiftDrawer({
   week: number;
   drawer: DrawerState | null;
   employees: ShiftEmployeeOption[];
+  breakRule: string;
   onClose: () => void;
+  canManage: boolean;
 }) {
   if (!drawer) {
     return null;
@@ -545,6 +560,31 @@ function ShiftDrawer({
   const shift = drawer.shift;
   const action = shift?.dbId ? updateShiftAction : createShiftAction;
   const returnTo = `/u/${tenant}/standorte/${location.id}?tab=shifts&year=${year}&week=${week}`;
+
+  /** Berechnet die Pause aus der Pausenregel des Mandanten neu, sobald sich Start/Ende ändern. */
+  function applyBreakRule() {
+    const form = document.getElementById("location-shift-form");
+
+    if (!(form instanceof HTMLFormElement)) {
+      return;
+    }
+
+    const start = form.elements.namedItem("startTime");
+    const end = form.elements.namedItem("endTime");
+    const breakMinutes = form.elements.namedItem("breakMinutes");
+
+    if (
+      start instanceof HTMLInputElement &&
+      end instanceof HTMLInputElement &&
+      breakMinutes instanceof HTMLInputElement &&
+      start.value &&
+      end.value
+    ) {
+      breakMinutes.value = String(
+        calculateBreakMinutes(start.value, end.value, breakRule),
+      );
+    }
+  }
 
   return (
     <div
@@ -594,6 +634,7 @@ function ShiftDrawer({
           <input type="hidden" name="returnTo" value={returnTo} />
           {shift?.dbId && <input type="hidden" name="shiftId" value={shift.dbId} />}
 
+          <fieldset disabled={!canManage} className="flex flex-col gap-4 border-0 p-0">
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="field">
               <label htmlFor="location-shift-start" className="label">
@@ -605,6 +646,7 @@ function ShiftDrawer({
                 type="time"
                 className="input"
                 defaultValue={shift?.startTime ?? "09:00"}
+                onChange={applyBreakRule}
                 required
               />
             </div>
@@ -618,6 +660,7 @@ function ShiftDrawer({
                 type="time"
                 className="input"
                 defaultValue={shift?.endTime ?? "17:00"}
+                onChange={applyBreakRule}
                 required
               />
             </div>
@@ -632,7 +675,7 @@ function ShiftDrawer({
               name="breakMinutes"
               type="number"
               min="0"
-              step="5"
+              step="1"
               className="input"
               defaultValue={shift?.breakMinutes ?? 30}
             />
@@ -674,12 +717,13 @@ function ShiftDrawer({
             <Clock3 size={15} className="text-muted" />
             Diese Schicht wird direkt mit der zentralen Schichtplanung synchronisiert.
           </div>
+          </fieldset>
 
           <div className="mt-1 flex justify-end gap-2.5 border-t border-border-soft pt-4">
             <button type="button" className="btn btn-secondary" onClick={onClose}>
-              Abbrechen
+              {canManage ? "Abbrechen" : "Schließen"}
             </button>
-            {shift?.dbId && (
+            {canManage && shift?.dbId && (
               <ConfirmSubmitButton
                 className="btn btn-secondary text-danger"
                 form="location-shift-form"
@@ -689,12 +733,14 @@ function ShiftDrawer({
                 Löschen
               </ConfirmSubmitButton>
             )}
-            <FormSubmitButton
-              Icon={Save}
-              pendingLabel="Wird gespeichert..."
-            >
-              Speichern
-            </FormSubmitButton>
+            {canManage && (
+              <FormSubmitButton
+                Icon={Save}
+                pendingLabel="Wird gespeichert..."
+              >
+                Speichern
+              </FormSubmitButton>
+            )}
           </div>
         </form>
       </aside>
@@ -712,6 +758,8 @@ export default function LocationShiftPlanner({
   days,
   employees,
   wishFreeRequests,
+  breakRule,
+  canManage = true,
 }: LocationShiftPlannerProps) {
   const router = useRouter();
   const [drawer, setDrawer] = useState<DrawerState | null>(null);
@@ -864,15 +912,17 @@ export default function LocationShiftPlanner({
                       onClick={() => setDrawer({ day, shift })}
                     />
                   ))}
-                  <button
-                    type="button"
-                    aria-label={`Schicht am ${day.weekday} hinzufügen`}
-                    title="Schicht hinzufügen"
-                    className="flex w-full cursor-pointer items-center justify-center rounded-[9px] border-[1.5px] border-dashed border-[#DEDAD4] bg-transparent p-[7px] text-[#C0BFBA] transition-colors hover:border-muted hover:text-muted-2"
-                    onClick={() => setDrawer({ day })}
-                  >
-                    <Plus size={15} strokeWidth={1.8} />
-                  </button>
+                  {canManage && (
+                    <button
+                      type="button"
+                      aria-label={`Schicht am ${day.weekday} hinzufügen`}
+                      title="Schicht hinzufügen"
+                      className="flex w-full cursor-pointer items-center justify-center rounded-[9px] border-[1.5px] border-dashed border-[#DEDAD4] bg-transparent p-[7px] text-[#C0BFBA] transition-colors hover:border-muted hover:text-muted-2"
+                      onClick={() => setDrawer({ day })}
+                    >
+                      <Plus size={15} strokeWidth={1.8} />
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -887,7 +937,9 @@ export default function LocationShiftPlanner({
         week={week}
         drawer={drawer}
         employees={employees}
+        breakRule={breakRule}
         onClose={() => setDrawer(null)}
+        canManage={canManage}
       />
       {isWishFreeDrawerOpen && (
         <WishFreeDrawer
@@ -900,6 +952,7 @@ export default function LocationShiftPlanner({
           activeFilter={wishFreeFilter}
           selectedRequestId={selectedWishFreeRequestId}
           isCreating={isCreatingWishFreeRequest}
+          canManage={canManage}
           onFilterChange={(filter) => {
             setWishFreeFilter(filter);
             setIsCreatingWishFreeRequest(false);

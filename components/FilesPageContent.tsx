@@ -1,6 +1,7 @@
 import FilesBrowser from "@/components/FilesBrowser";
 import AuditLogPanel from "@/components/AuditLogPanel";
 import PageHeader from "@/components/PageHeader";
+import PaginationControls from "@/components/PaginationControls";
 import {
   FileDownloadButton,
   FileSoftDeleteButton,
@@ -10,9 +11,14 @@ import {
 import { getAuditLogsForEntity } from "@/lib/audit";
 import { getFilesPageData } from "@/lib/files-server";
 import { getFileVersions, type FileItem } from "@/lib/files";
+import { paginate, searchParamPage } from "@/lib/pagination";
+import { hasPermissionLevel } from "@/lib/roles";
+import { getTenantPermissions, withAccessRedirect } from "@/lib/tenant-access";
 import { Archive, ArrowLeft, FileText, Lock } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+
+const PAGE_SIZE = 30;
 
 function FileMetricCard({
   label,
@@ -40,10 +46,12 @@ function FileInfoCard({
   file,
   tenant,
   returnPath,
+  canManageFiles,
 }: {
   file: FileItem;
   tenant: string;
   returnPath: string;
+  canManageFiles: boolean;
 }) {
   const versions = getFileVersions(file);
 
@@ -66,8 +74,12 @@ function FileInfoCard({
         <div className="flex shrink-0 flex-wrap gap-2">
           <FileViewButton file={file} tenant={tenant} />
           <FileDownloadButton file={file} tenant={tenant} label="Aktuelle Version" />
-          <VersionUploadButton file={file} tenant={tenant} returnPath={returnPath} />
-          <FileSoftDeleteButton file={file} tenant={tenant} returnPath={returnPath} />
+          {canManageFiles && (
+            <>
+              <VersionUploadButton file={file} tenant={tenant} returnPath={returnPath} />
+              <FileSoftDeleteButton file={file} tenant={tenant} returnPath={returnPath} />
+            </>
+          )}
         </div>
       </div>
 
@@ -109,7 +121,7 @@ function FileInfoCard({
               </span>
             </div>
             <div>
-              Gueltig ab:{" "}
+              Gültig ab:{" "}
               <span className="font-semibold text-ink">
                 {file.validFrom ?? "Nicht gesetzt"}
               </span>
@@ -131,7 +143,7 @@ function FileInfoCard({
               ))}
             </div>
           ) : (
-            <div className="text-[12.5px] text-muted">Keine Rollen eingeschraenkt.</div>
+            <div className="text-[12.5px] text-muted">Keine Rollen eingeschränkt.</div>
           )}
         </div>
 
@@ -148,7 +160,7 @@ function FileInfoCard({
               ))}
             </div>
           ) : (
-            <div className="text-[12.5px] text-muted">Keine einzelnen User eingeschraenkt.</div>
+            <div className="text-[12.5px] text-muted">Keine einzelnen User eingeschränkt.</div>
           )}
         </div>
       </div>
@@ -200,9 +212,11 @@ function FileInfoCard({
 export default async function FilesPageContent({
   tenant,
   path = [],
+  page: pageParam,
 }: {
   tenant: string;
   path?: string[];
+  page?: string | string[];
 }) {
   const {
     activeFile,
@@ -214,17 +228,23 @@ export default async function FilesPageContent({
     metrics,
     uploadOptions,
     visibleFiles,
-  } = await getFilesPageData(tenant, path);
+  } = await withAccessRedirect(tenant, () => getFilesPageData(tenant, path));
 
   if (path.length > 0 && !activeFile && !activeFolder) {
     notFound();
   }
 
+  const permissions = await getTenantPermissions(tenant);
+  const canManageFiles = hasPermissionLevel(permissions.files, "write");
+  const canManageReminders = hasPermissionLevel(permissions.reminders, "write");
+
   const baseHref = `/u/${tenant}/dateien`;
+  const filesPage = paginate(visibleFiles, searchParamPage(pageParam), PAGE_SIZE);
 
   if (activeFile) {
     const auditEntries = await getAuditLogsForEntity({
       tenantSlug: tenant,
+      area: "files",
       entityType: "file",
       entityId: activeFile.storageFileId ?? activeFile.slug,
     });
@@ -240,7 +260,12 @@ export default async function FilesPageContent({
             {activeFile.folderSlug ? "Zurück zum Ordner" : "Zurück zur Ablage"}
           </Link>
         </div>
-        <FileInfoCard file={activeFile} tenant={tenant} returnPath={returnPath} />
+        <FileInfoCard
+          file={activeFile}
+          tenant={tenant}
+          returnPath={returnPath}
+          canManageFiles={canManageFiles}
+        />
         <div className="mt-4">
           <AuditLogPanel entries={auditEntries} title="Datei Audit Log" />
         </div>
@@ -255,10 +280,12 @@ export default async function FilesPageContent({
         title="Dateien"
         subtitle={`${folders.length} Ordner \u00b7 ${files.length} Dateien`}
       >
-        <button type="button" className="btn btn-primary">
-          <Archive size={15} />
-          ZIP importieren
-        </button>
+        {canManageFiles && (
+          <button type="button" className="btn btn-primary">
+            <Archive size={15} />
+            ZIP importieren
+          </button>
+        )}
       </PageHeader>
 
       <section className="mb-7 grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(190px,1fr))]">
@@ -270,12 +297,21 @@ export default async function FilesPageContent({
       <FilesBrowser
         folders={folders}
         tenant={tenant}
-        files={visibleFiles}
+        files={filesPage.items}
         activeFolder={activeFolder}
         currentFolderPath={currentFolderPath}
         folderOptions={folderOptions}
         uploadOptions={uploadOptions}
         baseHref={baseHref}
+        canManageFiles={canManageFiles}
+        canManageReminders={canManageReminders}
+      />
+      <PaginationControls
+        page={filesPage.page}
+        pageCount={filesPage.pageCount}
+        total={filesPage.total}
+        pageSize={filesPage.pageSize}
+        basePath={activeFolder ? `${baseHref}/${activeFolder.path ?? activeFolder.slug}` : baseHref}
       />
     </>
   );

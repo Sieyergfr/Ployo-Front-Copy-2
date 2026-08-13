@@ -1,5 +1,6 @@
 "use server";
 
+import { z } from "zod";
 import {
   createEmployeeInfoRequest,
   createTenantEmployee,
@@ -14,6 +15,8 @@ import {
   updateEmployeeContractStatus,
   type ContractStatus,
 } from "@/lib/contract-service";
+import { uploadPayrollStatement } from "@/lib/payroll-service";
+import { type ActionState, parseAction } from "@/lib/action-state";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -53,6 +56,8 @@ function contractStatus(formData: FormData, fallback: ContractStatus = "draft") 
     : fallback;
 }
 
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 function employeesPath(tenant: string) {
   return `/u/${tenant}/employees`;
 }
@@ -61,29 +66,55 @@ function employeePath(tenant: string, employeeHandle: string) {
   return `${employeesPath(tenant)}/${employeeHandle}`;
 }
 
-export async function createEmployeeAction(formData: FormData) {
-  const tenant = formString(formData, "tenant");
-  const firstName = formString(formData, "firstName");
-  const lastName = formString(formData, "lastName");
-  const email = formString(formData, "email");
+const createEmployeeSchema = z
+  .object({
+    tenant: z.string().trim().min(1, "Mandant fehlt."),
+    firstName: z.string().trim().default(""),
+    lastName: z.string().trim().default(""),
+    email: z
+      .string()
+      .trim()
+      .default("")
+      .refine((value) => value === "" || EMAIL_PATTERN.test(value), {
+        message: "Bitte eine gültige E-Mail-Adresse angeben.",
+      }),
+    location: z.string().trim().default(""),
+    team: z.string().trim().default(""),
+    role: z.string().trim().default("Mitarbeiter"),
+    startDate: z.string().trim().default(""),
+    contract: z.string().trim().default("Unbefristet"),
+    weeklyHours: z.string().trim().default("38 Std/Woche"),
+    status: z.string().trim().default("active"),
+    employeeNumber: z.string().trim().default(""),
+  })
+  .refine((data) => data.firstName || data.lastName || data.email, {
+    message: "Name oder E-Mail ist erforderlich.",
+    path: ["email"],
+  });
 
-  if (!tenant || (!firstName && !lastName && !email)) {
-    throw new Error("Name oder E-Mail ist erforderlich.");
+export async function createEmployeeAction(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const parsed = parseAction(createEmployeeSchema, Object.fromEntries(formData));
+
+  if (!parsed.success) {
+    return parsed.state;
   }
 
-  const employee = await createTenantEmployee({
-    tenantSlug: tenant,
-    firstName,
-    lastName,
-    email,
-    location: formString(formData, "location"),
-    team: formString(formData, "team"),
-    role: formString(formData, "role", "Mitarbeiter"),
-    startDate: formString(formData, "startDate"),
-    contract: formString(formData, "contract", "Unbefristet"),
-    weeklyHours: formString(formData, "weeklyHours", "38 Std/Woche"),
-    status: formString(formData, "status", "active"),
-  });
+  const { tenant, ...employeeInput } = parsed.data;
+  let employee: Awaited<ReturnType<typeof createTenantEmployee>>;
+
+  try {
+    employee = await createTenantEmployee({ tenantSlug: tenant, ...employeeInput });
+  } catch (error) {
+    return {
+      error:
+        error instanceof Error
+          ? error.message
+          : "Mitarbeiter konnte nicht angelegt werden.",
+    };
+  }
 
   revalidatePath(employeesPath(tenant));
   redirect(employeePath(tenant, employee.key ?? employee.id));
@@ -94,9 +125,41 @@ export async function updateEmployeeAction(formData: FormData) {
   const employeeId = formString(formData, "employeeId");
   const activeTab = formString(formData, "activeTab");
   const contractDetailsSubmitted = formData.get("contractDetailsSubmitted") === "1";
+  const emergencyContactsSubmitted =
+    formData.get("emergencyContactsSubmitted") === "1";
+  const emergencyContactIds = formData.getAll("emergencyContactId").map(String);
+  const emergencyContactNames = formData.getAll("emergencyContactName").map(String);
+  const emergencyContactRelations = formData
+    .getAll("emergencyContactRelation")
+    .map(String);
+  const emergencyContactPhones = formData.getAll("emergencyContactPhone").map(String);
+  const emergencyContactEmails = formData.getAll("emergencyContactEmail").map(String);
+  const emergencyContacts = emergencyContactNames
+    .map((rawName, index) => ({
+      id: emergencyContactIds[index] ?? "",
+      name: rawName.trim(),
+      relation: (emergencyContactRelations[index] ?? "").trim(),
+      phone: (emergencyContactPhones[index] ?? "").trim(),
+      email: (emergencyContactEmails[index] ?? "").trim() || undefined,
+    }))
+    .filter((contact) => contact.name || contact.phone);
 
   if (!tenant || !employeeId) {
     throw new Error("Mitarbeiter konnte nicht gespeichert werden.");
+  }
+
+  const rawName = formData.get("name");
+  if (typeof rawName === "string" && rawName.trim() === "") {
+    throw new Error("Name darf nicht leer sein.");
+  }
+
+  const rawEmail = formData.get("email");
+  if (
+    typeof rawEmail === "string" &&
+    rawEmail.trim() &&
+    !EMAIL_PATTERN.test(rawEmail.trim())
+  ) {
+    throw new Error("Bitte eine gültige E-Mail-Adresse angeben.");
   }
 
   const employee = await updateTenantEmployee({
@@ -157,6 +220,7 @@ export async function updateEmployeeAction(formData: FormData) {
     compensation: fieldString(formData, "compensation"),
     workingTime: fieldString(formData, "workingTime"),
     vacation: fieldString(formData, "vacation"),
+    emergencyContacts: emergencyContactsSubmitted ? emergencyContacts : undefined,
   });
 
   revalidatePath(employeesPath(tenant));
@@ -206,7 +270,7 @@ export async function createEmployeeInfoRequestAction(formData: FormData) {
   const title = formString(formData, "title");
 
   if (!tenant || !employeeId || !employeeHandle || !title) {
-    throw new Error("Bitte angeben, welche Information benoetigt wird.");
+    throw new Error("Bitte angeben, welche Information benötigt wird.");
   }
 
   await createEmployeeInfoRequest({
@@ -228,7 +292,7 @@ export async function deleteEmployeeAction(formData: FormData) {
   const employeeId = formString(formData, "employeeId");
 
   if (!tenant || !employeeId) {
-    throw new Error("Mitarbeiter konnte nicht geloescht werden.");
+    throw new Error("Mitarbeiter konnte nicht gelöscht werden.");
   }
 
   await deleteTenantEmployee({ tenantSlug: tenant, employeeId });
@@ -280,6 +344,7 @@ export async function updateEmployeeContractStatusAction(formData: FormData) {
   const contractId = formString(formData, "contractId");
   const status = contractStatus(formData, "inactive");
   const terminationDate = formString(formData, "terminationDate");
+  const terminationReason = formString(formData, "terminationReason");
 
   if (!tenant || !employeeId || !employeeHandle || !contractId) {
     throw new Error("Vertrag konnte nicht aktualisiert werden.");
@@ -289,16 +354,68 @@ export async function updateEmployeeContractStatusAction(formData: FormData) {
     throw new Error("Bitte ein Kündigungsdatum auswählen.");
   }
 
+  if (status === "terminated" && !terminationReason) {
+    throw new Error("Bitte einen Kündigungsgrund angeben.");
+  }
+
   await updateEmployeeContractStatus({
     tenantSlug: tenant,
     employeeId,
     contractId,
     status,
     terminationDate,
-    terminationReason: formString(formData, "terminationReason"),
+    terminationReason,
   });
 
   const path = `${employeePath(tenant, employeeHandle)}?tab=contract`;
+  revalidatePath(path);
+  redirect(path);
+}
+
+const uploadPayrollStatementSchema = z.object({
+  tenant: z.string().trim().min(1),
+  employeeId: z.string().trim().min(1),
+  employeeHandle: z.string().trim().min(1),
+  period: z.string().trim().min(1, "Bitte einen Zeitraum angeben (z. B. \"Januar 2026\")."),
+  gross: z.string().trim().default(""),
+  net: z.string().trim().default(""),
+  file: z
+    .instanceof(File)
+    .refine((file) => file.size > 0, "Bitte eine PDF-Datei auswählen."),
+});
+
+export async function uploadPayrollStatementAction(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const parsed = parseAction(
+    uploadPayrollStatementSchema,
+    Object.fromEntries(formData),
+  );
+
+  if (!parsed.success) {
+    return parsed.state;
+  }
+
+  try {
+    await uploadPayrollStatement({
+      tenantSlug: parsed.data.tenant,
+      employeeId: parsed.data.employeeId,
+      file: parsed.data.file,
+      period: parsed.data.period,
+      gross: parsed.data.gross,
+      net: parsed.data.net,
+    });
+  } catch (error) {
+    return {
+      error:
+        error instanceof Error
+          ? error.message
+          : "Gehaltsabrechnung konnte nicht hochgeladen werden.",
+    };
+  }
+
+  const path = `${employeePath(parsed.data.tenant, parsed.data.employeeHandle)}?tab=payroll`;
   revalidatePath(path);
   redirect(path);
 }

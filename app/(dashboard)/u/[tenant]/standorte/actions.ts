@@ -101,7 +101,7 @@ export async function addLocationEmployeesAction(formData: FormData) {
     .filter((value): value is string => typeof value === "string");
 
   if (!tenant || !locationId || employeeIds.length === 0) {
-    throw new Error("Mitarbeiter konnten nicht hinzugefuegt werden.");
+    throw new Error("Mitarbeiter konnten nicht hinzugefügt werden.");
   }
 
   const location = await addEmployeesToTenantLocation({
@@ -119,7 +119,7 @@ export async function deleteLocationAction(formData: FormData) {
   const locationId = formString(formData, "locationId");
 
   if (!tenant || !locationId) {
-    throw new Error("Standort konnte nicht geloescht werden.");
+    throw new Error("Standort konnte nicht gelöscht werden.");
   }
 
   await deleteTenantLocation({

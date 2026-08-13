@@ -98,11 +98,12 @@ function StatusForm({ tenant, employeeId, employeeHandle, contract, target }: {
   </form>;
 }
 
-export default function EmployeeContracts({ tenant, employeeId, employeeHandle, contracts }: {
+export default function EmployeeContracts({ tenant, employeeId, employeeHandle, contracts, canManage = true }: {
   tenant: string;
   employeeId: string;
   employeeHandle: string;
   contracts: EmployeeContractItem[];
+  canManage?: boolean;
 }) {
   const { openPopup } = useUniversalPopup();
   const [isOpening, startOpening] = useTransition();
@@ -119,11 +120,11 @@ export default function EmployeeContracts({ tenant, employeeId, employeeHandle, 
   }
 
   return <div className="flex flex-col gap-3">
-    <button type="button" className="btn btn-primary btn-sm self-start" onClick={() => openPopup({ title: "Neuen Vertrag anlegen", className: "max-w-[760px]", content: <NewContractForm tenant={tenant} employeeId={employeeId} employeeHandle={employeeHandle} /> })}><FilePlus2 size={14} />Neuer Vertrag</button>
+    {canManage && <button type="button" className="btn btn-primary btn-sm self-start" onClick={() => openPopup({ title: "Neuen Vertrag anlegen", className: "max-w-[760px]", content: <NewContractForm tenant={tenant} employeeId={employeeId} employeeHandle={employeeHandle} /> })}><FilePlus2 size={14} />Neuer Vertrag</button>}
     {contracts.length === 0 ? <div className="rounded-xl border border-dashed border-border bg-bg p-5 text-center"><FileText className="mx-auto text-muted" size={22} /><div className="mt-2 text-[13px] font-semibold text-ink">Noch kein Vertrag hinterlegt</div><div className="mt-1 text-[12px] text-muted">Lege den ersten Vertrag inklusive PDF an.</div></div> : contracts.map((contract) => <article key={contract.id} className="rounded-xl border border-border bg-bg p-3.5">
       <div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="truncate text-[13.5px] font-semibold text-ink">{contract.title}</div><div className="mt-1 font-mono text-[10.5px] text-muted">{contract.startDate} – {contract.endDate || "laufend"}</div></div><span className={`rounded-[7px] px-2 py-1 font-mono text-[10px] ${contract.status === "active" ? "bg-success/10 text-success" : contract.status === "terminated" ? "bg-danger/10 text-danger" : "bg-white text-muted-2"}`}>{statuses.find((item) => item.value === contract.status)?.label}</span></div>
       <button type="button" disabled={isOpening} onClick={() => openPdf(contract.file.id)} className="mt-3 flex w-full items-center gap-2 rounded-lg border border-border bg-white px-3 py-2 text-left text-[11.5px] text-ink"><FileText size={14} className="text-danger" /><span className="min-w-0 flex-1 truncate">{contract.file.displayName}</span><Eye size={13} className="text-muted" /></button>
-      <div className="mt-3 flex flex-wrap gap-2">{contract.status !== "active" && <button type="button" className="btn btn-secondary btn-sm" onClick={() => changeStatus(contract, "active")}><Power size={13} />Aktivieren</button>}{contract.status === "active" && <button type="button" className="btn btn-secondary btn-sm" onClick={() => changeStatus(contract, "inactive")}>Inaktiv setzen</button>}{contract.status !== "terminated" && <button type="button" className="btn btn-secondary btn-sm text-danger" onClick={() => changeStatus(contract, "terminated")}><XCircle size={13} />Kündigen</button>}</div>
+      {canManage && <div className="mt-3 flex flex-wrap gap-2">{contract.status !== "active" && <button type="button" className="btn btn-secondary btn-sm" onClick={() => changeStatus(contract, "active")}><Power size={13} />Aktivieren</button>}{contract.status === "active" && <button type="button" className="btn btn-secondary btn-sm" onClick={() => changeStatus(contract, "inactive")}>Inaktiv setzen</button>}{contract.status !== "terminated" && <button type="button" className="btn btn-secondary btn-sm text-danger" onClick={() => changeStatus(contract, "terminated")}><XCircle size={13} />Kündigen</button>}</div>}
       {contract.terminationDate && <div className="mt-3 rounded-lg bg-danger/5 px-3 py-2 text-[11.5px] text-danger">Gekündigt zum {contract.terminationDate}{contract.terminationReason ? ` · ${contract.terminationReason}` : ""}</div>}
     </article>)}
   </div>;

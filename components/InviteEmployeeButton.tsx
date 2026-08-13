@@ -1,10 +1,15 @@
 "use client";
 
+import { useActionState } from "react";
 import { createEmployeeAction } from "@/app/(dashboard)/u/[tenant]/employees/actions";
 import DatePickerField from "@/components/DatePickerField";
 import FormSubmitButton from "@/components/FormSubmitButton";
+import { FieldErrors, FormErrorBanner } from "@/components/FormFeedback";
 import { useUniversalPopup } from "@/components/UniversalPopup";
+import type { ActionState } from "@/lib/action-state";
 import { Plus, Send } from "lucide-react";
+
+const initialState: ActionState = {};
 
 type InviteEmployeeButtonProps = {
   tenant: string;
@@ -22,8 +27,10 @@ function InviteEmployeeForm({
   employeeNumberRequired,
   onDone,
 }: InviteEmployeeButtonProps & { onDone: () => void }) {
+  const [state, formAction] = useActionState(createEmployeeAction, initialState);
+
   return (
-    <form className="flex flex-col gap-4" action={createEmployeeAction}>
+    <form className="flex flex-col gap-4" action={formAction}>
       <input type="hidden" name="tenant" value={tenant} />
 
       <div className="grid gap-3 sm:grid-cols-2">
@@ -65,8 +72,8 @@ function InviteEmployeeForm({
           className="input"
           placeholder="sophie.wagner@example.com"
           autoComplete="email"
-          required
         />
+        <FieldErrors errors={state.fieldErrors?.email} />
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
@@ -81,7 +88,7 @@ function InviteEmployeeForm({
             defaultValue=""
           >
             <option value="" disabled>
-              Auswaehlen
+              Auswählen
             </option>
             {locations.map((location) => (
               <option key={location} value={location}>
@@ -102,7 +109,7 @@ function InviteEmployeeForm({
             defaultValue=""
           >
             <option value="" disabled>
-              Auswaehlen
+              Auswählen
             </option>
             {teams.map((team) => (
               <option key={team} value={team}>
@@ -176,8 +183,10 @@ function InviteEmployeeForm({
 
       <p className="m-0 text-[12.5px] leading-[1.55] text-muted-2">
         Der Mitarbeiter wird angelegt und kann danach in der Personalakte
-        vervollstaendigt werden.
+        vervollständigt werden.
       </p>
+
+      <FormErrorBanner message={state.error} />
 
       <div className="mt-1 flex justify-end gap-2.5 border-t border-border-soft pt-4">
         <button type="button" className="btn btn-secondary" onClick={onDone}>

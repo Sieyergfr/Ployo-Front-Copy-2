@@ -2,8 +2,17 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { type Shift, type ShiftDay } from "@/lib/shifts";
 import { headers } from "next/headers";
-import { requireTenantAccess } from "@/lib/tenant-access";
+import {
+  requireTenantAccess,
+  requireTenantMembership,
+  resolveScopeFilter,
+} from "@/lib/tenant-access";
 import { parseShiftPresets } from "@/lib/shift-presets";
+import {
+  parseShiftTemplateEntries,
+  type ShiftTemplateEntry,
+} from "@/lib/shift-templates";
+import { isUniqueConstraintError } from "@/lib/prisma-errors";
 
 export type ShiftEmployeeOption = {
   id: string;
@@ -21,7 +30,7 @@ export type ShiftLocationOption = {
   accentClassName: string;
 };
 
-const weekdays = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
+const weekdays = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"] as const;
 
 function normalizeShiftKey(value: string) {
   return value
@@ -176,12 +185,40 @@ export async function getTenantIdForShifts(tenantSlug: string) {
   return (await requireTenantAccess(tenantSlug, "shifts", "read")).tenantId;
 }
 
+/**
+ * Übersetzt den konfigurierten Scope (own/team/all) der "shifts"-
+ * Berechtigung in einen zusätzlichen `where`-Filter. "own"/"team" ohne
+ * verknüpften eigenen Mitarbeiterdatensatz liefert einen Filter, der nichts
+ * trifft — nie stillschweigend auf "alles sehen" zurückfallen.
+ */
+async function shiftScopeWhere(tenantSlug: string) {
+  const access = await requireTenantAccess(tenantSlug, "shifts", "read");
+  const scopeFilter = await resolveScopeFilter(access);
+
+  if (scopeFilter.type === "all") {
+    return { tenantId: access.tenantId };
+  }
+
+  if (scopeFilter.type === "own") {
+    return { tenantId: access.tenantId, employeeId: scopeFilter.employeeId ?? "__none__" };
+  }
+
+  if (scopeFilter.type === "team") {
+    return { tenantId: access.tenantId, employee: { team: scopeFilter.team } };
+  }
+
+  // "shifts" unterstützt (bisher) keinen "assigned"-Scope — sollte er
+  // dennoch auftreten, nichts treffen statt stillschweigend alles zu zeigen.
+  return { tenantId: access.tenantId, employeeId: "__none__" };
+}
+
 export async function getShiftPlanForTenant(input: {
   tenantSlug: string;
   year: number;
   week: number;
 }) {
-  const tenantId = await getTenantIdForShifts(input.tenantSlug);
+  const scopeWhere = await shiftScopeWhere(input.tenantSlug);
+  const tenantId = scopeWhere.tenantId;
 
   if (!tenantId) {
     return null;
@@ -189,29 +226,36 @@ export async function getShiftPlanForTenant(input: {
 
   const days = buildWeekDays(input.year, input.week);
   const dayIds = days.map((day) => day.id);
-  const records = await prisma.tenantShift.findMany({
-    where: {
-      tenantId,
-      date: { in: dayIds },
-    },
-    orderBy: [{ date: "asc" }, { startTime: "asc" }],
-    include: {
-      employee: {
-        select: {
-          id: true,
-          name: true,
-          team: true,
+  const [records, settings] = await Promise.all([
+    prisma.tenantShift.findMany({
+      where: {
+        ...scopeWhere,
+        date: { in: dayIds },
+      },
+      orderBy: [{ date: "asc" }, { startTime: "asc" }],
+      include: {
+        employee: {
+          select: {
+            id: true,
+            name: true,
+            team: true,
+          },
+        },
+        location: {
+          select: {
+            id: true,
+            name: true,
+            accentClassName: true,
+          },
         },
       },
-      location: {
-        select: {
-          id: true,
-          name: true,
-          accentClassName: true,
-        },
-      },
-    },
-  });
+    }),
+    prisma.tenantSettings.findUnique({
+      where: { tenantId },
+      select: { shiftMinStaffing: true },
+    }),
+  ]);
+  const minStaffing = settings?.shiftMinStaffing ?? 0;
   const conflictIds = new Set<string>();
 
   for (const record of records) {
@@ -258,10 +302,104 @@ export async function getShiftPlanForTenant(input: {
     label: `KW ${input.week}`,
     range: formatWeekRange(getISOWeekStart(input.year, input.week)),
     conflictCount: conflictIds.size + records.filter((record) => record.conflict).length,
+    minStaffing,
+    days: days.map((day) => {
+      const dayShifts = shiftsByDate.get(day.id) ?? [];
+      const staffedCount = dayShifts.filter((shift) => shift.employeeId).length;
+
+      return {
+        ...day,
+        shifts: dayShifts,
+        staffedCount,
+        understaffed: minStaffing > 0 && staffedCount < minStaffing,
+      };
+    }) satisfies ShiftDay[],
+  };
+}
+
+export type MyShift = {
+  id: string;
+  startTime: string;
+  endTime: string;
+  time: string;
+  location: string;
+  note: string;
+};
+
+export type MyWeekDay = {
+  id: string;
+  weekday: string;
+  date: string;
+  isWeekend: boolean;
+  shifts: MyShift[];
+};
+
+/**
+ * Read-only Variante von `getShiftPlanForTenant` für "Mein Bereich" —
+ * bewusst ohne `shifts:read`-Berechtigung (nur `requireTenantMembership`),
+ * damit jedes Mitglied seine eigenen Schichten der laufenden Woche sehen
+ * kann, unabhängig vom konfigurierten "shifts"-Scope der eigenen Rolle.
+ * Liefert nur die eigenen Schichten, kein Bearbeiten — dafür gibt es die
+ * reguläre Schichtplanung mit den passenden Berechtigungen.
+ */
+export async function getMyShiftsForCurrentWeek(tenantSlug: string): Promise<{
+  label: string;
+  range: string;
+  days: MyWeekDay[];
+} | null> {
+  const access = await requireTenantMembership(tenantSlug);
+  const employee = await prisma.tenantEmployee.findFirst({
+    where: { tenantId: access.tenantId, userId: access.userId },
+    select: { id: true },
+  });
+
+  if (!employee) {
+    return null;
+  }
+
+  const { year, week } = getISOWeekFromDate(new Date());
+  const days = buildWeekDays(year, week);
+  const dayIds = days.map((day) => day.id);
+
+  const records = await prisma.tenantShift.findMany({
+    where: { tenantId: access.tenantId, employeeId: employee.id, date: { in: dayIds } },
+    orderBy: [{ date: "asc" }, { startTime: "asc" }],
+    select: {
+      id: true,
+      date: true,
+      startTime: true,
+      endTime: true,
+      note: true,
+      location: { select: { name: true } },
+    },
+  });
+  const shiftsByDate = new Map<string, MyShift[]>();
+
+  for (const record of records) {
+    const shift: MyShift = {
+      id: record.id,
+      startTime: record.startTime,
+      endTime: record.endTime,
+      time: toTimeRange(record.startTime, record.endTime),
+      location: record.location?.name ?? "",
+      note: record.note,
+    };
+    const dateShifts = shiftsByDate.get(record.date) ?? [];
+
+    dateShifts.push(shift);
+    shiftsByDate.set(record.date, dateShifts);
+  }
+
+  return {
+    label: `KW ${week}`,
+    range: formatWeekRange(getISOWeekStart(year, week)),
     days: days.map((day) => ({
-      ...day,
+      id: day.id,
+      weekday: day.weekday,
+      date: day.date,
+      isWeekend: day.isWeekend,
       shifts: shiftsByDate.get(day.id) ?? [],
-    })) satisfies ShiftDay[],
+    })),
   };
 }
 
@@ -326,7 +464,7 @@ export async function getShiftPlanningSettings(tenantSlug: string) {
     weekStart: settings?.weekStart ?? "monday",
     minStaffing: settings?.shiftMinStaffing ?? 3,
     breakRule: settings?.shiftBreakRule ?? "30-6",
-    presets: parseShiftPresets(settings?.shiftPresetsJson ?? "[]"),
+    presets: parseShiftPresets(settings?.shiftPresetsJson ?? []),
   };
 }
 
@@ -358,16 +496,16 @@ export async function requireShiftManager(tenantSlug: string) {
   });
 
   if (!membership) {
-    throw new Error("Keine Berechtigung fuer diesen Mandanten.");
+    throw new Error("Keine Berechtigung für diesen Mandanten.");
   }
 
-  const legacyRole = membership.role.toUpperCase();
+  const role = membership.role;
   const permission = membership.roleRef?.permissions[0]?.level ?? "none";
 
   if (
-    legacyRole === "OWNER" ||
-    legacyRole === "ADMIN" ||
-    legacyRole === "HR" ||
+    role === "OWNER" ||
+    role === "ADMIN" ||
+    role === "HR" ||
     permission === "write" ||
     permission === "admin"
   ) {
@@ -422,7 +560,7 @@ export async function createTenantShift(input: {
       key,
       date: input.date,
       weekday:
-        weekdays[(new Date(`${input.date}T00:00:00Z`).getUTCDay() || 7) - 1] ?? "",
+        weekdays[(new Date(`${input.date}T00:00:00Z`).getUTCDay() || 7) - 1],
       startTime: input.startTime,
       endTime: input.endTime,
       breakMinutes: input.breakMinutes,
@@ -490,7 +628,12 @@ export async function deleteTenantShift(input: {
   tenantSlug: string;
   shiftId: string;
 }) {
-  const access = await requireShiftManager(input.tenantSlug);
+  const access = await requireTenantAccess(input.tenantSlug, "shifts", "read");
+
+  if (!access.canDelete) {
+    throw new Error("FORBIDDEN");
+  }
+
   const current = await prisma.tenantShift.findFirst({
     where: { id: input.shiftId, tenantId: access.tenantId },
     select: { id: true },
@@ -503,4 +646,223 @@ export async function deleteTenantShift(input: {
   await prisma.tenantShift.delete({
     where: { id: input.shiftId },
   });
+}
+
+export async function getShiftTemplatesForTenant(tenantSlug: string) {
+  const tenantId = await getTenantIdForShifts(tenantSlug);
+
+  if (!tenantId) {
+    return null;
+  }
+
+  const templates = await prisma.tenantShiftTemplate.findMany({
+    where: { tenantId },
+    orderBy: { name: "asc" },
+  });
+
+  return templates.map((template) => ({
+    id: template.id,
+    name: template.name,
+    entries: parseShiftTemplateEntries(template.entriesJson),
+  }));
+}
+
+/** Speichert die aktuell angezeigte Woche als wiederverwendbare Wochenvorlage (ohne Mitarbeiterzuordnung). */
+export async function saveShiftTemplateFromWeek(input: {
+  tenantSlug: string;
+  year: number;
+  week: number;
+  name: string;
+}) {
+  const access = await requireShiftManager(input.tenantSlug);
+  const name = input.name.trim();
+
+  if (!name) {
+    throw new Error("Bitte einen Namen für die Vorlage angeben.");
+  }
+
+  const days = buildWeekDays(input.year, input.week);
+  const dayIds = days.map((day) => day.id);
+  const records = await prisma.tenantShift.findMany({
+    where: { tenantId: access.tenantId, date: { in: dayIds } },
+    select: {
+      weekday: true,
+      startTime: true,
+      endTime: true,
+      breakMinutes: true,
+      team: true,
+      locationId: true,
+    },
+  });
+
+  if (records.length === 0) {
+    throw new Error(
+      "Diese Woche enthält keine Schichten, aus denen eine Vorlage erstellt werden kann.",
+    );
+  }
+
+  const entries: ShiftTemplateEntry[] = records.map((record) => ({
+    weekday: record.weekday,
+    startTime: record.startTime,
+    endTime: record.endTime,
+    breakMinutes: record.breakMinutes,
+    team: record.team,
+    locationId: record.locationId ?? "",
+  }));
+
+  const template = await prisma.tenantShiftTemplate
+    .create({
+      data: {
+        tenantId: access.tenantId,
+        name,
+        entriesJson: entries,
+      },
+    })
+    .catch((error: unknown) => {
+      if (isUniqueConstraintError(error, "name")) {
+        throw new Error(`Es gibt bereits eine Vorlage namens "${name}".`);
+      }
+
+      throw error;
+    });
+
+  return template;
+}
+
+/**
+ * Bearbeitet eine gespeicherte Vorlage direkt — Name und einzelne
+ * Schicht-Einträge, ohne über eine reale Woche zu gehen. Ergänzt
+ * `saveShiftTemplateFromWeek` (Anlegen aus der aktuellen Woche) um ein
+ * eigenständiges Bearbeiten bestehender Vorlagen.
+ */
+export async function updateShiftTemplate(input: {
+  tenantSlug: string;
+  templateId: string;
+  name: string;
+  entries: ShiftTemplateEntry[];
+}) {
+  const access = await requireShiftManager(input.tenantSlug);
+  const name = input.name.trim();
+
+  if (!name) {
+    throw new Error("Bitte einen Namen für die Vorlage angeben.");
+  }
+
+  const current = await prisma.tenantShiftTemplate.findFirst({
+    where: { id: input.templateId, tenantId: access.tenantId },
+    select: { id: true },
+  });
+
+  if (!current) {
+    throw new Error("Vorlage nicht gefunden.");
+  }
+
+  const entries = parseShiftTemplateEntries(input.entries);
+  const locationIds = Array.from(
+    new Set(entries.map((entry) => entry.locationId).filter(Boolean)),
+  );
+
+  if (locationIds.length > 0) {
+    const knownLocations = await prisma.tenantLocation.findMany({
+      where: { id: { in: locationIds }, tenantId: access.tenantId },
+      select: { id: true },
+    });
+    const knownIds = new Set(knownLocations.map((location) => location.id));
+    const unknownLocation = locationIds.some((id) => !knownIds.has(id));
+
+    if (unknownLocation) {
+      throw new Error("Mindestens ein Standort in der Vorlage wurde nicht gefunden.");
+    }
+  }
+
+  return prisma.tenantShiftTemplate
+    .update({
+      where: { id: input.templateId },
+      data: { name, entriesJson: entries },
+    })
+    .catch((error: unknown) => {
+      if (isUniqueConstraintError(error, "name")) {
+        throw new Error(`Es gibt bereits eine Vorlage namens "${name}".`);
+      }
+
+      throw error;
+    });
+}
+
+/** Legt für jeden Eintrag der Vorlage eine neue (unbesetzte) Schicht in der Zielwoche an. */
+export async function applyShiftTemplateToWeek(input: {
+  tenantSlug: string;
+  templateId: string;
+  year: number;
+  week: number;
+}) {
+  const access = await requireShiftManager(input.tenantSlug);
+  const template = await prisma.tenantShiftTemplate.findFirst({
+    where: { id: input.templateId, tenantId: access.tenantId },
+  });
+
+  if (!template) {
+    throw new Error("Vorlage nicht gefunden.");
+  }
+
+  const entries = parseShiftTemplateEntries(template.entriesJson);
+  const weekStart = getISOWeekStart(input.year, input.week);
+  let created = 0;
+
+  for (const entry of entries) {
+    const weekdayIndex = weekdays.indexOf(entry.weekday);
+
+    if (weekdayIndex === -1) {
+      continue;
+    }
+
+    const date = new Date(weekStart);
+    date.setUTCDate(weekStart.getUTCDate() + weekdayIndex);
+    const dateId = formatDateValue(date);
+
+    const key = await createUniqueShiftKey({
+      tenantId: access.tenantId,
+      date: dateId,
+      startTime: entry.startTime,
+    });
+
+    await prisma.tenantShift.create({
+      data: {
+        tenantId: access.tenantId,
+        key,
+        date: dateId,
+        weekday: entry.weekday,
+        startTime: entry.startTime,
+        endTime: entry.endTime,
+        breakMinutes: entry.breakMinutes,
+        locationId: entry.locationId || null,
+        team: entry.team,
+      },
+    });
+    created += 1;
+  }
+
+  return { created };
+}
+
+export async function deleteShiftTemplate(input: {
+  tenantSlug: string;
+  templateId: string;
+}) {
+  const access = await requireTenantAccess(input.tenantSlug, "shifts", "read");
+
+  if (!access.canDelete) {
+    throw new Error("FORBIDDEN");
+  }
+
+  const template = await prisma.tenantShiftTemplate.findFirst({
+    where: { id: input.templateId, tenantId: access.tenantId },
+    select: { id: true },
+  });
+
+  if (!template) {
+    throw new Error("Vorlage nicht gefunden.");
+  }
+
+  await prisma.tenantShiftTemplate.delete({ where: { id: input.templateId } });
 }

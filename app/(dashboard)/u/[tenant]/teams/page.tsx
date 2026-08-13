@@ -4,6 +4,8 @@ import { getEmployeesForTenant } from "@/lib/employee-service";
 import { getLocationsForTenant } from "@/lib/location-service";
 import { getTeamMetrics, getTeamsForTenant } from "@/lib/team-service";
 import { type Team, type TeamMember } from "@/lib/teams";
+import { hasPermissionLevel } from "@/lib/roles";
+import { getTenantPermissions, withAccessRedirect } from "@/lib/tenant-access";
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -104,15 +106,21 @@ export default async function TeamsPage({
   params,
 }: PageProps<"/u/[tenant]/teams">) {
   const { tenant } = await params;
-  const [teams, employees, locations] = await Promise.all([
-    getTeamsForTenant(tenant),
-    getEmployeesForTenant(tenant),
-    getLocationsForTenant(tenant),
-  ]);
+  const teams = await withAccessRedirect(tenant, () => getTeamsForTenant(tenant));
 
-  if (!teams || !employees || !locations) {
+  if (!teams) {
     notFound();
   }
+
+  // Nur für den Mitglieder-Picker und die Standort-Filter im
+  // "Team anlegen"-Dialog — fehlende Berechtigung dafür soll die Teamliste
+  // selbst nicht sperren.
+  const [employees, locations, permissions] = await Promise.all([
+    getEmployeesForTenant(tenant).catch(() => null).then((v) => v ?? []),
+    getLocationsForTenant(tenant).catch(() => null).then((v) => v ?? []),
+    getTenantPermissions(tenant),
+  ]);
+  const canCreateTeam = hasPermissionLevel(permissions.teams, "write");
 
   const teamMetrics = getTeamMetrics(teams);
   const employeeOptions = employees
@@ -126,11 +134,13 @@ export default async function TeamsPage({
   return (
     <>
       <PageHeader eyebrow="Organisationsstruktur" title="Teams">
-        <CreateTeamButton
-          tenant={tenant}
-          employees={employeeOptions}
-          locations={locations.map((location) => location.name)}
-        />
+        {canCreateTeam && (
+          <CreateTeamButton
+            tenant={tenant}
+            employees={employeeOptions}
+            locations={locations.map((location) => location.name)}
+          />
+        )}
       </PageHeader>
 
       <section className="mb-7 grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]">

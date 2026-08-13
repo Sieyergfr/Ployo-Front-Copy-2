@@ -7,6 +7,7 @@ import EmployeeSelector, {
 } from "@/components/EmployeeSelector";
 import FormSubmitButton from "@/components/FormSubmitButton";
 import { useUniversalPopup } from "@/components/UniversalPopup";
+import { locationColorPalette, locationKinds } from "@/lib/org-options";
 import { Building2, Check, ChevronDown, Plus } from "lucide-react";
 import { useState } from "react";
 
@@ -16,16 +17,7 @@ type DropdownOption = {
   meta?: string;
 };
 
-const locationColors = [
-  { value: "bg-ink", className: "bg-ink", label: "Schwarz" },
-  { value: "bg-[#2A6FDB]", className: "bg-[#2A6FDB]", label: "Blau" },
-  { value: "bg-success", className: "bg-success", label: "Gruen" },
-  { value: "bg-[#8B6ED4]", className: "bg-[#8B6ED4]", label: "Violett" },
-  { value: "bg-[#C9622A]", className: "bg-[#C9622A]", label: "Orange" },
-  { value: "bg-danger", className: "bg-danger", label: "Rot" },
-  { value: "bg-[#168A8A]", className: "bg-[#168A8A]", label: "Tuerkis" },
-  { value: "bg-[#5C6B7A]", className: "bg-[#5C6B7A]", label: "Schiefer" },
-];
+const locationColors = locationColorPalette;
 
 function CustomDropdownField({
   label,
@@ -130,7 +122,7 @@ function CustomDropdownField({
 }
 
 function LocationColorPicker() {
-  const [selectedColor, setSelectedColor] = useState(locationColors[0].value);
+  const [selectedColor, setSelectedColor] = useState<string>(locationColors[0].value);
 
   return (
     <div className="field">
@@ -180,7 +172,7 @@ function CreateLocationForm({
           id="location-name"
           name="name"
           className="input"
-          placeholder="Filiale Muenchen Zentrum"
+          placeholder="Filiale München Zentrum"
           required
         />
       </div>
@@ -189,20 +181,15 @@ function CreateLocationForm({
         <CustomDropdownField
           label="Typ"
           name="kind"
-          placeholder="Auswaehlen"
+          placeholder="Auswählen"
           defaultValue="Filiale"
-          options={[
-            { value: "Filiale", label: "Filiale" },
-            { value: "Zentrale", label: "Zentrale" },
-            { value: "Lager", label: "Lager" },
-            { value: "Buero", label: "Buero" },
-          ]}
+          options={locationKinds.map((kind) => ({ value: kind, label: kind }))}
         />
 
         <CustomDropdownField
           label="Status"
           name="status"
-          placeholder="Auswaehlen"
+          placeholder="Auswählen"
           defaultValue="active"
           options={[
             { value: "active", label: "Aktiv" },
@@ -241,7 +228,7 @@ function CreateLocationForm({
       <LocationColorPicker />
 
       <p className="m-0 text-[12.5px] leading-[1.55] text-muted-2">
-        Teams, Mitarbeiter und Schichten koennen nach dem Anlegen dem Standort
+        Teams, Mitarbeiter und Schichten können nach dem Anlegen dem Standort
         zugeordnet werden.
       </p>
 

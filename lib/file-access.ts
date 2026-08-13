@@ -1,19 +1,18 @@
-import { requireTenantAccess, type TenantAccess } from "@/lib/tenant-access";
+import {
+  requireTenantAccess,
+  type TenantAccess,
+  type TenantPermissionArea,
+} from "@/lib/tenant-access";
 
 export type FileAclRecord = {
-  accessRoleIdsJson: string;
-  accessUserIdsJson: string;
+  accessRoleIdsJson: unknown;
+  accessUserIdsJson: unknown;
 };
 
-function parseIds(value: string) {
-  try {
-    const parsed: unknown = JSON.parse(value);
-    return Array.isArray(parsed)
-      ? parsed.filter((item): item is string => typeof item === "string")
-      : [];
-  } catch {
-    return [];
-  }
+function parseIds(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
 }
 
 export function canAccessFileAcl(file: FileAclRecord, access: TenantAccess) {
@@ -33,6 +32,27 @@ export function requireFileAcl(file: FileAclRecord, access: TenantAccess) {
 export async function getOptionalFileReadAccess(tenantSlug: string) {
   try {
     return await requireTenantAccess(tenantSlug, "files", "read");
+  } catch (error) {
+    if (error instanceof Error && error.message === "FORBIDDEN") return null;
+    throw error;
+  }
+}
+
+/**
+ * Wie `getOptionalFileReadAccess`, aber für Dokumente, die an einen
+ * Fachbereich statt an das eigenständige Dateien-Modul gebunden sind
+ * (Personalakte-Dokumente, Standort-Dokumente, ...) — prüft `canViewFiles`
+ * des jeweiligen Bereichs statt des globalen `files`-Levels. `null` bedeutet
+ * "keine Datei aus diesem Bereich anzeigen", nicht "alle anzeigen".
+ */
+export async function getOptionalAreaFileAccess(
+  tenantSlug: string,
+  area: TenantPermissionArea,
+) {
+  try {
+    const access = await requireTenantAccess(tenantSlug, area, "read");
+
+    return access.canViewFiles ? access : null;
   } catch (error) {
     if (error instanceof Error && error.message === "FORBIDDEN") return null;
     throw error;

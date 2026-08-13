@@ -4,8 +4,11 @@ import {
   getShiftFormOptions,
   getShiftPlanForTenant,
   getShiftPlanningSettings,
+  getShiftTemplatesForTenant,
 } from "@/lib/shift-service";
 import { getWishFreeRequestsForTenant } from "@/lib/wish-free-service";
+import { hasPermissionLevel } from "@/lib/roles";
+import { getTenantCapabilities, withAccessRedirect } from "@/lib/tenant-access";
 import { notFound } from "next/navigation";
 
 export const metadata = {
@@ -31,11 +34,14 @@ export default async function ShiftPlanningPage({
   const currentWeek = getISOWeekFromDate(new Date());
   const year = searchParamNumber(query.year, currentWeek.year);
   const week = searchParamNumber(query.week, currentWeek.week);
-  const [plan, options, shiftSettings] = await Promise.all([
-    getShiftPlanForTenant({ tenantSlug: tenant, year, week }),
-    getShiftFormOptions(tenant),
-    getShiftPlanningSettings(tenant),
-  ]);
+  const [plan, options, shiftSettings, templates] = await withAccessRedirect(tenant, () =>
+    Promise.all([
+      getShiftPlanForTenant({ tenantSlug: tenant, year, week }),
+      getShiftFormOptions(tenant),
+      getShiftPlanningSettings(tenant),
+      getShiftTemplatesForTenant(tenant),
+    ]),
+  );
 
   if (!plan || !options) {
     notFound();
@@ -44,6 +50,7 @@ export default async function ShiftPlanningPage({
   const wishFreeRequests = await getWishFreeRequestsForTenant({
     tenantSlug: tenant,
   });
+  const capabilities = await getTenantCapabilities(tenant);
 
   return (
     <ShiftPlanningClient
@@ -58,6 +65,10 @@ export default async function ShiftPlanningPage({
       locations={options.locations}
       wishFreeRequests={wishFreeRequests}
       shiftSettings={shiftSettings}
+      templates={templates ?? []}
+      canManage={hasPermissionLevel(capabilities.shifts.level, "write")}
+      canDelete={capabilities.shifts.canDelete}
+      canManageSettings={hasPermissionLevel(capabilities.settings.level, "write")}
     />
   );
 }

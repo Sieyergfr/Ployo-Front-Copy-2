@@ -18,6 +18,12 @@ function hasSessionCookie(request: NextRequest) {
 }
 
 export function proxy(request: NextRequest) {
+  // Request-ID für die Log-Korrelation (lib/logger.ts) — vom Reverse Proxy
+  // übernehmen, falls schon gesetzt, sonst hier erzeugen. Wird sowohl an
+  // den Server (Request-Header) als auch an den Client (Response-Header)
+  // weitergereicht.
+  const requestId = request.headers.get("x-request-id") ?? crypto.randomUUID();
+
   if (!hasSessionCookie(request)) {
     const loginUrl = new URL("/login", request.url);
     const target = `${request.nextUrl.pathname}${request.nextUrl.search}`;
@@ -26,10 +32,19 @@ export function proxy(request: NextRequest) {
       loginUrl.searchParams.set("next", target);
     }
 
-    return NextResponse.redirect(loginUrl);
+    const response = NextResponse.redirect(loginUrl);
+    response.headers.set("x-request-id", requestId);
+
+    return response;
   }
 
-  return NextResponse.next();
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-request-id", requestId);
+
+  const response = NextResponse.next({ request: { headers: requestHeaders } });
+  response.headers.set("x-request-id", requestId);
+
+  return response;
 }
 
 export const config = {

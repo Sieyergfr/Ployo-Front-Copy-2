@@ -31,7 +31,7 @@ function InfoRequestForm({
       </div>
       <div className="field">
         <label htmlFor="info-request-title" className="label">
-          Benoetigte Information
+          Benötigte Information
         </label>
         <input
           id="info-request-title"
@@ -51,7 +51,7 @@ function InfoRequestForm({
         <label className="checkbox-row mt-6">
           <input type="checkbox" name="fileRequested" className="peer sr-only" />
           <span className="checkbox" />
-          <span className="checkbox-label">Datei gewuenscht</span>
+          <span className="checkbox-label">Datei gewünscht</span>
         </label>
       </div>
       <div className="field">
@@ -62,7 +62,7 @@ function InfoRequestForm({
           id="info-request-message"
           name="message"
           className="input min-h-28 resize-none"
-          placeholder="Kurz erklaeren, was hochgeladen oder bestaetigt werden soll"
+          placeholder="Kurz erklären, was hochgeladen oder bestätigt werden soll"
         />
       </div>
       <div className="mt-1 flex justify-end gap-2.5 border-t border-border-soft pt-4">

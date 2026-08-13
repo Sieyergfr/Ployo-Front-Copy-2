@@ -2,9 +2,12 @@
 
 import {
   changeAccountPassword,
-  deleteOwnAccount,
+  scheduleOwnAccountDeletion,
   updateAccountName,
+  updateOwnPreferences,
 } from "@/lib/account-service";
+import { uploadOwnAvatar } from "@/lib/avatar-service";
+import { type ActionState } from "@/lib/action-state";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -39,7 +42,42 @@ export async function changePasswordAction(formData: FormData) {
 }
 
 export async function deleteAccountAction(formData: FormData) {
-  await deleteOwnAccount(formString(formData, "password"));
+  await scheduleOwnAccountDeletion(formString(formData, "password"));
 
-  redirect("/login");
+  redirect("/login?accountDeletionScheduled=1");
+}
+
+export async function uploadAvatarAction(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const file = formData.get("avatar");
+
+  if (!(file instanceof File) || file.size === 0) {
+    return { error: "Bitte ein Bild auswählen." };
+  }
+
+  try {
+    await uploadOwnAvatar(file);
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "Upload fehlgeschlagen.",
+    };
+  }
+
+  revalidatePath("/konto");
+
+  return {};
+}
+
+export async function updatePreferencesAction(formData: FormData) {
+  await updateOwnPreferences({
+    language: formString(formData, "language"),
+    timezone: formString(formData, "timezone"),
+    startPage: formString(formData, "startPage"),
+    dateFormat: formString(formData, "dateFormat"),
+  });
+
+  revalidatePath("/konto");
+  redirect("/konto?saved=preferences");
 }

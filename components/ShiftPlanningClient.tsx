@@ -1,12 +1,16 @@
 "use client";
 
 import {
+  applyShiftTemplateAction,
   approveWishFreeRequestAction,
   createShiftAction,
   createWishFreeRequestAction,
   deleteShiftAction,
+  deleteShiftTemplateAction,
   rejectWishFreeRequestAction,
+  saveShiftTemplateAction,
   updateShiftAction,
+  updateShiftTemplateAction,
 } from "@/app/(dashboard)/u/[tenant]/schichtplanung/actions";
 import {
   ShiftSettingsDrawerButton,
@@ -21,6 +25,8 @@ import {
   type ShiftEmployeeOption,
 } from "@/lib/shift-service";
 import { type Shift, type ShiftDay } from "@/lib/shifts";
+import { calculateBreakMinutes } from "@/lib/shift-break-rule";
+import { type ShiftTemplateEntry } from "@/lib/shift-templates";
 import {
   type WishFreeFilter,
   type WishFreeRequest,
@@ -28,18 +34,26 @@ import {
 } from "@/lib/wish-free";
 import {
   AlertCircle,
+  AlertTriangle,
   CalendarDays,
   CalendarX,
   Check,
   ChevronLeft,
   ChevronRight,
+  Pencil,
   Plus,
   Save,
   Send,
   X,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+
+type ShiftTemplateSummary = {
+  id: string;
+  name: string;
+  entries: ShiftTemplateEntry[];
+};
 
 type ShiftPlanningClientProps = {
   tenant: string;
@@ -53,6 +67,10 @@ type ShiftPlanningClientProps = {
   locations: ShiftLocationOption[];
   wishFreeRequests: WishFreeRequest[];
   shiftSettings: ShiftPlanningSettings;
+  templates: ShiftTemplateSummary[];
+  canManage?: boolean;
+  canDelete?: boolean;
+  canManageSettings?: boolean;
 };
 
 type DrawerState = {
@@ -196,6 +214,7 @@ function WishFreeDrawer({
   onSelectRequest,
   onCreateRequest,
   onClose,
+  canManage,
 }: {
   tenant: string;
   year: number;
@@ -209,6 +228,7 @@ function WishFreeDrawer({
   onSelectRequest: (requestId: string) => void;
   onCreateRequest: () => void;
   onClose: () => void;
+  canManage: boolean;
 }) {
   const filteredRequests =
     activeFilter === "all"
@@ -249,18 +269,20 @@ function WishFreeDrawer({
               </h2>
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              <button
-                type="button"
-                className={`inline-flex cursor-pointer items-center gap-2 rounded-[9px] border px-3 py-2 text-[12px] font-semibold transition-colors ${
-                  isCreating
-                    ? "border-ink bg-ink text-white"
-                    : "border-border bg-bg text-ink hover:border-muted"
-                }`}
-                onClick={onCreateRequest}
-              >
-                <Plus size={14} />
-                Neue Anfrage
-              </button>
+              {canManage && (
+                <button
+                  type="button"
+                  className={`inline-flex cursor-pointer items-center gap-2 rounded-[9px] border px-3 py-2 text-[12px] font-semibold transition-colors ${
+                    isCreating
+                      ? "border-ink bg-ink text-white"
+                      : "border-border bg-bg text-ink hover:border-muted"
+                  }`}
+                  onClick={onCreateRequest}
+                >
+                  <Plus size={14} />
+                  Neue Anfrage
+                </button>
+              )}
               <button
                 type="button"
                 aria-label="Drawer schliessen"
@@ -308,7 +330,7 @@ function WishFreeDrawer({
 
         <div className="grid min-h-0 flex-1 grid-cols-[minmax(220px,0.85fr)_minmax(280px,1fr)] max-md:grid-cols-1">
           <div className="min-h-0 overflow-y-auto border-r border-border bg-bg p-3 max-md:max-h-[42svh] max-md:border-r-0 max-md:border-b">
-            {isCreating && (
+            {isCreating && canManage && (
               <button
                 type="button"
                 className="mb-2 w-full cursor-pointer rounded-xl border border-ink bg-white p-3 text-left"
@@ -318,7 +340,7 @@ function WishFreeDrawer({
                   Neue Wunschfrei Anfrage
                 </div>
                 <div className="mt-1 font-mono text-[10px] text-muted">
-                  Mitarbeiter und Datum auswaehlen
+                  Mitarbeiter und Datum auswählen
                 </div>
               </button>
             )}
@@ -391,7 +413,7 @@ function WishFreeDrawer({
                       defaultValue=""
                     >
                       <option value="" disabled>
-                        Mitarbeiter auswaehlen
+                        Mitarbeiter auswählen
                       </option>
                       {employees.map((employee) => (
                         <option key={employee.id} value={employee.id}>
@@ -408,13 +430,13 @@ function WishFreeDrawer({
 
                   <div className="field mt-4">
                     <label htmlFor="wishfree-reason" className="label">
-                      Begruendung
+                      Begründung
                     </label>
                     <textarea
                       id="wishfree-reason"
                       name="reason"
                       className="input min-h-28 resize-none"
-                      placeholder="Optionaler Grund fuer den Wunschfrei Antrag"
+                      placeholder="Optionaler Grund für den Wunschfrei Antrag"
                     />
                   </div>
                 </div>
@@ -476,46 +498,50 @@ function WishFreeDrawer({
                   </div>
 
                   <div className="mt-4 rounded-xl border border-border bg-white px-4 py-3">
-                    <div className="label">Begruendung</div>
+                    <div className="label">Begründung</div>
                     <p className="mt-2 text-[13px] leading-6 text-muted-2">
                       {selectedRequest.reason}
                     </p>
                   </div>
 
-                  <div className="field mt-4">
-                    <label htmlFor="wishfree-reject-reason" className="label">
-                      Grund bei Ablehnung optional
-                    </label>
-                    <textarea
-                      id="wishfree-reject-reason"
-                      name="rejectReason"
-                      className="input min-h-24 resize-none"
-                      defaultValue={selectedRequest.rejectReason ?? ""}
-                      placeholder="Optionaler Hinweis fuer die Ablehnung"
-                    />
-                  </div>
+                  {canManage && (
+                    <div className="field mt-4">
+                      <label htmlFor="wishfree-reject-reason" className="label">
+                        Grund bei Ablehnung optional
+                      </label>
+                      <textarea
+                        id="wishfree-reject-reason"
+                        name="rejectReason"
+                        className="input min-h-24 resize-none"
+                        defaultValue={selectedRequest.rejectReason ?? ""}
+                        placeholder="Optionaler Hinweis für die Ablehnung"
+                      />
+                    </div>
+                  )}
                 </div>
 
-                <div className="mt-6 flex justify-end gap-2.5 border-t border-border-soft pt-4">
-                  <button
-                    type="submit"
-                    formAction={rejectWishFreeRequestAction}
-                    className="btn btn-secondary text-danger"
-                  >
-                    Ablehnen
-                  </button>
-                  <FormSubmitButton
-                    formAction={approveWishFreeRequestAction}
-                    className="btn btn-primary"
-                  >
-                    <Check size={15} />
-                    Annehmen
-                  </FormSubmitButton>
-                </div>
+                {canManage && (
+                  <div className="mt-6 flex justify-end gap-2.5 border-t border-border-soft pt-4">
+                    <button
+                      type="submit"
+                      formAction={rejectWishFreeRequestAction}
+                      className="btn btn-secondary text-danger"
+                    >
+                      Ablehnen
+                    </button>
+                    <FormSubmitButton
+                      formAction={approveWishFreeRequestAction}
+                      className="btn btn-primary"
+                    >
+                      <Check size={15} />
+                      Annehmen
+                    </FormSubmitButton>
+                  </div>
+                )}
               </form>
             ) : (
               <div className="flex h-full items-center justify-center text-[13px] text-muted">
-                Keine Anfrage ausgewaehlt.
+                Keine Anfrage ausgewählt.
               </div>
             )}
           </div>
@@ -533,7 +559,10 @@ function ShiftDrawer({
   employees,
   locations,
   presets,
+  breakRule,
   onClose,
+  canManage,
+  canDelete,
 }: {
   tenant: string;
   year: number;
@@ -542,7 +571,10 @@ function ShiftDrawer({
   employees: ShiftEmployeeOption[];
   locations: ShiftLocationOption[];
   presets: ShiftPlanningSettings["presets"];
+  breakRule: string;
   onClose: () => void;
+  canManage: boolean;
+  canDelete: boolean;
 }) {
   if (!drawer) {
     return null;
@@ -567,6 +599,31 @@ function ShiftDrawer({
     if (end instanceof HTMLInputElement) end.value = preset.end;
     if (breakMinutes instanceof HTMLInputElement) {
       breakMinutes.value = String(Number.parseInt(preset.pause, 10) || 0);
+    }
+  }
+
+  /** Berechnet die Pause aus der Pausenregel des Mandanten neu, sobald sich Start/Ende ändern. */
+  function applyBreakRule() {
+    const form = document.getElementById("shift-drawer-form");
+
+    if (!(form instanceof HTMLFormElement)) {
+      return;
+    }
+
+    const start = form.elements.namedItem("startTime");
+    const end = form.elements.namedItem("endTime");
+    const breakMinutes = form.elements.namedItem("breakMinutes");
+
+    if (
+      start instanceof HTMLInputElement &&
+      end instanceof HTMLInputElement &&
+      breakMinutes instanceof HTMLInputElement &&
+      start.value &&
+      end.value
+    ) {
+      breakMinutes.value = String(
+        calculateBreakMinutes(start.value, end.value, breakRule),
+      );
     }
   }
 
@@ -595,7 +652,7 @@ function ShiftDrawer({
               id="shift-drawer-title"
               className="mt-1 font-display text-[22px] font-semibold leading-tight text-ink"
             >
-              {shift ? "Schicht bearbeiten" : "Schicht hinzufuegen"}
+              {shift ? "Schicht bearbeiten" : "Schicht hinzufügen"}
             </h2>
           </div>
           <button
@@ -616,6 +673,7 @@ function ShiftDrawer({
           <input type="hidden" name="date" value={drawer.day.id} />
           {shift?.dbId && <input type="hidden" name="shiftId" value={shift.dbId} />}
 
+          <fieldset disabled={!canManage} className="flex flex-col gap-4 border-0 p-0">
           {presets.length > 0 && (
             <div className="field">
               <span className="label">Standardschichten</span>
@@ -648,6 +706,7 @@ function ShiftDrawer({
                 type="time"
                 className="input"
                 defaultValue={shift?.startTime ?? "09:00"}
+                onChange={applyBreakRule}
                 required
               />
             </div>
@@ -659,6 +718,7 @@ function ShiftDrawer({
                 id="shift-end"
                 name="endTime"
                 type="time"
+                onChange={applyBreakRule}
                 className="input"
                 defaultValue={shift?.endTime ?? "17:00"}
                 required
@@ -676,7 +736,7 @@ function ShiftDrawer({
                 name="breakMinutes"
                 type="number"
                 min="0"
-                step="5"
+                step="1"
                 className="input"
                 defaultValue={shift?.breakMinutes ?? 30}
               />
@@ -742,28 +802,287 @@ function ShiftDrawer({
               name="note"
               className="input min-h-24 resize-none"
               defaultValue={shift?.note ?? ""}
-              placeholder="Uebergabe, Besonderheiten oder Bedarf"
+              placeholder="Übergabe, Besonderheiten oder Bedarf"
             />
           </div>
+          </fieldset>
 
           <div className="mt-1 flex justify-end gap-2.5 border-t border-border-soft pt-4">
             <button type="button" className="btn btn-secondary" onClick={onClose}>
-              Abbrechen
+              {canManage ? "Abbrechen" : "Schließen"}
             </button>
-            {shift?.dbId && (
+            {canDelete && shift?.dbId && (
               <ConfirmSubmitButton
                 className="btn btn-secondary text-danger"
                 form="shift-drawer-form"
                 formAction={deleteShiftAction}
                 description="Diese Schicht wird dauerhaft aus dem Dienstplan entfernt."
               >
-                Loeschen
+                Löschen
               </ConfirmSubmitButton>
             )}
-            <FormSubmitButton
-              Icon={Save}
-              pendingLabel="Wird gespeichert..."
-            >
+            {canManage && (
+              <FormSubmitButton
+                Icon={Save}
+                pendingLabel="Wird gespeichert..."
+              >
+                Speichern
+              </FormSubmitButton>
+            )}
+          </div>
+        </form>
+      </aside>
+    </div>
+  );
+}
+
+const templateWeekdayOptions = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"] as const;
+
+function TemplateEntryRow({
+  index,
+  entry,
+  locations,
+  onRemove,
+}: {
+  index: number;
+  entry: ShiftTemplateEntry;
+  locations: ShiftLocationOption[];
+  onRemove: () => void;
+}) {
+  return (
+    <div className="grid grid-cols-[minmax(0,90px)_repeat(2,minmax(0,90px))_minmax(0,80px)_minmax(0,1fr)_minmax(0,1fr)_auto] items-end gap-2 rounded-xl border border-border-soft bg-bg p-2.5">
+      <div className="field">
+        <label className="label" htmlFor={`entry-weekday-${index}`}>
+          Tag
+        </label>
+        <select
+          id={`entry-weekday-${index}`}
+          name="entryWeekday"
+          className="input cursor-pointer bg-white text-[12px]"
+          defaultValue={entry.weekday}
+        >
+          {templateWeekdayOptions.map((weekday) => (
+            <option key={weekday} value={weekday}>
+              {weekday}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="field">
+        <label className="label" htmlFor={`entry-start-${index}`}>
+          Von
+        </label>
+        <input
+          id={`entry-start-${index}`}
+          type="time"
+          name="entryStartTime"
+          className="input text-[12px]"
+          defaultValue={entry.startTime}
+          required
+        />
+      </div>
+      <div className="field">
+        <label className="label" htmlFor={`entry-end-${index}`}>
+          Bis
+        </label>
+        <input
+          id={`entry-end-${index}`}
+          type="time"
+          name="entryEndTime"
+          className="input text-[12px]"
+          defaultValue={entry.endTime}
+          required
+        />
+      </div>
+      <div className="field">
+        <label className="label" htmlFor={`entry-break-${index}`}>
+          Pause
+        </label>
+        <input
+          id={`entry-break-${index}`}
+          type="number"
+          min={0}
+          name="entryBreakMinutes"
+          className="input text-[12px]"
+          defaultValue={entry.breakMinutes}
+        />
+      </div>
+      <div className="field">
+        <label className="label" htmlFor={`entry-team-${index}`}>
+          Team
+        </label>
+        <input
+          id={`entry-team-${index}`}
+          type="text"
+          name="entryTeam"
+          className="input text-[12px]"
+          defaultValue={entry.team}
+          placeholder="Optional"
+        />
+      </div>
+      <div className="field">
+        <label className="label" htmlFor={`entry-location-${index}`}>
+          Standort
+        </label>
+        <select
+          id={`entry-location-${index}`}
+          name="entryLocationId"
+          className="input cursor-pointer bg-white text-[12px]"
+          defaultValue={entry.locationId}
+        >
+          <option value="">Kein Standort</option>
+          {locations.map((location) => (
+            <option key={location.id} value={location.id}>
+              {location.name}
+            </option>
+          ))}
+        </select>
+      </div>
+      <button
+        type="button"
+        aria-label="Eintrag entfernen"
+        title="Eintrag entfernen"
+        className="flex size-8 cursor-pointer items-center justify-center rounded-lg text-muted transition-colors hover:bg-danger/10 hover:text-danger"
+        onClick={onRemove}
+      >
+        <X size={14} />
+      </button>
+    </div>
+  );
+}
+
+function TemplateEditDrawer({
+  tenant,
+  year,
+  week,
+  template,
+  locations,
+  onClose,
+}: {
+  tenant: string;
+  year: number;
+  week: number;
+  template: ShiftTemplateSummary | null;
+  locations: ShiftLocationOption[];
+  onClose: () => void;
+}) {
+  const [rows, setRows] = useState<Array<ShiftTemplateEntry & { key: number }>>(
+    () => (template?.entries ?? []).map((entry, index) => ({ ...entry, key: index })),
+  );
+  const nextKeyRef = useRef(rows.length);
+
+  if (!template) {
+    return null;
+  }
+
+  function addRow() {
+    nextKeyRef.current += 1;
+    setRows((current) => [
+      ...current,
+      {
+        key: nextKeyRef.current,
+        weekday: "Mo",
+        startTime: "09:00",
+        endTime: "17:00",
+        breakMinutes: 30,
+        team: "",
+        locationId: "",
+      },
+    ]);
+  }
+
+  function removeRow(key: number) {
+    setRows((current) => current.filter((row) => row.key !== key));
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-[1000] flex justify-end bg-black/35 backdrop-blur-[4px]"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) {
+          onClose();
+        }
+      }}
+    >
+      <aside
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="template-drawer-title"
+        className="h-full w-full max-w-[720px] overflow-y-auto border-l border-border bg-white p-6 shadow-[-20px_0_70px_rgba(0,0,0,0.18)]"
+      >
+        <div className="mb-5 flex items-start justify-between gap-4">
+          <h2
+            id="template-drawer-title"
+            className="font-display text-[22px] font-semibold leading-tight text-ink"
+          >
+            Vorlage bearbeiten
+          </h2>
+          <button
+            type="button"
+            aria-label="Schließen"
+            className="flex size-8 cursor-pointer items-center justify-center rounded-lg text-muted hover:bg-bg"
+            onClick={onClose}
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        <form
+          id="template-edit-form"
+          action={updateShiftTemplateAction}
+          className="flex flex-col gap-4"
+        >
+          <input type="hidden" name="tenant" value={tenant} />
+          <input type="hidden" name="year" value={year} />
+          <input type="hidden" name="week" value={week} />
+          <input type="hidden" name="templateId" value={template.id} />
+
+          <div className="field">
+            <label className="label" htmlFor="template-edit-name">
+              Name der Vorlage
+            </label>
+            <input
+              id="template-edit-name"
+              type="text"
+              name="templateName"
+              className="input"
+              defaultValue={template.name}
+              required
+            />
+          </div>
+
+          <div className="flex flex-col gap-2.5">
+            {rows.map((row, index) => (
+              <TemplateEntryRow
+                key={row.key}
+                index={index}
+                entry={row}
+                locations={locations}
+                onRemove={() => removeRow(row.key)}
+              />
+            ))}
+            {rows.length === 0 && (
+              <p className="text-[12.5px] text-muted">
+                Noch keine Schichten in dieser Vorlage.
+              </p>
+            )}
+          </div>
+
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm w-fit"
+            onClick={addRow}
+          >
+            <Plus size={14} />
+            Schicht hinzufügen
+          </button>
+
+          <div className="mt-2 flex justify-end gap-2.5 border-t border-border-soft pt-4">
+            <button type="button" className="btn btn-secondary" onClick={onClose}>
+              Abbrechen
+            </button>
+            <FormSubmitButton Icon={Save} pendingLabel="Wird gespeichert...">
               Speichern
             </FormSubmitButton>
           </div>
@@ -785,9 +1104,14 @@ export default function ShiftPlanningClient({
   locations,
   wishFreeRequests,
   shiftSettings,
+  templates,
+  canManage = true,
+  canDelete = canManage,
+  canManageSettings = true,
 }: ShiftPlanningClientProps) {
   const router = useRouter();
   const [drawer, setDrawer] = useState<DrawerState | null>(null);
+  const [editingTemplate, setEditingTemplate] = useState<ShiftTemplateSummary | null>(null);
   const [isWishFreeDrawerOpen, setIsWishFreeDrawerOpen] = useState(false);
   const [isCreatingWishFreeRequest, setIsCreatingWishFreeRequest] = useState(false);
   const [wishFreeFilter, setWishFreeFilter] = useState<WishFreeFilter>("open");
@@ -860,6 +1184,7 @@ export default function ShiftPlanningClient({
             year={year}
             week={week}
             settings={shiftSettings}
+            canManage={canManageSettings}
           />
           <button
             type="button"
@@ -891,7 +1216,7 @@ export default function ShiftPlanningClient({
               type="button"
               className="flex size-8 cursor-pointer items-center justify-center rounded-lg text-muted transition-colors hover:bg-bg hover:text-ink"
               onClick={() => navigateWeek(1)}
-              aria-label="Naechste Woche"
+              aria-label="Nächste Woche"
             >
               <ChevronRight size={15} />
             </button>
@@ -906,6 +1231,98 @@ export default function ShiftPlanningClient({
           </span>
         </div>
 
+        {canManage && (
+        <div className="mb-3 flex flex-wrap items-center gap-3 rounded-xl border border-border bg-white px-4 py-3">
+          <span className="font-mono text-[11px] text-muted">Wochenvorlagen:</span>
+
+          {templates.length > 0 ? (
+            <form action={applyShiftTemplateAction} className="flex items-center gap-2">
+              <input type="hidden" name="tenant" value={tenant} />
+              <input type="hidden" name="year" value={year} />
+              <input type="hidden" name="week" value={week} />
+              <select
+                name="templateId"
+                className="input input-mono cursor-pointer bg-white text-[12px]"
+                defaultValue=""
+                required
+              >
+                <option value="" disabled>
+                  Vorlage wählen
+                </option>
+                {templates.map((template) => (
+                  <option key={template.id} value={template.id}>
+                    {template.name} ({template.entries.length})
+                  </option>
+                ))}
+              </select>
+              <FormSubmitButton className="btn btn-secondary btn-sm" pendingLabel="Wird angewendet...">
+                Auf diese Woche anwenden
+              </FormSubmitButton>
+            </form>
+          ) : (
+            <span className="text-[12px] text-muted-2">Noch keine Vorlagen gespeichert.</span>
+          )}
+
+          <form action={saveShiftTemplateAction} className="ml-auto flex items-center gap-2">
+            <input type="hidden" name="tenant" value={tenant} />
+            <input type="hidden" name="year" value={year} />
+            <input type="hidden" name="week" value={week} />
+            <input
+              type="text"
+              name="templateName"
+              placeholder="Name der Vorlage"
+              className="input text-[12px]"
+              required
+            />
+            <FormSubmitButton
+              Icon={Save}
+              className="btn btn-secondary btn-sm"
+              pendingLabel="Wird gespeichert..."
+            >
+              Diese Woche als Vorlage
+            </FormSubmitButton>
+          </form>
+
+          {templates.length > 0 && (
+            <div className="flex w-full flex-wrap items-center gap-1.5 border-t border-border-soft pt-2.5">
+              {templates.map((template) => (
+                <span
+                  key={template.id}
+                  className="flex items-center gap-1 rounded-[7px] bg-border-soft py-0.5 pr-1 pl-2"
+                >
+                  <span className="font-mono text-[10px] text-muted-2">
+                    {template.name} ({template.entries.length})
+                  </span>
+                  <button
+                    type="button"
+                    aria-label={`Vorlage ${template.name} bearbeiten`}
+                    title="Vorlage bearbeiten"
+                    className="flex size-5 cursor-pointer items-center justify-center rounded-[5px] text-muted transition-colors hover:bg-bg hover:text-ink"
+                    onClick={() => setEditingTemplate(template)}
+                  >
+                    <Pencil size={10} />
+                  </button>
+                  {canDelete && (
+                    <form action={deleteShiftTemplateAction}>
+                      <input type="hidden" name="tenant" value={tenant} />
+                      <input type="hidden" name="templateId" value={template.id} />
+                      <button
+                        type="submit"
+                        aria-label={`Vorlage ${template.name} l\u00f6schen`}
+                        title="Vorlage löschen"
+                        className="flex size-5 cursor-pointer items-center justify-center rounded-[5px] text-muted transition-colors hover:bg-danger/10 hover:text-danger"
+                      >
+                        <X size={11} />
+                      </button>
+                    </form>
+                  )}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+        )}
+
         <section className="overflow-hidden rounded-card border border-border bg-white">
           <div className="overflow-x-auto">
             <div className="grid min-w-[900px] [grid-template-columns:repeat(7,minmax(150px,1fr))]">
@@ -916,7 +1333,11 @@ export default function ShiftPlanningClient({
                 >
                   <div
                     className={`border-b border-border px-2.5 py-3 text-center ${
-                      day.isWeekend ? "bg-bg" : "bg-white"
+                      day.understaffed
+                        ? "bg-danger/10"
+                        : day.isWeekend
+                          ? "bg-bg"
+                          : "bg-white"
                     }`}
                   >
                     <div
@@ -929,6 +1350,15 @@ export default function ShiftPlanningClient({
                     <div className="mt-0.5 font-mono text-[9px] text-[#B0B0AB]">
                       {day.date}
                     </div>
+                    {day.understaffed && (
+                      <div
+                        className="mt-1 flex items-center justify-center gap-1 font-mono text-[9px] font-semibold text-danger"
+                        title={`Unterbesetzt: ${day.staffedCount ?? 0} von ${shiftSettings.minStaffing} geplant`}
+                      >
+                        <AlertTriangle size={10} />
+                        {day.staffedCount ?? 0}/{shiftSettings.minStaffing}
+                      </div>
+                    )}
                   </div>
                   <div className="flex min-h-[130px] flex-1 flex-col gap-1.5 p-2">
                     <WishFreeBlock
@@ -942,15 +1372,17 @@ export default function ShiftPlanningClient({
                         onClick={() => setDrawer({ day, shift })}
                       />
                     ))}
-                    <button
-                      type="button"
-                      aria-label={`Schicht am ${day.weekday} hinzufuegen`}
-                      title="Schicht hinzufuegen"
-                      className="flex w-full cursor-pointer items-center justify-center rounded-[9px] border-[1.5px] border-dashed border-[#DEDAD4] bg-transparent p-[7px] text-[#C0BFBA] transition-colors hover:border-muted hover:text-muted-2"
-                      onClick={() => setDrawer({ day })}
-                    >
-                      <Plus size={15} strokeWidth={1.8} />
-                    </button>
+                    {canManage && (
+                      <button
+                        type="button"
+                        aria-label={`Schicht am ${day.weekday} hinzufügen`}
+                        title="Schicht hinzufügen"
+                        className="flex w-full cursor-pointer items-center justify-center rounded-[9px] border-[1.5px] border-dashed border-[#DEDAD4] bg-transparent p-[7px] text-[#C0BFBA] transition-colors hover:border-muted hover:text-muted-2"
+                        onClick={() => setDrawer({ day })}
+                      >
+                        <Plus size={15} strokeWidth={1.8} />
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -967,7 +1399,20 @@ export default function ShiftPlanningClient({
         employees={employees}
         locations={locations}
         presets={shiftSettings.presets}
+        breakRule={shiftSettings.breakRule}
         onClose={() => setDrawer(null)}
+        canManage={canManage}
+        canDelete={canDelete}
+      />
+
+      <TemplateEditDrawer
+        key={editingTemplate?.id ?? "none"}
+        tenant={tenant}
+        year={year}
+        week={week}
+        template={editingTemplate}
+        locations={locations}
+        onClose={() => setEditingTemplate(null)}
       />
 
       {isWishFreeDrawerOpen && (
@@ -977,6 +1422,7 @@ export default function ShiftPlanningClient({
           week={week}
           employees={employees}
           requests={wishFreeRequests}
+          canManage={canManage}
           activeFilter={wishFreeFilter}
           selectedRequestId={selectedWishFreeRequestId}
           isCreating={isCreatingWishFreeRequest}

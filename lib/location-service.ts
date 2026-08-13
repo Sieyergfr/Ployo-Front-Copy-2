@@ -1,26 +1,49 @@
 import { auth } from "@/lib/auth";
 import {
   addressDefaults,
+  assertRequiredAddress,
   formatAddress,
-  normalizeAddressInput,
   type AddressInput,
 } from "@/lib/address";
+import { isKnownLocationColor, isKnownLocationKind } from "@/lib/org-options";
 import {
   type Location,
   type LocationActivity,
   type LocationFile,
   type LocationFileFolder,
   type LocationMetric,
-  type LocationShiftPlan,
   type LocationStatus,
-  type LocationTeamMember,
 } from "@/lib/locations";
 import { recordTenantAudit } from "@/lib/audit";
 import { mapTenantFileToFileItem } from "@/lib/files";
 import { prisma } from "@/lib/prisma";
 import { headers } from "next/headers";
-import { requireTenantAccess } from "@/lib/tenant-access";
-import { canAccessFileAcl, getOptionalFileReadAccess } from "@/lib/file-access";
+import {
+  requireTenantAccess,
+  resolveScopeFilter,
+  type TenantAccess,
+} from "@/lib/tenant-access";
+import { canAccessFileAcl, getOptionalAreaFileAccess } from "@/lib/file-access";
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function assertValidLocationEmail(email: string) {
+  if (email && !EMAIL_PATTERN.test(email)) {
+    throw new Error("Bitte eine gültige Kontakt-E-Mail-Adresse angeben.");
+  }
+}
+
+function assertKnownLocationKind(kind: string) {
+  if (kind && !isKnownLocationKind(kind)) {
+    throw new Error("Unbekannter Standort-Typ.");
+  }
+}
+
+function assertKnownLocationColor(accentClassName: string) {
+  if (accentClassName && !isKnownLocationColor(accentClassName)) {
+    throw new Error("Unbekannte Standortfarbe.");
+  }
+}
 
 type LocationRecord = {
   id: string;
@@ -47,11 +70,8 @@ type LocationRecord = {
   leadName: string;
   leadPhone: string;
   leadEmail: string;
-  teamJson: string;
-  activityJson: string;
-  fileFoldersJson: string;
-  filesJson: string;
-  shiftPlanJson: string;
+  members?: { employeeId: string; initials: string; name: string }[];
+  activities?: { actor: string; text: string; tone: string; createdAt: Date }[];
   storageFiles?: TenantFileRecord[];
   storageFileFolders?: TenantFileFolderRecord[];
 };
@@ -69,9 +89,9 @@ type TenantFileRecord = {
   mimeType: string;
   extension: string;
   version: number;
-  accessRoleIdsJson: string;
-  accessUserIdsJson: string;
-  parent?: { accessRoleIdsJson: string; accessUserIdsJson: string } | null;
+  accessRoleIdsJson: unknown;
+  accessUserIdsJson: unknown;
+  parent?: { accessRoleIdsJson: unknown; accessUserIdsJson: unknown } | null;
 };
 
 type TenantFileFolderRecord = {
@@ -83,29 +103,6 @@ type TenantFileFolderRecord = {
   updatedAt: Date;
   createdAt: Date;
 };
-
-const emptyShiftPlan: LocationShiftPlan = {
-  week: "KW 1",
-  days: [
-    { label: "Mo", date: "" },
-    { label: "Di", date: "" },
-    { label: "Mi", date: "" },
-    { label: "Do", date: "" },
-    { label: "Fr", date: "" },
-    { label: "Sa", date: "", weekend: true },
-    { label: "So", date: "", weekend: true },
-  ],
-  rows: [],
-  employees: [],
-};
-
-function parseJson<T>(value: string, fallback: T): T {
-  try {
-    return JSON.parse(value) as T;
-  } catch {
-    return fallback;
-  }
-}
 
 function normalizeLocationKey(value: string) {
   return value
@@ -246,11 +243,24 @@ function toLocation(record: LocationRecord): Location {
       phone: record.leadPhone,
       email: record.leadEmail,
     },
-    team: parseJson<LocationTeamMember[]>(record.teamJson, []),
-    activity: parseJson<LocationActivity[]>(record.activityJson, []),
+    team: (record.members ?? []).map((member) => ({
+      employeeId: member.employeeId || undefined,
+      initials: member.initials,
+      name: member.name,
+    })),
+    activity: (record.activities ?? []).map((entry) => ({
+      actor: entry.actor,
+      text: entry.text,
+      tone: entry.tone as LocationActivity["tone"],
+      time: new Intl.DateTimeFormat("de-DE", {
+        day: "2-digit",
+        month: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      }).format(entry.createdAt),
+    })),
     fileFolders: Array.from(folderMap.values()),
     files,
-    shiftPlan: parseJson<LocationShiftPlan>(record.shiftPlanJson, emptyShiftPlan),
   };
 }
 
@@ -266,19 +276,38 @@ export async function getTenantIdForLocations(tenantSlug: string) {
   return (await requireTenantAccess(tenantSlug, "locations", "read")).tenantId;
 }
 
-export async function getLocationsForTenant(tenantSlug: string) {
-  const tenantId = await getTenantIdForLocations(tenantSlug);
-  const fileAccess = await getOptionalFileReadAccess(tenantSlug);
+/**
+ * "assigned"-Scope für Standorte: nur der eigene, per Namensabgleich
+ * ermittelte Standort. "own"/"team" ergeben für Standorte (bisher) keinen
+ * Sinn — sicherheitshalber nichts treffen statt zu raten, welcher Standort
+ * gemeint sein könnte.
+ */
+async function locationScopeWhere(access: TenantAccess) {
+  const scopeFilter = await resolveScopeFilter(access);
 
-  if (!tenantId) {
-    return null;
+  if (scopeFilter.type === "all") {
+    return { tenantId: access.tenantId };
   }
 
+  if (scopeFilter.type === "assigned" && scopeFilter.area === "locations") {
+    return { tenantId: access.tenantId, name: { in: scopeFilter.locationNames } };
+  }
+
+  return { tenantId: access.tenantId, id: "__none__" };
+}
+
+export async function getLocationsForTenant(tenantSlug: string) {
+  const access = await requireTenantAccess(tenantSlug, "locations", "read");
+  const where = await locationScopeWhere(access);
+  const fileAccess = await getOptionalAreaFileAccess(tenantSlug, "locations");
+
   const records = await prisma.tenantLocation.findMany({
-    where: { tenantId },
+    where,
     orderBy: { createdAt: "asc" },
     include: {
       address: true,
+      members: { orderBy: { createdAt: "asc" } },
+      activities: { orderBy: { createdAt: "desc" } },
       storageFiles: {
         where: { status: "active" },
         orderBy: { updatedAt: "desc" },
@@ -300,20 +329,19 @@ export async function getLocationsForTenant(tenantSlug: string) {
 }
 
 export async function getLocationForTenant(tenantSlug: string, locationHandle: string) {
-  const tenantId = await getTenantIdForLocations(tenantSlug);
-  const fileAccess = await getOptionalFileReadAccess(tenantSlug);
-
-  if (!tenantId) {
-    return null;
-  }
+  const access = await requireTenantAccess(tenantSlug, "locations", "read");
+  const where = await locationScopeWhere(access);
+  const fileAccess = await getOptionalAreaFileAccess(tenantSlug, "locations");
 
   const record = await prisma.tenantLocation.findFirst({
     where: {
-      tenantId,
+      ...where,
       key: locationHandle,
     },
     include: {
       address: true,
+      members: { orderBy: { createdAt: "asc" } },
+      activities: { orderBy: { createdAt: "desc" } },
       storageFiles: {
         where: { status: "active" },
         orderBy: { updatedAt: "desc" },
@@ -457,6 +485,11 @@ export async function createTenantLocation(input: {
   email: string;
   accentClassName: string;
 }) {
+  assertValidLocationEmail(input.email.trim());
+  assertKnownLocationKind(input.kind.trim());
+  assertKnownLocationColor(input.accentClassName);
+  const address = assertRequiredAddress(input.address);
+
   const access = await requireLocationManager(input.tenantSlug);
   const key = await createUniqueLocationKey({
     tenantId: access.tenantId,
@@ -477,14 +510,13 @@ export async function createTenantLocation(input: {
       kind: input.kind.trim() || "Standort",
       status: normalizeStatus(input.status),
       address: {
-        create: normalizeAddressInput(input.address),
+        create: address,
       },
       accentClassName: input.accentClassName,
       leadInitials: lead?.leadInitials ?? "--",
       leadName: lead?.leadName ?? "Keine Leitung",
       leadPhone: lead?.leadPhone ?? "",
       leadEmail: input.email.trim() || lead?.leadEmail || "",
-      shiftPlanJson: JSON.stringify(emptyShiftPlan),
     },
     include: { address: true },
   });
@@ -518,12 +550,22 @@ export async function updateTenantLocation(input: {
   leadEmail: string;
   accentClassName: string;
 }) {
+  assertValidLocationEmail(input.leadEmail.trim());
+  assertKnownLocationKind(input.kind.trim());
+  assertKnownLocationColor(input.accentClassName.trim());
+  const address = assertRequiredAddress(input.address);
+
   const access = await requireLocationManager(input.tenantSlug);
   const key = await createUniqueLocationKey({
     tenantId: access.tenantId,
     name: input.name,
     excludeLocationId: input.locationId,
   });
+  const current = await prisma.tenantLocation.findFirst({
+    where: { id: input.locationId, tenantId: access.tenantId },
+    select: { name: true },
+  });
+  const nextName = input.name.trim();
 
   const updated = await prisma.tenantLocation.update({
     where: {
@@ -532,12 +574,12 @@ export async function updateTenantLocation(input: {
     },
     data: {
       key,
-      name: input.name.trim(),
+      name: nextName,
       kind: input.kind.trim() || "Standort",
       address: {
         upsert: {
-          create: normalizeAddressInput(input.address),
-          update: normalizeAddressInput(input.address),
+          create: address,
+          update: address,
         },
       },
       status: normalizeStatus(input.status),
@@ -555,6 +597,21 @@ export async function updateTenantLocation(input: {
     },
     include: { address: true },
   });
+
+  // TenantEmployee.location / TenantTeamMember.location sind Freitext-Kopien
+  // des Standortnamens (keine Relation) — bei Umbenennung überall nachziehen.
+  if (current && current.name !== nextName) {
+    await Promise.all([
+      prisma.tenantEmployee.updateMany({
+        where: { tenantId: access.tenantId, location: current.name },
+        data: { location: nextName },
+      }),
+      prisma.tenantTeamMember.updateMany({
+        where: { team: { tenantId: access.tenantId }, location: current.name },
+        data: { location: nextName },
+      }),
+    ]);
+  }
 
   await recordLocationAudit(
     access,
@@ -603,12 +660,12 @@ export async function addEmployeesToTenantLocation(input: {
       status: true,
     },
   });
-  const currentTeam = parseJson<Array<LocationTeamMember & { employeeId?: string }>>(
-    location.teamJson,
-    [],
-  );
+  const currentMembers = await prisma.tenantLocationMember.findMany({
+    where: { locationId: input.locationId },
+    select: { employeeId: true, name: true },
+  });
   const existingKeys = new Set(
-    currentTeam.map((member) => member.employeeId ?? member.name),
+    currentMembers.map((member) => member.employeeId || member.name),
   );
   const newMembers = employees
     .filter((employee) => !existingKeys.has(employee.id) && !existingKeys.has(employee.name))
@@ -617,66 +674,43 @@ export async function addEmployeesToTenantLocation(input: {
       initials: employee.initials,
       name: employee.name,
     }));
-  const nextTeam = [...currentTeam, ...newMembers];
-  const currentShiftPlan = parseJson<LocationShiftPlan>(
-    location.shiftPlanJson,
-    emptyShiftPlan,
-  );
-  const existingShiftKeys = new Set(
-    currentShiftPlan.employees.map((employee) => employee.employeeId ?? employee.name),
-  );
-  const shiftEmployees = employees
-    .filter(
-      (employee) =>
-        !existingShiftKeys.has(employee.id) && !existingShiftKeys.has(employee.name),
-    )
-    .map((employee) => ({
-      employeeId: employee.id,
-      initials: employee.initials,
-      name: employee.name,
-      days: currentShiftPlan.days.map(() => null),
-    }));
-  const nextShiftPlan: LocationShiftPlan = {
-    ...currentShiftPlan,
-    employees: [...currentShiftPlan.employees, ...shiftEmployees],
-  };
-  const activity = parseJson<LocationActivity[]>(location.activityJson, []);
   const actorName = (
     await requireTenantAccess(input.tenantSlug, "locations", "write")
   ).userName;
-  const now = new Intl.DateTimeFormat("de-DE", {
-    day: "2-digit",
-    month: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date());
+  const totalMembers = currentMembers.length + newMembers.length;
 
-  return prisma.tenantLocation.update({
-    where: {
-      id: input.locationId,
-      tenantId: access.tenantId,
-    },
-    data: {
-      teamJson: JSON.stringify(nextTeam),
-      shiftPlanJson: JSON.stringify(nextShiftPlan),
-      employeeCount: nextTeam.length,
-      activeToday: Math.max(
-        nextTeam.length,
-        employees.filter((employee) => employee.status === "active").length,
-      ),
-      activityJson: JSON.stringify([
-        {
+  if (newMembers.length > 0) {
+    await prisma.$transaction([
+      prisma.tenantLocationMember.createMany({
+        data: newMembers.map((member) => ({ ...member, locationId: input.locationId })),
+      }),
+      prisma.tenantLocationActivity.create({
+        data: {
+          tenantId: access.tenantId,
+          locationId: input.locationId,
           actor: actorName,
           text:
             newMembers.length === 1
               ? `hat ${newMembers[0].name} dem Standort hinzugefügt`
               : `hat ${newMembers.length} Mitarbeiter dem Standort hinzugefügt`,
-          time: now,
           tone: "success",
         },
-        ...activity,
-      ]),
-    },
+      }),
+      prisma.tenantLocation.update({
+        where: { id: input.locationId, tenantId: access.tenantId },
+        data: {
+          employeeCount: totalMembers,
+          activeToday: Math.max(
+            totalMembers,
+            employees.filter((employee) => employee.status === "active").length,
+          ),
+        },
+      }),
+    ]);
+  }
+
+  const updated = await prisma.tenantLocation.findFirstOrThrow({
+    where: { id: input.locationId, tenantId: access.tenantId },
   });
 
   await recordLocationAudit(
@@ -685,13 +719,19 @@ export async function addEmployeesToTenantLocation(input: {
     input.locationId,
     newMembers.map((member) => member.name).join(", "),
   );
+
+  return updated;
 }
 
 export async function deleteTenantLocation(input: {
   tenantSlug: string;
   locationId: string;
 }) {
-  const access = await requireLocationManager(input.tenantSlug);
+  const access = await requireTenantAccess(input.tenantSlug, "locations", "read");
+
+  if (!access.canDelete) {
+    throw new Error("FORBIDDEN");
+  }
 
   const location = await prisma.tenantLocation.delete({
     where: {
@@ -700,10 +740,14 @@ export async function deleteTenantLocation(input: {
     },
   });
 
-  await recordLocationAudit(
-    access,
-    "Standort gelöscht",
-    location.id,
-    location.name,
-  );
+  await recordTenantAudit({
+    tenantId: access.tenantId,
+    actorId: access.userId,
+    actorName: access.userName,
+    action: "Standort gelöscht",
+    source: "Standorte",
+    entityType: "location",
+    entityId: location.id,
+    detail: location.name,
+  });
 }

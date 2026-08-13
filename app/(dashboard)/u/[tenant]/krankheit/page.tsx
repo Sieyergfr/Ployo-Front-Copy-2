@@ -8,6 +8,8 @@ import {
   type SicknessMetric,
 } from "@/lib/sickness";
 import { getEmployeesForTenant } from "@/lib/employee-service";
+import { hasPermissionLevel } from "@/lib/roles";
+import { getTenantCapabilities, withAccessRedirect } from "@/lib/tenant-access";
 
 export const metadata = {
   title: "Krankheit",
@@ -34,9 +36,13 @@ function SicknessMetricCard({ label, value, caption, tone }: SicknessMetric) {
 function CurrentSicknessRow({
   item,
   tenant,
+  canManage,
+  canDelete,
 }: {
   item: CurrentSickness;
   tenant: string;
+  canManage: boolean;
+  canDelete: boolean;
 }) {
   return (
     <div className="flex items-center gap-3 border-t border-border-soft py-3.5">
@@ -57,7 +63,7 @@ function CurrentSicknessRow({
         </div>
         <div className="text-[10px] text-muted">Tage</div>
       </div>
-      <SicknessDrawerButton tenant={tenant} item={item} />
+      <SicknessDrawerButton tenant={tenant} item={item} canManage={canManage} canDelete={canDelete} />
     </div>
   );
 }
@@ -94,10 +100,13 @@ function SicknessHistoryRow({
 
 export default async function SicknessPage({ params }: PageProps<"/u/[tenant]/krankheit">) {
   const { tenant } = await params;
-  const [sickness, employees] = await Promise.all([
-    getSicknessForTenant(tenant),
-    getEmployeesForTenant(tenant),
-  ]);
+  const sickness = await withAccessRedirect(tenant, () => getSicknessForTenant(tenant));
+  // Nur für Namen/Standort im Meldungs-Dialog — fehlende Berechtigung dafür
+  // soll die Krankheitsübersicht selbst nicht sperren.
+  const employees = await getEmployeesForTenant(tenant).catch(() => []);
+  const capabilities = await getTenantCapabilities(tenant);
+  const canManage = hasPermissionLevel(capabilities.sickness.level, "write");
+  const canDelete = capabilities.sickness.canDelete;
   const sicknessMetrics = sickness.metrics;
   const currentSickness = sickness.current;
   const sicknessChart = sickness.chart;
@@ -110,7 +119,9 @@ export default async function SicknessPage({ params }: PageProps<"/u/[tenant]/kr
   return (
     <>
       <PageHeader eyebrow="Abwesenheitsstatistik" title="Krankheit">
-        <SicknessReportButton tenant={tenant} employees={employeeOptions} />
+        {canManage && (
+          <SicknessReportButton tenant={tenant} employees={employeeOptions} />
+        )}
       </PageHeader>
 
       <section className="mb-7 grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]">
@@ -136,7 +147,13 @@ export default async function SicknessPage({ params }: PageProps<"/u/[tenant]/kr
           </div>
           <div className="px-6 pb-5">
             {currentSickness.map((item) => (
-              <CurrentSicknessRow key={item.id} item={item} tenant={tenant} />
+              <CurrentSicknessRow
+                key={item.id}
+                item={item}
+                tenant={tenant}
+                canManage={canManage}
+                canDelete={canDelete}
+              />
             ))}
           </div>
         </div>

@@ -17,7 +17,7 @@ export default function AuthLayout ({
                 </Card>
                 <footer className="footer">
                     <span className="footer-text">
-                        © 2025 Ployo GmbH ·{" "}
+                        © {new Date().getFullYear()} Ployo ·{" "}
                     </span>
 
                     <a href="/datenschutz" className="footer-link">

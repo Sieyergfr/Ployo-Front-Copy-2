@@ -1,4 +1,16 @@
 import { addressDefaults, type AddressInput } from "@/lib/address";
+import SelectOrOtherField from "@/components/SelectOrOtherField";
+
+const countryOptions = [
+  { value: "DE", label: "Deutschland" },
+  { value: "AT", label: "Österreich" },
+  { value: "CH", label: "Schweiz" },
+  { value: "NL", label: "Niederlande" },
+  { value: "BE", label: "Belgien" },
+  { value: "FR", label: "Frankreich" },
+  { value: "PL", label: "Polen" },
+  { value: "IT", label: "Italien" },
+];
 
 type AddressFieldsProps = {
   idPrefix: string;
@@ -38,6 +50,7 @@ export default function AddressFields({
           defaultValue={values.careOf}
           placeholder="Optional"
           autoComplete="address-line2"
+          maxLength={255}
         />
       </div>
       <div className="field">
@@ -51,6 +64,7 @@ export default function AddressFields({
           defaultValue={values.street}
           autoComplete="address-line1"
           required={required}
+          maxLength={255}
         />
       </div>
       <div className="field">
@@ -64,6 +78,7 @@ export default function AddressFields({
           defaultValue={values.houseNumber}
           autoComplete="address-line1"
           required={required}
+          maxLength={64}
         />
       </div>
       <div className="field">
@@ -77,6 +92,7 @@ export default function AddressFields({
           defaultValue={values.postalCode}
           autoComplete="postal-code"
           required={required}
+          maxLength={32}
         />
       </div>
       <div className="field">
@@ -90,19 +106,18 @@ export default function AddressFields({
           defaultValue={values.city}
           autoComplete="address-level2"
           required={required}
+          maxLength={128}
         />
       </div>
       <div className="field sm:col-span-2">
         <label htmlFor={`${idPrefix}-country`} className="label">
           Land
         </label>
-        <input
+        <SelectOrOtherField
           id={`${idPrefix}-country`}
           name={fieldName(namePrefix, "country")}
-          className="input bg-white"
+          options={countryOptions}
           defaultValue={values.country}
-          autoComplete="country-name"
-          required={required}
         />
       </div>
     </div>

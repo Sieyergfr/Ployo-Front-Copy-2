@@ -3,6 +3,7 @@ import CompanyList from "@/components/CompanyList/CompanyList";
 import CompanyListItem from "@/components/CompanyList/CompanyListItem";
 import SearchInput from "@/components/inputs/SearchInput";
 import { auth } from "@/lib/auth";
+import { getOwnPreferences, getOwnScheduledDeletion, startPagePath } from "@/lib/account-service";
 import { getTenantsForUser } from "@/lib/tenants";
 import { ArrowRight } from "lucide-react";
 import { headers } from "next/headers";
@@ -31,7 +32,14 @@ export default async function TenantSelectPage() {
     redirect("/login");
   }
 
-  const memberships = await getTenantsForUser(session.user.id);
+  if (await getOwnScheduledDeletion()) {
+    redirect("/konto-loeschung");
+  }
+
+  const [memberships, preference] = await Promise.all([
+    getTenantsForUser(session.user.id),
+    getOwnPreferences(),
+  ]);
 
   return (
     <>
@@ -49,7 +57,7 @@ export default async function TenantSelectPage() {
           memberships.map((membership) => (
             <CompanyListItem
               key={membership.tenant.id}
-              href={`/u/${membership.tenant.slug}`}
+              href={startPagePath(membership.tenant.slug, preference.startPage)}
               title={membership.tenant.name}
               industry={membership.tenant.industry}
               initials={getInitials(membership.tenant.name)}

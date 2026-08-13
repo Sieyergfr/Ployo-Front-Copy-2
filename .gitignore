@@ -12,6 +12,10 @@
 
 # testing
 /coverage
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
 
 # next.js
 /.next/
@@ -39,6 +43,9 @@ yarn-error.log*
 
 # vercel
 .vercel
+
+# design references (Figma/Devcanvas exports etc.) — not app code
+/design/
 
 # typescript
 *.tsbuildinfo

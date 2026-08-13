@@ -1,0 +1,207 @@
+.landing {
+  --lp-bg: #07070c;
+  --lp-surf: #0d0d14;
+  --lp-surf2: #14141e;
+  --lp-bd: rgba(255, 255, 255, 0.07);
+  --lp-bd-hi: rgba(255, 255, 255, 0.13);
+  --lp-ac: #4dffa6;
+  --lp-ac-dim: rgba(77, 255, 166, 0.09);
+  --lp-ac-glow: rgba(77, 255, 166, 0.18);
+  --lp-blue: #4d9fff;
+  --lp-red: #ff4d6a;
+  --lp-tx: #eeeee8;
+  --lp-tx2: #9090a0;
+  /* #484852 only hit ~2.2:1 against --lp-bg, well under the 4.5:1 AA
+     minimum for the meta text/footer links it's used on. */
+  --lp-mu: #7c7c8c;
+
+  background-color: var(--lp-bg);
+  color: var(--lp-tx);
+  background-image: radial-gradient(
+    rgba(255, 255, 255, 0.032) 1px,
+    transparent 1px
+  );
+  background-size: 30px 30px;
+}
+
+.landing a {
+  text-decoration: none;
+}
+
+.landing ::selection {
+  background: var(--lp-ac);
+  color: #000;
+}
+
+@keyframes lp-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(26px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes lp-fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes lp-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-13px);
+  }
+}
+
+@keyframes lp-float-b {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes lp-glow-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 0.75;
+    transform: scale(1.09);
+  }
+}
+
+@keyframes lp-scan {
+  0% {
+    top: -2px;
+  }
+
+  100% {
+    top: 100%;
+  }
+}
+
+@keyframes lp-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.25;
+  }
+}
+
+.lp-fu {
+  opacity: 0;
+  animation: lp-fade-up 0.75s ease forwards;
+}
+
+.lp-fi {
+  opacity: 0;
+  animation: lp-fade-in 0.6s ease forwards;
+}
+
+.lp-nav-link {
+  color: var(--lp-tx2);
+  transition: color 0.15s;
+}
+
+.lp-nav-link:hover {
+  color: var(--lp-tx);
+}
+
+.lp-btn-primary {
+  transition: opacity 0.15s;
+}
+
+.lp-btn-primary:hover {
+  opacity: 0.84;
+}
+
+.lp-btn-secondary {
+  transition:
+    color 0.15s,
+    border-color 0.15s;
+}
+
+.lp-btn-secondary:hover {
+  color: var(--lp-tx);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.lp-feature-card {
+  transition: border-color 0.2s;
+}
+
+.lp-feature-card:hover {
+  border-color: var(--lp-bd-hi);
+}
+
+.lp-footer-link {
+  transition: color 0.15s;
+}
+
+.lp-footer-link:hover {
+  color: var(--lp-tx2);
+}
+
+/* Step dividers: stacked with a top rule on mobile, side-by-side with a
+   left rule from md up — inline styles can't hold media queries. */
+.lp-step {
+  border-top: 1px solid var(--lp-bd);
+  padding-top: 40px;
+}
+
+.lp-step:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+@media (min-width: 768px) {
+  .lp-step {
+    border-top: none;
+    border-left: 1px solid var(--lp-bd);
+    padding-top: 0;
+    padding-right: 48px;
+    padding-left: 48px;
+  }
+
+  .lp-step:first-child {
+    border-left: none;
+    padding-left: 0;
+  }
+
+  .lp-step:last-child {
+    padding-right: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing *,
+  .landing *::before,
+  .landing *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

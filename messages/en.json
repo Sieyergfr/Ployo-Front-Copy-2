@@ -1,0 +1,19 @@
+{
+  "AccountPreferences": {
+    "cardTitle": "Personal Settings",
+    "startPageLabel": "Start page after sign-in",
+    "startPageOverview": "Overview",
+    "startPageMeinBereich": "My Area",
+    "startPageEmployees": "Employees",
+    "startPageUrlaub": "Vacation",
+    "startPageSchichtplanung": "Shift Planning",
+    "languageLabel": "Language",
+    "languageDe": "German",
+    "languageEn": "English",
+    "dateFormatLabel": "Date format",
+    "timezoneLabel": "Time zone",
+    "disclaimer": "Language already applies to this section — the rest of the interface will follow gradually. Date format and time zone are saved but not yet applied.",
+    "save": "Save",
+    "saving": "Saving..."
+  }
+}

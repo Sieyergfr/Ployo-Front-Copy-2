@@ -1,4 +1,5 @@
 import "server-only";
+import { logger } from "@/lib/logger";
 
 /**
  * Zentraler E-Mail-Versand. Nutzt SMTP, sobald SMTP_HOST konfiguriert ist.
@@ -20,15 +21,18 @@ export function isEmailConfigured() {
 export async function sendEmail(input: SendEmailInput) {
   if (!isEmailConfigured()) {
     if (process.env.NODE_ENV === "production") {
-      console.error(
-        `[email] SMTP ist nicht konfiguriert – E-Mail an ${input.to} („${input.subject}“) wurde NICHT versendet.`,
-      );
+      logger.error("SMTP ist nicht konfiguriert – E-Mail wurde nicht versendet.", {
+        to: input.to,
+        subject: input.subject,
+      });
       throw new Error("EMAIL_NOT_CONFIGURED");
     }
 
-    console.info(
-      `[email] (dev, SMTP fehlt) E-Mail an ${input.to}: ${input.subject}\n${input.text}`,
-    );
+    logger.info("E-Mail (dev, SMTP fehlt) — nur geloggt, nicht versendet.", {
+      to: input.to,
+      subject: input.subject,
+      text: input.text,
+    });
     return;
   }
 
@@ -97,6 +101,22 @@ export async function sendVerificationEmail(input: { to: string; url: string }) 
     html: emailLayout(
       "E-Mail-Adresse bestätigen",
       `<p style="font-size:14px;line-height:1.5;">Bitte bestätigen Sie Ihre E-Mail-Adresse, um Ihr Ployo-Konto zu aktivieren.</p>${actionButton(input.url, "E-Mail bestätigen")}`,
+    ),
+  });
+}
+
+export async function sendChangeEmailConfirmationEmail(input: {
+  to: string;
+  newEmail: string;
+  url: string;
+}) {
+  await sendEmail({
+    to: input.to,
+    subject: "Bestätigen Sie die Änderung Ihrer E-Mail-Adresse",
+    text: `Für Ihr Ployo-Konto wurde eine Änderung der Anmelde-E-Mail zu ${input.newEmail} angefordert.\n\nBestätigen: ${input.url}\n\nWenn Sie das nicht waren, ignorieren Sie diese E-Mail — Ihre Adresse bleibt unverändert.`,
+    html: emailLayout(
+      "E-Mail-Änderung bestätigen",
+      `<p style="font-size:14px;line-height:1.5;">Für Ihr Ployo-Konto wurde eine Änderung der Anmelde-E-Mail zu <strong>${input.newEmail}</strong> angefordert.</p>${actionButton(input.url, "Änderung bestätigen")}<p style="font-size:12px;color:#6e6e6b;">Wenn Sie das nicht waren, ignorieren Sie diese E-Mail — Ihre Adresse bleibt unverändert.</p>`,
     ),
   });
 }

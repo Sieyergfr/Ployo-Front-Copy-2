@@ -51,6 +51,10 @@ function revalidateFileAreas(input: {
     revalidatePath(`/u/${input.tenant}/standorte/${input.ownerId}`);
   }
 
+  if (input.ownerType === "team" && input.ownerId) {
+    revalidatePath(`/u/${input.tenant}/teams/${input.ownerId}`);
+  }
+
   if (input.returnPath) {
     revalidatePath(input.returnPath);
   }
@@ -123,6 +127,9 @@ export async function createHrFolderAction(formData: FormData) {
   if (ownerType === "location" && ownerId) {
     revalidatePath(`/u/${tenant}/standorte/${ownerId}`);
   }
+  if (ownerType === "team" && ownerId) {
+    revalidatePath(`/u/${tenant}/teams/${ownerId}`);
+  }
   revalidatePath(returnPath);
   redirect(returnPath);
 }
@@ -153,7 +160,7 @@ export async function softDeleteHrFileAction(formData: FormData) {
   const returnPath = formString(formData, "returnPath") || filesPath(tenant);
 
   if (!tenant || !fileId) {
-    throw new Error("Datei konnte nicht geloescht werden.");
+    throw new Error("Datei konnte nicht gelöscht werden.");
   }
 
   await softDeleteTenantFile({ tenantSlug: tenant, fileId });

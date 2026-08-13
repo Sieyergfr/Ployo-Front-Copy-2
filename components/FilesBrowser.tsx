@@ -15,10 +15,12 @@ function FolderCard({
   folder,
   baseHref,
   tenant,
+  canManageReminders,
 }: {
   folder: FileFolder;
   baseHref: string;
   tenant: string;
+  canManageReminders: boolean;
 }) {
   const folderHref = `${baseHref}/${folder.slug}`;
 
@@ -47,6 +49,7 @@ function FolderCard({
         compact
         name={folder.name}
         context={`Ordner \u00b7 ${folder.owner}`}
+        canManage={canManageReminders}
       />
     </div>
   );
@@ -56,10 +59,14 @@ function FileRow({
   file,
   baseHref,
   tenant,
+  canManageFiles,
+  canManageReminders,
 }: {
   file: FileItem;
   baseHref: string;
   tenant: string;
+  canManageFiles: boolean;
+  canManageReminders: boolean;
 }) {
   const isHomeFile = file.folderSlug === "";
   const returnPath = isHomeFile ? baseHref : `${baseHref}/${file.folderSlug}`;
@@ -94,18 +101,22 @@ function FileRow({
       </span>
       <FileViewButton file={file} tenant={tenant} compact />
       <FileDownloadButton file={file} tenant={tenant} compact />
-      <VersionUploadButton
-        file={file}
-        tenant={tenant}
-        returnPath={returnPath}
-        compact
-      />
-      <FileSoftDeleteButton
-        file={file}
-        tenant={tenant}
-        returnPath={returnPath}
-        compact
-      />
+      {canManageFiles && (
+        <>
+          <VersionUploadButton
+            file={file}
+            tenant={tenant}
+            returnPath={returnPath}
+            compact
+          />
+          <FileSoftDeleteButton
+            file={file}
+            tenant={tenant}
+            returnPath={returnPath}
+            compact
+          />
+        </>
+      )}
       {file.locked && <Lock size={13} className="shrink-0 text-muted" />}
       <FileReminderButton
         tenant={tenant}
@@ -113,6 +124,7 @@ function FileRow({
         compact
         name={file.name}
         context={`${file.folder} \u00b7 ${file.owner}`}
+        canManage={canManageReminders}
       />
     </div>
   );
@@ -127,6 +139,8 @@ export default function FilesBrowser({
   currentFolderPath = "",
   folderOptions = [],
   uploadOptions,
+  canManageFiles = true,
+  canManageReminders = true,
 }: {
   folders: FileFolder[];
   files: FileItem[];
@@ -136,6 +150,8 @@ export default function FilesBrowser({
   currentFolderPath?: string;
   folderOptions?: FileFolder[];
   uploadOptions?: FileUploadOptions;
+  canManageFiles?: boolean;
+  canManageReminders?: boolean;
 }) {
   const currentReturnPath = activeFolder
     ? `${baseHref}/${activeFolder.path ?? activeFolder.slug}`
@@ -166,19 +182,23 @@ export default function FilesBrowser({
               Alle Ordner
             </Link>
           )}
-          <CreateFolderButton
-            tenant={tenant}
-            returnPath={currentReturnPath}
-            parentPath={currentFolderPath}
-          />
-          <UploadFileButton
-            tenant={tenant}
-            returnPath={currentReturnPath}
-            folderSlug={activeFolder?.path ?? activeFolder?.slug}
-            folderName={activeFolder?.name}
-            folderOptions={folderOptions}
-            uploadOptions={uploadOptions}
-          />
+          {canManageFiles && (
+            <>
+              <CreateFolderButton
+                tenant={tenant}
+                returnPath={currentReturnPath}
+                parentPath={currentFolderPath}
+              />
+              <UploadFileButton
+                tenant={tenant}
+                returnPath={currentReturnPath}
+                folderSlug={activeFolder?.path ?? activeFolder?.slug}
+                folderName={activeFolder?.name}
+                folderOptions={folderOptions}
+                uploadOptions={uploadOptions}
+              />
+            </>
+          )}
         </div>
       </div>
 
@@ -190,6 +210,7 @@ export default function FilesBrowser({
               folder={folder}
               baseHref={baseHref}
               tenant={tenant}
+              canManageReminders={canManageReminders}
             />
           ))}
         </div>
@@ -206,6 +227,8 @@ export default function FilesBrowser({
               file={file}
               baseHref={baseHref}
               tenant={tenant}
+              canManageFiles={canManageFiles}
+              canManageReminders={canManageReminders}
             />
           ))
         ) : (

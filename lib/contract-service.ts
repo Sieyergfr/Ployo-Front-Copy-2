@@ -1,7 +1,7 @@
 import { recordTenantAudit } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 import { uploadTenantFile } from "@/lib/storage/storage.service";
-import { requireTenantAccess } from "@/lib/tenant-access";
+import { requireTenantAccess, resolveScopeFilter } from "@/lib/tenant-access";
 import { canAccessFileAcl, getOptionalFileReadAccess } from "@/lib/file-access";
 
 export const contractStatuses = [
@@ -21,6 +21,22 @@ export const contractStatusLabels: Record<ContractStatus, string> = {
   expired: "Abgelaufen",
   inactive: "Inaktiv",
 };
+
+const employeeContractTypes = [
+  "Arbeitsvertrag",
+  "Befristeter Arbeitsvertrag",
+  "Teilzeitvertrag",
+  "Änderungsvertrag",
+  "Zusatzvereinbarung",
+] as const;
+
+type EmployeeContractType = (typeof employeeContractTypes)[number];
+
+function normalizeContractType(value: string | undefined): EmployeeContractType {
+  return employeeContractTypes.includes(value as EmployeeContractType)
+    ? (value as EmployeeContractType)
+    : "Arbeitsvertrag";
+}
 
 async function requireContractAccess(tenantSlug: string) {
   return (await requireTenantAccess(tenantSlug, "payroll", "write")).tenantId;
@@ -48,10 +64,17 @@ async function recordContractAudit(input: {
 
 export async function getEmployeeContracts(tenantSlug: string, employeeId: string) {
   const access = await requireTenantAccess(tenantSlug, "payroll", "read");
+  const scopeFilter = await resolveScopeFilter(access);
+  const scopeConstraint =
+    scopeFilter.type === "own"
+      ? { id: scopeFilter.employeeId ?? "__none__" }
+      : scopeFilter.type === "team"
+        ? { team: scopeFilter.team }
+        : {};
   const fileAccess = await getOptionalFileReadAccess(tenantSlug);
   const contracts = await prisma.tenantEmployeeContract.findMany({
     where: {
-      employee: { OR: [{ id: employeeId }, { key: employeeId }] },
+      employee: { OR: [{ id: employeeId }, { key: employeeId }], ...scopeConstraint },
       tenantId: access.tenantId,
     },
     include: {
@@ -102,6 +125,8 @@ export async function createEmployeeContract(input: {
     throw new Error("Jeder Vertrag benötigt eine PDF-Datei.");
   }
 
+  const contractType = normalizeContractType(input.contractType);
+
   const storedFile = await uploadTenantFile({
     tenantSlug: input.tenantSlug,
     file: input.file,
@@ -110,7 +135,7 @@ export async function createEmployeeContract(input: {
     folderSlug: "vertraege-vereinbarungen",
     folderName: "Verträge & Vereinbarungen",
     ownerName: "HR",
-    documentType: input.contractType || "Arbeitsvertrag",
+    documentType: contractType,
     validFrom: input.startDate,
     expiresAt: input.endDate,
     description: input.title,
@@ -132,7 +157,7 @@ export async function createEmployeeContract(input: {
         employeeId: employee.id,
         fileId: storedFile.id,
         title: input.title,
-        contractType: input.contractType,
+        contractType,
         status: input.status,
         startDate: input.startDate,
         endDate: input.endDate,
@@ -152,9 +177,18 @@ export async function createEmployeeContract(input: {
       await tx.tenantEmployee.update({
         where: { id: employee.id },
         data: {
-          contract: input.contractType,
+          contract: contractType,
           startDate: input.startDate,
           weeklyHours: input.weeklyHours,
+          timeline: {
+            create: [
+              {
+                title: `Neuer Vertrag hinterlegt: ${input.title}`,
+                tone: "ink",
+                tenant: { connect: { id: tenantId } },
+              },
+            ],
+          },
         },
       });
     }

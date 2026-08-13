@@ -1,9 +1,18 @@
 "use client";
 
-import { saveSettingsPopupAction } from "@/app/(dashboard)/u/[tenant]/einstellungen/actions";
+import {
+  openBillingPortalAction,
+  saveSettingsPopupAction,
+  startBillingCheckoutAction,
+} from "@/app/(dashboard)/u/[tenant]/einstellungen/actions";
 import AddressFields from "@/components/AddressFields";
 import type { AddressInput } from "@/lib/address";
 import FormSubmitButton from "@/components/FormSubmitButton";
+import Checkbox from "@/components/inputs/checkbox";
+import { useSlugAvailability } from "@/lib/hooks/useSlugAvailability";
+import { permissionLevels, type PermissionLevel } from "@/lib/roles";
+import { slugify } from "@/lib/slug";
+import type { TenantPermissionArea } from "@/lib/tenant-access";
 import {
   Bell,
   Building2,
@@ -13,6 +22,7 @@ import {
   ChevronsUpDown,
   CreditCard,
   KeyRound,
+  Loader2,
   LogOut,
   Plug,
   Save,
@@ -32,7 +42,13 @@ type NavItem = {
   label: string;
   code: string;
   href: string;
+  area?: TenantPermissionArea;
+  requiredLevel?: PermissionLevel;
 };
+
+function hasRequiredLevel(actual: PermissionLevel, required: PermissionLevel) {
+  return permissionLevels.indexOf(actual) >= permissionLevels.indexOf(required);
+}
 
 type TenantItem = {
   name: string;
@@ -41,6 +57,7 @@ type TenantItem = {
   href: string;
   colorClass: string;
   slug?: string;
+  permissions?: Record<TenantPermissionArea, PermissionLevel>;
   country?: string;
   timezone?: string;
   size?: string;
@@ -50,6 +67,10 @@ type TenantItem = {
   primaryColor?: string;
   plan?: string;
   billingCycle?: string;
+  stripeSubscriptionStatus?: string;
+  stripeCancelAtPeriodEnd?: boolean;
+  stripeCurrentPeriodEnd?: string;
+  locations?: { id: string; name: string }[];
   settings?: {
     companyAddress: AddressInput | null;
     taxId: string;
@@ -58,6 +79,8 @@ type TenantItem = {
     workHours: string;
     vacationDays: number;
     employeeNumberRequired: boolean;
+    employeeNumberPrefix: string;
+    employeeNumberSuffix: string;
     archiveFormerEmployees: boolean;
     mailNotifications: boolean;
     inAppNotifications: boolean;
@@ -76,15 +99,16 @@ export type NavigationTenantItem = TenantItem;
 
 const navigationItems: NavItem[] = [
   { label: "Übersicht", code: "Üb", href: "" },
-  { label: "Mitarbeiter", code: "MA", href: "/employees" },
-  { label: "Standorte", code: "St", href: "/standorte" },
-  { label: "Teams", code: "Tm", href: "/teams" },
-  { label: "Rollen", code: "Ro", href: "/rollen" },
-  { label: "Dateien", code: "Dt", href: "/dateien" },
-  { label: "Urlaub", code: "Ur", href: "/urlaub" },
-  { label: "Krankheit", code: "Kr", href: "/krankheit" },
-  { label: "Schichtplanung", code: "Sp", href: "/schichtplanung" },
-  { label: "Erinnerungen", code: "Er", href: "/erinnerungen" },
+  { label: "Mein Bereich", code: "Mb", href: "/mein-bereich" },
+  { label: "Mitarbeiter", code: "MA", href: "/employees", area: "employees" },
+  { label: "Standorte", code: "St", href: "/standorte", area: "locations" },
+  { label: "Teams", code: "Tm", href: "/teams", area: "teams" },
+  { label: "Rollen", code: "Ro", href: "/rollen", area: "roles", requiredLevel: "admin" },
+  { label: "Dateien", code: "Dt", href: "/dateien", area: "files" },
+  { label: "Urlaub", code: "Ur", href: "/urlaub", area: "vacation" },
+  { label: "Krankheit", code: "Kr", href: "/krankheit", area: "sickness" },
+  { label: "Schichtplanung", code: "Sp", href: "/schichtplanung", area: "shifts" },
+  { label: "Erinnerungen", code: "Er", href: "/erinnerungen", area: "reminders" },
 ];
 
 const fallbackTenantItem: TenantItem = {
@@ -103,6 +127,8 @@ const defaultSettings: NonNullable<TenantItem["settings"]> = {
   workHours: "40 Stunden pro Woche",
   vacationDays: 30,
   employeeNumberRequired: true,
+  employeeNumberPrefix: "MA-",
+  employeeNumberSuffix: "",
   archiveFormerEmployees: true,
   mailNotifications: true,
   inAppNotifications: true,
@@ -144,6 +170,8 @@ type SettingsCategory = {
   label: string;
   description: string;
   icon: LucideIcon;
+  area?: TenantPermissionArea;
+  requiredLevel?: PermissionLevel;
 };
 
 type NotificationItem = {
@@ -166,36 +194,53 @@ const settingsCategories: SettingsCategory[] = [
     label: "Unternehmen",
     description: "Mandant, Standorte, Defaults",
     icon: Building2,
+    area: "settings",
+    requiredLevel: "write",
   },
   {
     id: "roles",
     label: "Rollen",
     description: "Zugriffe und Freigaben",
     icon: UsersRound,
+    area: "roles",
+    requiredLevel: "admin",
   },
   {
     id: "notifications",
     label: "Benachrichtigungen",
     description: "E-Mail und Erinnerungen",
     icon: Bell,
+    area: "settings",
+    requiredLevel: "write",
   },
   {
     id: "security",
     label: "Sicherheit",
     description: "Login, 2FA, Sitzungen",
     icon: ShieldCheck,
+    // Bewusst ohne area/requiredLevel — anders als die übrigen Mandanten-
+    // weiten Einstellungen soll dieser Tab für jedes Mitglied sichtbar sein
+    // (Transparenz über die eigene Login-Sicherheit). Die einzige darin
+    // enthaltene Mandanten-weite Einstellung (Audit-Log-Aufbewahrung) bleibt
+    // trotzdem geschützt: das Feld wird unten für Mitglieder ohne
+    // "settings:write" deaktiviert, und `updateTenantSecurity` erzwingt den
+    // Zugriff serverseitig ohnehin unabhängig von der UI.
   },
   {
     id: "integrations",
     label: "Integrationen",
     description: "Lohn, Kalender, API",
     icon: Plug,
+    area: "settings",
+    requiredLevel: "admin",
   },
   {
     id: "billing",
     label: "Abrechnung",
     description: "Plan, Zahlung, Stripe",
     icon: CreditCard,
+    area: "settings",
+    requiredLevel: "write",
   },
 ];
 
@@ -208,32 +253,8 @@ export type NavigationUserItem = {
 export type NavigationUsageInfo = {
   employeeTotal: number;
   activeEmployees: number;
+  employeeLimit: number | null;
 };
-
-function SettingsCheckbox({
-  name,
-  children,
-  defaultChecked = false,
-}: {
-  name: string;
-  children: string;
-  defaultChecked?: boolean;
-}) {
-  return (
-    <label className="checkbox-row relative cursor-pointer">
-      <input
-        type="checkbox"
-        name={name}
-        className="peer absolute inset-0 cursor-pointer opacity-0"
-        defaultChecked={defaultChecked}
-      />
-      <span className="checkbox">
-        <Check size={12} strokeWidth={4} />
-      </span>
-      <span className="checkbox-label">{children}</span>
-    </label>
-  );
-}
 
 function SettingsSection({
   title,
@@ -257,16 +278,71 @@ function SettingsSection({
   );
 }
 
+function TenantSlugField({ initialSlug }: { initialSlug: string }) {
+  const [value, setValue] = useState(initialSlug);
+  const slug = slugify(value);
+  const slugState = useSlugAvailability(slug, initialSlug);
+  const showStatus = slug !== "" && slug !== initialSlug;
+
+  return (
+    <div className="field">
+      <label htmlFor="settings-company-id" className="label">
+        Mandanten-ID
+      </label>
+      <input
+        id="settings-company-id"
+        name="tenantId"
+        className="input input-mono bg-white"
+        value={value}
+        onChange={(event) => setValue(event.target.value)}
+      />
+      {showStatus && (
+        <p
+          className={cx(
+            "mt-1 flex items-center gap-1.5 text-[12px] font-medium",
+            slugState === "checking"
+              ? "text-muted-2"
+              : slugState === "available"
+                ? "text-success"
+                : slugState === "taken"
+                  ? "text-danger"
+                  : "text-muted-2",
+          )}
+        >
+          {slugState === "checking" && (
+            <>
+              <Loader2 size={12} className="animate-spin" /> Wird geprüft…
+            </>
+          )}
+          {slugState === "available" && (
+            <>
+              <Check size={12} strokeWidth={2.6} /> Verfügbar
+            </>
+          )}
+          {slugState === "taken" && (
+            <>
+              <X size={12} strokeWidth={2.6} /> Bereits vergeben
+            </>
+          )}
+          {slugState === "error" && "Prüfung fehlgeschlagen"}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function SettingsPanel({
   activeCategory,
   tenant,
   user,
   usage,
+  isStripeConfigured,
 }: {
   activeCategory: SettingsCategoryId;
   tenant: TenantItem;
   user?: NavigationUserItem;
   usage?: NavigationUsageInfo | null;
+  isStripeConfigured: boolean;
 }) {
   const settings = tenant.settings ?? defaultSettings;
   if (activeCategory === "company") {
@@ -283,19 +359,10 @@ function SettingsPanel({
                 name="companyName"
                 className="input bg-white"
                 defaultValue={tenant.name}
+                required
               />
             </div>
-            <div className="field">
-              <label htmlFor="settings-company-id" className="label">
-                Mandanten-ID
-              </label>
-              <input
-                id="settings-company-id"
-                name="tenantId"
-                className="input input-mono bg-white"
-                defaultValue={tenant.slug ?? tenantSlugFromHref(tenant.href)}
-              />
-            </div>
+            <TenantSlugField initialSlug={tenant.slug ?? tenantSlugFromHref(tenant.href)} />
             <div className="sm:col-span-2">
               <div className="mb-2 label">Rechnungsadresse</div>
               <AddressFields
@@ -313,6 +380,7 @@ function SettingsPanel({
                 name="taxId"
                 className="input input-mono bg-white"
                 defaultValue={settings.taxId}
+                maxLength={64}
               />
             </div>
           </div>
@@ -328,10 +396,18 @@ function SettingsPanel({
                 name="defaultLocation"
                 className="input cursor-pointer bg-white"
                 defaultValue={settings.defaultLocationId}
+                disabled={!tenant.locations?.length}
               >
-                <option value="berlin">Berlin</option>
-                <option value="hamburg">Hamburg</option>
-                <option value="munich">München</option>
+                <option value="">
+                  {tenant.locations?.length
+                    ? "Keinen Hauptstandort festlegen"
+                    : "Noch keine Standorte angelegt"}
+                </option>
+                {tenant.locations?.map((location) => (
+                  <option key={location.id} value={location.id}>
+                    {location.name}
+                  </option>
+                ))}
               </select>
             </div>
             <div className="field">
@@ -367,6 +443,7 @@ function SettingsPanel({
                 id="settings-vacation-days"
                 name="vacationDays"
                 type="number"
+                min="0"
                 className="input bg-white"
                 defaultValue={settings.vacationDays}
               />
@@ -375,12 +452,52 @@ function SettingsPanel({
         </SettingsSection>
         <SettingsSection title="Daten & Aufbewahrung" icon={KeyRound}>
           <div className="flex flex-col gap-3">
-            <SettingsCheckbox name="employeeNumberRequired" defaultChecked={settings.employeeNumberRequired}>
+            <Checkbox id="employeeNumberRequired" defaultChecked={settings.employeeNumberRequired}>
               Personalnummer für neue Mitarbeiter verpflichtend
-            </SettingsCheckbox>
-            <SettingsCheckbox name="archiveFormerEmployees" defaultChecked={settings.archiveFormerEmployees}>
+            </Checkbox>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="field">
+                <label htmlFor="settings-employee-number-prefix" className="label">
+                  Personalnummer-Präfix
+                </label>
+                <input
+                  id="settings-employee-number-prefix"
+                  name="employeeNumberPrefix"
+                  className="input bg-white"
+                  placeholder="MA-"
+                  defaultValue={settings.employeeNumberPrefix}
+                  maxLength={16}
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="settings-employee-number-suffix" className="label">
+                  Personalnummer-Suffix
+                </label>
+                <input
+                  id="settings-employee-number-suffix"
+                  name="employeeNumberSuffix"
+                  className="input bg-white"
+                  placeholder="optional"
+                  defaultValue={settings.employeeNumberSuffix}
+                  maxLength={16}
+                />
+              </div>
+            </div>
+            <Checkbox id="archiveFormerEmployees" defaultChecked={settings.archiveFormerEmployees}>
               Ausgeschiedene Mitarbeiter automatisch archivieren
-            </SettingsCheckbox>
+            </Checkbox>
+            <div className="flex items-center justify-between gap-3 border-t border-border-soft pt-3">
+              <p className="text-[12px] text-muted">
+                Alle Personal-, Team-, Standort- und Planungsdaten dieses
+                Unternehmens als JSON-Datei herunterladen.
+              </p>
+              <a
+                href={`/api/tenants/${tenant.slug ?? tenantSlugFromHref(tenant.href)}/export`}
+                className="btn btn-secondary btn-sm shrink-0"
+              >
+                Daten exportieren
+              </a>
+            </div>
           </div>
         </SettingsSection>
       </div>
@@ -416,29 +533,29 @@ function SettingsPanel({
             <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-muted">
               Kanäle
             </div>
-            <SettingsCheckbox name="mailNotifications" defaultChecked={settings.mailNotifications}>
+            <Checkbox id="mailNotifications" defaultChecked={settings.mailNotifications}>
               E-Mail-Benachrichtigungen
-            </SettingsCheckbox>
-            <SettingsCheckbox name="inAppNotifications" defaultChecked={settings.inAppNotifications}>
+            </Checkbox>
+            <Checkbox id="inAppNotifications" defaultChecked={settings.inAppNotifications}>
               In-App-Benachrichtigungen
-            </SettingsCheckbox>
-            <SettingsCheckbox name="mobilePush" defaultChecked={settings.mobilePush}>
+            </Checkbox>
+            <Checkbox id="mobilePush" defaultChecked={settings.mobilePush}>
               Mobile Push-Nachrichten
-            </SettingsCheckbox>
+            </Checkbox>
           </div>
           <div className="flex flex-col gap-3">
             <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-muted">
               Ereignisse
             </div>
-            <SettingsCheckbox name="deadlineAlerts" defaultChecked={settings.deadlineAlerts}>
+            <Checkbox id="deadlineAlerts" defaultChecked={settings.deadlineAlerts}>
               Fristen und Erinnerungen melden
-            </SettingsCheckbox>
-            <SettingsCheckbox name="absenceAlerts" defaultChecked={settings.absenceAlerts}>
+            </Checkbox>
+            <Checkbox id="absenceAlerts" defaultChecked={settings.absenceAlerts}>
               Urlaubs- und Krankmeldungen sofort senden
-            </SettingsCheckbox>
-            <SettingsCheckbox name="shiftAlerts" defaultChecked={settings.shiftAlerts}>
+            </Checkbox>
+            <Checkbox id="shiftAlerts" defaultChecked={settings.shiftAlerts}>
               Schichtplan-Konflikte hervorheben
-            </SettingsCheckbox>
+            </Checkbox>
           </div>
           <div className="field sm:col-span-2">
             <label htmlFor="settings-digest-time" className="label">
@@ -461,14 +578,34 @@ function SettingsPanel({
   }
 
   if (activeCategory === "security") {
+    const canManageSecurity = hasRequiredLevel(
+      tenant.permissions?.settings ?? "none",
+      "write",
+    );
+
     return (
       <div className="flex flex-col gap-4">
         <SettingsSection title="Login-Sicherheit" icon={ShieldCheck}>
-          <p className="text-[12.5px] leading-5 text-muted">
-            Zwei-Faktor-Authentifizierung und automatische Sitzungs-Abmeldung
-            sind in Vorbereitung und werden hier aktivierbar sein, sobald sie
-            verfügbar sind.
-          </p>
+          <fieldset disabled={!canManageSecurity} className="m-0 border-0 p-0">
+            <Checkbox
+              id="twoFactorRequired"
+              defaultChecked={settings.twoFactorRequired}
+              alignItems="start"
+            >
+              <span className="block">
+                Zwei-Faktor-Authentifizierung für alle Mitglieder verpflichtend
+              </span>
+              <span className="mt-0.5 block text-[11.5px] font-normal text-muted-2">
+                Mitglieder ohne eingerichtete 2FA werden beim nächsten Zugriff
+                zur Einrichtung aufgefordert, bevor sie weiter arbeiten können.
+              </span>
+            </Checkbox>
+          </fieldset>
+          {!canManageSecurity && (
+            <p className="mt-1 text-[11.5px] text-muted-2">
+              Nur mit Schreibrecht auf „Einstellungen“ änderbar.
+            </p>
+          )}
         </SettingsSection>
         <div className="grid gap-3">
           <div className="field">
@@ -478,13 +615,19 @@ function SettingsPanel({
             <select
               id="settings-audit-retention"
               name="auditRetentionMonths"
-              className="input cursor-pointer bg-white"
+              className="input cursor-pointer bg-white disabled:cursor-not-allowed disabled:opacity-60"
               defaultValue={settings.auditRetentionMonths}
+              disabled={!canManageSecurity}
             >
               <option value="12">12 Monate</option>
               <option value="24">24 Monate</option>
               <option value="60">5 Jahre</option>
             </select>
+            {!canManageSecurity && (
+              <p className="mt-1 text-[11.5px] text-muted-2">
+                Nur mit Schreibrecht auf „Einstellungen“ änderbar.
+              </p>
+            )}
           </div>
         </div>
       </div>
@@ -511,6 +654,15 @@ function SettingsPanel({
   }
 
   if (activeCategory === "billing") {
+    const isSubscriptionHealthy =
+      tenant.stripeSubscriptionStatus === "active" ||
+      tenant.stripeSubscriptionStatus === "trialing";
+    const periodEndLabel = tenant.stripeCurrentPeriodEnd
+      ? new Intl.DateTimeFormat("de-DE", { dateStyle: "medium" }).format(
+          new Date(tenant.stripeCurrentPeriodEnd),
+        )
+      : null;
+
     return (
       <div className="flex flex-col gap-4">
         <input type="hidden" name="companyName" value={tenant.name} />
@@ -519,63 +671,141 @@ function SettingsPanel({
           name="tenantId"
           value={tenant.slug ?? tenantSlugFromHref(tenant.href)}
         />
-        <SettingsSection title="Abonnement" icon={CreditCard}>
-          <div className="rounded-[10px] border border-warning/30 bg-warning/10 px-3 py-2.5 text-[12.5px] leading-5 text-[#7A4E00]">
-            Es ist noch keine Zahlungsabwicklung angebunden. Plan und
-            Abrechnungsintervall sind reine Angaben zum Mandanten – es werden
-            keine Rechnungen erzeugt und keine Zahlungen eingezogen.
-          </div>
 
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <div className="field">
-              <label htmlFor="settings-plan" className="label">
-                Plan
-              </label>
-              <select
-                id="settings-plan"
-                name="planSelection"
-                className="input cursor-pointer bg-white"
-                defaultValue={tenant.plan ?? "professional"}
+        {!isStripeConfigured ? (
+          <SettingsSection title="Abonnement" icon={CreditCard}>
+            <div className="rounded-[10px] border border-warning/30 bg-warning/10 px-3 py-2.5 text-[12.5px] leading-5 text-[#7A4E00]">
+              Es ist noch keine Zahlungsabwicklung angebunden. Plan und
+              Abrechnungsintervall sind reine Angaben zum Mandanten – es werden
+              keine Rechnungen erzeugt und keine Zahlungen eingezogen.
+            </div>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <div className="field">
+                <label htmlFor="settings-plan" className="label">
+                  Plan
+                </label>
+                <select
+                  id="settings-plan"
+                  name="planSelection"
+                  className="input cursor-pointer bg-white"
+                  defaultValue={tenant.plan ?? "professional"}
+                >
+                  <option value="starter">Starter</option>
+                  <option value="professional">Professional</option>
+                  <option value="business">Business</option>
+                </select>
+              </div>
+              <div className="field">
+                <label htmlFor="settings-payment-interval" className="label">
+                  Abrechnungsintervall
+                </label>
+                <select
+                  id="settings-payment-interval"
+                  name="paymentInterval"
+                  className="input cursor-pointer bg-white"
+                  defaultValue={tenant.billingCycle ?? "monthly"}
+                >
+                  <option value="monthly">Monatlich</option>
+                  <option value="yearly">Jährlich</option>
+                </select>
+              </div>
+              <div className="field sm:col-span-2">
+                <label htmlFor="settings-receipt-email" className="label">
+                  Rechnungs-E-Mail
+                </label>
+                <input
+                  id="settings-receipt-email"
+                  name="receiptEmail"
+                  type="email"
+                  className="input bg-white"
+                  defaultValue={tenant.contactEmail ?? ""}
+                />
+              </div>
+            </div>
+          </SettingsSection>
+        ) : isSubscriptionHealthy ? (
+          <SettingsSection title="Abonnement" icon={CreditCard}>
+            <div className="rounded-[10px] border border-success/30 bg-success/10 px-3 py-2.5 text-[12.5px] leading-5 text-[#1F5D2C]">
+              Aktiver Plan: <strong className="capitalize">{tenant.plan}</strong>
+              {" "}({tenant.billingCycle === "yearly" ? "jährlich" : "monatlich"}).{" "}
+              {periodEndLabel
+                ? tenant.stripeCancelAtPeriodEnd
+                  ? `Endet am ${periodEndLabel} und verlängert sich nicht.`
+                  : `Verlängert sich automatisch am ${periodEndLabel}.`
+                : null}
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="submit"
+                formAction={openBillingPortalAction}
+                name="portalIntent"
+                value="switch-plan"
+                className="btn btn-secondary btn-sm"
               >
-                <option value="starter">Starter</option>
-                <option value="professional">Professional</option>
-                <option value="business">Business</option>
-              </select>
-            </div>
-            <div className="field">
-              <label htmlFor="settings-payment-interval" className="label">
-                Abrechnungsintervall
-              </label>
-              <select
-                id="settings-payment-interval"
-                name="paymentInterval"
-                className="input cursor-pointer bg-white"
-                defaultValue={tenant.billingCycle ?? "monthly"}
+                Plan wechseln
+              </button>
+              <button
+                type="submit"
+                formAction={openBillingPortalAction}
+                className="btn btn-secondary btn-sm"
               >
-                <option value="monthly">Monatlich</option>
-                <option value="yearly">Jährlich</option>
-              </select>
+                Zahlung verwalten
+              </button>
             </div>
-            <div className="field sm:col-span-2">
-              <label htmlFor="settings-receipt-email" className="label">
-                Rechnungs-E-Mail
-              </label>
-              <input
-                id="settings-receipt-email"
-                name="receiptEmail"
-                type="email"
-                className="input bg-white"
-                defaultValue={tenant.contactEmail ?? ""}
-              />
+          </SettingsSection>
+        ) : (
+          <SettingsSection title="Abonnement" icon={CreditCard}>
+            <div className="rounded-[10px] border border-warning/30 bg-warning/10 px-3 py-2.5 text-[12.5px] leading-5 text-[#7A4E00]">
+              Kein aktives Abonnement. Wählen Sie einen Plan, um die Zahlung
+              zu starten.
             </div>
-          </div>
-        </SettingsSection>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <div className="field">
+                <label htmlFor="settings-plan" className="label">
+                  Plan
+                </label>
+                <select
+                  id="settings-plan"
+                  name="planSelection"
+                  className="input cursor-pointer bg-white"
+                  defaultValue={tenant.plan ?? "professional"}
+                >
+                  <option value="starter">Starter</option>
+                  <option value="professional">Professional</option>
+                  <option value="business">Business</option>
+                </select>
+              </div>
+              <div className="field">
+                <label htmlFor="settings-payment-interval" className="label">
+                  Abrechnungsintervall
+                </label>
+                <select
+                  id="settings-payment-interval"
+                  name="paymentInterval"
+                  className="input cursor-pointer bg-white"
+                  defaultValue={tenant.billingCycle ?? "monthly"}
+                >
+                  <option value="monthly">Monatlich</option>
+                  <option value="yearly">Jährlich</option>
+                </select>
+              </div>
+            </div>
+            <button
+              type="submit"
+              formAction={startBillingCheckoutAction}
+              className="btn btn-primary btn-sm mt-3"
+            >
+              Jetzt abonnieren
+            </button>
+          </SettingsSection>
+        )}
 
         <SettingsSection title="Nutzung" icon={Building2}>
           <div className="rounded-[10px] border border-border-light bg-bg px-3 py-2.5">
             <div className="text-[13px] font-semibold text-ink">
               {usage
-                ? `${usage.activeEmployees} aktive Mitarbeiter`
+                ? `${usage.activeEmployees}${usage.employeeLimit ? ` / ${usage.employeeLimit}` : ""} aktive Mitarbeiter`
                 : "Keine Nutzungsdaten verfügbar"}
             </div>
             {usage && (
@@ -651,18 +881,31 @@ function SettingsPopupForm({
   tenant,
   user,
   usage,
+  isStripeConfigured,
   onDone,
 }: {
   tenant: TenantItem;
   user?: NavigationUserItem;
   usage?: NavigationUsageInfo | null;
+  isStripeConfigured: boolean;
   onDone: () => void;
 }) {
   const [activeCategory, setActiveCategory] =
     useState<SettingsCategoryId>("account");
 
+  const visibleCategories = settingsCategories.filter((category) => {
+    if (!category.area || !tenant.permissions) {
+      return true;
+    }
+
+    return hasRequiredLevel(
+      tenant.permissions[category.area],
+      category.requiredLevel ?? "read",
+    );
+  });
+
   const activeCategoryLabel =
-    settingsCategories.find((category) => category.id === activeCategory)?.label ??
+    visibleCategories.find((category) => category.id === activeCategory)?.label ??
     "Konto";
 
   return (
@@ -689,7 +932,7 @@ function SettingsPopupForm({
           Einstellungen
         </div>
         <div className="flex gap-1 overflow-x-auto pb-1 md:flex-col md:overflow-visible md:pb-0">
-          {settingsCategories.map((category) => {
+          {visibleCategories.map((category) => {
             const Icon = category.icon;
             const isActive = category.id === activeCategory;
 
@@ -746,6 +989,7 @@ function SettingsPopupForm({
             tenant={tenant}
             user={user}
             usage={usage}
+            isStripeConfigured={isStripeConfigured}
           />
         </div>
       </div>
@@ -769,11 +1013,13 @@ function SettingsPopup({
   tenant,
   user,
   usage,
+  isStripeConfigured,
   onClose,
 }: {
   tenant: TenantItem;
   user?: NavigationUserItem;
   usage?: NavigationUsageInfo | null;
+  isStripeConfigured: boolean;
   onClose: () => void;
 }) {
   return (
@@ -806,6 +1052,7 @@ function SettingsPopup({
           tenant={tenant}
           user={user}
           usage={usage}
+          isStripeConfigured={isStripeConfigured}
           onDone={onClose}
         />
       </div>
@@ -960,9 +1207,11 @@ function NotificationsPopup({
 export default function NavigationSidebar({
   tenants = [],
   user,
+  isStripeConfigured = false,
 }: {
   tenants?: NavigationTenantItem[];
   user?: NavigationUserItem;
+  isStripeConfigured?: boolean;
 }) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isTenantMenuOpen, setIsTenantMenuOpen] = useState(false);
@@ -1006,19 +1255,30 @@ export default function NavigationSidebar({
 
   const items = useMemo(
     () =>
-      navigationItems.map((item) => {
-        const href = `${baseHref}${item.href}`;
+      navigationItems
+        .filter((item) => {
+          if (!item.area || !activeTenant.permissions) {
+            return true;
+          }
 
-        return {
-          ...item,
-          href,
-          isActive:
-            item.href === ""
-              ? pathname === baseHref
-              : pathname === href || pathname.startsWith(`${href}/`),
-        };
-      }),
-    [baseHref, pathname],
+          return hasRequiredLevel(
+            activeTenant.permissions[item.area],
+            item.requiredLevel ?? "read",
+          );
+        })
+        .map((item) => {
+          const href = `${baseHref}${item.href}`;
+
+          return {
+            ...item,
+            href,
+            isActive:
+              item.href === ""
+                ? pathname === baseHref
+                : pathname === href || pathname.startsWith(`${href}/`),
+          };
+        }),
+    [activeTenant.permissions, baseHref, pathname],
   );
 
   useEffect(() => {
@@ -1316,6 +1576,7 @@ export default function NavigationSidebar({
           tenant={activeTenant}
           user={user}
           usage={usage}
+          isStripeConfigured={isStripeConfigured}
           onClose={() => setIsSettingsOpen(false)}
         />
       )}
