@@ -1,4 +1,177 @@
 {
+  "Navigation": {
+    "items": {
+      "overview": "Übersicht",
+      "myArea": "Mein Bereich",
+      "employees": "Mitarbeiter",
+      "locations": "Standorte",
+      "teams": "Teams",
+      "roles": "Rollen",
+      "files": "Dateien",
+      "vacation": "Urlaub",
+      "sickness": "Krankheit",
+      "shifts": "Schichtplanung",
+      "reminders": "Erinnerungen"
+    },
+    "brand": {
+      "subtitle": "Personalakte"
+    },
+    "toggle": {
+      "expand": "Navigation ausklappen",
+      "collapse": "Navigation einklappen",
+      "mobileOpen": "Navigation öffnen",
+      "mobileClose": "Navigation schließen"
+    },
+    "mainNavLabel": "Hauptnavigation",
+    "tenant": {
+      "switchTenant": "Unternehmen wechseln",
+      "unknownCompany": "Unbekanntes Unternehmen",
+      "selectCompany": "Unternehmen auswählen",
+      "noCompanyActive": "Kein Unternehmen aktiv"
+    },
+    "footer": {
+      "settings": "Einstellungen",
+      "logout": "Abmelden",
+      "localeDe": "Deutsch",
+      "localeEn": "English"
+    },
+    "user": {
+      "signedIn": "Angemeldet",
+      "notifications": "Benachrichtigungen",
+      "unreadNotifications": "{count} ungelesene Benachrichtigungen"
+    },
+    "notificationsPopup": {
+      "inboxEyebrow": "Inbox",
+      "title": "Benachrichtigungen",
+      "close": "Schließen",
+      "closeLabel": "Benachrichtigungen schließen",
+      "unreadCount": "{count} ungelesen",
+      "allRead": "Alles gelesen",
+      "markAllRead": "Als gelesen markieren",
+      "markRead": "Gelesen",
+      "empty": "Keine Benachrichtigungen – alles erledigt."
+    },
+    "settings": {
+      "dialogLabel": "Einstellungen",
+      "closeLabel": "Einstellungen schließen",
+      "close": "Schließen",
+      "categoriesNavLabel": "Einstellungskategorien",
+      "sidebarTitle": "Einstellungen",
+      "sectionEyebrow": "Bereich",
+      "cancel": "Abbrechen",
+      "save": "Speichern",
+      "saving": "Wird gespeichert...",
+      "categories": {
+        "account": { "label": "Konto", "description": "Profil, Sprache, Darstellung" },
+        "company": { "label": "Unternehmen", "description": "Mandant, Standorte, Defaults" },
+        "roles": { "label": "Rollen", "description": "Zugriffe und Freigaben" },
+        "notifications": { "label": "Benachrichtigungen", "description": "E-Mail und Erinnerungen" },
+        "security": { "label": "Sicherheit", "description": "Login, 2FA, Sitzungen" },
+        "integrations": { "label": "Integrationen", "description": "Lohn, Kalender, API" },
+        "billing": { "label": "Abrechnung", "description": "Plan, Zahlung, Stripe" }
+      },
+      "company": {
+        "profileTitle": "Unternehmensprofil",
+        "companyName": "Unternehmensname",
+        "tenantId": "Mandanten-ID",
+        "checking": "Wird geprüft…",
+        "available": "Verfügbar",
+        "taken": "Bereits vergeben",
+        "checkFailed": "Prüfung fehlgeschlagen",
+        "billingAddress": "Rechnungsadresse",
+        "vatId": "USt-ID",
+        "defaultsTitle": "Standards",
+        "defaultLocation": "Hauptstandort",
+        "noDefaultLocation": "Keinen Hauptstandort festlegen",
+        "noLocationsYet": "Noch keine Standorte angelegt",
+        "weekStart": "Wochenstart",
+        "monday": "Montag",
+        "sunday": "Sonntag",
+        "workHours": "Sollarbeitszeit",
+        "vacationDays": "Urlaubstage",
+        "dataRetentionTitle": "Daten & Aufbewahrung",
+        "employeeNumberRequired": "Personalnummer für neue Mitarbeiter verpflichtend",
+        "employeeNumberPrefix": "Personalnummer-Präfix",
+        "employeeNumberSuffix": "Personalnummer-Suffix",
+        "employeeNumberSuffixPlaceholder": "optional",
+        "archiveFormerEmployees": "Ausgeschiedene Mitarbeiter automatisch archivieren",
+        "exportDescription": "Alle Personal-, Team-, Standort- und Planungsdaten dieses Unternehmens als JSON-Datei herunterladen.",
+        "exportButton": "Daten exportieren"
+      },
+      "roles": {
+        "title": "Rollen & Rechte",
+        "description": "Rollen und Berechtigungen werden auf der eigenen Rollen-Seite verwaltet. Dort legen Sie fest, welche Bereiche eine Rolle lesen, bearbeiten oder verwalten darf.",
+        "manageButton": "Rollen verwalten"
+      },
+      "notificationsTab": {
+        "title": "Benachrichtigungen",
+        "channelsTitle": "Kanäle",
+        "mailNotifications": "E-Mail-Benachrichtigungen",
+        "inAppNotifications": "In-App-Benachrichtigungen",
+        "mobilePush": "Mobile Push-Nachrichten",
+        "eventsTitle": "Ereignisse",
+        "deadlineAlerts": "Fristen und Erinnerungen melden",
+        "absenceAlerts": "Urlaubs- und Krankmeldungen sofort senden",
+        "shiftAlerts": "Schichtplan-Konflikte hervorheben",
+        "digestLabel": "Wöchentlicher Digest",
+        "digestMonday": "Montag, 08:00 Uhr",
+        "digestFriday": "Freitag, 16:00 Uhr",
+        "digestDisabled": "Deaktiviert"
+      },
+      "security": {
+        "loginTitle": "Login-Sicherheit",
+        "twoFactorRequired": "Zwei-Faktor-Authentifizierung für alle Mitglieder verpflichtend",
+        "twoFactorRequiredHint": "Mitglieder ohne eingerichtete 2FA werden beim nächsten Zugriff zur Einrichtung aufgefordert, bevor sie weiter arbeiten können.",
+        "writeRequired": "Nur mit Schreibrecht auf „Einstellungen“ änderbar.",
+        "auditRetention": "Audit-Log-Aufbewahrung",
+        "months12": "12 Monate",
+        "months24": "24 Monate",
+        "years5": "5 Jahre"
+      },
+      "integrations": {
+        "title": "Integrationen",
+        "description": "Es sind derzeit keine externen Integrationen verfügbar. Lohn-Export (z. B. DATEV), Kalender-Synchronisierung und eine öffentliche API sind geplant, aber noch nicht umgesetzt.",
+        "documentsTitle": "Dokumentenablage",
+        "documentsDescription": "Dateien liegen im S3-Speicher des Mandanten. Verwaltung über den Bereich „Dateien“."
+      },
+      "billing": {
+        "subscriptionTitle": "Abonnement",
+        "notConfigured": "Es ist noch keine Zahlungsabwicklung angebunden. Plan und Abrechnungsintervall sind reine Angaben zum Mandanten – es werden keine Rechnungen erzeugt und keine Zahlungen eingezogen.",
+        "plan": "Plan",
+        "starter": "Starter",
+        "professional": "Professional",
+        "business": "Business",
+        "billingInterval": "Abrechnungsintervall",
+        "monthly": "Monatlich",
+        "yearly": "Jährlich",
+        "receiptEmail": "Rechnungs-E-Mail",
+        "activePlan": "Aktiver Plan:",
+        "yearlySuffix": "jährlich",
+        "monthlySuffix": "monatlich",
+        "endsOn": "Endet am {date} und verlängert sich nicht.",
+        "renewsOn": "Verlängert sich automatisch am {date}.",
+        "changePlan": "Plan wechseln",
+        "managePayment": "Zahlung verwalten",
+        "noActiveSubscription": "Kein aktives Abonnement. Wählen Sie einen Plan, um die Zahlung zu starten.",
+        "subscribeNow": "Jetzt abonnieren",
+        "usageTitle": "Nutzung",
+        "activeEmployees": "aktive Mitarbeiter",
+        "noUsageData": "Keine Nutzungsdaten verfügbar",
+        "totalRecords": "Personalakten gesamt"
+      },
+      "account": {
+        "profileTitle": "Profil",
+        "signedIn": "Angemeldet",
+        "roleAt": "{role} bei {company}",
+        "displayName": "Anzeigename",
+        "email": "E-Mail",
+        "emailHint": "Die Anmelde-E-Mail kann derzeit nicht selbst geändert werden.",
+        "passwordTitle": "Passwort & Konto",
+        "passwordDescription": "Passwort ändern und das Konto endgültig löschen erfolgt auf der Kontoseite.",
+        "manageAccount": "Konto verwalten"
+      }
+    }
+  },
   "Auth": {
     "header": {
       "eyebrow": "PERSONALAKTE"

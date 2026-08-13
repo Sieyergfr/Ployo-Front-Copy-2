@@ -1,4 +1,177 @@
 {
+  "Navigation": {
+    "items": {
+      "overview": "Overview",
+      "myArea": "My Area",
+      "employees": "Employees",
+      "locations": "Locations",
+      "teams": "Teams",
+      "roles": "Roles",
+      "files": "Files",
+      "vacation": "Vacation",
+      "sickness": "Sick Leave",
+      "shifts": "Shift Planning",
+      "reminders": "Reminders"
+    },
+    "brand": {
+      "subtitle": "HR Records"
+    },
+    "toggle": {
+      "expand": "Expand navigation",
+      "collapse": "Collapse navigation",
+      "mobileOpen": "Open navigation",
+      "mobileClose": "Close navigation"
+    },
+    "mainNavLabel": "Main navigation",
+    "tenant": {
+      "switchTenant": "Switch company",
+      "unknownCompany": "Unknown company",
+      "selectCompany": "Select company",
+      "noCompanyActive": "No company active"
+    },
+    "footer": {
+      "settings": "Settings",
+      "logout": "Sign out",
+      "localeDe": "Deutsch",
+      "localeEn": "English"
+    },
+    "user": {
+      "signedIn": "Signed in",
+      "notifications": "Notifications",
+      "unreadNotifications": "{count} unread notifications"
+    },
+    "notificationsPopup": {
+      "inboxEyebrow": "Inbox",
+      "title": "Notifications",
+      "close": "Close",
+      "closeLabel": "Close notifications",
+      "unreadCount": "{count} unread",
+      "allRead": "All caught up",
+      "markAllRead": "Mark as read",
+      "markRead": "Read",
+      "empty": "No notifications — all caught up."
+    },
+    "settings": {
+      "dialogLabel": "Settings",
+      "closeLabel": "Close settings",
+      "close": "Close",
+      "categoriesNavLabel": "Settings categories",
+      "sidebarTitle": "Settings",
+      "sectionEyebrow": "Section",
+      "cancel": "Cancel",
+      "save": "Save",
+      "saving": "Saving...",
+      "categories": {
+        "account": { "label": "Account", "description": "Profile, language, appearance" },
+        "company": { "label": "Company", "description": "Tenant, locations, defaults" },
+        "roles": { "label": "Roles", "description": "Access and permissions" },
+        "notifications": { "label": "Notifications", "description": "Email and reminders" },
+        "security": { "label": "Security", "description": "Login, 2FA, sessions" },
+        "integrations": { "label": "Integrations", "description": "Payroll, calendar, API" },
+        "billing": { "label": "Billing", "description": "Plan, payment, Stripe" }
+      },
+      "company": {
+        "profileTitle": "Company profile",
+        "companyName": "Company name",
+        "tenantId": "Tenant ID",
+        "checking": "Checking…",
+        "available": "Available",
+        "taken": "Already taken",
+        "checkFailed": "Check failed",
+        "billingAddress": "Billing address",
+        "vatId": "VAT ID",
+        "defaultsTitle": "Defaults",
+        "defaultLocation": "Main location",
+        "noDefaultLocation": "Don't set a main location",
+        "noLocationsYet": "No locations created yet",
+        "weekStart": "Week starts on",
+        "monday": "Monday",
+        "sunday": "Sunday",
+        "workHours": "Target working hours",
+        "vacationDays": "Vacation days",
+        "dataRetentionTitle": "Data & retention",
+        "employeeNumberRequired": "Employee number required for new employees",
+        "employeeNumberPrefix": "Employee number prefix",
+        "employeeNumberSuffix": "Employee number suffix",
+        "employeeNumberSuffixPlaceholder": "optional",
+        "archiveFormerEmployees": "Automatically archive former employees",
+        "exportDescription": "Download all HR, team, location, and scheduling data for this company as a JSON file.",
+        "exportButton": "Export data"
+      },
+      "roles": {
+        "title": "Roles & permissions",
+        "description": "Roles and permissions are managed on the dedicated roles page. There you define which areas a role may read, edit, or manage.",
+        "manageButton": "Manage roles"
+      },
+      "notificationsTab": {
+        "title": "Notifications",
+        "channelsTitle": "Channels",
+        "mailNotifications": "Email notifications",
+        "inAppNotifications": "In-app notifications",
+        "mobilePush": "Mobile push notifications",
+        "eventsTitle": "Events",
+        "deadlineAlerts": "Report deadlines and reminders",
+        "absenceAlerts": "Send vacation and sick leave notices immediately",
+        "shiftAlerts": "Highlight shift schedule conflicts",
+        "digestLabel": "Weekly digest",
+        "digestMonday": "Monday, 8:00 AM",
+        "digestFriday": "Friday, 4:00 PM",
+        "digestDisabled": "Disabled"
+      },
+      "security": {
+        "loginTitle": "Login security",
+        "twoFactorRequired": "Require two-factor authentication for all members",
+        "twoFactorRequiredHint": "Members without 2FA set up will be prompted to set it up on their next access, before they can continue working.",
+        "writeRequired": "Only changeable with write access to \"Settings\".",
+        "auditRetention": "Audit log retention",
+        "months12": "12 months",
+        "months24": "24 months",
+        "years5": "5 years"
+      },
+      "integrations": {
+        "title": "Integrations",
+        "description": "No external integrations are currently available. Payroll export (e.g. DATEV), calendar sync, and a public API are planned but not yet built.",
+        "documentsTitle": "Document storage",
+        "documentsDescription": "Files are stored in the tenant's S3 storage. Manage them under the \"Files\" section."
+      },
+      "billing": {
+        "subscriptionTitle": "Subscription",
+        "notConfigured": "No payment processing is connected yet. Plan and billing interval are informational only — no invoices are generated and no payments are collected.",
+        "plan": "Plan",
+        "starter": "Starter",
+        "professional": "Professional",
+        "business": "Business",
+        "billingInterval": "Billing interval",
+        "monthly": "Monthly",
+        "yearly": "Yearly",
+        "receiptEmail": "Billing email",
+        "activePlan": "Active plan:",
+        "yearlySuffix": "yearly",
+        "monthlySuffix": "monthly",
+        "endsOn": "Ends on {date} and won't renew.",
+        "renewsOn": "Renews automatically on {date}.",
+        "changePlan": "Change plan",
+        "managePayment": "Manage payment",
+        "noActiveSubscription": "No active subscription. Choose a plan to start payment.",
+        "subscribeNow": "Subscribe now",
+        "usageTitle": "Usage",
+        "activeEmployees": "active employees",
+        "noUsageData": "No usage data available",
+        "totalRecords": "total HR records"
+      },
+      "account": {
+        "profileTitle": "Profile",
+        "signedIn": "Signed in",
+        "roleAt": "{role} at {company}",
+        "displayName": "Display name",
+        "email": "Email",
+        "emailHint": "The sign-in email currently can't be changed by yourself.",
+        "passwordTitle": "Password & account",
+        "passwordDescription": "Changing your password and permanently deleting the account happens on the account page.",
+        "manageAccount": "Manage account"
+      }
+    }
+  },
   "Auth": {
     "header": {
       "eyebrow": "HR RECORDS"

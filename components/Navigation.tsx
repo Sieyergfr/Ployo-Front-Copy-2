@@ -35,7 +35,7 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import { useLocale } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import Image from "next/image";
 import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
@@ -47,7 +47,7 @@ const availableLocales = [
 ] as const;
 
 type NavItem = {
-  label: string;
+  labelKey: string;
   code: string;
   href: string;
   area?: TenantPermissionArea;
@@ -106,26 +106,28 @@ type TenantItem = {
 export type NavigationTenantItem = TenantItem;
 
 const navigationItems: NavItem[] = [
-  { label: "Übersicht", code: "Üb", href: "" },
-  { label: "Mein Bereich", code: "Mb", href: "/mein-bereich" },
-  { label: "Mitarbeiter", code: "MA", href: "/employees", area: "employees" },
-  { label: "Standorte", code: "St", href: "/standorte", area: "locations" },
-  { label: "Teams", code: "Tm", href: "/teams", area: "teams" },
-  { label: "Rollen", code: "Ro", href: "/rollen", area: "roles", requiredLevel: "admin" },
-  { label: "Dateien", code: "Dt", href: "/dateien", area: "files" },
-  { label: "Urlaub", code: "Ur", href: "/urlaub", area: "vacation" },
-  { label: "Krankheit", code: "Kr", href: "/krankheit", area: "sickness" },
-  { label: "Schichtplanung", code: "Sp", href: "/schichtplanung", area: "shifts" },
-  { label: "Erinnerungen", code: "Er", href: "/erinnerungen", area: "reminders" },
+  { labelKey: "overview", code: "Üb", href: "" },
+  { labelKey: "myArea", code: "Mb", href: "/mein-bereich" },
+  { labelKey: "employees", code: "MA", href: "/employees", area: "employees" },
+  { labelKey: "locations", code: "St", href: "/standorte", area: "locations" },
+  { labelKey: "teams", code: "Tm", href: "/teams", area: "teams" },
+  { labelKey: "roles", code: "Ro", href: "/rollen", area: "roles", requiredLevel: "admin" },
+  { labelKey: "files", code: "Dt", href: "/dateien", area: "files" },
+  { labelKey: "vacation", code: "Ur", href: "/urlaub", area: "vacation" },
+  { labelKey: "sickness", code: "Kr", href: "/krankheit", area: "sickness" },
+  { labelKey: "shifts", code: "Sp", href: "/schichtplanung", area: "shifts" },
+  { labelKey: "reminders", code: "Er", href: "/erinnerungen", area: "reminders" },
 ];
 
-const fallbackTenantItem: TenantItem = {
-  name: "Unternehmen auswählen",
-  role: "Kein Unternehmen aktiv",
-  mark: "U",
-  href: "/select",
-  colorClass: "sidebar-tenant-mark-blue",
-};
+function getFallbackTenantItem(t: (key: string) => string): TenantItem {
+  return {
+    name: t("tenant.selectCompany"),
+    role: t("tenant.noCompanyActive"),
+    mark: "U",
+    href: "/select",
+    colorClass: "sidebar-tenant-mark-blue",
+  };
+}
 
 const defaultSettings: NonNullable<TenantItem["settings"]> = {
   companyAddress: null,
@@ -190,67 +192,69 @@ type NotificationItem = {
   category: string;
 };
 
-const settingsCategories: SettingsCategory[] = [
-  {
-    id: "account",
-    label: "Konto",
-    description: "Profil, Sprache, Darstellung",
-    icon: UserCog,
-  },
-  {
-    id: "company",
-    label: "Unternehmen",
-    description: "Mandant, Standorte, Defaults",
-    icon: Building2,
-    area: "settings",
-    requiredLevel: "write",
-  },
-  {
-    id: "roles",
-    label: "Rollen",
-    description: "Zugriffe und Freigaben",
-    icon: UsersRound,
-    area: "roles",
-    requiredLevel: "admin",
-  },
-  {
-    id: "notifications",
-    label: "Benachrichtigungen",
-    description: "E-Mail und Erinnerungen",
-    icon: Bell,
-    area: "settings",
-    requiredLevel: "write",
-  },
-  {
-    id: "security",
-    label: "Sicherheit",
-    description: "Login, 2FA, Sitzungen",
-    icon: ShieldCheck,
-    // Bewusst ohne area/requiredLevel — anders als die übrigen Mandanten-
-    // weiten Einstellungen soll dieser Tab für jedes Mitglied sichtbar sein
-    // (Transparenz über die eigene Login-Sicherheit). Die einzige darin
-    // enthaltene Mandanten-weite Einstellung (Audit-Log-Aufbewahrung) bleibt
-    // trotzdem geschützt: das Feld wird unten für Mitglieder ohne
-    // "settings:write" deaktiviert, und `updateTenantSecurity` erzwingt den
-    // Zugriff serverseitig ohnehin unabhängig von der UI.
-  },
-  {
-    id: "integrations",
-    label: "Integrationen",
-    description: "Lohn, Kalender, API",
-    icon: Plug,
-    area: "settings",
-    requiredLevel: "admin",
-  },
-  {
-    id: "billing",
-    label: "Abrechnung",
-    description: "Plan, Zahlung, Stripe",
-    icon: CreditCard,
-    area: "settings",
-    requiredLevel: "write",
-  },
-];
+function getSettingsCategories(t: (key: string) => string): SettingsCategory[] {
+  return [
+    {
+      id: "account",
+      label: t("categories.account.label"),
+      description: t("categories.account.description"),
+      icon: UserCog,
+    },
+    {
+      id: "company",
+      label: t("categories.company.label"),
+      description: t("categories.company.description"),
+      icon: Building2,
+      area: "settings",
+      requiredLevel: "write",
+    },
+    {
+      id: "roles",
+      label: t("categories.roles.label"),
+      description: t("categories.roles.description"),
+      icon: UsersRound,
+      area: "roles",
+      requiredLevel: "admin",
+    },
+    {
+      id: "notifications",
+      label: t("categories.notifications.label"),
+      description: t("categories.notifications.description"),
+      icon: Bell,
+      area: "settings",
+      requiredLevel: "write",
+    },
+    {
+      id: "security",
+      label: t("categories.security.label"),
+      description: t("categories.security.description"),
+      icon: ShieldCheck,
+      // Bewusst ohne area/requiredLevel — anders als die übrigen Mandanten-
+      // weiten Einstellungen soll dieser Tab für jedes Mitglied sichtbar sein
+      // (Transparenz über die eigene Login-Sicherheit). Die einzige darin
+      // enthaltene Mandanten-weite Einstellung (Audit-Log-Aufbewahrung) bleibt
+      // trotzdem geschützt: das Feld wird unten für Mitglieder ohne
+      // "settings:write" deaktiviert, und `updateTenantSecurity` erzwingt den
+      // Zugriff serverseitig ohnehin unabhängig von der UI.
+    },
+    {
+      id: "integrations",
+      label: t("categories.integrations.label"),
+      description: t("categories.integrations.description"),
+      icon: Plug,
+      area: "settings",
+      requiredLevel: "admin",
+    },
+    {
+      id: "billing",
+      label: t("categories.billing.label"),
+      description: t("categories.billing.description"),
+      icon: CreditCard,
+      area: "settings",
+      requiredLevel: "write",
+    },
+  ];
+}
 
 export type NavigationUserItem = {
   name: string;
@@ -291,11 +295,12 @@ function TenantSlugField({ initialSlug }: { initialSlug: string }) {
   const slug = slugify(value);
   const slugState = useSlugAvailability(slug, initialSlug);
   const showStatus = slug !== "" && slug !== initialSlug;
+  const t = useTranslations("Navigation.settings.company");
 
   return (
     <div className="field">
       <label htmlFor="settings-company-id" className="label">
-        Mandanten-ID
+        {t("tenantId")}
       </label>
       <input
         id="settings-company-id"
@@ -319,20 +324,20 @@ function TenantSlugField({ initialSlug }: { initialSlug: string }) {
         >
           {slugState === "checking" && (
             <>
-              <Loader2 size={12} className="animate-spin" /> Wird geprüft…
+              <Loader2 size={12} className="animate-spin" /> {t("checking")}
             </>
           )}
           {slugState === "available" && (
             <>
-              <Check size={12} strokeWidth={2.6} /> Verfügbar
+              <Check size={12} strokeWidth={2.6} /> {t("available")}
             </>
           )}
           {slugState === "taken" && (
             <>
-              <X size={12} strokeWidth={2.6} /> Bereits vergeben
+              <X size={12} strokeWidth={2.6} /> {t("taken")}
             </>
           )}
-          {slugState === "error" && "Prüfung fehlgeschlagen"}
+          {slugState === "error" && t("checkFailed")}
         </p>
       )}
     </div>
@@ -353,14 +358,16 @@ function SettingsPanel({
   isStripeConfigured: boolean;
 }) {
   const settings = tenant.settings ?? defaultSettings;
+  const t = useTranslations("Navigation.settings");
+  const currentLocale = useLocale();
   if (activeCategory === "company") {
     return (
       <div className="flex flex-col gap-4">
-        <SettingsSection title="Unternehmensprofil" icon={Building2}>
+        <SettingsSection title={t("company.profileTitle")} icon={Building2}>
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="field">
               <label htmlFor="settings-company-name" className="label">
-                Unternehmensname
+                {t("company.companyName")}
               </label>
               <input
                 id="settings-company-name"
@@ -372,7 +379,7 @@ function SettingsPanel({
             </div>
             <TenantSlugField initialSlug={tenant.slug ?? tenantSlugFromHref(tenant.href)} />
             <div className="sm:col-span-2">
-              <div className="mb-2 label">Rechnungsadresse</div>
+              <div className="mb-2 label">{t("company.billingAddress")}</div>
               <AddressFields
                 idPrefix="settings-company-address"
                 namePrefix="companyAddress"
@@ -381,7 +388,7 @@ function SettingsPanel({
             </div>
             <div className="field">
               <label htmlFor="settings-company-tax" className="label">
-                USt-ID
+                {t("company.vatId")}
               </label>
               <input
                 id="settings-company-tax"
@@ -393,11 +400,11 @@ function SettingsPanel({
             </div>
           </div>
         </SettingsSection>
-        <SettingsSection title="Standards" icon={SlidersHorizontal}>
+        <SettingsSection title={t("company.defaultsTitle")} icon={SlidersHorizontal}>
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="field">
               <label htmlFor="settings-default-location" className="label">
-                Hauptstandort
+                {t("company.defaultLocation")}
               </label>
               <select
                 id="settings-default-location"
@@ -408,8 +415,8 @@ function SettingsPanel({
               >
                 <option value="">
                   {tenant.locations?.length
-                    ? "Keinen Hauptstandort festlegen"
-                    : "Noch keine Standorte angelegt"}
+                    ? t("company.noDefaultLocation")
+                    : t("company.noLocationsYet")}
                 </option>
                 {tenant.locations?.map((location) => (
                   <option key={location.id} value={location.id}>
@@ -420,7 +427,7 @@ function SettingsPanel({
             </div>
             <div className="field">
               <label htmlFor="settings-week-start" className="label">
-                Wochenstart
+                {t("company.weekStart")}
               </label>
               <select
                 id="settings-week-start"
@@ -428,13 +435,13 @@ function SettingsPanel({
                 className="input cursor-pointer bg-white"
                 defaultValue={settings.weekStart}
               >
-                <option value="monday">Montag</option>
-                <option value="sunday">Sonntag</option>
+                <option value="monday">{t("company.monday")}</option>
+                <option value="sunday">{t("company.sunday")}</option>
               </select>
             </div>
             <div className="field">
               <label htmlFor="settings-work-hours" className="label">
-                Sollarbeitszeit
+                {t("company.workHours")}
               </label>
               <input
                 id="settings-work-hours"
@@ -445,7 +452,7 @@ function SettingsPanel({
             </div>
             <div className="field">
               <label htmlFor="settings-vacation-days" className="label">
-                Urlaubstage
+                {t("company.vacationDays")}
               </label>
               <input
                 id="settings-vacation-days"
@@ -458,15 +465,15 @@ function SettingsPanel({
             </div>
           </div>
         </SettingsSection>
-        <SettingsSection title="Daten & Aufbewahrung" icon={KeyRound}>
+        <SettingsSection title={t("company.dataRetentionTitle")} icon={KeyRound}>
           <div className="flex flex-col gap-3">
             <Checkbox id="employeeNumberRequired" defaultChecked={settings.employeeNumberRequired}>
-              Personalnummer für neue Mitarbeiter verpflichtend
+              {t("company.employeeNumberRequired")}
             </Checkbox>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="field">
                 <label htmlFor="settings-employee-number-prefix" className="label">
-                  Personalnummer-Präfix
+                  {t("company.employeeNumberPrefix")}
                 </label>
                 <input
                   id="settings-employee-number-prefix"
@@ -479,31 +486,30 @@ function SettingsPanel({
               </div>
               <div className="field">
                 <label htmlFor="settings-employee-number-suffix" className="label">
-                  Personalnummer-Suffix
+                  {t("company.employeeNumberSuffix")}
                 </label>
                 <input
                   id="settings-employee-number-suffix"
                   name="employeeNumberSuffix"
                   className="input bg-white"
-                  placeholder="optional"
+                  placeholder={t("company.employeeNumberSuffixPlaceholder")}
                   defaultValue={settings.employeeNumberSuffix}
                   maxLength={16}
                 />
               </div>
             </div>
             <Checkbox id="archiveFormerEmployees" defaultChecked={settings.archiveFormerEmployees}>
-              Ausgeschiedene Mitarbeiter automatisch archivieren
+              {t("company.archiveFormerEmployees")}
             </Checkbox>
             <div className="flex items-center justify-between gap-3 border-t border-border-soft pt-3">
               <p className="text-[12px] text-muted">
-                Alle Personal-, Team-, Standort- und Planungsdaten dieses
-                Unternehmens als JSON-Datei herunterladen.
+                {t("company.exportDescription")}
               </p>
               <a
                 href={`/api/tenants/${tenant.slug ?? tenantSlugFromHref(tenant.href)}/export`}
                 className="btn btn-secondary btn-sm shrink-0"
               >
-                Daten exportieren
+                {t("company.exportButton")}
               </a>
             </div>
           </div>
@@ -516,18 +522,16 @@ function SettingsPanel({
     const tenantSlug = tenant.slug ?? tenantSlugFromHref(tenant.href);
 
     return (
-      <SettingsSection title="Rollen & Rechte" icon={UsersRound}>
+      <SettingsSection title={t("roles.title")} icon={UsersRound}>
         <p className="text-[12.5px] leading-5 text-muted">
-          Rollen und Berechtigungen werden auf der eigenen Rollen-Seite
-          verwaltet. Dort legen Sie fest, welche Bereiche eine Rolle lesen,
-          bearbeiten oder verwalten darf.
+          {t("roles.description")}
         </p>
         <Link
           href={`/u/${tenantSlug}/rollen`}
           className="btn btn-secondary btn-sm mt-3 w-fit"
         >
           <UsersRound size={14} />
-          Rollen verwalten
+          {t("roles.manageButton")}
         </Link>
       </SettingsSection>
     );
@@ -535,39 +539,39 @@ function SettingsPanel({
 
   if (activeCategory === "notifications") {
     return (
-      <SettingsSection title="Benachrichtigungen" icon={Bell}>
+      <SettingsSection title={t("notificationsTab.title")} icon={Bell}>
         <div className="grid gap-5 sm:grid-cols-2">
           <div className="flex flex-col gap-3">
             <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-muted">
-              Kanäle
+              {t("notificationsTab.channelsTitle")}
             </div>
             <Checkbox id="mailNotifications" defaultChecked={settings.mailNotifications}>
-              E-Mail-Benachrichtigungen
+              {t("notificationsTab.mailNotifications")}
             </Checkbox>
             <Checkbox id="inAppNotifications" defaultChecked={settings.inAppNotifications}>
-              In-App-Benachrichtigungen
+              {t("notificationsTab.inAppNotifications")}
             </Checkbox>
             <Checkbox id="mobilePush" defaultChecked={settings.mobilePush}>
-              Mobile Push-Nachrichten
+              {t("notificationsTab.mobilePush")}
             </Checkbox>
           </div>
           <div className="flex flex-col gap-3">
             <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-muted">
-              Ereignisse
+              {t("notificationsTab.eventsTitle")}
             </div>
             <Checkbox id="deadlineAlerts" defaultChecked={settings.deadlineAlerts}>
-              Fristen und Erinnerungen melden
+              {t("notificationsTab.deadlineAlerts")}
             </Checkbox>
             <Checkbox id="absenceAlerts" defaultChecked={settings.absenceAlerts}>
-              Urlaubs- und Krankmeldungen sofort senden
+              {t("notificationsTab.absenceAlerts")}
             </Checkbox>
             <Checkbox id="shiftAlerts" defaultChecked={settings.shiftAlerts}>
-              Schichtplan-Konflikte hervorheben
+              {t("notificationsTab.shiftAlerts")}
             </Checkbox>
           </div>
           <div className="field sm:col-span-2">
             <label htmlFor="settings-digest-time" className="label">
-              Wöchentlicher Digest
+              {t("notificationsTab.digestLabel")}
             </label>
             <select
               id="settings-digest-time"
@@ -575,9 +579,9 @@ function SettingsPanel({
               className="input cursor-pointer bg-white"
               defaultValue={settings.digestTime}
             >
-              <option value="monday-0800">Montag, 08:00 Uhr</option>
-              <option value="friday-1600">Freitag, 16:00 Uhr</option>
-              <option value="disabled">Deaktiviert</option>
+              <option value="monday-0800">{t("notificationsTab.digestMonday")}</option>
+              <option value="friday-1600">{t("notificationsTab.digestFriday")}</option>
+              <option value="disabled">{t("notificationsTab.digestDisabled")}</option>
             </select>
           </div>
         </div>
@@ -593,32 +597,29 @@ function SettingsPanel({
 
     return (
       <div className="flex flex-col gap-4">
-        <SettingsSection title="Login-Sicherheit" icon={ShieldCheck}>
+        <SettingsSection title={t("security.loginTitle")} icon={ShieldCheck}>
           <fieldset disabled={!canManageSecurity} className="m-0 border-0 p-0">
             <Checkbox
               id="twoFactorRequired"
               defaultChecked={settings.twoFactorRequired}
               alignItems="start"
             >
-              <span className="block">
-                Zwei-Faktor-Authentifizierung für alle Mitglieder verpflichtend
-              </span>
+              <span className="block">{t("security.twoFactorRequired")}</span>
               <span className="mt-0.5 block text-[11.5px] font-normal text-muted-2">
-                Mitglieder ohne eingerichtete 2FA werden beim nächsten Zugriff
-                zur Einrichtung aufgefordert, bevor sie weiter arbeiten können.
+                {t("security.twoFactorRequiredHint")}
               </span>
             </Checkbox>
           </fieldset>
           {!canManageSecurity && (
             <p className="mt-1 text-[11.5px] text-muted-2">
-              Nur mit Schreibrecht auf „Einstellungen“ änderbar.
+              {t("security.writeRequired")}
             </p>
           )}
         </SettingsSection>
         <div className="grid gap-3">
           <div className="field">
             <label htmlFor="settings-audit-retention" className="label">
-              Audit-Log-Aufbewahrung
+              {t("security.auditRetention")}
             </label>
             <select
               id="settings-audit-retention"
@@ -627,13 +628,13 @@ function SettingsPanel({
               defaultValue={settings.auditRetentionMonths}
               disabled={!canManageSecurity}
             >
-              <option value="12">12 Monate</option>
-              <option value="24">24 Monate</option>
-              <option value="60">5 Jahre</option>
+              <option value="12">{t("security.months12")}</option>
+              <option value="24">{t("security.months24")}</option>
+              <option value="60">{t("security.years5")}</option>
             </select>
             {!canManageSecurity && (
               <p className="mt-1 text-[11.5px] text-muted-2">
-                Nur mit Schreibrecht auf „Einstellungen“ änderbar.
+                {t("security.writeRequired")}
               </p>
             )}
           </div>
@@ -644,17 +645,16 @@ function SettingsPanel({
 
   if (activeCategory === "integrations") {
     return (
-      <SettingsSection title="Integrationen" icon={Plug}>
+      <SettingsSection title={t("integrations.title")} icon={Plug}>
         <p className="text-[12.5px] leading-5 text-muted">
-          Es sind derzeit keine externen Integrationen verfügbar. Lohn-Export
-          (z. B. DATEV), Kalender-Synchronisierung und eine öffentliche API sind
-          geplant, aber noch nicht umgesetzt.
+          {t("integrations.description")}
         </p>
         <div className="mt-3 rounded-[10px] border border-border-light bg-bg px-3 py-2.5">
-          <div className="text-[13px] font-semibold text-ink">Dokumentenablage</div>
+          <div className="text-[13px] font-semibold text-ink">
+            {t("integrations.documentsTitle")}
+          </div>
           <div className="mt-0.5 text-[11.5px] text-muted-2">
-            Dateien liegen im S3-Speicher des Mandanten. Verwaltung über den
-            Bereich „Dateien“.
+            {t("integrations.documentsDescription")}
           </div>
         </div>
       </SettingsSection>
@@ -666,9 +666,9 @@ function SettingsPanel({
       tenant.stripeSubscriptionStatus === "active" ||
       tenant.stripeSubscriptionStatus === "trialing";
     const periodEndLabel = tenant.stripeCurrentPeriodEnd
-      ? new Intl.DateTimeFormat("de-DE", { dateStyle: "medium" }).format(
-          new Date(tenant.stripeCurrentPeriodEnd),
-        )
+      ? new Intl.DateTimeFormat(currentLocale === "en" ? "en-GB" : "de-DE", {
+          dateStyle: "medium",
+        }).format(new Date(tenant.stripeCurrentPeriodEnd))
       : null;
 
     return (
@@ -681,17 +681,15 @@ function SettingsPanel({
         />
 
         {!isStripeConfigured ? (
-          <SettingsSection title="Abonnement" icon={CreditCard}>
+          <SettingsSection title={t("billing.subscriptionTitle")} icon={CreditCard}>
             <div className="rounded-[10px] border border-warning/30 bg-warning/10 px-3 py-2.5 text-[12.5px] leading-5 text-[#7A4E00]">
-              Es ist noch keine Zahlungsabwicklung angebunden. Plan und
-              Abrechnungsintervall sind reine Angaben zum Mandanten – es werden
-              keine Rechnungen erzeugt und keine Zahlungen eingezogen.
+              {t("billing.notConfigured")}
             </div>
 
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <div className="field">
                 <label htmlFor="settings-plan" className="label">
-                  Plan
+                  {t("billing.plan")}
                 </label>
                 <select
                   id="settings-plan"
@@ -699,14 +697,14 @@ function SettingsPanel({
                   className="input cursor-pointer bg-white"
                   defaultValue={tenant.plan ?? "professional"}
                 >
-                  <option value="starter">Starter</option>
-                  <option value="professional">Professional</option>
-                  <option value="business">Business</option>
+                  <option value="starter">{t("billing.starter")}</option>
+                  <option value="professional">{t("billing.professional")}</option>
+                  <option value="business">{t("billing.business")}</option>
                 </select>
               </div>
               <div className="field">
                 <label htmlFor="settings-payment-interval" className="label">
-                  Abrechnungsintervall
+                  {t("billing.billingInterval")}
                 </label>
                 <select
                   id="settings-payment-interval"
@@ -714,13 +712,13 @@ function SettingsPanel({
                   className="input cursor-pointer bg-white"
                   defaultValue={tenant.billingCycle ?? "monthly"}
                 >
-                  <option value="monthly">Monatlich</option>
-                  <option value="yearly">Jährlich</option>
+                  <option value="monthly">{t("billing.monthly")}</option>
+                  <option value="yearly">{t("billing.yearly")}</option>
                 </select>
               </div>
               <div className="field sm:col-span-2">
                 <label htmlFor="settings-receipt-email" className="label">
-                  Rechnungs-E-Mail
+                  {t("billing.receiptEmail")}
                 </label>
                 <input
                   id="settings-receipt-email"
@@ -733,14 +731,19 @@ function SettingsPanel({
             </div>
           </SettingsSection>
         ) : isSubscriptionHealthy ? (
-          <SettingsSection title="Abonnement" icon={CreditCard}>
+          <SettingsSection title={t("billing.subscriptionTitle")} icon={CreditCard}>
             <div className="rounded-[10px] border border-success/30 bg-success/10 px-3 py-2.5 text-[12.5px] leading-5 text-[#1F5D2C]">
-              Aktiver Plan: <strong className="capitalize">{tenant.plan}</strong>
-              {" "}({tenant.billingCycle === "yearly" ? "jährlich" : "monatlich"}).{" "}
+              {t("billing.activePlan")} <strong className="capitalize">{tenant.plan}</strong>
+              {" "}
+              (
+              {tenant.billingCycle === "yearly"
+                ? t("billing.yearlySuffix")
+                : t("billing.monthlySuffix")}
+              ).{" "}
               {periodEndLabel
                 ? tenant.stripeCancelAtPeriodEnd
-                  ? `Endet am ${periodEndLabel} und verlängert sich nicht.`
-                  : `Verlängert sich automatisch am ${periodEndLabel}.`
+                  ? t("billing.endsOn", { date: periodEndLabel })
+                  : t("billing.renewsOn", { date: periodEndLabel })
                 : null}
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
@@ -751,27 +754,26 @@ function SettingsPanel({
                 value="switch-plan"
                 className="btn btn-secondary btn-sm"
               >
-                Plan wechseln
+                {t("billing.changePlan")}
               </button>
               <button
                 type="submit"
                 formAction={openBillingPortalAction}
                 className="btn btn-secondary btn-sm"
               >
-                Zahlung verwalten
+                {t("billing.managePayment")}
               </button>
             </div>
           </SettingsSection>
         ) : (
-          <SettingsSection title="Abonnement" icon={CreditCard}>
+          <SettingsSection title={t("billing.subscriptionTitle")} icon={CreditCard}>
             <div className="rounded-[10px] border border-warning/30 bg-warning/10 px-3 py-2.5 text-[12.5px] leading-5 text-[#7A4E00]">
-              Kein aktives Abonnement. Wählen Sie einen Plan, um die Zahlung
-              zu starten.
+              {t("billing.noActiveSubscription")}
             </div>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <div className="field">
                 <label htmlFor="settings-plan" className="label">
-                  Plan
+                  {t("billing.plan")}
                 </label>
                 <select
                   id="settings-plan"
@@ -779,14 +781,14 @@ function SettingsPanel({
                   className="input cursor-pointer bg-white"
                   defaultValue={tenant.plan ?? "professional"}
                 >
-                  <option value="starter">Starter</option>
-                  <option value="professional">Professional</option>
-                  <option value="business">Business</option>
+                  <option value="starter">{t("billing.starter")}</option>
+                  <option value="professional">{t("billing.professional")}</option>
+                  <option value="business">{t("billing.business")}</option>
                 </select>
               </div>
               <div className="field">
                 <label htmlFor="settings-payment-interval" className="label">
-                  Abrechnungsintervall
+                  {t("billing.billingInterval")}
                 </label>
                 <select
                   id="settings-payment-interval"
@@ -794,8 +796,8 @@ function SettingsPanel({
                   className="input cursor-pointer bg-white"
                   defaultValue={tenant.billingCycle ?? "monthly"}
                 >
-                  <option value="monthly">Monatlich</option>
-                  <option value="yearly">Jährlich</option>
+                  <option value="monthly">{t("billing.monthly")}</option>
+                  <option value="yearly">{t("billing.yearly")}</option>
                 </select>
               </div>
             </div>
@@ -804,21 +806,21 @@ function SettingsPanel({
               formAction={startBillingCheckoutAction}
               className="btn btn-primary btn-sm mt-3"
             >
-              Jetzt abonnieren
+              {t("billing.subscribeNow")}
             </button>
           </SettingsSection>
         )}
 
-        <SettingsSection title="Nutzung" icon={Building2}>
+        <SettingsSection title={t("billing.usageTitle")} icon={Building2}>
           <div className="rounded-[10px] border border-border-light bg-bg px-3 py-2.5">
             <div className="text-[13px] font-semibold text-ink">
               {usage
-                ? `${usage.activeEmployees}${usage.employeeLimit ? ` / ${usage.employeeLimit}` : ""} aktive Mitarbeiter`
-                : "Keine Nutzungsdaten verfügbar"}
+                ? `${usage.activeEmployees}${usage.employeeLimit ? ` / ${usage.employeeLimit}` : ""} ${t("billing.activeEmployees")}`
+                : t("billing.noUsageData")}
             </div>
             {usage && (
               <div className="mt-0.5 text-[11.5px] text-muted-2">
-                {usage.employeeTotal} Personalakten gesamt
+                {usage.employeeTotal} {t("billing.totalRecords")}
               </div>
             )}
           </div>
@@ -829,22 +831,22 @@ function SettingsPanel({
 
   return (
     <div className="flex flex-col gap-4">
-      <SettingsSection title="Profil" icon={UserCog}>
+      <SettingsSection title={t("account.profileTitle")} icon={UserCog}>
         <div className="mb-4 flex items-center gap-3 rounded-[10px] bg-bg p-3">
           <div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-ink text-[15px] font-semibold text-white">
             {user?.initials ?? "–"}
           </div>
           <div className="min-w-0">
-            <div className="font-semibold text-ink">{user?.name ?? "Angemeldet"}</div>
+            <div className="font-semibold text-ink">{user?.name ?? t("account.signedIn")}</div>
             <div className="mt-0.5 text-[12px] text-muted-2">
-              {tenant.role} bei {tenant.name}
+              {t("account.roleAt", { role: tenant.role, company: tenant.name })}
             </div>
           </div>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="field">
             <label htmlFor="settings-account-name" className="label">
-              Anzeigename
+              {t("account.displayName")}
             </label>
             <input
               id="settings-account-name"
@@ -855,7 +857,7 @@ function SettingsPanel({
           </div>
           <div className="field">
             <label htmlFor="settings-account-email" className="label">
-              E-Mail
+              {t("account.email")}
             </label>
             <input
               id="settings-account-email"
@@ -865,20 +867,19 @@ function SettingsPanel({
               aria-describedby="settings-account-email-hint"
             />
             <p id="settings-account-email-hint" className="mt-1 text-[11.5px] text-muted">
-              Die Anmelde-E-Mail kann derzeit nicht selbst geändert werden.
+              {t("account.emailHint")}
             </p>
           </div>
         </div>
       </SettingsSection>
 
-      <SettingsSection title="Passwort & Konto" icon={KeyRound}>
+      <SettingsSection title={t("account.passwordTitle")} icon={KeyRound}>
         <p className="text-[12.5px] leading-5 text-muted">
-          Passwort ändern und das Konto endgültig löschen erfolgt auf der
-          Kontoseite.
+          {t("account.passwordDescription")}
         </p>
         <Link href="/konto" className="btn btn-secondary btn-sm mt-3 w-fit">
           <UserCog size={14} />
-          Konto verwalten
+          {t("account.manageAccount")}
         </Link>
       </SettingsSection>
     </div>
@@ -900,8 +901,9 @@ function SettingsPopupForm({
 }) {
   const [activeCategory, setActiveCategory] =
     useState<SettingsCategoryId>("account");
+  const t = useTranslations("Navigation.settings");
 
-  const visibleCategories = settingsCategories.filter((category) => {
+  const visibleCategories = getSettingsCategories(t).filter((category) => {
     if (!category.area || !tenant.permissions) {
       return true;
     }
@@ -914,7 +916,7 @@ function SettingsPopupForm({
 
   const activeCategoryLabel =
     visibleCategories.find((category) => category.id === activeCategory)?.label ??
-    "Konto";
+    t("categories.account.label");
 
   return (
     <form
@@ -933,11 +935,11 @@ function SettingsPopupForm({
       <input type="hidden" name="plan" value={tenant.plan ?? "professional"} />
       <input type="hidden" name="billingCycle" value={tenant.billingCycle ?? "monthly"} />
       <nav
-        aria-label="Einstellungskategorien"
+        aria-label={t("categoriesNavLabel")}
         className="border-b border-white/[0.08] bg-[#0D0D0D] p-3 md:row-span-2 md:border-r md:border-b-0"
       >
         <div className="mb-3 px-2 pt-1 font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-[#5E5E5B]">
-          Einstellungen
+          {t("sidebarTitle")}
         </div>
         <div className="flex gap-1 overflow-x-auto pb-1 md:flex-col md:overflow-visible md:pb-0">
           {visibleCategories.map((category) => {
@@ -984,7 +986,7 @@ function SettingsPopupForm({
       <div className="flex min-w-0 flex-col overflow-hidden bg-[#FAFAF8]">
         <div className="border-b border-border px-6 py-5">
           <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
-            Bereich
+            {t("sectionEyebrow")}
           </div>
           <div className="mt-1 font-display text-[24px] font-semibold leading-tight text-ink">
             {activeCategoryLabel}
@@ -1004,13 +1006,13 @@ function SettingsPopupForm({
 
       <div className="flex justify-end gap-2.5 border-t border-border-soft bg-white px-6 py-4">
         <button type="button" className="btn btn-secondary" onClick={onDone}>
-          Abbrechen
+          {t("cancel")}
         </button>
         <FormSubmitButton
           Icon={Save}
-          pendingLabel="Wird gespeichert..."
+          pendingLabel={t("saving")}
         >
-          Speichern
+          {t("save")}
         </FormSubmitButton>
       </div>
     </form>
@@ -1030,6 +1032,8 @@ function SettingsPopup({
   isStripeConfigured: boolean;
   onClose: () => void;
 }) {
+  const t = useTranslations("Navigation.settings");
+
   return (
     <div
       className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/45 backdrop-blur-[6px]"
@@ -1043,13 +1047,13 @@ function SettingsPopup({
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="Einstellungen"
+        aria-label={t("dialogLabel")}
         className="relative h-[min(760px,100svh)] w-full max-w-[1040px] overflow-hidden rounded-card bg-white shadow-[0_24px_80px_rgba(0,0,0,0.24)]"
       >
         <button
           type="button"
-          aria-label="Einstellungen schließen"
-          title="Schließen"
+          aria-label={t("closeLabel")}
+          title={t("close")}
           className="absolute top-3 right-3 z-10 flex size-8 cursor-pointer items-center justify-center rounded-[9px] border border-border bg-white text-muted transition-colors hover:border-muted hover:text-ink"
           onClick={onClose}
         >
@@ -1083,6 +1087,7 @@ function NotificationsPopup({
     (notification) => !readNotificationIds.includes(notification.id),
   );
   const hasUnread = unreadNotifications.length > 0;
+  const t = useTranslations("Navigation.notificationsPopup");
 
   return (
     <div
@@ -1096,23 +1101,23 @@ function NotificationsPopup({
     >
       <div
         role="dialog"
-        aria-label="Benachrichtigungen"
+        aria-label={t("title")}
         className="relative flex max-h-[calc(100svh-32px)] w-full max-w-[520px] flex-col overflow-hidden rounded-card bg-white shadow-[0_24px_80px_rgba(0,0,0,0.24)] md:max-h-[620px]"
       >
         <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
           <div>
             <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
-              Inbox
+              {t("inboxEyebrow")}
             </div>
             <div className="mt-1 font-display text-[24px] font-semibold leading-tight text-ink">
-              Benachrichtigungen
+              {t("title")}
             </div>
           </div>
 
           <button
             type="button"
-            aria-label="Benachrichtigungen schließen"
-            title="Schließen"
+            aria-label={t("closeLabel")}
+            title={t("close")}
             className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-[9px] border border-border bg-white text-muted transition-colors hover:border-muted hover:text-ink"
             onClick={onClose}
           >
@@ -1123,8 +1128,8 @@ function NotificationsPopup({
         <div className="flex items-center justify-between gap-3 border-b border-border-soft bg-bg px-5 py-3">
           <div className="text-[12.5px] text-muted-2">
             {hasUnread
-              ? `${unreadNotifications.length} ungelesen`
-              : "Alles gelesen"}
+              ? t("unreadCount", { count: unreadNotifications.length })
+              : t("allRead")}
           </div>
           <button
             type="button"
@@ -1135,7 +1140,7 @@ function NotificationsPopup({
             }
           >
             <Check size={14} />
-            Als gelesen markieren
+            {t("markAllRead")}
           </button>
         </div>
 
@@ -1143,7 +1148,7 @@ function NotificationsPopup({
           <div className="flex flex-col gap-2">
             {notifications.length === 0 && (
               <p className="rounded-[12px] border border-border-soft bg-white p-3 text-[12.5px] text-muted">
-                Keine Benachrichtigungen – alles erledigt.
+                {t("empty")}
               </p>
             )}
             {notifications.map((notification) => {
@@ -1199,7 +1204,7 @@ function NotificationsPopup({
                       className="shrink-0 text-[12px] font-semibold text-ink transition-colors hover:text-muted-2"
                       onClick={() => onMarkAsRead([notification.id])}
                     >
-                      Gelesen
+                      {t("markRead")}
                     </button>
                   )}
                 </article>
@@ -1225,6 +1230,7 @@ export default function NavigationSidebar({
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [isTenantMenuOpen, setIsTenantMenuOpen] = useState(false);
   const currentLocale = useLocale();
+  const t = useTranslations("Navigation");
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [readNotificationIds, setReadNotificationIds] = useState<string[]>([]);
@@ -1243,11 +1249,12 @@ export default function NavigationSidebar({
   const routeTenant = Array.isArray(params.tenant) ? params.tenant[0] : params.tenant;
   const tenant = routeTenant ?? tenantSlugFromPathname(pathname);
   const baseHref = tenant ? `/u/${tenant}` : "/u";
+  const fallbackTenantItem = getFallbackTenantItem(t);
   const tenantItems = tenants.length > 0 ? tenants : [fallbackTenantItem];
   const isCurrentTenantData = Boolean(tenant) && fetchedData?.tenant === tenant;
   const notifications = isCurrentTenantData ? fetchedData!.notifications : [];
   const usage = isCurrentTenantData ? fetchedData!.usage : null;
-  const toggleLabel = isCollapsed ? "Navigation ausklappen" : "Navigation einklappen";
+  const toggleLabel = isCollapsed ? t("toggle.expand") : t("toggle.collapse");
   const unreadNotificationCount = notifications.filter(
     (notification) => !readNotificationIds.includes(notification.id),
   ).length;
@@ -1257,7 +1264,7 @@ export default function NavigationSidebar({
       ? {
           ...fallbackTenantItem,
           name: tenant,
-          role: "Unbekanntes Unternehmen",
+          role: t("tenant.unknownCompany"),
           mark: tenant.slice(0, 1).toUpperCase(),
           href: baseHref,
         }
@@ -1281,6 +1288,7 @@ export default function NavigationSidebar({
 
           return {
             ...item,
+            label: t(`items.${item.labelKey}`),
             href,
             isActive:
               item.href === ""
@@ -1288,7 +1296,7 @@ export default function NavigationSidebar({
                 : pathname === href || pathname.startsWith(`${href}/`),
           };
         }),
-    [activeTenant.permissions, baseHref, pathname],
+    [activeTenant.permissions, baseHref, pathname, t],
   );
 
   useEffect(() => {
@@ -1368,7 +1376,7 @@ export default function NavigationSidebar({
       <button
         type="button"
         className="fixed top-3 left-3 z-[960] flex size-10 items-center justify-center rounded-[10px] border border-border bg-white text-ink shadow-[0_4px_16px_rgba(0,0,0,0.12)] md:hidden"
-        aria-label="Navigation öffnen"
+        aria-label={t("toggle.mobileOpen")}
         aria-expanded={isMobileOpen}
         onClick={() => setIsMobileOpen(true)}
       >
@@ -1406,7 +1414,7 @@ export default function NavigationSidebar({
 
             <span className="sidebar-brand-copy">
               <span className="sidebar-brand-title">Ployo</span>
-              <span className="sidebar-brand-subtitle">Personalakte</span>
+              <span className="sidebar-brand-subtitle">{t("brand.subtitle")}</span>
             </span>
           </Link>
         )}
@@ -1428,8 +1436,8 @@ export default function NavigationSidebar({
         <button
           type="button"
           className="sidebar-toggle md:hidden"
-          title="Navigation schließen"
-          aria-label="Navigation schließen"
+          title={t("toggle.mobileClose")}
+          aria-label={t("toggle.mobileClose")}
           onClick={() => setIsMobileOpen(false)}
         >
           <X size={15} />
@@ -1438,7 +1446,7 @@ export default function NavigationSidebar({
 
       <nav
         className="sidebar-nav"
-        aria-label="Hauptnavigation"
+        aria-label={t("mainNavLabel")}
         onClick={() => setIsMobileOpen(false)}
       >
         {items.map((item) => (
@@ -1471,7 +1479,7 @@ export default function NavigationSidebar({
             <div className="sidebar-tenant-menu">
               <div className="sidebar-tenant-menu-header">
                 <div className="sidebar-tenant-menu-title">
-                  Unternehmen wechseln
+                  {t("tenant.switchTenant")}
                 </div>
               </div>
 
@@ -1539,7 +1547,7 @@ export default function NavigationSidebar({
 
         <button
           type="button"
-          title="Einstellungen"
+          title={t("footer.settings")}
           className="sidebar-link w-full appearance-none border-0 bg-transparent text-left"
           aria-haspopup="dialog"
           onClick={() => {
@@ -1548,19 +1556,19 @@ export default function NavigationSidebar({
           }}
         >
           <span className="sidebar-link-code">Eg</span>
-          {!isCollapsed && <span className="sidebar-link-label">Einstellungen</span>}
+          {!isCollapsed && <span className="sidebar-link-label">{t("footer.settings")}</span>}
         </button>
 
         <form action="/logout" method="post">
           <button
             type="submit"
-            title="Abmelden"
+            title={t("footer.logout")}
             className="sidebar-link w-full appearance-none border-0 bg-transparent text-left"
           >
             <span className="sidebar-link-code">
               <LogOut size={14} strokeWidth={2} />
             </span>
-            {!isCollapsed && <span className="sidebar-link-label">Abmelden</span>}
+            {!isCollapsed && <span className="sidebar-link-label">{t("footer.logout")}</span>}
           </button>
         </form>
 
@@ -1573,7 +1581,7 @@ export default function NavigationSidebar({
                 <button
                   type="submit"
                   disabled={currentLocale === locale.code}
-                  title={locale.code === "de" ? "Deutsch" : "English"}
+                  title={locale.code === "de" ? t("footer.localeDe") : t("footer.localeEn")}
                   className={cx(
                     "cursor-pointer rounded-[7px] px-2 py-1 font-mono text-[10px] uppercase tracking-[0.06em] transition-colors disabled:cursor-default",
                     currentLocale === locale.code
@@ -1599,7 +1607,7 @@ export default function NavigationSidebar({
 
             {!isCollapsed && (
               <div className="sidebar-user-copy">
-                <div className="sidebar-user-name">{user?.name ?? "Angemeldet"}</div>
+                <div className="sidebar-user-name">{user?.name ?? t("user.signedIn")}</div>
                 <div className="sidebar-user-role">{activeTenant.role}</div>
               </div>
             )}
@@ -1609,11 +1617,11 @@ export default function NavigationSidebar({
             <button
               type="button"
               className="sidebar-notification-button"
-              title="Benachrichtigungen"
+              title={t("user.notifications")}
               aria-label={
                 unreadNotificationCount > 0
-                  ? `${unreadNotificationCount} ungelesene Benachrichtigungen`
-                  : "Benachrichtigungen"
+                  ? t("user.unreadNotifications", { count: unreadNotificationCount })
+                  : t("user.notifications")
               }
               aria-haspopup="dialog"
               aria-expanded={isNotificationsOpen}
