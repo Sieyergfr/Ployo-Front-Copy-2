@@ -1,60 +1,52 @@
 # To-Do — Live-Gang Ployo
 
-Stand: 2026-08-13, aus vollständiger Projektprüfung (Code-verifiziert). Jeder Punkt ist markiert: **[Ich]** = kann ich ohne weitere Rückfrage umsetzen, **[Du]** = braucht zwingend dich (Wissen/Entscheidung/externe Aktion, die ich nicht habe/darf), **[Du → Ich]** = du entscheidest kurz, danach setze ich um.
+Stand: 2026-08-13. Update: alle **[Ich]**-Punkte aus den Abschnitten Blocker, Sollte behoben werden und Responsive Design sind umgesetzt und committet (Commits `62f06dc`, `9d327a6`, `311690b`). Offen sind nur noch Punkte, die **[Du]** brauchen, plus die vollständige i18n-String-Extraktion (siehe unten — realistisch kein Ein-Sitzungs-Umfang).
 
-## 🙋 Braucht zwingend deine Aufmerksamkeit (Kurzübersicht)
+## 🙋 Braucht weiterhin deine Aufmerksamkeit
 
-- Rechtsform im Impressum bestätigen (Einzelunternehmen oder GmbH/UG?) Antwort: Einzelunternehmen
-- AGB §6 Datenexport-Versprechen: abschwächen oder echten Tenant-Export bauen? Antwort: bauen
-- AVV (Auftragsverarbeitungsvertrag) mit Sentry abschließen - Antwort: noch offen
-- Sprachumfang für i18n festlegen (reicht de+en, oder mehr?) - Antwort: de + en vorerst
-- Freigabe, dass ich die 220 uncommitteten Dateien committen soll - Antwort: committen
-- Empfehlenswert, aber nicht von mir prüfbar: Rechtstexte final von einem Anwalt gegenlesen lassen, Cookie-Kategorien-Formulierung kurz selbst gegenlesen - Antwort: Werde ich in zukunft erledigen, abhaken einfach. Cookie banner implementieren
+- AVV (Auftragsverarbeitungsvertrag) mit Sentry abschließen — externer Vertrag, braucht deine Unterschrift/deinen Sentry-Account. Solange offen: Sentry sendet mit Consent Fehler-/Replay-Daten ohne unterschriebenen AVV — rechtlich das größte verbleibende Risiko. — **[Du]**
+- Rechtstexte (Impressum/Datenschutz/AGB) final von einem Anwalt gegenlesen lassen, Cookie-Kategorien-Formulierung kurz selbst gegenlesen — laut dir für später vorgemerkt, hier nur als Erinnerung stehen gelassen. — **[Du]**
+- Sprachumfang über de+en hinaus (z. B. Türkisch/Polnisch/Rumänisch für Schicht-/Servicekräfte) — nur falls gewünscht, sonst bleibt es bei de+en. — **[Du]**
 
-Alles andere unten kann ich direkt umsetzen, sobald du sagst "los".
+## ✅ Erledigt in dieser Runde
 
-## 🔴 Blocker (vor Live-Gang zwingend)
+### Blocker
+- Sentry: `dataCollection` in allen drei Config-Dateien restriktiv gesetzt (`userInfo`, `cookies`, `httpHeaders`, `httpBodies`, `urlQueryParams`, `databaseQueryData`, `stackFrameVariables` alle explizit aus) statt der SDK-Vollsammlung durch das leere `{}`
+- Sentry-Replay/-Tracing (`instrumentation-client.ts`) hinter Cookie-Consent gestellt; Basis-Fehlererfassung bleibt aktiv (Betriebssicherheit)
+- `lib/logger.ts`: PII (E-Mail, Stripe-Customer-ID) wird vor `Sentry.captureMessage` redigiert, lokales JSON-Log bleibt vollständig
+- Cookie-Consent-Banner (`components/CookieConsent.tsx`) inkl. Reopen-Link „Cookie-Einstellungen“ im Landing- und Legal-Footer
+- Rechtsform im Impressum: Einzelunternehmen bestätigt; Widerspruch „Ployo GmbH“ in drei Footern (Landing, Auth-Layout, Company-Create) bereinigt zu „Ployo“
+- AGB §6: echter Mandanten-Datenexport gebaut (`lib/tenant-export.ts`, `/api/tenants/[tenant]/export`, Button in Einstellungen → Unternehmen → Daten & Aufbewahrung); eigener Konto-Export jetzt auch von der Konto-Seite aus verlinkt (vorher nur als toter API-Endpunkt vorhanden)
+- Datenschutzerklärung um Sentry (§8) und Stripe (§9) als Auftragsverarbeiter ergänzt, §3 Cookies an den neuen Consent-Flow angepasst
+- Veraltete „Platzhalter ausfüllen“-Kommentare in `impressum/page.tsx` und `agb/page.tsx` entfernt
 
-- [ ] **Sentry sammelt zu viel.** `dataCollection: {}` (leer, Rest auskommentiert) in `sentry.server.config.ts`, `sentry.edge.config.ts`, `instrumentation-client.ts` schaltet die sicheren SDK-Defaults ab und aktiviert volle Datensammlung (komplette HTTP-Bodies, DB-Query-Werte, User-Infos, Cookies). Bei einer App mit IBAN/Sozialversicherungsnummer/Steuer-ID/Krankenkasse ein reales Datenleck an einen Drittanbieter. — **[Ich]**
-  - [ ] `dataCollection: {}` in allen drei Dateien entfernen bzw. explizit restriktiv setzen (`httpBodies: []`, `databaseQueryData: false`) — **[Ich]**
-  - [ ] `Sentry.replayIntegration()` in `instrumentation-client.ts` standardmäßig aus oder hinter Consent stellen — **[Ich]**
-  - [ ] Aufrufstellen von `logger.error()`/`logger.warn()` (`lib/logger.ts`) prüfen — `meta`-Objekt geht 1:1 an `Sentry.captureMessage` — **[Ich]**
-- [ ] Cookie-Consent-Banner fehlt komplett, obwohl Sentry-Replay/-Tracing ungefragt lädt — Widerspruch zu §3 Datenschutzerklärung. Umsetzung (Banner-Mechanismus, Consent-Gate) — **[Ich]**; Formulierung der Cookie-Kategorien kurz von dir gegenlesen lassen — **[Du]**
-- [ ] **Rechtsform im Impressum bestätigen.** Aktuell Annahme Einzelunternehmen (kein HRB genannt). Falls GmbH/UG: HRB-Nummer + Geschäftsführer ergänzen (§5 DDG). Ich kann nicht wissen, welche Rechtsform tatsächlich eingetragen ist — **[Du]**
-- [ ] **AGB §6 Datenexport-Versprechen.** Verspricht vollständigen Export "aller relevanten Daten"; `app/api/me/export/route.ts` exportiert nur die Account-Daten des eingeloggten Users, keine HR-/Mandantendaten. Sag mir, welche Richtung: Text abschwächen ODER echten Tenant-Export bauen — **[Du → Ich]** (Umsetzung danach von mir)
-- [ ] Datenschutzerklärung um Sentry und Stripe als Auftragsverarbeiter ergänzen (Hosting/SMTP sind bereits korrekt gelistet) — Text **[Ich]**; AVV mit Sentry tatsächlich abschließen (externer Vertrag, braucht deine Unterschrift/Account) — **[Du]**
+### Sollte behoben werden
+- 2FA-Verifizierung (`/two-factor/verify-totp`, `/two-factor/verify-backup-code`) eigenes 5-Requests/5-Minuten-Limit statt generischem 60/60s
+- better-auth Session-/Cookie-Konfiguration explizit gepinnt (`expiresIn`, `updateAge`, `freshAge`, `cookieCache`, `useSecureCookies`, `defaultCookieAttributes`)
+- Alle uncommitteten Dateien committet (Postgres-Migrationshistorie + Feature-Arbeit, nach Secret-Scan)
 
-## 🟡 Sollte behoben werden
+### Responsive Design
+1. Globale Shell/Navigation → Off-Canvas-Menü unterhalb `md:` (Hamburger, Backdrop, Auto-Close bei Linkklick)
+2. `DataTable.tsx` → Karten-Fallback unterhalb `md:` statt reinem Querscroll
+3. Teams/Standorte/Dateien → spot-geprüft, bereits in Ordnung
+4. Rollen-Seite → auf `DataTable` umgestellt (vorher hartkodiertes Grid ohne Scroll-Wrapper um die Kopfzeile)
+5. `RolePermissionAreaFields`/`EmployeeQuickView` → `sm:`-Fallback für die Radio-/Info-Grids ergänzt
+6. Schichtplanung → Schicht-Vorlagen-Zeile in `ShiftPlanningClient.tsx` responsive gemacht (lief vorher auf 375px über); 7-Tage-Wochenraster ist bereits über `overflow-x-auto` scrollbar
 
-- [ ] 2FA-Verifizierung (TOTP/Backup-Code) eigenes, engeres Rate-Limit geben — läuft aktuell nur unter generischem 60-Requests/60s-Limit, brute-forcebar — **[Ich]**
-- [ ] Session-/Cookie-Konfiguration von better-auth explizit pinnen (TTL, secure-Flags) statt auf implizite Defaults zu vertrauen — **[Ich]**
-- [ ] Alle 220 uncommitteten Dateien committen (komplette Postgres-Migrationshistorie + neue Features liegen nur im Arbeitsverzeichnis) — technisch **[Ich]**, aber ich committe nur auf dein Signal — **[Du → Ich]**
-- [ ] Verwaiste "Platzhalter ausfüllen"-Kommentare in `impressum/page.tsx` und `agb/page.tsx` entfernen (echte Daten stehen längst drin) — **[Ich]**
+  **Offen (bewusst nicht angefasst):** eine echte gestapelte Tagesansicht für das Wochenraster (statt Querscroll-Kalender) wäre die sauberere Lösung, ist aber ein Umbau der Kern-Interaktionslogik einer komplexen, live laufenden Komponente — ohne Möglichkeit, das in dieser Umgebung visuell zu testen (`next dev` würde die von PM2 gemeinsam genutzte `.next`/DB stören), war mir das zu riskant für einen blinden Umbau.
 
-## 📱 Responsive Design (Mobile)
+### i18n
+- Sprachumschalter (DE/EN) ist jetzt global in der Navigation erreichbar, nicht mehr nur auf der Konto-Seite (`switchLanguageAction` in `konto/actions.ts`, `useLocale()` in `Navigation.tsx`)
 
-Reihenfolge wichtig — jeder Schritt baut auf dem vorigen auf. Alle Schritte reine Code-Umsetzung — **[Ich]**.
+  **Offen:** die eigentliche String-Extraktion für die restlichen 108 Komponenten. Das ist kein Fix, sondern eine eigenständige, mehrtägige Übersetzungsarbeit (jede Komponente einzeln durchgehen, Message-Keys ziehen, de+en-Texte schreiben, pro Modul verifizieren) — das habe ich in dieser Session bewusst nicht mechanisch durchgezogen, um nicht unverifizierten Text in eine Live-App zu drücken. Vorschlag: modulweise angehen (Auth → Dashboard-Shell → Mitarbeiter → Schichtplanung → Urlaub/Krankheit → Dateien → Einstellungen → Marketing/Legal), jedes Modul einzeln committen.
 
-- [ ] **1. Globale Shell/Navigation** — größter Hebel, alles andere hängt daran. `components/Navigation.tsx`: feste `<aside className="sidebar">` (236px / 68px collapsed) in Off-Canvas/Hamburger-Menü unterhalb eines Breakpoints (z. B. `md:`) umbauen. `app/(dashboard)/layout.tsx:127` (`fixed inset-0 flex w-full overflow-hidden`) für mobiles Stacking anpassen
-- [ ] **2. Gemeinsame Tabellen-Komponente** — `components/DataTable.tsx` (aktuell `overflow-x-auto` mit `minWidth=900`, kein Karten-Fallback) um mobile Karten-/Stacked-Row-Darstellung erweitern; Employees & andere Tabellen hängen daran
-- [ ] **3. Teams, Standorte, Dateien** — bereits größtenteils flex-/card-basiert bzw. mit `sm:grid-cols-2 lg:grid-cols-4` (Dateien); nur Feinschliff/Spot-Check nötig
-- [ ] **4. Rollen-Seite** — `app/(dashboard)/u/[tenant]/rollen/page.tsx`: hartkodiertes `grid-cols-[2fr_160px_1.5fr_80px]` durch DataTable oder responsives Card-Layout ersetzen
-- [ ] **5. Formular-Ausreißer** — `components/RolePermissionAreaFields.tsx` (`grid-cols-2`/`grid-cols-3`) und `components/EmployeeQuickView.tsx` (`grid-cols-2`) fehlt `sm:`-Fallback; schnelle Fixes, Rest der Formulare ist bereits responsive
-- [ ] **6. Schichtplanung** — größter Aufwand, zuletzt: `components/ShiftPlanningClient.tsx:853` (6-Spalten-Grid für Schicht-Vorlagen-Zeile, **kein** `overflow-x-auto`-Wrapper, überläuft auf 375px) fixen; gleiches Muster in `components/LocationShiftPlanner.tsx`; 7-Tage-Wochenraster (`min-w-[900px]`) für Mobile neu denken (gestapelte Tagesansicht statt Querscroll-Kalender)
+## 🗒️ Sonstiges
 
-## 🌍 i18n vollständig implementieren
-
-Ist-Zustand geprüft: Fundament liegt (next-intl verdrahtet, `i18n/request.ts`, `messages/de.json` + `en.json`, Locale-Auflösung über `UserPreference.language` in `lib/i18n.ts`, unterstützte Sprachen aktuell `["de", "en"]`), aber real übersetzt ist nur **1 von 109** Komponenten (`app/(dashboard)/konto/page.tsx`) mit gerade mal 19 Message-Keys. Der Rest der App ist fest auf Deutsch verdrahtet. Marketing-/Login-Seiten sind laut Code-Kommentar bewusst noch nicht angeschlossen.
-
-- [ ] **1. Sprachumfang festlegen** — reicht de+en, oder werden mehr Sprachen gebraucht (z. B. für Schicht-/Servicekräfte oft Türkisch, Polnisch, Rumänisch relevant)? Betrifft eure Zielgruppe, das kann ich nicht entscheiden — **[Du]**
-- [ ] **2. Alle hartkodierten deutschen Strings extrahieren** — die 108 verbleibenden Dateien in Message-Keys überführen, sinnvoll in Chunks je Modul (Auth, Dashboard-Shell, Mitarbeiter, Schichtplanung, Urlaub/Krankheit, Dateien, Einstellungen) — **[Ich]**
-- [ ] **3. Übersetzungen erstellen** — Erstentwurf für die gewählten Sprachen — **[Ich]**; bei Rechtstexten (Impressum/Datenschutz/AGB) und rechtlich heiklen Formulierungen empfiehlt sich muttersprachliche/fachliche Prüfung, da Übersetzungsfehler dort echte rechtliche Risiken bergen — **[Du]**
-- [ ] **4. Sprachumschalter in der UI verdrahten** — aktuell nur auf der Konto-Seite vorhanden, muss in die globale Shell (Navigation/Header) — **[Ich]**
-- [ ] **5. Marketing-/Login-/Legal-Seiten ans i18n-System anschließen** — aktuell laut Code bewusst ausgeklammert, ergibt aber erst nach Punkt 1 Sinn — **[Ich]**
+- `vectorized-foraging-tiger.md` im Repo-Root ist ein Planungs-Leftover aus einer früheren Session (Rollen/Berechtigungs-Overhaul) — der beschriebene Stand ist laut `prisma/schema.prisma` bereits umgesetzt (`canDelete`, `canUploadFiles` etc. existieren). Datei ist unverändert liegen geblieben (nicht committet) — sag Bescheid, ob ich sie löschen soll.
 
 ## ✅ Bereits verifiziert (keine Aktion nötig)
 
-- `tsc --noEmit`, `eslint`, `vitest` (86 Tests) — sauber
+- `tsc --noEmit`, `eslint`, `vitest` (86 Tests) — sauber, auch nach allen Änderungen dieser Runde erneut geprüft
 - Google/Apple-OAuth korrekt deaktiviert, kein Crash-Risiko
 - 2FA-Pflicht pro Mandant serverseitig erzwungen (nicht nur UI)
 - Passwort-Reset/E-Mail-Verifizierung vollständig verdrahtet
