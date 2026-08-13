@@ -5,6 +5,7 @@ import DatePickerField from "@/components/DatePickerField";
 import FormSubmitButton from "@/components/FormSubmitButton";
 import { useUniversalPopup } from "@/components/UniversalPopup";
 import { MessageSquarePlus, Send } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 function InfoRequestForm({
   tenant,
@@ -19,58 +20,61 @@ function InfoRequestForm({
   employeeName: string;
   onDone: () => void;
 }) {
+  const t = useTranslations("EmployeeInfoRequestButton");
+
   return (
     <form className="flex flex-col gap-4" action={createEmployeeInfoRequestAction}>
       <input type="hidden" name="tenant" value={tenant} />
       <input type="hidden" name="employeeId" value={employeeId} />
       <input type="hidden" name="employeeHandle" value={employeeHandle} />
       <div className="rounded-xl border border-border bg-bg p-3 text-[12.5px] text-muted-2">
-        Anfrage an <span className="font-semibold text-ink">{employeeName}</span>.
-        Die Anfrage wird in der Personalakte dokumentiert. Eine automatische
-        Benachrichtigung an den Mitarbeiter erfolgt noch nicht.
+        {t.rich("requestTo", {
+          name: employeeName,
+          b: (chunks) => <span className="font-semibold text-ink">{chunks}</span>,
+        })}
       </div>
       <div className="field">
         <label htmlFor="info-request-title" className="label">
-          Benötigte Information
+          {t("titleLabel")}
         </label>
         <input
           id="info-request-title"
           name="title"
           className="input"
-          placeholder="z. B. neue Adresse, Zertifikat, Bankdaten"
+          placeholder={t("titlePlaceholder")}
           required
         />
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="field">
           <label htmlFor="info-request-due" className="label">
-            Frist
+            {t("dueDate")}
           </label>
           <DatePickerField id="info-request-due" name="dueAt" />
         </div>
         <label className="checkbox-row mt-6">
           <input type="checkbox" name="fileRequested" className="peer sr-only" />
           <span className="checkbox" />
-          <span className="checkbox-label">Datei gewünscht</span>
+          <span className="checkbox-label">{t("fileRequested")}</span>
         </label>
       </div>
       <div className="field">
         <label htmlFor="info-request-message" className="label">
-          Nachricht
+          {t("message")}
         </label>
         <textarea
           id="info-request-message"
           name="message"
           className="input min-h-28 resize-none"
-          placeholder="Kurz erklären, was hochgeladen oder bestätigt werden soll"
+          placeholder={t("messagePlaceholder")}
         />
       </div>
       <div className="mt-1 flex justify-end gap-2.5 border-t border-border-soft pt-4">
         <button type="button" className="btn btn-secondary" onClick={onDone}>
-          Abbrechen
+          {t("cancel")}
         </button>
-        <FormSubmitButton Icon={Send} pendingLabel="Wird gespeichert...">
-          Anfrage speichern
+        <FormSubmitButton Icon={Send} pendingLabel={t("saving")}>
+          {t("saveRequest")}
         </FormSubmitButton>
       </div>
     </form>
@@ -89,6 +93,7 @@ export default function EmployeeInfoRequestButton({
   employeeName: string;
 }) {
   const { openPopup, closePopup } = useUniversalPopup();
+  const t = useTranslations("EmployeeInfoRequestButton");
 
   return (
     <button
@@ -96,7 +101,7 @@ export default function EmployeeInfoRequestButton({
       className="btn btn-primary btn-sm"
       onClick={() =>
         openPopup({
-          title: "Info anfragen",
+          title: t("popupTitle"),
           content: (
             <InfoRequestForm
               tenant={tenant}
@@ -110,7 +115,7 @@ export default function EmployeeInfoRequestButton({
       }
     >
       <MessageSquarePlus size={14} />
-      Info anfragen
+      {t("button")}
     </button>
   );
 }

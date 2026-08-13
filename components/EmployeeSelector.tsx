@@ -1,6 +1,7 @@
 "use client";
 
 import { Check, ChevronDown, Search } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 
 type EmployeeSelectorMode = "single" | "multi";
@@ -16,7 +17,7 @@ export type EmployeeSelectorOption = {
 };
 
 export default function EmployeeSelector({
-  label = "Mitarbeiter",
+  label,
   name = "employees",
   mode = "single",
   defaultSelectedIds = [],
@@ -31,6 +32,7 @@ export default function EmployeeSelector({
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [selectedIds, setSelectedIds] = useState(defaultSelectedIds);
+  const t = useTranslations("EmployeeSelector");
   const employeeOptions = useMemo(() => options ?? [], [options]);
   const selectedEmployees = employeeOptions.filter((employee) =>
     selectedIds.includes(employee.id),
@@ -54,10 +56,10 @@ export default function EmployeeSelector({
   );
   const summary =
     selectedEmployees.length === 0
-      ? "Mitarbeiter auswählen"
+      ? t("placeholder")
       : mode === "single"
         ? selectedEmployees[0].name
-        : `${selectedEmployees.length} Mitarbeiter ausgewählt`;
+        : t("selectedCount", { count: selectedEmployees.length });
 
   function toggleEmployee(employeeId: string) {
     setSelectedIds((current) => {
@@ -81,7 +83,7 @@ export default function EmployeeSelector({
         }
       }}
     >
-      <span className="label">{label}</span>
+      <span className="label">{label ?? t("defaultLabel")}</span>
       {selectedIds.map((employeeId) => (
         <input key={employeeId} type="hidden" name={name} value={employeeId} />
       ))}
@@ -112,7 +114,7 @@ export default function EmployeeSelector({
             <input
               type="search"
               className="input input-with-icon-left bg-bg py-2.5 text-[12.5px]"
-              placeholder="Name, Team oder Rolle"
+              placeholder={t("searchPlaceholder")}
               value={query}
               onChange={(event) => setQuery(event.target.value)}
             />
