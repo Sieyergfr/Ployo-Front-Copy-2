@@ -6,8 +6,6 @@ import { getOwnScheduledDeletion } from "@/lib/account-service";
 import { isStripeConfigured } from "@/lib/stripe/client";
 import { computePermissionLevels } from "@/lib/tenant-access";
 import { getTenantsForUser } from "@/lib/tenants";
-import { NextIntlClientProvider } from "next-intl";
-import { getLocale, getMessages } from "next-intl/server";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
@@ -60,8 +58,6 @@ export default async function AuthLayout ({
     if (await getOwnScheduledDeletion()) {
         redirect("/konto-loeschung");
     }
-
-    const [locale, messages] = await Promise.all([getLocale(), getMessages()]);
 
     const memberships = await getTenantsForUser(session.user.id);
     const tenants: NavigationTenantItem[] = memberships.map((membership, index) => ({
@@ -118,23 +114,21 @@ export default async function AuthLayout ({
     }));
 
     return (
-        <NextIntlClientProvider locale={locale} messages={messages}>
-            <div className="fixed inset-0 flex w-full overflow-hidden">
-                <NavigationSidebar
-                    tenants={tenants}
-                    user={{
-                        name: session.user.name || session.user.email,
-                        email: session.user.email,
-                        initials: getInitials(session.user.name || session.user.email),
-                    }}
-                    isStripeConfigured={isStripeConfigured()}
-                />
-                <main className="main-content">
-                    <div className="container">
-                        {children}
-                    </div>
-                </main>
-            </div>
-        </NextIntlClientProvider>
+        <div className="fixed inset-0 flex w-full overflow-hidden">
+            <NavigationSidebar
+                tenants={tenants}
+                user={{
+                    name: session.user.name || session.user.email,
+                    email: session.user.email,
+                    initials: getInitials(session.user.name || session.user.email),
+                }}
+                isStripeConfigured={isStripeConfigured()}
+            />
+            <main className="main-content">
+                <div className="container">
+                    {children}
+                </div>
+            </main>
+        </div>
     )
 }

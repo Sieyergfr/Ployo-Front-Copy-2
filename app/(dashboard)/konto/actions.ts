@@ -9,7 +9,9 @@ import {
 } from "@/lib/account-service";
 import { uploadOwnAvatar } from "@/lib/avatar-service";
 import { type ActionState } from "@/lib/action-state";
+import { LOCALE_COOKIE, LOCALE_COOKIE_MAX_AGE_DAYS } from "@/lib/locale-shared";
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 function formString(formData: FormData, key: string) {
@@ -87,6 +89,14 @@ export async function switchLanguageAction(formData: FormData) {
     timezone: current.timezone,
     startPage: current.startPage,
     dateFormat: current.dateFormat,
+  });
+
+  // Damit die Wahl auch nach dem Logout (Login-/Marketing-Seiten ohne
+  // Session, siehe lib/i18n.ts) erhalten bleibt statt auf "de" zurückzufallen.
+  (await cookies()).set(LOCALE_COOKIE, language, {
+    maxAge: LOCALE_COOKIE_MAX_AGE_DAYS * 24 * 60 * 60,
+    path: "/",
+    sameSite: "lax",
   });
 
   revalidatePath(redirectTo);

@@ -1,6 +1,7 @@
 import AuthHeader from "@/components/AuthHeader";
 import AuthSegmented from "@/components/AuthSegmented";
 import Card from "@/components/Card/card";
+import { LocaleSwitcher } from "@/components/LocaleSwitcher";
 
 export default function AuthLayout ({
   children,
@@ -31,6 +32,12 @@ export default function AuthLayout ({
                     <a href="/impressum" className="footer-link">
                         Impressum
                     </a>
+
+                    <span className="footer-text">
+                        {" "}·{" "}
+                    </span>
+
+                    <LocaleSwitcher className="inline-flex items-center gap-1.5 align-middle" />
                 </footer>
             </div>
         </div>

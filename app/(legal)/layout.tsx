@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { CookieSettingsLink } from "@/components/CookieSettingsLink";
+import { LocaleSwitcher } from "@/components/LocaleSwitcher";
 
 export default function LegalLayout({
   children,
@@ -34,6 +35,7 @@ export default function LegalLayout({
             </Link>
             <CookieSettingsLink className="cursor-pointer hover:text-ink" />
           </nav>
+          <LocaleSwitcher />
         </div>
       </footer>
     </div>

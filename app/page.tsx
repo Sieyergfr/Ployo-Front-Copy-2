@@ -8,6 +8,7 @@ import {
   Users,
 } from "lucide-react";
 import { CookieSettingsLink } from "@/components/CookieSettingsLink";
+import { LocaleSwitcher } from "@/components/LocaleSwitcher";
 import "./landing.css";
 
 export const metadata = {
@@ -667,6 +668,7 @@ export default function Home() {
               className="lp-footer-link text-[13px] cursor-pointer"
               style={{ color: "var(--lp-mu)" }}
             />
+            <LocaleSwitcher />
           </div>
           <span className="font-mono text-[11px]" style={{ color: "var(--lp-mu)" }}>
             © {new Date().getFullYear()} Ployo · Made in Germany

@@ -2,7 +2,8 @@ import "server-only";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { preferenceLanguages } from "@/lib/account-service";
-import { headers } from "next/headers";
+import { LOCALE_COOKIE } from "@/lib/locale-shared";
+import { cookies, headers } from "next/headers";
 
 export const defaultLocale = "de";
 export const locales = preferenceLanguages;
@@ -13,22 +14,27 @@ function isLocale(value: string): value is Locale {
 }
 
 /**
- * Locale fürs aktuelle Request: aus der gespeicherten Nutzer-Präferenz
- * (`UserPreference.language`), sonst Standard "de". Kein Cookie/Header-
- * Fallback nötig — nicht angemeldete Seiten (Login, Marketing) bleiben
- * ohnehin Deutsch, bis sie ebenfalls ans Katalog-System angeschlossen sind.
+ * Locale fürs aktuelle Request: angemeldete Nutzer über die gespeicherte
+ * Präferenz (`UserPreference.language`); ohne Session (oder ohne
+ * gespeicherte Präferenz) über den `ployo-locale`-Cookie, den
+ * `components/LocaleSwitcher.tsx` auf Login-/Marketing-/Legal-Seiten setzt.
+ * Letzter Fallback: "de".
  */
 export async function resolveLocale(): Promise<Locale> {
   const session = await auth.api.getSession({ headers: await headers() }).catch(() => null);
 
-  if (!session?.user?.id) {
-    return defaultLocale;
+  if (session?.user?.id) {
+    const preference = await prisma.userPreference.findUnique({
+      where: { userId: session.user.id },
+      select: { language: true },
+    });
+
+    if (preference && isLocale(preference.language)) {
+      return preference.language;
+    }
   }
 
-  const preference = await prisma.userPreference.findUnique({
-    where: { userId: session.user.id },
-    select: { language: true },
-  });
+  const cookieLocale = (await cookies()).get(LOCALE_COOKIE)?.value;
 
-  return preference && isLocale(preference.language) ? preference.language : defaultLocale;
+  return cookieLocale && isLocale(cookieLocale) ? cookieLocale : defaultLocale;
 }
