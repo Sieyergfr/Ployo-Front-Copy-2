@@ -24,6 +24,7 @@ import {
   KeyRound,
   Loader2,
   LogOut,
+  Menu,
   Plug,
   Save,
   ShieldCheck,
@@ -1214,6 +1215,7 @@ export default function NavigationSidebar({
   isStripeConfigured?: boolean;
 }) {
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [isTenantMenuOpen, setIsTenantMenuOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
@@ -1354,7 +1356,34 @@ export default function NavigationSidebar({
   }, [isNotificationsOpen]);
 
   return (
-    <aside className={cx("sidebar", isCollapsed && "sidebar-collapsed")}>
+    <>
+      <button
+        type="button"
+        className="fixed top-3 left-3 z-[960] flex size-10 items-center justify-center rounded-[10px] border border-border bg-white text-ink shadow-[0_4px_16px_rgba(0,0,0,0.12)] md:hidden"
+        aria-label="Navigation öffnen"
+        aria-expanded={isMobileOpen}
+        onClick={() => setIsMobileOpen(true)}
+      >
+        <Menu size={18} />
+      </button>
+
+      {isMobileOpen && (
+        <div
+          className="fixed inset-0 z-[940] bg-black/40 md:hidden"
+          aria-hidden="true"
+          onClick={() => setIsMobileOpen(false)}
+        />
+      )}
+
+      <aside
+        className={cx(
+          "sidebar",
+          isCollapsed && "sidebar-collapsed",
+          "fixed inset-y-0 left-0 z-[950] w-[236px] -translate-x-full transition-transform duration-200 ease-out",
+          isMobileOpen && "translate-x-0",
+          "md:static md:z-auto md:w-auto md:translate-x-0 md:transition-none",
+        )}
+      >
       <div className="sidebar-header">
         {!isCollapsed && (
           <Link href={baseHref} className="sidebar-brand" title="Ployo">
@@ -1376,7 +1405,7 @@ export default function NavigationSidebar({
 
         <button
           type="button"
-          className="sidebar-toggle"
+          className="sidebar-toggle hidden md:flex"
           title={toggleLabel}
           aria-label={toggleLabel}
           aria-expanded={!isCollapsed}
@@ -1387,9 +1416,23 @@ export default function NavigationSidebar({
         >
           {isCollapsed ? <ChevronRight size={15} /> : <ChevronLeft size={15} />}
         </button>
+
+        <button
+          type="button"
+          className="sidebar-toggle md:hidden"
+          title="Navigation schließen"
+          aria-label="Navigation schließen"
+          onClick={() => setIsMobileOpen(false)}
+        >
+          <X size={15} />
+        </button>
       </div>
 
-      <nav className="sidebar-nav" aria-label="Hauptnavigation">
+      <nav
+        className="sidebar-nav"
+        aria-label="Hauptnavigation"
+        onClick={() => setIsMobileOpen(false)}
+      >
         {items.map((item) => (
           <Link
             key={item.href}
@@ -1581,6 +1624,7 @@ export default function NavigationSidebar({
         />
       )}
 
-    </aside>
+      </aside>
+    </>
   );
 }

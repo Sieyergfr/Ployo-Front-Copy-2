@@ -850,7 +850,7 @@ function TemplateEntryRow({
   onRemove: () => void;
 }) {
   return (
-    <div className="grid grid-cols-[minmax(0,90px)_repeat(2,minmax(0,90px))_minmax(0,80px)_minmax(0,1fr)_minmax(0,1fr)_auto] items-end gap-2 rounded-xl border border-border-soft bg-bg p-2.5">
+    <div className="grid grid-cols-2 items-end gap-2 rounded-xl border border-border-soft bg-bg p-2.5 sm:grid-cols-3 lg:grid-cols-[minmax(0,90px)_repeat(2,minmax(0,90px))_minmax(0,80px)_minmax(0,1fr)_minmax(0,1fr)_auto]">
       <div className="field">
         <label className="label" htmlFor={`entry-weekday-${index}`}>
           Tag
@@ -942,7 +942,7 @@ function TemplateEntryRow({
         type="button"
         aria-label="Eintrag entfernen"
         title="Eintrag entfernen"
-        className="flex size-8 cursor-pointer items-center justify-center rounded-lg text-muted transition-colors hover:bg-danger/10 hover:text-danger"
+        className="col-span-2 flex size-8 cursor-pointer items-center justify-center justify-self-end rounded-lg text-muted transition-colors hover:bg-danger/10 hover:text-danger sm:col-span-3 lg:col-span-1 lg:justify-self-auto"
         onClick={onRemove}
       >
         <X size={14} />

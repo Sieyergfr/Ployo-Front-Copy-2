@@ -39,6 +39,9 @@ export default function DataTable<T>({
     .join(" ");
   const gridStyle: CSSProperties = { gridTemplateColumns };
 
+  const nonActionColumns = columns.filter((column) => !column.isRowAction);
+  const actionColumns = columns.filter((column) => column.isRowAction);
+
   return (
     <section
       className={cx(
@@ -46,7 +49,7 @@ export default function DataTable<T>({
         className,
       )}
     >
-      <div className="overflow-x-auto">
+      <div className="hidden overflow-x-auto md:block">
         <div style={{ minWidth }}>
           <div
             className="grid gap-3.5 border-b border-border px-6 py-4 font-mono text-[9.5px] uppercase tracking-[0.6px] text-muted"
@@ -115,6 +118,69 @@ export default function DataTable<T>({
             </div>
           )}
         </div>
+      </div>
+
+      {/* Mobile-Fallback: gestapelte Karten statt Querscroll-Tabelle. Erste
+          Spalte (üblicherweise Name/Avatar) dient als Kartentitel ohne
+          Label, weitere Spalten als Label/Wert-Paare; Aktionsspalten liegen
+          außerhalb eines eventuellen Link-Wrappers (keine verschachtelten
+          interaktiven Elemente). */}
+      <div className="flex flex-col md:hidden">
+        {rows.length > 0 ? (
+          rows.map((row) => {
+            const key = getRowKey(row);
+            const href = getRowHref?.(row);
+
+            const fields = (
+              <div className="flex flex-col gap-2">
+                {nonActionColumns.map((column, index) => (
+                  <div key={column.key} className="flex items-start justify-between gap-3">
+                    {index > 0 && (
+                      <span className="shrink-0 pt-0.5 font-mono text-[9.5px] uppercase tracking-[0.6px] text-muted">
+                        {column.header}
+                      </span>
+                    )}
+                    <div
+                      className={cx(
+                        "min-w-0",
+                        index === 0 ? "flex-1" : "text-right",
+                        column.className,
+                      )}
+                    >
+                      {column.render(row)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+
+            return (
+              <div
+                key={key}
+                className="flex items-start gap-2 border-t border-border-soft px-4 py-3.5 first:border-t-0"
+              >
+                {href ? (
+                  <Link href={href} className="block min-w-0 flex-1 no-underline">
+                    {fields}
+                  </Link>
+                ) : (
+                  <div className="min-w-0 flex-1">{fields}</div>
+                )}
+                {actionColumns.length > 0 && (
+                  <div className="flex shrink-0 items-center gap-1.5 pt-0.5">
+                    {actionColumns.map((column) => (
+                      <div key={column.key}>{column.render(row)}</div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })
+        ) : (
+          <div className="px-4 py-10 text-center text-[13px] text-muted">
+            {emptyState}
+          </div>
+        )}
       </div>
     </section>
   );

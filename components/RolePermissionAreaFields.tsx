@@ -44,7 +44,7 @@ export default function RolePermissionAreaFields({
         <div className="mb-3 font-mono text-[9.5px] uppercase tracking-[0.6px] text-muted">
           Rechte
         </div>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {permissionLevels.map((permission) => (
             <label key={permission} className="checkbox-row relative cursor-pointer">
               <input
@@ -73,7 +73,7 @@ export default function RolePermissionAreaFields({
           </p>
         ) : area.supportsScope ? (
           <>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               {visibilityScopes.map((scopeOption) => (
                 <label key={scopeOption} className="checkbox-row relative cursor-pointer">
                   <input
@@ -97,7 +97,7 @@ export default function RolePermissionAreaFields({
           </>
         ) : area.supportsAssignedScope ? (
           <>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {assignedScopes.map((scopeOption) => (
                 <label key={scopeOption} className="checkbox-row relative cursor-pointer">
                   <input

@@ -634,8 +634,8 @@ body {
 }
 
 @utility container {
-  @apply mx-auto w-full max-w-[1200px] px-[clamp(24px,4vw,60px)] pt-10 pb-16;
-} 
+  @apply mx-auto w-full max-w-[1200px] px-[clamp(24px,4vw,60px)] pt-16 pb-16 md:pt-10;
+}
 
 @keyframes action-drawer-backdrop-in {
   from {

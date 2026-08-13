@@ -76,7 +76,7 @@ export default function EmployeeQuickView({
             <div className="grid gap-3">
               <div className="rounded-xl border border-border bg-bg p-4">
                 <DataTableStatus label={status.label} tone={status.tone} />
-                <div className="mt-3 grid grid-cols-2 gap-3 text-[12.5px]">
+                <div className="mt-3 grid grid-cols-1 gap-3 text-[12.5px] sm:grid-cols-2">
                   <div>
                     <div className="font-mono text-[9.5px] uppercase text-muted">
                       Personal-Nr.
