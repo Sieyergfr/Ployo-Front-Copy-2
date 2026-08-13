@@ -8,6 +8,7 @@ import { FieldErrors, FormErrorBanner } from "@/components/FormFeedback";
 import { useUniversalPopup } from "@/components/UniversalPopup";
 import type { ActionState } from "@/lib/action-state";
 import { Plus, Send } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 const initialState: ActionState = {};
 
@@ -28,6 +29,7 @@ function InviteEmployeeForm({
   onDone,
 }: InviteEmployeeButtonProps & { onDone: () => void }) {
   const [state, formAction] = useActionState(createEmployeeAction, initialState);
+  const t = useTranslations("InviteEmployeeButton");
 
   return (
     <form className="flex flex-col gap-4" action={formAction}>
@@ -36,7 +38,7 @@ function InviteEmployeeForm({
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="field">
           <label htmlFor="invite-first-name" className="label">
-            Vorname
+            {t("firstName")}
           </label>
           <input
             id="invite-first-name"
@@ -49,7 +51,7 @@ function InviteEmployeeForm({
 
         <div className="field">
           <label htmlFor="invite-last-name" className="label">
-            Nachname
+            {t("lastName")}
           </label>
           <input
             id="invite-last-name"
@@ -63,7 +65,7 @@ function InviteEmployeeForm({
 
       <div className="field">
         <label htmlFor="invite-email" className="label">
-          E-Mail-Adresse
+          {t("email")}
         </label>
         <input
           id="invite-email"
@@ -79,7 +81,7 @@ function InviteEmployeeForm({
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="field">
           <label htmlFor="invite-location" className="label">
-            Standort
+            {t("location")}
           </label>
           <select
             id="invite-location"
@@ -88,7 +90,7 @@ function InviteEmployeeForm({
             defaultValue=""
           >
             <option value="" disabled>
-              Auswählen
+              {t("select")}
             </option>
             {locations.map((location) => (
               <option key={location} value={location}>
@@ -100,7 +102,7 @@ function InviteEmployeeForm({
 
         <div className="field">
           <label htmlFor="invite-team" className="label">
-            Team
+            {t("team")}
           </label>
           <select
             id="invite-team"
@@ -109,7 +111,7 @@ function InviteEmployeeForm({
             defaultValue=""
           >
             <option value="" disabled>
-              Auswählen
+              {t("select")}
             </option>
             {teams.map((team) => (
               <option key={team} value={team}>
@@ -123,7 +125,7 @@ function InviteEmployeeForm({
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="field">
           <label htmlFor="invite-role" className="label">
-            Berechtigungsrolle
+            {t("permissionRole")}
           </label>
           <select
             id="invite-role"
@@ -141,7 +143,7 @@ function InviteEmployeeForm({
 
         <div className="field">
           <label htmlFor="invite-contract" className="label">
-            Vertrag
+            {t("contract")}
           </label>
           <select
             id="invite-contract"
@@ -149,10 +151,10 @@ function InviteEmployeeForm({
             className="input cursor-pointer bg-bg"
             defaultValue="Unbefristet"
           >
-            <option value="Unbefristet">Unbefristet</option>
-            <option value="Teilzeit">Teilzeit</option>
-            <option value="Befristet">Befristet</option>
-            <option value="Werkstudentin">Werkstudentin</option>
+            <option value="Unbefristet">{t("contractPermanent")}</option>
+            <option value="Teilzeit">{t("contractPartTime")}</option>
+            <option value="Befristet">{t("contractFixedTerm")}</option>
+            <option value="Werkstudentin">{t("contractWorkingStudent")}</option>
           </select>
         </div>
       </div>
@@ -160,21 +162,23 @@ function InviteEmployeeForm({
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="field">
           <label htmlFor="invite-start-date" className="label">
-            Eintritt
+            {t("startDate")}
           </label>
           <DatePickerField id="invite-start-date" name="startDate" />
         </div>
 
         <div className="field">
           <label htmlFor="invite-employee-number" className="label">
-            Personalnummer{employeeNumberRequired ? "" : " (optional)"}
+            {employeeNumberRequired ? t("employeeNumber") : t("employeeNumberOptional")}
           </label>
           <input
             id="invite-employee-number"
             name="employeeNumber"
             className="input input-mono"
             placeholder={
-              employeeNumberRequired ? "z. B. MA-0042" : "Wird automatisch vergeben"
+              employeeNumberRequired
+                ? t("employeeNumberPlaceholder")
+                : t("employeeNumberAutoPlaceholder")
             }
             required={employeeNumberRequired}
           />
@@ -182,21 +186,20 @@ function InviteEmployeeForm({
       </div>
 
       <p className="m-0 text-[12.5px] leading-[1.55] text-muted-2">
-        Der Mitarbeiter wird angelegt und kann danach in der Personalakte
-        vervollständigt werden.
+        {t("hint")}
       </p>
 
       <FormErrorBanner message={state.error} />
 
       <div className="mt-1 flex justify-end gap-2.5 border-t border-border-soft pt-4">
         <button type="button" className="btn btn-secondary" onClick={onDone}>
-          Abbrechen
+          {t("cancel")}
         </button>
         <FormSubmitButton
           Icon={Send}
-          pendingLabel="Wird angelegt..."
+          pendingLabel={t("submitting")}
         >
-          Anlegen
+          {t("submit")}
         </FormSubmitButton>
       </div>
     </form>
@@ -205,6 +208,7 @@ function InviteEmployeeForm({
 
 export default function InviteEmployeeButton(props: InviteEmployeeButtonProps) {
   const { openPopup, closePopup } = useUniversalPopup();
+  const t = useTranslations("InviteEmployeeButton");
 
   return (
     <button
@@ -212,13 +216,13 @@ export default function InviteEmployeeButton(props: InviteEmployeeButtonProps) {
       className="btn btn-primary"
       onClick={() => {
         openPopup({
-          title: "Mitarbeiter anlegen",
+          title: t("createTitle"),
           content: <InviteEmployeeForm {...props} onDone={closePopup} />,
         });
       }}
     >
       <Plus size={15} strokeWidth={2} />
-      Anlegen
+      {t("submit")}
     </button>
   );
 }

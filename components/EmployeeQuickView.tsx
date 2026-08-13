@@ -3,6 +3,7 @@
 import { DataTableStatus } from "@/components/DataTable";
 import { employeeStatusConfig, type Employee } from "@/lib/employees";
 import { AlertTriangle, Eye, FileText, Phone, X } from "lucide-react";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -16,14 +17,15 @@ export default function EmployeeQuickView({
   const [isOpen, setIsOpen] = useState(false);
   const status = employeeStatusConfig[employee.status];
   const primaryEmergency = employee.emergencyContacts[0];
+  const t = useTranslations("EmployeeQuickView");
 
   return (
     <>
       <button
         type="button"
         className="flex size-8 cursor-pointer items-center justify-center rounded-[8px] border border-border bg-white text-muted transition-colors hover:border-muted hover:text-ink"
-        title="Quick View"
-        aria-label={`${employee.name} Quick View öffnen`}
+        title={t("title")}
+        aria-label={t("openLabel", { name: employee.name })}
         onClick={(event) => {
           event.preventDefault();
           event.stopPropagation();
@@ -45,7 +47,7 @@ export default function EmployeeQuickView({
           <aside
             role="dialog"
             aria-modal="true"
-            aria-label={`${employee.name} Quick View`}
+            aria-label={t("dialogLabel", { name: employee.name })}
             className="action-drawer-panel h-full w-full max-w-[460px] overflow-y-auto border-l border-border bg-white p-6 shadow-[-20px_0_70px_rgba(0,0,0,0.18)]"
           >
             <div className="mb-5 flex items-start justify-between gap-4">
@@ -64,8 +66,8 @@ export default function EmployeeQuickView({
               </div>
               <button
                 type="button"
-                aria-label="Quick View schließen"
-                title="Schließen"
+                aria-label={t("closeLabel")}
+                title={t("close")}
                 className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-[9px] border border-border bg-white text-muted transition-colors hover:border-muted hover:text-ink"
                 onClick={() => setIsOpen(false)}
               >
@@ -79,13 +81,13 @@ export default function EmployeeQuickView({
                 <div className="mt-3 grid grid-cols-1 gap-3 text-[12.5px] sm:grid-cols-2">
                   <div>
                     <div className="font-mono text-[9.5px] uppercase text-muted">
-                      Personal-Nr.
+                      {t("employeeNumber")}
                     </div>
                     <div className="mt-1 font-mono text-ink">{employee.employeeNumber}</div>
                   </div>
                   <div>
                     <div className="font-mono text-[9.5px] uppercase text-muted">
-                      Eintritt
+                      {t("startDate")}
                     </div>
                     <div className="mt-1 font-mono text-ink">{employee.startDate}</div>
                   </div>
@@ -97,7 +99,7 @@ export default function EmployeeQuickView({
                   <div className="mb-2 flex items-center gap-2 text-danger">
                     <AlertTriangle size={16} />
                     <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.06em]">
-                      Notfallkontakt
+                      {t("emergencyContact")}
                     </span>
                   </div>
                   <div className="text-[14px] font-semibold text-ink">
@@ -117,7 +119,7 @@ export default function EmployeeQuickView({
                 <div className="mb-3 flex items-center gap-2">
                   <FileText size={15} className="text-muted" />
                   <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-muted">
-                    Letzte Dokumente
+                    {t("recentDocuments")}
                   </span>
                 </div>
                 {employee.files.slice(0, 3).map((file) => (
@@ -134,7 +136,7 @@ export default function EmployeeQuickView({
             </div>
 
             <Link href={href} className="btn btn-primary mt-5 w-full justify-center">
-              Personalakte öffnen
+              {t("openRecord")}
             </Link>
           </aside>
         </div>

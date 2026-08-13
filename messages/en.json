@@ -172,6 +172,61 @@
       }
     }
   },
+  "Employees": {
+    "eyebrow": "Employee Directory",
+    "pageTitle": "Employees",
+    "subtitle": "{count} entries · all locations",
+    "searchPlaceholder": "Name, employee number, or team",
+    "searchAriaLabel": "Search employees",
+    "locationFilterLabel": "Location",
+    "allLocations": "All locations",
+    "defaultRoleName": "Employee",
+    "columns": {
+      "name": "Name",
+      "employeeNumber": "Employee #",
+      "location": "Location",
+      "teamRole": "Team / Role",
+      "startDate": "Start date",
+      "contract": "Contract",
+      "status": "Status"
+    }
+  },
+  "EmployeeQuickView": {
+    "title": "Quick View",
+    "openLabel": "Open quick view for {name}",
+    "dialogLabel": "{name} quick view",
+    "closeLabel": "Close quick view",
+    "close": "Close",
+    "employeeNumber": "Employee #",
+    "startDate": "Start date",
+    "emergencyContact": "Emergency contact",
+    "recentDocuments": "Recent documents",
+    "openRecord": "Open HR record"
+  },
+  "InviteEmployeeButton": {
+    "createTitle": "Add employee",
+    "firstName": "First name",
+    "lastName": "Last name",
+    "email": "Email address",
+    "location": "Location",
+    "select": "Select",
+    "team": "Team",
+    "permissionRole": "Permission role",
+    "contract": "Contract",
+    "contractPermanent": "Permanent",
+    "contractPartTime": "Part-time",
+    "contractFixedTerm": "Fixed-term",
+    "contractWorkingStudent": "Working student",
+    "startDate": "Start date",
+    "employeeNumber": "Employee number",
+    "employeeNumberOptional": "Employee number (optional)",
+    "employeeNumberPlaceholder": "e.g. MA-0042",
+    "employeeNumberAutoPlaceholder": "Assigned automatically",
+    "hint": "The employee is created and can then be completed in their HR record.",
+    "cancel": "Cancel",
+    "submitting": "Adding...",
+    "submit": "Add"
+  },
   "Auth": {
     "header": {
       "eyebrow": "HR RECORDS"

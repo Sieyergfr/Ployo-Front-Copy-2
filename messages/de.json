@@ -172,6 +172,61 @@
       }
     }
   },
+  "Employees": {
+    "eyebrow": "Personalverzeichnis",
+    "pageTitle": "Mitarbeiter",
+    "subtitle": "{count} Einträge · alle Standorte",
+    "searchPlaceholder": "Name, Personal-Nr. oder Team",
+    "searchAriaLabel": "Mitarbeiter suchen",
+    "locationFilterLabel": "Standort",
+    "allLocations": "Alle Standorte",
+    "defaultRoleName": "Mitarbeiter",
+    "columns": {
+      "name": "Name",
+      "employeeNumber": "Personal-Nr.",
+      "location": "Standort",
+      "teamRole": "Team / Rolle",
+      "startDate": "Eintritt",
+      "contract": "Vertrag",
+      "status": "Status"
+    }
+  },
+  "EmployeeQuickView": {
+    "title": "Quick View",
+    "openLabel": "{name} Quick View öffnen",
+    "dialogLabel": "{name} Quick View",
+    "closeLabel": "Quick View schließen",
+    "close": "Schließen",
+    "employeeNumber": "Personal-Nr.",
+    "startDate": "Eintritt",
+    "emergencyContact": "Notfallkontakt",
+    "recentDocuments": "Letzte Dokumente",
+    "openRecord": "Personalakte öffnen"
+  },
+  "InviteEmployeeButton": {
+    "createTitle": "Mitarbeiter anlegen",
+    "firstName": "Vorname",
+    "lastName": "Nachname",
+    "email": "E-Mail-Adresse",
+    "location": "Standort",
+    "select": "Auswählen",
+    "team": "Team",
+    "permissionRole": "Berechtigungsrolle",
+    "contract": "Vertrag",
+    "contractPermanent": "Unbefristet",
+    "contractPartTime": "Teilzeit",
+    "contractFixedTerm": "Befristet",
+    "contractWorkingStudent": "Werkstudentin",
+    "startDate": "Eintritt",
+    "employeeNumber": "Personalnummer",
+    "employeeNumberOptional": "Personalnummer (optional)",
+    "employeeNumberPlaceholder": "z. B. MA-0042",
+    "employeeNumberAutoPlaceholder": "Wird automatisch vergeben",
+    "hint": "Der Mitarbeiter wird angelegt und kann danach in der Personalakte vervollständigt werden.",
+    "cancel": "Abbrechen",
+    "submitting": "Wird angelegt...",
+    "submit": "Anlegen"
+  },
   "Auth": {
     "header": {
       "eyebrow": "PERSONALAKTE"

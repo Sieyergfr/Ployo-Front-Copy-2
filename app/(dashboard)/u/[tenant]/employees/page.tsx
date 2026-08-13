@@ -27,6 +27,7 @@ import {
 } from "@/lib/tenant-access";
 import { getTeamsForTenant } from "@/lib/team-service";
 import { ChevronDown } from "lucide-react";
+import { getTranslations } from "next-intl/server";
 import { notFound, redirect } from "next/navigation";
 
 const PAGE_SIZE = 25;
@@ -35,11 +36,14 @@ export const metadata = {
   title: "Mitarbeiter",
 };
 
-function getColumns(tenant: string): Array<DataTableColumn<Employee>> {
+function getColumns(
+  tenant: string,
+  t: (key: string) => string,
+): Array<DataTableColumn<Employee>> {
   return [
     {
       key: "name",
-      header: "Name",
+      header: t("columns.name"),
       width: "2fr",
       render: (employee) => (
         <DataTableAvatar initials={employee.initials} label={employee.name} />
@@ -47,21 +51,21 @@ function getColumns(tenant: string): Array<DataTableColumn<Employee>> {
     },
     {
       key: "employeeNumber",
-      header: "Personal-Nr.",
+      header: t("columns.employeeNumber"),
       width: "116px",
       className: "font-mono text-[12px] text-muted-2",
       render: (employee) => employee.employeeNumber,
     },
     {
       key: "location",
-      header: "Standort",
+      header: t("columns.location"),
       width: "120px",
       className: "text-[13px] text-ink",
       render: (employee) => employee.location,
     },
     {
       key: "teamRole",
-      header: "Team / Rolle",
+      header: t("columns.teamRole"),
       width: "1.3fr",
       render: (employee) => (
         <DataTableStack title={employee.team} subtitle={employee.role} />
@@ -69,20 +73,20 @@ function getColumns(tenant: string): Array<DataTableColumn<Employee>> {
     },
     {
       key: "startDate",
-      header: "Eintritt",
+      header: t("columns.startDate"),
       width: "112px",
       className: "font-mono text-[11.5px] text-muted",
       render: (employee) => employee.startDate,
     },
     {
       key: "contract",
-      header: "Vertrag",
+      header: t("columns.contract"),
       width: "132px",
       render: (employee) => <DataTableBadge>{employee.contract}</DataTableBadge>,
     },
     {
       key: "status",
-      header: "Status",
+      header: t("columns.status"),
       width: "130px",
       render: (employee) => {
         const status = employeeStatusConfig[employee.status];
@@ -146,35 +150,36 @@ export default async function EmployeesPage({
     getTenantPermissions(tenant),
   ]);
   const canCreateEmployee = hasPermissionLevel(permissions.employees, "write");
+  const t = await getTranslations("Employees");
 
-  const columns = getColumns(tenant);
+  const columns = getColumns(tenant, t);
   const locationNames = locations.map((location) => location.name);
   const permissionRoleNames = roles.length > 0
     ? roles.map((role) => role.name)
-    : ["Mitarbeiter"];
+    : [t("defaultRoleName")];
   const teamNames = teams.map((team) => team.name);
   const page = paginate(employees, searchParamPage(query.page), PAGE_SIZE);
 
   return (
     <>
       <PageHeader
-        eyebrow="Personalverzeichnis"
-        title="Mitarbeiter"
-        subtitle={`${employees.length} Eintr\u00e4ge \u00b7 alle Standorte`}
+        eyebrow={t("eyebrow")}
+        title={t("pageTitle")}
+        subtitle={t("subtitle", { count: employees.length })}
       >
         <SearchInput
-          placeholder="Name, Personal-Nr. oder Team"
-          aria-label="Mitarbeiter suchen"
+          placeholder={t("searchPlaceholder")}
+          aria-label={t("searchAriaLabel")}
           className="min-w-[230px] bg-white"
         />
 
         <div className="relative">
           <select
-            aria-label="Standort"
+            aria-label={t("locationFilterLabel")}
             className="input min-w-40 cursor-pointer appearance-none bg-white pr-9 font-medium"
-            defaultValue="Alle Standorte"
+            defaultValue={t("allLocations")}
           >
-            <option value="Alle Standorte">Alle Standorte</option>
+            <option value={t("allLocations")}>{t("allLocations")}</option>
             {locationNames.map((location) => (
               <option key={location} value={location}>
                 {location}
