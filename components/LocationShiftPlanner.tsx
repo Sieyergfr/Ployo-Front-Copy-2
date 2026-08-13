@@ -821,6 +821,61 @@ export default function LocationShiftPlanner({
     setIsWishFreeDrawerOpen(true);
   }
 
+  // Siehe ShiftPlanningClient.tsx: gleicher Tages-Renderer für Querscroll-
+  // Wochenraster (md:+) und gestapelte Tagesansicht (unterhalb md:).
+  function renderShiftDay(day: ShiftDay, isFirst: boolean) {
+    return (
+      <div
+        key={day.id}
+        className={`flex flex-col md:min-h-[260px] ${
+          isFirst ? "" : "border-t border-border md:border-t-0 md:border-l"
+        }`}
+      >
+        <div
+          className={`border-b border-border px-2.5 py-3 text-center ${
+            day.isWeekend ? "bg-bg" : "bg-white"
+          }`}
+        >
+          <div
+            className={`font-mono text-[11px] font-semibold ${
+              day.isWeekend ? "text-danger" : "text-muted"
+            }`}
+          >
+            {day.weekday}
+          </div>
+          <div className="mt-0.5 font-mono text-[9px] text-[#B0B0AB]">
+            {day.date}
+          </div>
+        </div>
+        <div className="flex min-h-[160px] flex-col gap-1.5 p-2">
+          <WishFreeBlock
+            requests={approvedWishFreeByDate.get(day.id) ?? []}
+            onRequestClick={openWishFreeRequest}
+          />
+          {day.shifts.map((shift) => (
+            <ShiftCard
+              key={shift.dbId ?? shift.id}
+              shift={shift}
+              locationAccentClassName={location.accentClassName}
+              onClick={() => setDrawer({ day, shift })}
+            />
+          ))}
+          {canManage && (
+            <button
+              type="button"
+              aria-label={`Schicht am ${day.weekday} hinzufügen`}
+              title="Schicht hinzufügen"
+              className="flex w-full cursor-pointer items-center justify-center rounded-[9px] border-[1.5px] border-dashed border-[#DEDAD4] bg-transparent p-[7px] text-[#C0BFBA] transition-colors hover:border-muted hover:text-muted-2"
+              onClick={() => setDrawer({ day })}
+            >
+              <Plus size={15} strokeWidth={1.8} />
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-white px-4 py-3">
@@ -876,57 +931,13 @@ export default function LocationShiftPlanner({
       </div>
 
       <section className="overflow-hidden rounded-card border border-border bg-white">
-        <div className="overflow-x-auto">
+        <div className="hidden overflow-x-auto md:block">
           <div className="grid min-w-[700px] [grid-template-columns:repeat(7,minmax(130px,1fr))]">
-            {days.map((day, index) => (
-              <div
-                key={day.id}
-                className={`flex min-h-[260px] flex-col ${index > 0 ? "border-l border-border" : ""}`}
-              >
-                <div
-                  className={`border-b border-border px-2.5 py-3 text-center ${
-                    day.isWeekend ? "bg-bg" : "bg-white"
-                  }`}
-                >
-                  <div
-                    className={`font-mono text-[11px] font-semibold ${
-                      day.isWeekend ? "text-danger" : "text-muted"
-                    }`}
-                  >
-                    {day.weekday}
-                  </div>
-                  <div className="mt-0.5 font-mono text-[9px] text-[#B0B0AB]">
-                    {day.date}
-                  </div>
-                </div>
-                <div className="flex min-h-[160px] flex-col gap-1.5 p-2">
-                  <WishFreeBlock
-                    requests={approvedWishFreeByDate.get(day.id) ?? []}
-                    onRequestClick={openWishFreeRequest}
-                  />
-                  {day.shifts.map((shift) => (
-                    <ShiftCard
-                      key={shift.dbId ?? shift.id}
-                      shift={shift}
-                      locationAccentClassName={location.accentClassName}
-                      onClick={() => setDrawer({ day, shift })}
-                    />
-                  ))}
-                  {canManage && (
-                    <button
-                      type="button"
-                      aria-label={`Schicht am ${day.weekday} hinzufügen`}
-                      title="Schicht hinzufügen"
-                      className="flex w-full cursor-pointer items-center justify-center rounded-[9px] border-[1.5px] border-dashed border-[#DEDAD4] bg-transparent p-[7px] text-[#C0BFBA] transition-colors hover:border-muted hover:text-muted-2"
-                      onClick={() => setDrawer({ day })}
-                    >
-                      <Plus size={15} strokeWidth={1.8} />
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
+            {days.map((day, index) => renderShiftDay(day, index === 0))}
           </div>
+        </div>
+        <div className="flex flex-col md:hidden">
+          {days.map((day, index) => renderShiftDay(day, index === 0))}
         </div>
       </section>
 

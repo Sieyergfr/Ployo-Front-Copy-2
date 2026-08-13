@@ -6,7 +6,7 @@ Stand: 2026-08-13. Update: alle **[Ich]**-Punkte aus den Abschnitten Blocker, So
 
 - AVV (Auftragsverarbeitungsvertrag) mit Sentry abschließen — externer Vertrag, braucht deine Unterschrift/deinen Sentry-Account. Solange offen: Sentry sendet mit Consent Fehler-/Replay-Daten ohne unterschriebenen AVV — rechtlich das größte verbleibende Risiko. — **[Du]**
 - Rechtstexte (Impressum/Datenschutz/AGB) final von einem Anwalt gegenlesen lassen, Cookie-Kategorien-Formulierung kurz selbst gegenlesen — laut dir für später vorgemerkt, hier nur als Erinnerung stehen gelassen. — **[Du]**
-- Sprachumfang über de+en hinaus (z. B. Türkisch/Polnisch/Rumänisch für Schicht-/Servicekräfte) — nur falls gewünscht, sonst bleibt es bei de+en. — **[Du]**
+- Sprachumfang über de+en hinaus (z. B. Türkisch/Polnisch/Rumänisch für Schicht-/Servicekräfte) — nur falls gewünscht, sonst bleibt es bei de+en. — **[Du]** Bitte nur DE + EN
 
 ## ✅ Erledigt in dieser Runde
 
