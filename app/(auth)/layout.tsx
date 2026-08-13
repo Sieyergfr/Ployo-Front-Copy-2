@@ -2,12 +2,15 @@ import AuthHeader from "@/components/AuthHeader";
 import AuthSegmented from "@/components/AuthSegmented";
 import Card from "@/components/Card/card";
 import { LocaleSwitcher } from "@/components/LocaleSwitcher";
+import { getTranslations } from "next-intl/server";
 
-export default function AuthLayout ({
+export default async function AuthLayout ({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+    const t = await getTranslations("Auth.footer");
+
     return (
         <div className="min-h-svh flex items-center justify-center p-6">
             <div className="w-full" style={{ maxWidth: '420px' }}>
@@ -22,7 +25,7 @@ export default function AuthLayout ({
                     </span>
 
                     <a href="/datenschutz" className="footer-link">
-                        Datenschutz
+                        {t("privacy")}
                     </a>
 
                     <span className="footer-text">
@@ -30,7 +33,7 @@ export default function AuthLayout ({
                     </span>
 
                     <a href="/impressum" className="footer-link">
-                        Impressum
+                        {t("imprint")}
                     </a>
 
                     <span className="footer-text">

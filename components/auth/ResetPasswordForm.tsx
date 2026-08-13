@@ -5,6 +5,7 @@ import PasswordInput from "@/components/inputs/password-input";
 import { useToast } from "@/components/Toasts";
 import { authClient } from "@/lib/auth-client";
 import { ArrowRight } from "lucide-react";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
@@ -13,12 +14,11 @@ export default function ResetPasswordForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
+  const t = useTranslations("Auth.resetPassword");
   const token = searchParams.get("token") ?? "";
   const callbackError = searchParams.get("error");
   const [error, setError] = useState<string | null>(
-    callbackError === "INVALID_TOKEN"
-      ? "Der Reset-Link ist ungültig oder abgelaufen."
-      : null,
+    callbackError === "INVALID_TOKEN" ? t("invalidToken") : null,
   );
   const [isPending, setIsPending] = useState(false);
 
@@ -34,12 +34,12 @@ export default function ResetPasswordForm() {
         const passwordRepeat = String(formData.get("password_repeat") ?? "");
 
         if (!token) {
-          setError("Der Reset-Link ist ungültig oder abgelaufen.");
+          setError(t("invalidToken"));
           return;
         }
 
         if (password !== passwordRepeat) {
-          setError("Die Passwörter stimmen nicht überein.");
+          setError(t("passwordMismatch"));
           return;
         }
 
@@ -53,12 +53,11 @@ export default function ResetPasswordForm() {
         setIsPending(false);
 
         if (resetError) {
-          const message =
-            resetError.message ?? "Das Passwort konnte nicht geändert werden.";
+          const message = resetError.message ?? t("errorFallback");
           setError(message);
           toast({
             tone: "error",
-            title: "Reset fehlgeschlagen",
+            title: t("errorTitle"),
             subtitle: message,
           });
           return;
@@ -66,8 +65,8 @@ export default function ResetPasswordForm() {
 
         toast({
           tone: "success",
-          title: "Passwort geändert",
-          subtitle: "Sie können sich jetzt mit dem neuen Passwort anmelden.",
+          title: t("successTitle"),
+          subtitle: t("successBody"),
         });
         router.push("/login");
         router.refresh();
@@ -77,7 +76,7 @@ export default function ResetPasswordForm() {
         <PasswordInput
           showStrength
           id="password"
-          label="Neues Passwort"
+          label={t("passwordLabel")}
           placeholder="password"
           autoComplete="new-password"
           minLength={12}
@@ -85,7 +84,7 @@ export default function ResetPasswordForm() {
         />
         <PasswordInput
           id="password_repeat"
-          label="Neues Passwort wiederholen"
+          label={t("passwordRepeatLabel")}
           placeholder="password"
           autoComplete="new-password"
           required
@@ -100,13 +99,13 @@ export default function ResetPasswordForm() {
 
       <PrimaryButton type="submit" disabled={isPending || !token}>
         <span className="leading-tight">
-          {isPending ? "Speichern..." : "Passwort speichern"}
+          {isPending ? t("submitting") : t("submit")}
         </span>
         <ArrowRight size={12} strokeWidth={3} color="currentColor" />
       </PrimaryButton>
 
       <Link href="/login" className="text-center text-[12.5px] text-muted underline">
-        Zurück zum Login
+        {t("backToLogin")}
       </Link>
     </form>
   );

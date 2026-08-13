@@ -6,6 +6,7 @@ import { auth } from "@/lib/auth";
 import { getOwnPreferences, getOwnScheduledDeletion, startPagePath } from "@/lib/account-service";
 import { getTenantsForUser } from "@/lib/tenants";
 import { ArrowRight } from "lucide-react";
+import { getTranslations } from "next-intl/server";
 import { headers } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -36,22 +37,20 @@ export default async function TenantSelectPage() {
     redirect("/konto-loeschung");
   }
 
-  const [memberships, preference] = await Promise.all([
+  const [memberships, preference, t] = await Promise.all([
     getTenantsForUser(session.user.id),
     getOwnPreferences(),
+    getTranslations("Auth.select"),
   ]);
 
   return (
     <>
-      <CardHeader
-        title="Unternehmen auswählen"
-        subtitle="Mit welchem Unternehmen möchten Sie fortfahren?"
-      />
-      <SearchInput placeholder="Unternehmen suchen..." />
+      <CardHeader title={t("title")} subtitle={t("subtitle")} />
+      <SearchInput placeholder={t("searchPlaceholder")} />
       <CompanyList>
         {memberships.length === 0 ? (
           <div className="rounded-[12px] border border-border bg-bg px-4 py-3 text-[13px] text-muted-2">
-            Noch kein Unternehmen angelegt.
+            {t("empty")}
           </div>
         ) : (
           memberships.map((membership) => (
@@ -66,7 +65,7 @@ export default async function TenantSelectPage() {
         )}
       </CompanyList>
       <Link href="/select/create" className="btn btn-block btn-primary">
-        <span>Neues Unternehmen erstellen</span>
+        <span>{t("createNew")}</span>
         <ArrowRight size={12} strokeWidth={3} />
       </Link>
     </>

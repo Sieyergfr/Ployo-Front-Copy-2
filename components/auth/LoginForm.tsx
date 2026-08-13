@@ -7,6 +7,7 @@ import TextInput from "@/components/inputs/text-input";
 import { useToast } from "@/components/Toasts";
 import { authClient } from "@/lib/auth-client";
 import { ArrowRight, MailCheck } from "lucide-react";
+import { useTranslations } from "next-intl";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -20,6 +21,7 @@ export default function LoginForm({ next }: { next?: string }) {
   const target = next ?? "/select";
   const router = useRouter();
   const { toast } = useToast();
+  const t = useTranslations("Auth.login");
   const [error, setError] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
   const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
@@ -74,12 +76,11 @@ export default function LoginForm({ next }: { next?: string }) {
 
     if (resendError) {
       const message =
-        resendError.message ??
-        "Der Bestätigungslink konnte nicht versendet werden.";
+        resendError.message ?? t("resendVerificationErrorFallback");
       setError(message);
       toast({
         tone: "error",
-        title: "Versand fehlgeschlagen",
+        title: t("resendVerificationErrorTitle"),
         subtitle: message,
       });
       return;
@@ -87,15 +88,17 @@ export default function LoginForm({ next }: { next?: string }) {
 
     toast({
       tone: "success",
-      title: "Bestätigungslink versendet",
-      subtitle: "Bitte prüfen Sie Ihr Postfach.",
+      title: t("resendVerificationSuccessTitle"),
+      subtitle: t("resendVerificationSuccessBody"),
     });
     router.push(`/confirm?email=${encodeURIComponent(unverifiedEmail)}`);
   }
 
   async function handleSocialSignIn(provider: SocialProvider) {
     if (!providerConfig[provider]) {
-      const message = `${provider === "google" ? "Google" : "Apple"} Login ist noch nicht konfiguriert.`;
+      const message = t("socialNotConfiguredError", {
+        provider: provider === "google" ? t("google") : t("apple"),
+      });
       setError(message);
       return;
     }
@@ -112,11 +115,11 @@ export default function LoginForm({ next }: { next?: string }) {
     setSocialProvider(null);
 
     if (signInError) {
-      const message = signInError.message ?? "Anmeldung fehlgeschlagen.";
+      const message = signInError.message ?? t("signInErrorFallback");
       setError(message);
       toast({
         tone: "error",
-        title: "Anmeldung fehlgeschlagen",
+        title: t("signInErrorTitle"),
         subtitle: message,
       });
     }
@@ -161,18 +164,17 @@ export default function LoginForm({ next }: { next?: string }) {
             setUnverifiedEmail(email);
             toast({
               tone: "error",
-              title: "E-Mail nicht bestätigt",
-              subtitle:
-                "Bitte bestätigen Sie Ihre E-Mail-Adresse, um sich anzumelden.",
+              title: t("unverifiedErrorTitle"),
+              subtitle: t("unverifiedErrorBody"),
             });
             return;
           }
 
-          const message = signInError.message ?? "Anmeldung fehlgeschlagen.";
+          const message = signInError.message ?? t("signInErrorFallback");
           setError(message);
           toast({
             tone: "error",
-            title: "Anmeldung fehlgeschlagen",
+            title: t("signInErrorTitle"),
             subtitle: message,
           });
           return;
@@ -180,8 +182,8 @@ export default function LoginForm({ next }: { next?: string }) {
 
         toast({
           tone: "success",
-          title: "Willkommen zurück",
-          subtitle: "Sie werden weitergeleitet.",
+          title: t("signInSuccessTitle"),
+          subtitle: t("signInSuccessBody"),
         });
         router.push(target);
         router.refresh();
@@ -190,7 +192,7 @@ export default function LoginForm({ next }: { next?: string }) {
       <div className="card-form">
         <TextInput
           id="email"
-          label="E-Mail"
+          label={t("emailLabel")}
           type="email"
           placeholder="name@unternehmen.de"
           autoComplete="email"
@@ -198,19 +200,19 @@ export default function LoginForm({ next }: { next?: string }) {
         />
         <PasswordInput
           id="password"
-          label="Passwort"
+          label={t("passwordLabel")}
           placeholder="password"
           autoComplete="current-password"
           required
         />
         <Checkbox id="stay_logged">
-          <span>Angemeldet bleiben</span>
+          <span>{t("stayLoggedIn")}</span>
         </Checkbox>
         <Link
           href="/forgot-password"
           className="self-start text-[12.5px] font-medium text-ink underline underline-offset-2"
         >
-          Passwort vergessen?
+          {t("forgotPassword")}
         </Link>
       </div>
 
@@ -218,11 +220,10 @@ export default function LoginForm({ next }: { next?: string }) {
         <div className="rounded-[10px] border border-danger/20 bg-danger/5 px-3 py-3 text-[12.5px] text-ink">
           <div className="flex items-center gap-2 font-medium">
             <MailCheck size={15} strokeWidth={2} />
-            E-Mail-Adresse noch nicht bestätigt
+            {t("unverifiedTitle")}
           </div>
           <p className="mt-1 text-muted">
-            {unverifiedEmail} wurde noch nicht bestätigt. Fordern Sie einen
-            neuen Bestätigungslink an, um sich anmelden zu können.
+            {t("unverifiedBody", { email: unverifiedEmail })}
           </p>
           <button
             type="button"
@@ -230,9 +231,7 @@ export default function LoginForm({ next }: { next?: string }) {
             disabled={isResending}
             onClick={handleResendVerification}
           >
-            {isResending
-              ? "Wird versendet..."
-              : "Bestätigungslink erneut senden"}
+            {isResending ? t("resendingVerification") : t("resendVerification")}
           </button>
         </div>
       )}
@@ -245,7 +244,7 @@ export default function LoginForm({ next }: { next?: string }) {
 
       <PrimaryButton type="submit" disabled={isPending}>
         <span className="leading-tight">
-          {isPending ? "Anmelden..." : "Anmelden"}
+          {isPending ? t("submitting") : t("submit")}
         </span>
         <ArrowRight size={12} strokeWidth={3} color="currentColor" />
       </PrimaryButton>
@@ -253,7 +252,7 @@ export default function LoginForm({ next }: { next?: string }) {
       <div className="flex items-center gap-3">
         <span className="h-px flex-1 bg-border-soft" />
         <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted">
-          oder
+          {t("or")}
         </span>
         <span className="h-px flex-1 bg-border-soft" />
       </div>
@@ -265,8 +264,8 @@ export default function LoginForm({ next }: { next?: string }) {
           disabled={Boolean(socialProvider) || isPending || !providerConfig.google}
           title={
             providerConfig.google
-              ? "Mit Google anmelden"
-              : "Google Login ist noch nicht konfiguriert"
+              ? t("socialConfiguredTitle", { provider: t("google") })
+              : t("socialNotConfiguredTitle", { provider: t("google") })
           }
           onClick={() => handleSocialSignIn("google")}
         >
@@ -278,7 +277,7 @@ export default function LoginForm({ next }: { next?: string }) {
             aria-hidden="true"
           />
           <span className="truncate">
-            {socialProvider === "google" ? "Verbinden..." : "Google"}
+            {socialProvider === "google" ? t("connecting") : t("google")}
           </span>
         </button>
 
@@ -288,8 +287,8 @@ export default function LoginForm({ next }: { next?: string }) {
           disabled={Boolean(socialProvider) || isPending || !providerConfig.apple}
           title={
             providerConfig.apple
-              ? "Mit Apple anmelden"
-              : "Apple Login ist noch nicht konfiguriert"
+              ? t("socialConfiguredTitle", { provider: t("apple") })
+              : t("socialNotConfiguredTitle", { provider: t("apple") })
           }
           onClick={() => handleSocialSignIn("apple")}
         >
@@ -301,7 +300,7 @@ export default function LoginForm({ next }: { next?: string }) {
             aria-hidden="true"
           />
           <span className="truncate">
-            {socialProvider === "apple" ? "Verbinden..." : "Apple"}
+            {socialProvider === "apple" ? t("connecting") : t("apple")}
           </span>
         </button>
       </div>

@@ -1,6 +1,7 @@
 import CardHeader from "@/components/Card/CardHeader";
 import RegisterForm from "@/components/auth/RegisterForm";
 import { isEmailConfigured } from "@/lib/email";
+import { getTranslations } from "next-intl/server";
 
 export const metadata = {
   title: "Registrieren",
@@ -20,13 +21,11 @@ export default async function RegisterPage({
   searchParams: Promise<{ next?: string | string[] }>;
 }) {
   const next = sanitizeNext((await searchParams).next);
+  const t = await getTranslations("Auth.register");
 
   return (
     <>
-      <CardHeader
-        title="Konto erstellen"
-        subtitle="Füllen Sie die Felder aus, um loszulegen."
-      />
+      <CardHeader title={t("title")} subtitle={t("subtitle")} />
       <RegisterForm next={next} requiresEmailVerification={isEmailConfigured()} />
     </>
   );

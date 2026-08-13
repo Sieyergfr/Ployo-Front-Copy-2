@@ -1,5 +1,6 @@
 import CardHeader from "@/components/Card/CardHeader";
 import TwoFactorVerifyForm from "@/components/auth/TwoFactorVerifyForm";
+import { getTranslations } from "next-intl/server";
 
 export const metadata = {
   title: "Zwei-Faktor-Bestätigung",
@@ -19,13 +20,11 @@ export default async function TwoFactorVerifyPage({
   searchParams: Promise<{ next?: string | string[] }>;
 }) {
   const next = sanitizeNext((await searchParams).next);
+  const t = await getTranslations("Auth.twoFactor");
 
   return (
     <>
-      <CardHeader
-        title="Zwei-Faktor-Bestätigung"
-        subtitle="Bitte geben Sie den 6-stelligen Code aus Ihrer Authenticator-App ein."
-      />
+      <CardHeader title={t("title")} subtitle={t("subtitle")} />
       <TwoFactorVerifyForm next={next} />
     </>
   );

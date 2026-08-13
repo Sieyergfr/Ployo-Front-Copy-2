@@ -1,10 +1,12 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import { useTranslations } from "next-intl";
 import SegmentedLinks from "@/components/segmented/SegmentedLinks";
 
 export default function AuthSegmented() {
   const pathname = usePathname();
+  const t = useTranslations("Auth.tabs");
 
   if (pathname !== "/login" && pathname !== "/register") {
     return null;
@@ -13,8 +15,8 @@ export default function AuthSegmented() {
   return (
     <SegmentedLinks
       links={[
-        { label: "Anmelden", href: "/login" },
-        { label: "Registrieren", href: "/register" },
+        { label: t("login"), href: "/login" },
+        { label: t("register"), href: "/register" },
       ]}
     />
   );

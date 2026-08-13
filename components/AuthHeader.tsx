@@ -1,6 +1,9 @@
 import Image from "next/image";
+import { getTranslations } from "next-intl/server";
 
-export default function AuthHeader() {
+export default async function AuthHeader() {
+    const t = await getTranslations("Auth.header");
+
     return (
         <div className="flex flex-col items-center gap-2 mb-8">
             <div className="relative w-10 h-10">
@@ -15,7 +18,7 @@ export default function AuthHeader() {
             </div>
             <div className="flex flex-col items-center gap-0.5">
                 <p className="text-logo">Ployo</p>
-                <p className="eyebrow">PERSONALAKTE</p>
+                <p className="eyebrow">{t("eyebrow")}</p>
             </div>
         </div>
     )

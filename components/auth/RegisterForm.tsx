@@ -7,6 +7,7 @@ import TextInput from "@/components/inputs/text-input";
 import { useToast } from "@/components/Toasts";
 import { authClient } from "@/lib/auth-client";
 import { ArrowRight } from "lucide-react";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -21,6 +22,7 @@ export default function RegisterForm({
   const target = next ?? "/select";
   const router = useRouter();
   const { toast } = useToast();
+  const t = useTranslations("Auth.register");
   const [error, setError] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
 
@@ -40,13 +42,13 @@ export default function RegisterForm({
         const termsAccepted = formData.get("terms") === "on";
 
         if (password !== passwordRepeat) {
-          const message = "Die Passwörter stimmen nicht überein.";
+          const message = t("passwordMismatch");
           setError(message);
           return;
         }
 
         if (!termsAccepted) {
-          const message = "Bitte akzeptieren Sie die Nutzungsbedingungen.";
+          const message = t("termsRequired");
           setError(message);
           return;
         }
@@ -65,11 +67,11 @@ export default function RegisterForm({
         setIsPending(false);
 
         if (signUpError) {
-          const message = signUpError.message ?? "Registrierung fehlgeschlagen.";
+          const message = signUpError.message ?? t("signUpErrorFallback");
           setError(message);
           toast({
             tone: "error",
-            title: "Registrierung fehlgeschlagen",
+            title: t("signUpErrorTitle"),
             subtitle: message,
           });
           return;
@@ -80,8 +82,8 @@ export default function RegisterForm({
         if (requiresEmailVerification) {
           toast({
             tone: "success",
-            title: "Konto erstellt",
-            subtitle: "Bitte bestätigen Sie Ihre E-Mail-Adresse.",
+            title: t("accountCreatedTitle"),
+            subtitle: t("verifyEmailBody"),
           });
           router.push(`/confirm?email=${encodeURIComponent(email)}`);
           return;
@@ -89,8 +91,8 @@ export default function RegisterForm({
 
         toast({
           tone: "success",
-          title: "Konto erstellt",
-          subtitle: "Sie werden weitergeleitet.",
+          title: t("accountCreatedTitle"),
+          subtitle: t("redirectingBody"),
         });
         router.push(target);
         router.refresh();
@@ -101,7 +103,7 @@ export default function RegisterForm({
           <TextInput
             id="firstName"
             type="text"
-            label="Vorname"
+            label={t("firstNameLabel")}
             placeholder="Anna"
             autoComplete="given-name"
             required
@@ -109,7 +111,7 @@ export default function RegisterForm({
           <TextInput
             id="lastName"
             type="text"
-            label="Nachname"
+            label={t("lastNameLabel")}
             placeholder="Müller"
             autoComplete="family-name"
             required
@@ -118,7 +120,7 @@ export default function RegisterForm({
         <TextInput
           id="email"
           type="email"
-          label="E-Mail"
+          label={t("emailLabel")}
           placeholder="name@unternehmen.de"
           autoComplete="email"
           required
@@ -126,7 +128,7 @@ export default function RegisterForm({
         <PasswordInput
           showStrength
           id="password"
-          label="Passwort"
+          label={t("passwordLabel")}
           placeholder="password"
           autoComplete="new-password"
           minLength={12}
@@ -134,22 +136,22 @@ export default function RegisterForm({
         />
         <PasswordInput
           id="password_repeat"
-          label="Passwort wiederholen"
+          label={t("passwordRepeatLabel")}
           placeholder="password"
           autoComplete="new-password"
           required
         />
 
         <Checkbox id="terms" alignItems="start">
-          Ich stimme den{" "}
+          {t("termsPrefix")}{" "}
           <Link href="/agb" className="text-ink underline underline-offset-2">
-            Nutzungsbedingungen
+            {t("termsLink")}
           </Link>{" "}
-          und der{" "}
+          {t("termsMiddle")}{" "}
           <Link href="/datenschutz" className="text-ink underline underline-offset-2">
-            Datenschutzerklärung
+            {t("privacyLink")}
           </Link>{" "}
-          zu.
+          {t("termsSuffix")}
         </Checkbox>
       </div>
 
@@ -161,7 +163,7 @@ export default function RegisterForm({
 
       <PrimaryButton type="submit" disabled={isPending}>
         <span className="leading-tight">
-          {isPending ? "Konto erstellen..." : "Konto erstellen"}
+          {isPending ? t("submitting") : t("submit")}
         </span>
         <ArrowRight size={12} strokeWidth={3} color="currentColor" />
       </PrimaryButton>

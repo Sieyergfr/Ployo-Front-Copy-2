@@ -5,11 +5,13 @@ import TextInput from "@/components/inputs/text-input";
 import { useToast } from "@/components/Toasts";
 import { authClient } from "@/lib/auth-client";
 import { ArrowLeft, ArrowRight, MailCheck } from "lucide-react";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useState } from "react";
 
 export default function ForgotPasswordForm() {
   const { toast } = useToast();
+  const t = useTranslations("Auth.forgotPassword");
   const [error, setError] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
   const [sentTo, setSentTo] = useState<string | null>(null);
@@ -34,12 +36,11 @@ export default function ForgotPasswordForm() {
         setIsPending(false);
 
         if (resetError) {
-          const message =
-            resetError.message ?? "Der Reset-Link konnte nicht angefordert werden.";
+          const message = resetError.message ?? t("errorFallback");
           setError(message);
           toast({
             tone: "error",
-            title: "Anfrage fehlgeschlagen",
+            title: t("errorTitle"),
             subtitle: message,
           });
           return;
@@ -48,15 +49,15 @@ export default function ForgotPasswordForm() {
         setSentTo(email);
         toast({
           tone: "success",
-          title: "Reset-Link angefordert",
-          subtitle: "Wenn die E-Mail existiert, wurde ein Link versendet.",
+          title: t("toastSuccessTitle"),
+          subtitle: t("toastSuccessBody"),
         });
       }}
     >
       <div className="card-form">
         <TextInput
           id="email"
-          label="E-Mail"
+          label={t("emailLabel")}
           type="email"
           placeholder="name@unternehmen.de"
           autoComplete="email"
@@ -68,11 +69,10 @@ export default function ForgotPasswordForm() {
         <div className="rounded-[10px] border border-success/20 bg-success/5 px-3 py-3 text-[12.5px] text-ink">
           <div className="flex items-center gap-2 font-medium">
             <MailCheck size={15} strokeWidth={2} />
-            Link angefordert
+            {t("requestedTitle")}
           </div>
           <p className="mt-1 text-muted">
-            Falls {sentTo} registriert ist, kann das Passwort über den
-            zugesendeten Link zurückgesetzt werden.
+            {t("requestedBody", { email: sentTo })}
           </p>
         </div>
       )}
@@ -85,7 +85,7 @@ export default function ForgotPasswordForm() {
 
       <PrimaryButton type="submit" disabled={isPending}>
         <span className="leading-tight">
-          {isPending ? "Link anfordern..." : "Reset-Link anfordern"}
+          {isPending ? t("submitting") : t("submit")}
         </span>
         <ArrowRight size={12} strokeWidth={3} color="currentColor" />
       </PrimaryButton>
@@ -95,7 +95,7 @@ export default function ForgotPasswordForm() {
         className="btn btn-secondary flex items-center justify-center gap-2"
       >
         <ArrowLeft size={14} strokeWidth={2.2} />
-        Zurück zum Login
+        {t("backToLogin")}
       </Link>
     </form>
   );
