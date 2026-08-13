@@ -2,6 +2,7 @@
 
 import {
   changeAccountPassword,
+  getOwnPreferences,
   scheduleOwnAccountDeletion,
   updateAccountName,
   updateOwnPreferences,
@@ -68,6 +69,28 @@ export async function uploadAvatarAction(
   revalidatePath("/konto");
 
   return {};
+}
+
+/**
+ * Leichtgewichtiger Sprachwechsel für den globalen Umschalter in der
+ * Navigation (components/Navigation.tsx) — im Unterschied zu
+ * updatePreferencesAction bleiben die übrigen Präferenzen unangetastet und
+ * es wird zur aufrufenden Seite statt immer zu /konto zurückgesprungen.
+ */
+export async function switchLanguageAction(formData: FormData) {
+  const language = formString(formData, "language");
+  const redirectTo = formString(formData, "redirectTo") || "/konto";
+  const current = await getOwnPreferences();
+
+  await updateOwnPreferences({
+    language,
+    timezone: current.timezone,
+    startPage: current.startPage,
+    dateFormat: current.dateFormat,
+  });
+
+  revalidatePath(redirectTo);
+  redirect(redirectTo);
 }
 
 export async function updatePreferencesAction(formData: FormData) {

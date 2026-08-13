@@ -1,5 +1,6 @@
 "use client";
 
+import { switchLanguageAction } from "@/app/(dashboard)/konto/actions";
 import {
   openBillingPortalAction,
   saveSettingsPopupAction,
@@ -34,10 +35,16 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
+import { useLocale } from "next-intl";
 import Image from "next/image";
 import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+
+const availableLocales = [
+  { code: "de", label: "DE" },
+  { code: "en", label: "EN" },
+] as const;
 
 type NavItem = {
   label: string;
@@ -1217,6 +1224,7 @@ export default function NavigationSidebar({
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [isTenantMenuOpen, setIsTenantMenuOpen] = useState(false);
+  const currentLocale = useLocale();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [readNotificationIds, setReadNotificationIds] = useState<string[]>([]);
@@ -1555,6 +1563,30 @@ export default function NavigationSidebar({
             {!isCollapsed && <span className="sidebar-link-label">Abmelden</span>}
           </button>
         </form>
+
+        {!isCollapsed && (
+          <div className="flex items-center gap-1 px-1 py-1">
+            {availableLocales.map((locale) => (
+              <form key={locale.code} action={switchLanguageAction}>
+                <input type="hidden" name="redirectTo" value={pathname} />
+                <input type="hidden" name="language" value={locale.code} />
+                <button
+                  type="submit"
+                  disabled={currentLocale === locale.code}
+                  title={locale.code === "de" ? "Deutsch" : "English"}
+                  className={cx(
+                    "cursor-pointer rounded-[7px] px-2 py-1 font-mono text-[10px] uppercase tracking-[0.06em] transition-colors disabled:cursor-default",
+                    currentLocale === locale.code
+                      ? "bg-white/10 text-white"
+                      : "text-muted-2 hover:text-white",
+                  )}
+                >
+                  {locale.label}
+                </button>
+              </form>
+            ))}
+          </div>
+        )}
 
         <div className="sidebar-user-row">
           <div className="sidebar-user">
