@@ -9,15 +9,15 @@ import EmployeeQuickView from "@/components/EmployeeQuickView";
 import InviteEmployeeButton from "@/components/InviteEmployeeButton";
 import PageHeader from "@/components/PageHeader";
 import PaginationControls from "@/components/PaginationControls";
-import SearchInput from "@/components/inputs/SearchInput";
+import EmployeeListFilters from "@/components/EmployeeListFilters";
 import {
   getEmployeesForTenant,
   getMyEmployeeHandle,
-  isEmployeeNumberRequired,
+  previewNextEmployeeNumber,
 } from "@/lib/employee-service";
 import { employeeStatusConfig, type Employee } from "@/lib/employees";
 import { getLocationsForTenant } from "@/lib/location-service";
-import { paginate, searchParamPage } from "@/lib/pagination";
+import { paginate, searchParamPage, searchParamString } from "@/lib/pagination";
 import { hasPermissionLevel } from "@/lib/roles";
 import { getRolesForTenant } from "@/lib/role-service";
 import {
@@ -26,7 +26,6 @@ import {
   withAccessRedirect,
 } from "@/lib/tenant-access";
 import { getTeamsForTenant } from "@/lib/team-service";
-import { ChevronDown } from "lucide-react";
 import { getTranslations } from "next-intl/server";
 import { notFound, redirect } from "next/navigation";
 
@@ -131,8 +130,14 @@ export default async function EmployeesPage({
     );
   }
 
+  // Such-/Standortfilter werden serverseitig angewandt (Prisma-`where`), nicht
+  // erst im Browser — die Antwort enthält damit nur noch die Treffer.
+  const search = searchParamString(query.search);
+  const locationFilter = searchParamString(query.location);
+  const isFiltered = Boolean(search || locationFilter);
+
   const employees = await withAccessRedirect(tenant, () =>
-    getEmployeesForTenant(tenant),
+    getEmployeesForTenant(tenant, { search, location: locationFilter }),
   );
 
   if (!employees) {
@@ -142,11 +147,11 @@ export default async function EmployeesPage({
   // Standorte/Teams/Rollen sind hier nur Zusatzinfo für Filter und Dropdowns —
   // fehlt dafür die Berechtigung (z. B. "Rollen" ist admin-only), wird das
   // tolerant übergangen statt die ganze Mitarbeiterliste zu sperren.
-  const [locations, teams, roles, employeeNumberRequired, permissions] = await Promise.all([
+  const [locations, teams, roles, employeeNumberPreview, permissions] = await Promise.all([
     getLocationsForTenant(tenant).catch(() => null).then((v) => v ?? []),
     getTeamsForTenant(tenant).catch(() => null).then((v) => v ?? []),
     getRolesForTenant(tenant).catch(() => null).then((v) => v ?? []),
-    isEmployeeNumberRequired(tenant),
+    previewNextEmployeeNumber(tenant),
     getTenantPermissions(tenant),
   ]);
   const canCreateEmployee = hasPermissionLevel(permissions.employees, "write");
@@ -165,32 +170,19 @@ export default async function EmployeesPage({
       <PageHeader
         eyebrow={t("eyebrow")}
         title={t("pageTitle")}
-        subtitle={t("subtitle", { count: employees.length })}
+        subtitle={
+          isFiltered
+            ? t("subtitleFiltered", { count: employees.length })
+            : t("subtitle", { count: employees.length })
+        }
       >
-        <SearchInput
-          placeholder={t("searchPlaceholder")}
-          aria-label={t("searchAriaLabel")}
-          className="min-w-[230px] bg-white"
+        <EmployeeListFilters
+          locations={locationNames}
+          searchPlaceholder={t("searchPlaceholder")}
+          searchAriaLabel={t("searchAriaLabel")}
+          locationFilterLabel={t("locationFilterLabel")}
+          allLocationsLabel={t("allLocations")}
         />
-
-        <div className="relative">
-          <select
-            aria-label={t("locationFilterLabel")}
-            className="input min-w-40 cursor-pointer appearance-none bg-white pr-9 font-medium"
-            defaultValue={t("allLocations")}
-          >
-            <option value={t("allLocations")}>{t("allLocations")}</option>
-            {locationNames.map((location) => (
-              <option key={location} value={location}>
-                {location}
-              </option>
-            ))}
-          </select>
-          <ChevronDown
-            size={14}
-            className="pointer-events-none absolute top-1/2 right-3.5 -translate-y-1/2 text-muted"
-          />
-        </div>
 
         {canCreateEmployee && (
           <InviteEmployeeButton
@@ -198,7 +190,7 @@ export default async function EmployeesPage({
             locations={locationNames}
             permissionRoles={permissionRoleNames}
             teams={teamNames}
-            employeeNumberRequired={employeeNumberRequired}
+            employeeNumberPreview={employeeNumberPreview}
           />
         )}
       </PageHeader>
@@ -209,6 +201,7 @@ export default async function EmployeesPage({
         getRowKey={(employee) => employee.id}
         getRowHref={(employee) => `/u/${tenant}/employees/${employee.id}`}
         minWidth={980}
+        emptyState={isFiltered ? t("noResults") : undefined}
       />
       <PaginationControls
         page={page.page}
@@ -216,6 +209,7 @@ export default async function EmployeesPage({
         total={page.total}
         pageSize={page.pageSize}
         basePath={`/u/${tenant}/employees`}
+        query={{ search, location: locationFilter }}
       />
     </>
   );

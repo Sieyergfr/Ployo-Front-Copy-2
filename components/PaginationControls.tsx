@@ -7,12 +7,18 @@ export default function PaginationControls({
   total,
   pageSize,
   basePath,
+  query,
 }: {
   page: number;
   pageCount: number;
   total: number;
   pageSize: number;
   basePath: string;
+  /**
+   * Aktive Filter der Liste. Sie müssen in den Seiten-Links erhalten bleiben,
+   * sonst springt ein Klick auf "weiter" zurück auf die ungefilterte Liste.
+   */
+  query?: Record<string, string | undefined>;
 }) {
   if (total === 0) {
     return null;
@@ -20,8 +26,23 @@ export default function PaginationControls({
 
   const from = (page - 1) * pageSize + 1;
   const to = Math.min(page * pageSize, total);
-  const hrefFor = (targetPage: number) =>
-    targetPage <= 1 ? basePath : `${basePath}?page=${targetPage}`;
+  const hrefFor = (targetPage: number) => {
+    const params = new URLSearchParams();
+
+    for (const [key, value] of Object.entries(query ?? {})) {
+      if (value) {
+        params.set(key, value);
+      }
+    }
+
+    if (targetPage > 1) {
+      params.set("page", String(targetPage));
+    }
+
+    const queryString = params.toString();
+
+    return queryString ? `${basePath}?${queryString}` : basePath;
+  };
 
   return (
     <div className="flex items-center justify-between gap-4 border-t border-border px-6 py-3.5">

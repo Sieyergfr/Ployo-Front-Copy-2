@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { decryptField, encryptField } from "@/lib/encryption";
 import { isUniqueConstraintError } from "@/lib/prisma-errors";
@@ -19,6 +20,8 @@ import {
   type EmployeeTimelineItem,
   type EmergencyContact,
   type InfoRequest,
+  type InfoRequestStatus,
+  infoRequestStatuses,
 } from "@/lib/employees";
 import { recordTenantAudit } from "@/lib/audit";
 import { mapTenantFileToFileItem } from "@/lib/files";
@@ -101,6 +104,9 @@ type InfoRequestRecord = {
   fileRequested: boolean;
   status: string;
   createdAt: Date;
+  responseMessage: string;
+  respondedAt: Date | null;
+  responseFileId: string | null;
 };
 
 type TimelineRecord = {
@@ -227,6 +233,20 @@ type EmployeeMutationInput = {
 
 function asJson<T>(value: unknown, fallback: T): T {
   return (value ?? fallback) as T;
+}
+
+/** Datum/Frist einer Info-Anfrage formatieren — Uhrzeit nur anzeigen, wenn tatsächlich eine gesetzt wurde. */
+function formatRequestDate(date: Date | null) {
+  if (!date) {
+    return "";
+  }
+
+  const hasTime = date.getHours() !== 0 || date.getMinutes() !== 0;
+
+  return new Intl.DateTimeFormat("de-DE", {
+    dateStyle: "short",
+    timeStyle: hasTime ? "short" : undefined,
+  }).format(date);
 }
 
 function thisWeekDateIds(): string[] {
@@ -616,9 +636,12 @@ function toEmployee(record: EmployeeRecord, sensitiveFieldsVisible = true): Empl
         dateStyle: "short",
         timeStyle: "short",
       }).format(request.createdAt),
-      dueAt: request.dueAt ? new Intl.DateTimeFormat("de-DE").format(request.dueAt) : "",
+      dueAt: formatRequestDate(request.dueAt),
       fileRequested: request.fileRequested,
       status: request.status as InfoRequest["status"],
+      responseMessage: request.responseMessage || undefined,
+      respondedAt: request.respondedAt ? formatRequestDate(request.respondedAt) : undefined,
+      hasResponseFile: Boolean(request.responseFileId),
     })),
     shifts,
     timeline: (record.timeline ?? []).map((entry) => ({
@@ -681,6 +704,21 @@ export async function isEmployeeNumberRequired(tenantSlug: string) {
   return settings?.employeeNumberRequired ?? false;
 }
 
+/** Voraussichtliche nächste Personalnummer für das "Mitarbeiter anlegen"-Formular (unter Prefix/Suffix). */
+export async function previewNextEmployeeNumber(tenantSlug: string) {
+  const tenantId = await getTenantIdForEmployees(tenantSlug);
+  const settings = await prisma.tenantSettings.findUnique({
+    where: { tenantId },
+    select: { employeeNumberPrefix: true, employeeNumberSuffix: true },
+  });
+
+  return nextEmployeeNumber(
+    tenantId,
+    settings?.employeeNumberPrefix ?? "MA-",
+    settings?.employeeNumberSuffix ?? "",
+  );
+}
+
 /** Maximale aktive Mitarbeiterzahl des aktuellen Plans (Feature-Gating). */
 export async function getEmployeeLimitForTenant(tenantSlug: string) {
   const tenantId = await getTenantIdForEmployees(tenantSlug);
@@ -692,7 +730,61 @@ export async function getEmployeeLimitForTenant(tenantSlug: string) {
   return tenant ? planEmployeeLimits[tenant.plan] : null;
 }
 
-export async function getEmployeesForTenant(tenantSlug: string) {
+/**
+ * Filter der Mitarbeiterliste. Beide Felder sind optional; ein leerer oder
+ * nur aus Leerzeichen bestehender String zählt als "kein Filter", damit ein
+ * geleertes Suchfeld nicht versehentlich alles ausblendet.
+ */
+export type EmployeeListFilters = {
+  /** Freitext über Name, Personalnummer und Team (Teiltreffer, Groß-/Kleinschreibung egal). */
+  search?: string;
+  /** Exakter Standortname, wie er in `TenantEmployee.location` steht. */
+  location?: string;
+};
+
+/** Maximale Länge eines Suchbegriffs — längere werden abgeschnitten. */
+const EMPLOYEE_SEARCH_MAX_LENGTH = 100;
+
+/**
+ * Übersetzt die Freitextsuche in eine Prisma-Bedingung über die drei Felder,
+ * die das Suchfeld laut Platzhalter verspricht ("Name, Personal-Nr. oder Team").
+ *
+ * Bewusst `contains` + `insensitive` statt eines Volltextindex: die Liste ist
+ * pro Mandant durch das Plan-Limit klein, und ein `tsvector` bräuchte eine
+ * Migration plus Pflege bei jedem Schreibvorgang. Sollte das je zu langsam
+ * werden, ist der Austausch auf diese eine Funktion beschraenkt.
+ */
+function employeeSearchWhere(search: string): Prisma.TenantEmployeeWhereInput {
+  const term = search.slice(0, EMPLOYEE_SEARCH_MAX_LENGTH);
+
+  return {
+    OR: [
+      { name: { contains: term, mode: "insensitive" } },
+      { employeeNumber: { contains: term, mode: "insensitive" } },
+      { team: { contains: term, mode: "insensitive" } },
+    ],
+  };
+}
+
+/**
+ * Baut die Filter-Klauseln, die **zusätzlich** zur Scope-Bedingung gelten.
+ * Getrennt gehalten, damit an der Aufrufstelle sichtbar bleibt, dass Filter
+ * den Scope nur weiter einengen und ihn nie aufweichen koennen.
+ */
+function employeeFilterWhere(filters: EmployeeListFilters): Prisma.TenantEmployeeWhereInput {
+  const search = filters.search?.trim() ?? "";
+  const location = filters.location?.trim() ?? "";
+
+  return {
+    ...(location ? { location } : {}),
+    ...(search ? employeeSearchWhere(search) : {}),
+  };
+}
+
+export async function getEmployeesForTenant(
+  tenantSlug: string,
+  filters: EmployeeListFilters = {},
+) {
   const where = await employeeScopeWhere(tenantSlug);
   const fileAccess = await getOptionalAreaFileAccess(tenantSlug, "employees");
 
@@ -701,7 +793,9 @@ export async function getEmployeesForTenant(tenantSlug: string) {
   }
 
   const records = await prisma.tenantEmployee.findMany({
-    where,
+    // Scope zuerst, Filter danach: beide landen als AND nebeneinander, ein
+    // Suchbegriff kann die Sichtbarkeitsgrenze also nicht überschreiben.
+    where: { ...where, ...employeeFilterWhere(filters) },
     orderBy: { createdAt: "asc" },
     include: {
       privateAddress: true,
@@ -1566,12 +1660,112 @@ export async function deleteTenantEmployee(input: {
   });
 }
 
+type TenantInfoRequestRecord = {
+  id: string;
+  title: string;
+  message: string;
+  requestedBy: string;
+  dueAt: Date | null;
+  fileRequested: boolean;
+  status: string;
+  createdAt: Date;
+  responseMessage: string;
+  respondedAt: Date | null;
+  responseFileId: string | null;
+  employeeId: string;
+  employee: {
+    id: string;
+    key: string;
+    initials: string;
+    name: string;
+    location: string;
+    team: string;
+  };
+};
+
+function toTenantInfoRequest(record: TenantInfoRequestRecord) {
+  return {
+    id: record.id,
+    title: record.title,
+    message: record.message || undefined,
+    requestedBy: record.requestedBy,
+    requestedAt: new Intl.DateTimeFormat("de-DE", {
+      dateStyle: "short",
+      timeStyle: "short",
+    }).format(record.createdAt),
+    dueAt: formatRequestDate(record.dueAt),
+    fileRequested: record.fileRequested,
+    status: record.status as InfoRequest["status"],
+    responseMessage: record.responseMessage || undefined,
+    respondedAt: record.respondedAt ? formatRequestDate(record.respondedAt) : undefined,
+    hasResponseFile: Boolean(record.responseFileId),
+    employeeId: record.employee.id,
+    employeeKey: record.employee.key,
+    employeeInitials: record.employee.initials,
+    employeeName: record.employee.name,
+    location: record.employee.location,
+    team: record.employee.team,
+  };
+}
+
+/**
+ * Übersetzt den konfigurierten Scope (own/team/all) der "employees"-
+ * Berechtigung in einen `where`-Filter für `prisma.tenantEmployeeInfoRequest`.
+ * "own"/"team" ohne verknüpften eigenen Mitarbeiterdatensatz liefert einen
+ * Filter, der nichts trifft — nie stillschweigend auf "alles sehen" zurückfallen.
+ */
+async function infoRequestScopeWhere(tenantSlug: string) {
+  const access = await requireTenantAccess(tenantSlug, "employees", "read");
+  const scopeFilter = await resolveScopeFilter(access);
+
+  if (scopeFilter.type === "all") {
+    return { tenantId: access.tenantId };
+  }
+
+  if (scopeFilter.type === "own") {
+    return { tenantId: access.tenantId, employeeId: scopeFilter.employeeId ?? "__none__" };
+  }
+
+  if (scopeFilter.type === "team") {
+    return { tenantId: access.tenantId, employee: { team: scopeFilter.team } };
+  }
+
+  // "employees" unterstützt (bisher) keinen "assigned"-Scope — sollte er
+  // dennoch auftreten, nichts treffen statt stillschweigend alles zu zeigen.
+  return { tenantId: access.tenantId, employeeId: "__none__" };
+}
+
+/** Alle Info-Anfragen des Tenants inkl. Status (own/team/all-Scope je nach Rolle). */
+export async function getInfoRequestsForTenant(tenantSlug: string) {
+  const where = await infoRequestScopeWhere(tenantSlug);
+
+  const records = await prisma.tenantEmployeeInfoRequest.findMany({
+    where,
+    orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+    include: {
+      employee: {
+        select: {
+          id: true,
+          key: true,
+          initials: true,
+          name: true,
+          location: true,
+          team: true,
+        },
+      },
+    },
+  });
+
+  return records.map(toTenantInfoRequest);
+}
+
 export async function createEmployeeInfoRequest(input: {
   tenantSlug: string;
   employeeId: string;
   title: string;
   message?: string;
   dueAt?: string;
+  dueTime?: string;
   fileRequested: boolean;
 }) {
   await requireEmployeeManager(input.tenantSlug);
@@ -1593,8 +1787,11 @@ export async function createEmployeeInfoRequest(input: {
   }
 
   const dueAtIso = input.dueAt?.trim() ?? "";
+  const dueTimeIso = /^\d{2}:\d{2}$/.test(input.dueTime?.trim() ?? "")
+    ? input.dueTime!.trim()
+    : "00:00";
   const dueAt = /^\d{4}-\d{2}-\d{2}$/.test(dueAtIso)
-    ? new Date(`${dueAtIso}T00:00:00`)
+    ? new Date(`${dueAtIso}T${dueTimeIso}:00`)
     : null;
 
   const request = await prisma.tenantEmployeeInfoRequest.create({
@@ -1622,4 +1819,234 @@ export async function createEmployeeInfoRequest(input: {
   });
 
   return request;
+}
+
+async function findTenantInfoRequest(tenantSlug: string, requestId: string) {
+  const access = await requireTenantAccess(tenantSlug, "employees", "write");
+  const request = await prisma.tenantEmployeeInfoRequest.findFirst({
+    where: { id: requestId, tenantId: access.tenantId },
+    include: { employee: { select: { id: true, name: true } } },
+  });
+
+  if (!request) {
+    throw new Error("Info-Anfrage nicht gefunden.");
+  }
+
+  return { access, request };
+}
+
+/** Status manuell setzen (Admin/Manager) — z. B. Anfrage stornieren oder eine offline erhaltene Antwort nachtragen. */
+export async function updateInfoRequestStatus(input: {
+  tenantSlug: string;
+  requestId: string;
+  status: InfoRequestStatus;
+}) {
+  await requireEmployeeManager(input.tenantSlug);
+
+  if (!infoRequestStatuses.includes(input.status)) {
+    throw new Error("Ungültiger Status.");
+  }
+
+  const { access, request } = await findTenantInfoRequest(input.tenantSlug, input.requestId);
+
+  const updated = await prisma.tenantEmployeeInfoRequest.update({
+    where: { id: request.id },
+    data: { status: input.status },
+  });
+
+  await recordTenantAudit({
+    tenantId: access.tenantId,
+    actorId: access.userId,
+    actorName: access.userName,
+    action:
+      input.status === "cancelled" ? "Info-Anfrage storniert" : "Info-Anfrage-Status geändert",
+    source: "Mitarbeiter",
+    entityType: "employee",
+    entityId: request.employee.id,
+    detail: `${request.employee.name}: ${request.title} → ${input.status}`,
+  });
+
+  return updated;
+}
+
+/** Info-Anfrage endgültig löschen (Admin/Manager) — die verknüpfte Antwortdatei bleibt in der Personalakte erhalten. */
+export async function deleteEmployeeInfoRequest(input: { tenantSlug: string; requestId: string }) {
+  await requireEmployeeManager(input.tenantSlug);
+
+  const { access, request } = await findTenantInfoRequest(input.tenantSlug, input.requestId);
+
+  await prisma.tenantEmployeeInfoRequest.delete({ where: { id: request.id } });
+
+  await recordTenantAudit({
+    tenantId: access.tenantId,
+    actorId: access.userId,
+    actorName: access.userName,
+    action: "Info-Anfrage gelöscht",
+    source: "Mitarbeiter",
+    entityType: "employee",
+    entityId: request.employee.id,
+    detail: `${request.employee.name}: ${request.title}`,
+  });
+}
+
+export type EmergencyContactInput = {
+  name: string;
+  relation: string;
+  phone: string;
+  email?: string;
+  note?: string;
+};
+
+async function loadEmergencyContacts(tenantId: string, employeeId: string) {
+  const employee = await prisma.tenantEmployee.findFirst({
+    where: { id: employeeId, tenantId },
+    select: { id: true, name: true, emergencyContactsJson: true },
+  });
+
+  if (!employee) {
+    throw new Error("Mitarbeiter nicht gefunden.");
+  }
+
+  return {
+    employee,
+    contacts: asJson<EmergencyContact[]>(employee.emergencyContactsJson, []),
+  };
+}
+
+async function saveEmergencyContacts(
+  access: { tenantId: string; userId: string; userName: string },
+  employee: { id: string; name: string },
+  contacts: EmergencyContact[],
+  auditAction: string,
+) {
+  await prisma.tenantEmployee.update({
+    where: { id: employee.id },
+    data: { emergencyContactsJson: contacts },
+  });
+
+  await recordTenantAudit({
+    tenantId: access.tenantId,
+    actorId: access.userId,
+    actorName: access.userName,
+    action: auditAction,
+    source: "Mitarbeiter",
+    entityType: "employee",
+    entityId: employee.id,
+    detail: employee.name,
+  });
+}
+
+export async function addEmergencyContact(input: {
+  tenantSlug: string;
+  employeeId: string;
+  contact: EmergencyContactInput;
+}) {
+  await requireEmployeeManager(input.tenantSlug);
+  const access = await requireTenantAccess(input.tenantSlug, "employees", "write");
+  const { employee, contacts } = await loadEmergencyContacts(access.tenantId, input.employeeId);
+
+  const name = input.contact.name.trim();
+  const phone = input.contact.phone.trim();
+
+  if (!name || !phone) {
+    throw new Error("Name und Telefonnummer sind erforderlich.");
+  }
+
+  const newContact: EmergencyContact = {
+    id: randomUUID(),
+    name,
+    relation: input.contact.relation.trim(),
+    phone,
+    email: input.contact.email?.trim() || undefined,
+    note: input.contact.note?.trim() || undefined,
+    isPrimary: contacts.length === 0,
+  };
+
+  await saveEmergencyContacts(
+    access,
+    employee,
+    [...contacts, newContact],
+    "Notfallkontakt hinzugefügt",
+  );
+
+  return newContact;
+}
+
+export async function updateEmergencyContact(input: {
+  tenantSlug: string;
+  employeeId: string;
+  contactId: string;
+  contact: EmergencyContactInput;
+}) {
+  await requireEmployeeManager(input.tenantSlug);
+  const access = await requireTenantAccess(input.tenantSlug, "employees", "write");
+  const { employee, contacts } = await loadEmergencyContacts(access.tenantId, input.employeeId);
+
+  const name = input.contact.name.trim();
+  const phone = input.contact.phone.trim();
+
+  if (!name || !phone) {
+    throw new Error("Name und Telefonnummer sind erforderlich.");
+  }
+
+  if (!contacts.some((contact) => contact.id === input.contactId)) {
+    throw new Error("Notfallkontakt nicht gefunden.");
+  }
+
+  const nextContacts = contacts.map((contact) =>
+    contact.id === input.contactId
+      ? {
+          ...contact,
+          name,
+          relation: input.contact.relation.trim(),
+          phone,
+          email: input.contact.email?.trim() || undefined,
+          note: input.contact.note?.trim() || undefined,
+        }
+      : contact,
+  );
+
+  await saveEmergencyContacts(access, employee, nextContacts, "Notfallkontakt bearbeitet");
+}
+
+export async function deleteEmergencyContact(input: {
+  tenantSlug: string;
+  employeeId: string;
+  contactId: string;
+}) {
+  await requireEmployeeManager(input.tenantSlug);
+  const access = await requireTenantAccess(input.tenantSlug, "employees", "write");
+  const { employee, contacts } = await loadEmergencyContacts(access.tenantId, input.employeeId);
+
+  const removed = contacts.find((contact) => contact.id === input.contactId);
+  let nextContacts = contacts.filter((contact) => contact.id !== input.contactId);
+
+  if (removed?.isPrimary && nextContacts.length > 0 && !nextContacts.some((c) => c.isPrimary)) {
+    nextContacts = nextContacts.map((contact, index) =>
+      index === 0 ? { ...contact, isPrimary: true } : contact,
+    );
+  }
+
+  await saveEmergencyContacts(access, employee, nextContacts, "Notfallkontakt gelöscht");
+}
+
+export async function setPrimaryEmergencyContact(input: {
+  tenantSlug: string;
+  employeeId: string;
+  contactId: string;
+}) {
+  await requireEmployeeManager(input.tenantSlug);
+  const access = await requireTenantAccess(input.tenantSlug, "employees", "write");
+  const { employee, contacts } = await loadEmergencyContacts(access.tenantId, input.employeeId);
+
+  if (!contacts.some((contact) => contact.id === input.contactId)) {
+    throw new Error("Notfallkontakt nicht gefunden.");
+  }
+
+  const nextContacts = contacts.map((contact) => ({
+    ...contact,
+    isPrimary: contact.id === input.contactId,
+  }));
+
+  await saveEmergencyContacts(access, employee, nextContacts, "Hauptkontakt geändert");
 }

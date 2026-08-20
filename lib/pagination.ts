@@ -5,6 +5,18 @@ export function searchParamPage(value: string | string[] | undefined) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
 }
 
+/**
+ * Einzelner Query-Wert als getrimmter String. Next liefert wiederholte
+ * Parameter (`?search=a&search=b`) als Array — dann zählt der erste, damit ein
+ * manipulierter Link nicht zu einem Typfehler führt.
+ */
+export function searchParamString(value: string | string[] | undefined) {
+  const raw = Array.isArray(value) ? value[0] : value;
+  const trimmed = raw?.trim() ?? "";
+
+  return trimmed || undefined;
+}
+
 export type Page<T> = {
   items: T[];
   page: number;

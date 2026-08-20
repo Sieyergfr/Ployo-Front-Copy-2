@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { prisma } from "@/lib/prisma";
 import {
   createTenantEmployeeRecord,
+  getEmployeesForTenant,
   updateTenantEmployee,
 } from "@/lib/employee-service";
 
@@ -69,6 +70,13 @@ beforeAll(async () => {
     data: [
       { tenantId, key: `entwicklerin-${RUN_ID}`, name: "Entwicklerin" },
       { tenantId, key: `tech-lead-${RUN_ID}`, name: "Tech Lead" },
+    ],
+  });
+
+  await prisma.tenantTeam.createMany({
+    data: [
+      { tenantId, key: `labor-${RUN_ID}`, name: "Labor" },
+      { tenantId, key: `krypto-${RUN_ID}`, name: "Krypto" },
     ],
   });
 });
@@ -178,5 +186,92 @@ describe("updateTenantEmployee", () => {
     expect(secondUpdate.contractDetails.position).toBe("Mathematikerin");
     expect(secondUpdate.contractDetails.department).toBe("Forschung");
     expect(secondUpdate.phone).toBe("+49 30 1234567");
+  });
+});
+
+describe("getEmployeesForTenant — Suche und Standortfilter", () => {
+  /** Eigene Fixtures mit unverwechselbaren Namen, damit die anderen Blöcke nicht hineinzählen. */
+  const names = ["Marie Curie", "Alan Turing", "Rosalind Franklin"];
+  const employeeNumbers: Record<string, string> = {};
+
+  beforeAll(async () => {
+    const fixtures = [
+      { firstName: "Marie", lastName: "Curie", location: "Standort A", team: "Labor" },
+      { firstName: "Alan", lastName: "Turing", location: "Standort B", team: "Krypto" },
+      { firstName: "Rosalind", lastName: "Franklin", location: "Standort A", team: "Labor" },
+    ];
+
+    for (const fixture of fixtures) {
+      const created = await createTenantEmployeeRecord({
+        tenantId,
+        actorId: "test-actor",
+        actorName: "Test Actor",
+        input: {
+          tenantSlug,
+          ...fixture,
+          email: `${fixture.firstName.toLowerCase()}-${RUN_ID}@ployo.invalid`,
+          role: "",
+        },
+      });
+
+      employeeNumbers[created.name] = created.employeeNumber;
+    }
+  });
+
+  const namesOf = async (filters?: Parameters<typeof getEmployeesForTenant>[1]) =>
+    ((await getEmployeesForTenant(tenantSlug, filters)) ?? []).map((e) => e.name);
+
+  it("findet über einen Teil des Namens, unabhängig von der Groß-/Kleinschreibung", async () => {
+    expect(await namesOf({ search: "curie" })).toEqual(["Marie Curie"]);
+    expect(await namesOf({ search: "CURIE" })).toEqual(["Marie Curie"]);
+    expect(await namesOf({ search: "Mar" })).toEqual(["Marie Curie"]);
+  });
+
+  it("findet über die Personalnummer", async () => {
+    const number = employeeNumbers["Alan Turing"];
+
+    expect(await namesOf({ search: number })).toEqual(["Alan Turing"]);
+  });
+
+  it("findet über das Team", async () => {
+    const found = await namesOf({ search: "Labor" });
+
+    expect(found).toContain("Marie Curie");
+    expect(found).toContain("Rosalind Franklin");
+    expect(found).not.toContain("Alan Turing");
+  });
+
+  it("filtert nach Standort", async () => {
+    const found = await namesOf({ location: "Standort B" });
+
+    expect(found).toContain("Alan Turing");
+    expect(found).not.toContain("Marie Curie");
+  });
+
+  it("kombiniert Suche und Standortfilter als UND", async () => {
+    expect(await namesOf({ search: "Labor", location: "Standort A" })).toEqual([
+      "Marie Curie",
+      "Rosalind Franklin",
+    ]);
+
+    // Team "Labor" gibt es an Standort B nicht — die Kombination darf nichts liefern.
+    expect(await namesOf({ search: "Labor", location: "Standort B" })).toEqual([]);
+  });
+
+  it("behandelt fehlende und leere Filter als 'kein Filter'", async () => {
+    const unfiltered = await namesOf();
+
+    for (const name of names) {
+      expect(unfiltered).toContain(name);
+    }
+
+    // Ein geleertes Suchfeld schickt "" bzw. Leerzeichen — das darf nicht
+    // versehentlich auf "Name enthält Leerzeichen" filtern.
+    expect(await namesOf({ search: "", location: "" })).toEqual(unfiltered);
+    expect(await namesOf({ search: "   " })).toEqual(unfiltered);
+  });
+
+  it("liefert eine leere Liste statt eines Fehlers, wenn nichts passt", async () => {
+    expect(await namesOf({ search: "gibtesnicht-xyz" })).toEqual([]);
   });
 });
