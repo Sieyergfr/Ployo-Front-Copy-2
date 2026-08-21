@@ -72,8 +72,8 @@ beforeAll(async () => {
     },
   });
 
-  // --- Fixtures für "assigned"-Scope (Standorte: Namensabgleich, Teams: TenantTeamMember-Relation) ---
-  await prisma.tenantLocation.create({
+  // --- Fixtures für "assigned"-Scope (Standorte: TenantLocationMember-Relation, Teams: TenantTeamMember-Relation) ---
+  const assignedLocation = await prisma.tenantLocation.create({
     data: { tenantId, key: `standort-a-${RUN_ID}`, kind: "Filiale", name: "Standort A" },
   });
 
@@ -95,6 +95,15 @@ beforeAll(async () => {
     },
   });
   assignedEmployeeId = assignedEmployee.id;
+
+  await prisma.tenantLocationMember.create({
+    data: {
+      locationId: assignedLocation.id,
+      employeeId: assignedEmployee.id,
+      initials: assignedEmployee.initials,
+      name: assignedEmployee.name,
+    },
+  });
 
   await prisma.tenantTeamMember.create({
     data: {
@@ -329,7 +338,7 @@ describe("resolveTenantAccessForUser (requireTenantAccess-Kernlogik)", () => {
 });
 
 describe("resolveScopeFilter — 'assigned'-Scope (Standorte/Teams)", () => {
-  it("löst 'assigned' für Standorte über den Namensabgleich der eigenen Personalakte auf", async () => {
+  it("löst 'assigned' für Standorte über die TenantLocationMember-Relation auf", async () => {
     const user = { id: userIds["assigned-employee"], email: "x", name: "Assigned" };
     const access = await resolveTenantAccessForUser(user, tenantSlug, "locations", "read");
 

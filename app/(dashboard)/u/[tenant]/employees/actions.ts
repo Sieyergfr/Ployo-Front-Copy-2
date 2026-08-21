@@ -2,10 +2,16 @@
 
 import { z } from "zod";
 import {
+  addEmergencyContact,
   createEmployeeInfoRequest,
   createTenantEmployee,
+  deleteEmergencyContact,
   deleteTenantEmployee,
   getEmployeeForTenant,
+  offboardEmployee,
+  reactivateEmployee,
+  setPrimaryEmergencyContact,
+  updateEmergencyContact,
   updateTenantEmployee,
 } from "@/lib/employee-service";
 import { createTenantInvitation } from "@/lib/settings-service";
@@ -16,6 +22,7 @@ import {
   type ContractStatus,
 } from "@/lib/contract-service";
 import { uploadPayrollStatement } from "@/lib/payroll-service";
+import { softDeleteTenantFile, uploadTenantFile } from "@/lib/storage/storage.service";
 import { type ActionState, parseAction } from "@/lib/action-state";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -46,6 +53,20 @@ function requiredFile(formData: FormData, key: string) {
   }
 
   return value;
+}
+
+function formFile(formData: FormData, key = "file") {
+  const value = formData.get(key);
+
+  return value instanceof File ? value : null;
+}
+
+function formStrings(formData: FormData, key: string) {
+  return formData
+    .getAll(key)
+    .filter((value): value is string => typeof value === "string")
+    .map((value) => value.trim())
+    .filter(Boolean);
 }
 
 function contractStatus(formData: FormData, fallback: ContractStatus = "draft") {
@@ -102,11 +123,14 @@ export async function createEmployeeAction(
     return parsed.state;
   }
 
+  // Mehrfachauswahl kommt als wiederholtes `locations`-Feld — `Object.fromEntries`
+  // oben würde davon nur den letzten Wert behalten, daher separat mit `getAll`.
+  const locations = formStrings(formData, "locations");
   const { tenant, ...employeeInput } = parsed.data;
   let employee: Awaited<ReturnType<typeof createTenantEmployee>>;
 
   try {
-    employee = await createTenantEmployee({ tenantSlug: tenant, ...employeeInput });
+    employee = await createTenantEmployee({ tenantSlug: tenant, ...employeeInput, locations });
   } catch (error) {
     return {
       error:
@@ -125,24 +149,6 @@ export async function updateEmployeeAction(formData: FormData) {
   const employeeId = formString(formData, "employeeId");
   const activeTab = formString(formData, "activeTab");
   const contractDetailsSubmitted = formData.get("contractDetailsSubmitted") === "1";
-  const emergencyContactsSubmitted =
-    formData.get("emergencyContactsSubmitted") === "1";
-  const emergencyContactIds = formData.getAll("emergencyContactId").map(String);
-  const emergencyContactNames = formData.getAll("emergencyContactName").map(String);
-  const emergencyContactRelations = formData
-    .getAll("emergencyContactRelation")
-    .map(String);
-  const emergencyContactPhones = formData.getAll("emergencyContactPhone").map(String);
-  const emergencyContactEmails = formData.getAll("emergencyContactEmail").map(String);
-  const emergencyContacts = emergencyContactNames
-    .map((rawName, index) => ({
-      id: emergencyContactIds[index] ?? "",
-      name: rawName.trim(),
-      relation: (emergencyContactRelations[index] ?? "").trim(),
-      phone: (emergencyContactPhones[index] ?? "").trim(),
-      email: (emergencyContactEmails[index] ?? "").trim() || undefined,
-    }))
-    .filter((contact) => contact.name || contact.phone);
 
   if (!tenant || !employeeId) {
     throw new Error("Mitarbeiter konnte nicht gespeichert werden.");
@@ -184,6 +190,11 @@ export async function updateEmployeeAction(formData: FormData) {
     healthInsurance: optionalString(formData, "healthInsurance"),
     iban: optionalString(formData, "iban"),
     location: optionalString(formData, "location"),
+    // Immer explizit mitgeschickt (nicht `undefined` bei leerer Auswahl!) —
+    // das Bearbeiten-Formular rendert den Mehrfachauswahl-Standort-Bereich
+    // immer mit, ein leeres Array bedeutet also "alle Standorte entfernt",
+    // nicht "Feld nicht angetastet".
+    locations: formStrings(formData, "locations"),
     team: optionalString(formData, "team"),
     role: optionalString(formData, "role"),
     startDate: optionalString(formData, "startDate"),
@@ -218,9 +229,9 @@ export async function updateEmployeeAction(formData: FormData) {
     parties: fieldString(formData, "parties"),
     collectiveAgreement: fieldString(formData, "collectiveAgreement"),
     compensation: fieldString(formData, "compensation"),
+    compensationGross: fieldString(formData, "compensationGross"),
     workingTime: fieldString(formData, "workingTime"),
     vacation: fieldString(formData, "vacation"),
-    emergencyContacts: emergencyContactsSubmitted ? emergencyContacts : undefined,
   });
 
   revalidatePath(employeesPath(tenant));
@@ -263,24 +274,128 @@ export async function inviteEmployeeAction(formData: FormData) {
   redirect(`${path}?invited=1`);
 }
 
-export async function createEmployeeInfoRequestAction(formData: FormData) {
+/**
+ * Kein Redirect: das Formular wird auf derselben Mitarbeiterseite geöffnet,
+ * auf der es sitzt — nur `revalidatePath`, das Popup schließt sich clientseitig
+ * über `useCloseOnSuccess`, sobald diese Action fehlerfrei durchläuft.
+ */
+export async function createEmployeeInfoRequestAction(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   const tenant = formString(formData, "tenant");
   const employeeId = formString(formData, "employeeId");
   const employeeHandle = formString(formData, "employeeHandle");
   const title = formString(formData, "title");
 
   if (!tenant || !employeeId || !employeeHandle || !title) {
-    throw new Error("Bitte angeben, welche Information benötigt wird.");
+    return { error: "Bitte angeben, welche Information benötigt wird." };
   }
 
-  await createEmployeeInfoRequest({
+  try {
+    await createEmployeeInfoRequest({
+      tenantSlug: tenant,
+      employeeId,
+      title,
+      message: formString(formData, "message"),
+      dueAt: formString(formData, "dueAt"),
+      dueTime: formString(formData, "dueTime"),
+      fileRequested: formData.get("fileRequested") === "on",
+    });
+  } catch (error) {
+    return {
+      error:
+        error instanceof Error
+          ? error.message
+          : "Anfrage konnte nicht gespeichert werden.",
+    };
+  }
+
+  revalidatePath(employeePath(tenant, employeeHandle));
+
+  return {};
+}
+
+function emergencyContactInputFromForm(formData: FormData) {
+  return {
+    name: formString(formData, "name"),
+    relation: formString(formData, "relation"),
+    phone: formString(formData, "phone"),
+    email: optionalString(formData, "email"),
+    note: optionalString(formData, "note"),
+  };
+}
+
+export async function addEmergencyContactAction(formData: FormData) {
+  const tenant = formString(formData, "tenant");
+  const employeeId = formString(formData, "employeeId");
+  const employeeHandle = formString(formData, "employeeHandle");
+
+  if (!tenant || !employeeId || !employeeHandle) {
+    throw new Error("Notfallkontakt konnte nicht gespeichert werden.");
+  }
+
+  await addEmergencyContact({
     tenantSlug: tenant,
     employeeId,
-    title,
-    message: formString(formData, "message"),
-    dueAt: formString(formData, "dueAt"),
-    fileRequested: formData.get("fileRequested") === "on",
+    contact: emergencyContactInputFromForm(formData),
   });
+
+  const path = employeePath(tenant, employeeHandle);
+  revalidatePath(path);
+  redirect(path);
+}
+
+export async function updateEmergencyContactAction(formData: FormData) {
+  const tenant = formString(formData, "tenant");
+  const employeeId = formString(formData, "employeeId");
+  const employeeHandle = formString(formData, "employeeHandle");
+  const contactId = formString(formData, "contactId");
+
+  if (!tenant || !employeeId || !employeeHandle || !contactId) {
+    throw new Error("Notfallkontakt konnte nicht gespeichert werden.");
+  }
+
+  await updateEmergencyContact({
+    tenantSlug: tenant,
+    employeeId,
+    contactId,
+    contact: emergencyContactInputFromForm(formData),
+  });
+
+  const path = employeePath(tenant, employeeHandle);
+  revalidatePath(path);
+  redirect(path);
+}
+
+export async function deleteEmergencyContactAction(formData: FormData) {
+  const tenant = formString(formData, "tenant");
+  const employeeId = formString(formData, "employeeId");
+  const employeeHandle = formString(formData, "employeeHandle");
+  const contactId = formString(formData, "contactId");
+
+  if (!tenant || !employeeId || !employeeHandle || !contactId) {
+    throw new Error("Notfallkontakt konnte nicht gelöscht werden.");
+  }
+
+  await deleteEmergencyContact({ tenantSlug: tenant, employeeId, contactId });
+
+  const path = employeePath(tenant, employeeHandle);
+  revalidatePath(path);
+  redirect(path);
+}
+
+export async function setPrimaryEmergencyContactAction(formData: FormData) {
+  const tenant = formString(formData, "tenant");
+  const employeeId = formString(formData, "employeeId");
+  const employeeHandle = formString(formData, "employeeHandle");
+  const contactId = formString(formData, "contactId");
+
+  if (!tenant || !employeeId || !employeeHandle || !contactId) {
+    throw new Error("Hauptkontakt konnte nicht festgelegt werden.");
+  }
+
+  await setPrimaryEmergencyContact({ tenantSlug: tenant, employeeId, contactId });
 
   const path = employeePath(tenant, employeeHandle);
   revalidatePath(path);
@@ -299,6 +414,42 @@ export async function deleteEmployeeAction(formData: FormData) {
 
   revalidatePath(employeesPath(tenant));
   redirect(employeesPath(tenant));
+}
+
+export async function offboardEmployeeAction(formData: FormData) {
+  const tenant = formString(formData, "tenant");
+  const employeeId = formString(formData, "employeeId");
+  const employeeHandle = formString(formData, "employeeHandle");
+  const endDate = formString(formData, "endDate");
+
+  if (!tenant || !employeeId || !employeeHandle || !endDate) {
+    throw new Error("Bitte ein Austrittsdatum angeben.");
+  }
+
+  await offboardEmployee({
+    tenantSlug: tenant,
+    employeeId,
+    endDate,
+    reason: formString(formData, "reason"),
+  });
+
+  revalidatePath(employeesPath(tenant));
+  redirect(employeePath(tenant, employeeHandle));
+}
+
+export async function reactivateEmployeeAction(formData: FormData) {
+  const tenant = formString(formData, "tenant");
+  const employeeId = formString(formData, "employeeId");
+  const employeeHandle = formString(formData, "employeeHandle");
+
+  if (!tenant || !employeeId || !employeeHandle) {
+    throw new Error("Mitarbeiter konnte nicht reaktiviert werden.");
+  }
+
+  await reactivateEmployee({ tenantSlug: tenant, employeeId });
+
+  revalidatePath(employeesPath(tenant));
+  redirect(employeePath(tenant, employeeHandle));
 }
 
 export async function createEmployeeContractAction(formData: FormData) {
@@ -416,6 +567,64 @@ export async function uploadPayrollStatementAction(
   }
 
   const path = `${employeePath(parsed.data.tenant, parsed.data.employeeHandle)}?tab=payroll`;
+  revalidatePath(path);
+  redirect(path);
+}
+
+/**
+ * Upload für die strukturierten Ausweisdokument-/Zertifikat-Felder
+ * (`EMPLOYEE_DOCUMENT_SLOTS`, siehe Mitarbeiter-Detailseite): fester
+ * `folderSlug`/`folderName` statt freier Ordnerwahl — jedes Feld ist
+ * ausschließlich für seine eine Kategorie gedacht. Bei Nicht-Mehrfach-Feldern
+ * wird die vorherige Datei nach erfolgreichem Upload entfernt
+ * (`replaceFileIds`, aus der bereits geladenen Dateiliste befüllt), damit
+ * immer nur der aktuell gültige Nachweis besteht.
+ */
+export async function uploadEmployeeDocumentSlotAction(formData: FormData) {
+  const tenant = formString(formData, "tenant");
+  const employeeId = formString(formData, "employeeId");
+  const employeeHandle = formString(formData, "employeeHandle");
+  const folderSlug = formString(formData, "folderSlug");
+  const folderName = formString(formData, "folderName");
+  const documentType = formString(formData, "documentType");
+  const replaceFileIds = formStrings(formData, "replaceFileIds");
+  const file = formFile(formData);
+
+  if (!tenant || !employeeId || !employeeHandle || !folderSlug || !file) {
+    throw new Error("Datei konnte nicht hochgeladen werden.");
+  }
+
+  await uploadTenantFile({
+    tenantSlug: tenant,
+    file,
+    ownerType: "employee",
+    ownerId: employeeId,
+    folderSlug,
+    folderName,
+    documentType,
+  });
+
+  for (const fileId of replaceFileIds) {
+    await softDeleteTenantFile({ tenantSlug: tenant, fileId }).catch(() => {});
+  }
+
+  const path = `${employeePath(tenant, employeeHandle)}?tab=files`;
+  revalidatePath(path);
+  redirect(path);
+}
+
+export async function deleteEmployeeDocumentSlotFileAction(formData: FormData) {
+  const tenant = formString(formData, "tenant");
+  const employeeHandle = formString(formData, "employeeHandle");
+  const fileId = formString(formData, "fileId");
+
+  if (!tenant || !employeeHandle || !fileId) {
+    throw new Error("Datei konnte nicht entfernt werden.");
+  }
+
+  await softDeleteTenantFile({ tenantSlug: tenant, fileId });
+
+  const path = `${employeePath(tenant, employeeHandle)}?tab=files`;
   revalidatePath(path);
   redirect(path);
 }

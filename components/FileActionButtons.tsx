@@ -86,6 +86,8 @@ function CreateFolderForm({
   parentPath?: string;
   onDone: () => void;
 }) {
+  const [isLocked, setIsLocked] = useState(false);
+
   return (
     <form className="flex flex-col gap-4" action={createHrFolderAction}>
       <input type="hidden" name="tenant" value={tenant} />
@@ -120,10 +122,37 @@ function CreateFolderForm({
       </div>
 
       <label className="checkbox-row">
-        <input type="checkbox" name="locked" className="peer sr-only" />
+        <input
+          type="checkbox"
+          name="locked"
+          className="peer sr-only"
+          checked={isLocked}
+          onChange={(event) => setIsLocked(event.target.checked)}
+        />
         <span className="checkbox" />
         <span className="checkbox-label">Ordner schützen</span>
       </label>
+
+      {isLocked && (
+        <div className="field">
+          <label htmlFor="folder-pin" className="label">
+            PIN (6 Ziffern)
+          </label>
+          <input
+            id="folder-pin"
+            name="pin"
+            className="input input-mono"
+            inputMode="numeric"
+            pattern="\d{6}"
+            maxLength={6}
+            placeholder="z. B. 482913"
+            required={isLocked}
+          />
+          <p className="m-0 text-[11px] text-muted">
+            Diese PIN wird zum Öffnen des Ordners benötigt.
+          </p>
+        </div>
+      )}
 
       <div className="mt-1 flex justify-end gap-2.5 border-t border-border-soft pt-4">
         <button type="button" className="btn btn-secondary" onClick={onDone}>

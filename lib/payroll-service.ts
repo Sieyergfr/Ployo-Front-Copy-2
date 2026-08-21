@@ -1,7 +1,8 @@
 import { recordTenantAudit } from "@/lib/audit";
+import { canAccessFileAcl, getOptionalFileReadAccess } from "@/lib/file-access";
 import { prisma } from "@/lib/prisma";
 import { uploadTenantFile } from "@/lib/storage/storage.service";
-import { requireTenantAccess } from "@/lib/tenant-access";
+import { requireTenantAccess, resolveScopeFilter } from "@/lib/tenant-access";
 
 /**
  * Gleiche Berechtigungsebene wie Verträge (siehe contract-service.ts) —
@@ -10,6 +11,79 @@ import { requireTenantAccess } from "@/lib/tenant-access";
  */
 async function requirePayrollAccess(tenantSlug: string) {
   return requireTenantAccess(tenantSlug, "payroll", "write");
+}
+
+/**
+ * Antwortform der API-Liste. Bewusst nicht der Prisma-Datensatz: der zieht
+ * über `file` den kompletten Storage-Eintrag inkl. `bucket`/`storageKey` mit,
+ * und die Mobile-App braucht nur Anzeige- plus Download-Daten.
+ */
+export type PayrollStatementListItem = {
+  id: string;
+  period: string;
+  /** `YYYY-MM-DD` */
+  issuedAt: string;
+  gross: string;
+  net: string;
+  status: "available" | "corrected";
+  /** Verweis auf die Datei im Dateien-Modul — für `/files/[fileId]/signed-url`. */
+  fileId: string;
+  fileName: string;
+  createdAt: string;
+};
+
+/**
+ * Abrechnungen eines Mitarbeiters. Gleiche Berechtigungsebene wie die
+ * Verträge (`payroll:read` inkl. Scope, siehe contract-service.ts) plus die
+ * Datei-ACL — sonst stünde in der Liste ein Download, den
+ * `/files/[fileId]/signed-url` anschließend mit `403` verweigert.
+ *
+ * `employeeId` akzeptiert `key` und DB-`id` (wie bei den Verträgen).
+ */
+export async function getPayrollStatements(
+  tenantSlug: string,
+  employeeId: string,
+): Promise<PayrollStatementListItem[]> {
+  const access = await requireTenantAccess(tenantSlug, "payroll", "read");
+  const scopeFilter = await resolveScopeFilter(access);
+  const scopeConstraint =
+    scopeFilter.type === "own"
+      ? { id: scopeFilter.employeeId ?? "__none__" }
+      : scopeFilter.type === "team"
+        ? { team: scopeFilter.team }
+        : {};
+  const fileAccess = await getOptionalFileReadAccess(tenantSlug);
+
+  if (!fileAccess) {
+    return [];
+  }
+
+  const statements = await prisma.tenantPayrollStatement.findMany({
+    where: {
+      tenantId: access.tenantId,
+      employee: { OR: [{ id: employeeId }, { key: employeeId }], ...scopeConstraint },
+    },
+    include: {
+      file: {
+        include: { parent: { select: { accessRoleIdsJson: true, accessUserIdsJson: true } } },
+      },
+    },
+    orderBy: [{ issuedAt: "desc" }, { createdAt: "desc" }],
+  });
+
+  return statements
+    .filter((statement) => canAccessFileAcl(statement.file.parent ?? statement.file, fileAccess))
+    .map((statement) => ({
+      id: statement.id,
+      period: statement.period,
+      issuedAt: statement.issuedAt.toISOString().slice(0, 10),
+      gross: statement.gross,
+      net: statement.net,
+      status: statement.status === "corrected" ? "corrected" : "available",
+      fileId: statement.fileId,
+      fileName: statement.file.displayName || statement.file.originalName,
+      createdAt: statement.createdAt.toISOString(),
+    }));
 }
 
 export async function uploadPayrollStatement(input: {
@@ -83,5 +157,17 @@ export async function uploadPayrollStatement(input: {
     detail: `${employee.name} · ${period}`,
   });
 
-  return statement;
+  // Gleiche Form wie die Liste oben — sonst bekäme derselbe Client für dieselbe
+  // Ressource zwei Formen (und mit dem Roh-Datensatz auch `storageKey`).
+  return {
+    id: statement.id,
+    period: statement.period,
+    issuedAt: statement.issuedAt.toISOString().slice(0, 10),
+    gross: statement.gross,
+    net: statement.net,
+    status: statement.status === "corrected" ? "corrected" : "available",
+    fileId: statement.fileId,
+    fileName: storedFile.displayName || storedFile.originalName,
+    createdAt: statement.createdAt.toISOString(),
+  } satisfies PayrollStatementListItem;
 }

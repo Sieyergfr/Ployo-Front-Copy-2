@@ -16,8 +16,35 @@ import {
 } from "@/lib/locations";
 import { recordTenantAudit } from "@/lib/audit";
 import { mapTenantFileToFileItem } from "@/lib/files";
+import {
+  parseOpeningHoursDays,
+  resolveEffectiveOpeningHours,
+  type OpeningHoursDay,
+} from "@/lib/opening-hours";
 import { prisma } from "@/lib/prisma";
+import { getDefaultOpeningHours, getISOWeekFromDate, getISOWeekStart } from "@/lib/shift-service";
 import { headers } from "next/headers";
+
+/** Datums-IDs (`YYYY-MM-DD`) der aktuellen ISO-Woche — für die "Schichten diese Woche"-Kennzahl je Standort. */
+function thisWeekDateIds(): string[] {
+  const { year, week } = getISOWeekFromDate(new Date());
+  const start = getISOWeekStart(year, week);
+
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(start);
+
+    date.setUTCDate(start.getUTCDate() + index);
+
+    return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")}`;
+  });
+}
+
+/** Datums-ID (`YYYY-MM-DD`) des heutigen Tages — für die "Heute im Dienst"-Kennzahl. */
+function todayDateId(): string {
+  const now = new Date();
+
+  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-${String(now.getUTCDate()).padStart(2, "0")}`;
+}
 import {
   requireTenantAccess,
   resolveScopeFilter,
@@ -62,6 +89,7 @@ type LocationRecord = {
   activeToday: number;
   shiftCount: number;
   openPositions: number;
+  openingHoursJson: unknown;
   utilization: string;
   utilizationCaption: string;
   status: string;
@@ -70,8 +98,10 @@ type LocationRecord = {
   leadName: string;
   leadPhone: string;
   leadEmail: string;
+  leadEmployeeId: string | null;
   members?: { employeeId: string; initials: string; name: string }[];
   activities?: { actor: string; text: string; tone: string; createdAt: Date }[];
+  shifts?: { id: string; date: string; employeeId: string | null }[];
   storageFiles?: TenantFileRecord[];
   storageFileFolders?: TenantFileFolderRecord[];
 };
@@ -181,7 +211,9 @@ async function employeeLead(input: { tenantId: string; employeeId?: string }) {
   };
 }
 
-function toLocation(record: LocationRecord): Location {
+function toLocation(record: LocationRecord, tenantDefaultOpeningHours: OpeningHoursDay[]): Location {
+  const openingHoursOverride = parseOpeningHoursDays(record.openingHoursJson);
+  const openingHours = resolveEffectiveOpeningHours(openingHoursOverride, tenantDefaultOpeningHours);
   const storedFiles: LocationFile[] = (record.storageFiles ?? []).map((file) => {
     const mapped = mapTenantFileToFileItem(file);
 
@@ -229,15 +261,33 @@ function toLocation(record: LocationRecord): Location {
     name: record.name,
     address: formatAddress(record.address),
     addressFields: addressDefaults(record.address),
-    employeeCount: record.employeeCount,
-    activeToday: record.activeToday,
-    shiftCount: record.shiftCount,
+    // Live aus der tatsächlichen Mitgliederliste statt aus dem
+    // denormalisierten `employeeCount`-Feld — das driftete auseinander,
+    // sobald Mitgliedschaften außerhalb von `addEmployeesToTenantLocation`/
+    // `syncEmployeeLocationMemberships` entstanden (z. B. direkt in der DB
+    // angelegte Bestandsdaten), siehe To-Do "Standorte: Mitarbeiter-Anzahl falsch".
+    employeeCount: (record.members ?? []).length,
+    // Live: Anzahl unterschiedlicher Mitarbeiter mit einer heutigen Schicht
+    // an diesem Standort — statt des nie aktualisierten `activeToday`-Felds
+    // (blieb i. d. R. bei 0), siehe To-Do "Heute im Dienst ist immer 0".
+    activeToday: new Set(
+      (record.shifts ?? [])
+        .filter((shift) => shift.date === todayDateId())
+        .map((shift) => shift.employeeId)
+        .filter((employeeId): employeeId is string => Boolean(employeeId)),
+    ).size,
+    // Live aus tatsächlich geplanten Schichten dieser Woche statt aus dem nie
+    // aktualisierten `shiftCount`-Feld — siehe To-Do "Standorte: Schichten-Anzahl falsch".
+    shiftCount: (record.shifts ?? []).length,
     openPositions: record.openPositions,
+    openingHours,
+    usesDefaultOpeningHours: openingHoursOverride.length === 0,
     utilization: record.utilization,
     utilizationCaption: record.utilizationCaption,
     status: normalizeStatus(record.status),
     accentClassName: record.accentClassName,
     lead: {
+      employeeId: record.leadEmployeeId,
       initials: record.leadInitials,
       name: record.leadName,
       phone: record.leadPhone,
@@ -300,6 +350,7 @@ export async function getLocationsForTenant(tenantSlug: string) {
   const access = await requireTenantAccess(tenantSlug, "locations", "read");
   const where = await locationScopeWhere(access);
   const fileAccess = await getOptionalAreaFileAccess(tenantSlug, "locations");
+  const tenantDefaultOpeningHours = await getDefaultOpeningHours(tenantSlug);
 
   const records = await prisma.tenantLocation.findMany({
     where,
@@ -307,6 +358,10 @@ export async function getLocationsForTenant(tenantSlug: string) {
     include: {
       address: true,
       members: { orderBy: { createdAt: "asc" } },
+      shifts: {
+        where: { date: { in: thisWeekDateIds() } },
+        select: { id: true, date: true, employeeId: true },
+      },
       activities: { orderBy: { createdAt: "desc" } },
       storageFiles: {
         where: { status: "active" },
@@ -325,13 +380,14 @@ export async function getLocationsForTenant(tenantSlug: string) {
     storageFiles: fileAccess
       ? record.storageFiles.filter((file) => canAccessFileAcl(file.parent ?? file, fileAccess))
       : [],
-  }));
+  }, tenantDefaultOpeningHours));
 }
 
 export async function getLocationForTenant(tenantSlug: string, locationHandle: string) {
   const access = await requireTenantAccess(tenantSlug, "locations", "read");
   const where = await locationScopeWhere(access);
   const fileAccess = await getOptionalAreaFileAccess(tenantSlug, "locations");
+  const tenantDefaultOpeningHours = await getDefaultOpeningHours(tenantSlug);
 
   const record = await prisma.tenantLocation.findFirst({
     where: {
@@ -341,6 +397,10 @@ export async function getLocationForTenant(tenantSlug: string, locationHandle: s
     include: {
       address: true,
       members: { orderBy: { createdAt: "asc" } },
+      shifts: {
+        where: { date: { in: thisWeekDateIds() } },
+        select: { id: true, date: true, employeeId: true },
+      },
       activities: { orderBy: { createdAt: "desc" } },
       storageFiles: {
         where: { status: "active" },
@@ -359,7 +419,7 @@ export async function getLocationForTenant(tenantSlug: string, locationHandle: s
     storageFiles: fileAccess
       ? record.storageFiles.filter((file) => canAccessFileAcl(file.parent ?? file, fileAccess))
       : [],
-  }) : null;
+  }, tenantDefaultOpeningHours) : null;
 }
 
 export function getLocationMetrics(locations: Location[]): LocationMetric[] {
@@ -397,6 +457,44 @@ export function getLocationMetrics(locations: Location[]): LocationMetric[] {
       tone: "danger",
     },
   ];
+}
+
+/**
+ * Payload für die App-seitigen `/api/tenants/[tenant]/locations`-Routen —
+ * analog zu `toTeamAdminPayload` (lib/team-service.ts). Die App erwartet
+ * flache `leadName`/`leadInitials`/`leadPhone`/`leadEmail`-Felder und eine
+ * strukturierte Adresse (`addressFields`), nicht das für die Web-Anzeige
+ * vorformatierte `lead`-Objekt bzw. den `address`-String — ohne dieses
+ * Mapping blieben Leitung und Adresse in der App leer (siehe To-Do
+ * "Standort Detail: Leitung wird nicht angezeigt" / "Adresse laden").
+ */
+export function toLocationAdminPayload(location: Location) {
+  const hasRealLead = Boolean(location.lead.name && location.lead.name !== "Keine Leitung");
+
+  return {
+    id: location.id,
+    dbId: location.dbId ?? null,
+    key: location.key ?? location.id,
+    name: location.name,
+    kind: location.kind,
+    status: location.status,
+    address: location.addressFields ?? null,
+    leadEmployeeId: location.lead.employeeId,
+    leadName: hasRealLead ? location.lead.name : null,
+    leadInitials: hasRealLead ? location.lead.initials : null,
+    leadPhone: hasRealLead ? location.lead.phone : null,
+    leadEmail: hasRealLead ? location.lead.email : null,
+    email: location.lead.email || null,
+    accentClassName: location.accentClassName,
+    employeeCount: location.employeeCount,
+    activeToday: location.activeToday,
+    shiftCount: location.shiftCount,
+    openPositions: location.openPositions,
+    utilization: location.utilization,
+    utilizationCaption: location.utilizationCaption,
+    openingHours: location.openingHours,
+    usesDefaultOpeningHours: location.usesDefaultOpeningHours,
+  };
 }
 
 export async function requireLocationManager(tenantSlug: string) {
@@ -484,6 +582,8 @@ export async function createTenantLocation(input: {
   leadEmployeeId?: string;
   email: string;
   accentClassName: string;
+  /** Leer = Mandanten-Standard verwenden, siehe resolveEffectiveOpeningHours(). */
+  openingHours?: OpeningHoursDay[];
 }) {
   assertValidLocationEmail(input.email.trim());
   assertKnownLocationKind(input.kind.trim());
@@ -513,10 +613,12 @@ export async function createTenantLocation(input: {
         create: address,
       },
       accentClassName: input.accentClassName,
+      leadEmployee: lead ? { connect: { id: input.leadEmployeeId } } : undefined,
       leadInitials: lead?.leadInitials ?? "--",
       leadName: lead?.leadName ?? "Keine Leitung",
       leadPhone: lead?.leadPhone ?? "",
       leadEmail: input.email.trim() || lead?.leadEmail || "",
+      openingHoursJson: input.openingHours ?? [],
     },
     include: { address: true },
   });
@@ -538,24 +640,42 @@ export async function updateTenantLocation(input: {
   kind: string;
   address: AddressInput;
   status: string;
-  employeeCount: string;
-  activeToday: string;
-  shiftCount: string;
-  openPositions: string;
-  utilization: string;
-  utilizationCaption: string;
-  leadName: string;
-  leadInitials: string;
-  leadPhone: string;
-  leadEmail: string;
+  /** Kennzahlen werden automatisch aus Team-/Schichtdaten berechnet — nur überschreiben, wenn explizit mitgegeben. */
+  employeeCount?: string;
+  activeToday?: string;
+  shiftCount?: string;
+  openPositions?: string;
+  utilization?: string;
+  utilizationCaption?: string;
+  /**
+   * Leitung wird aus dem Mitarbeiterprofil übernommen (Name/Initialen/
+   * Telefon/E-Mail) — leer = Leitung entfernen. Die freien Textfelder
+   * darunter bleiben nur als Fallback für Aufrufer, die (noch) keine
+   * Mitarbeiter-Zuordnung schicken.
+   */
+  leadEmployeeId?: string;
+  leadName?: string;
+  leadInitials?: string;
+  leadPhone?: string;
+  leadEmail?: string;
   accentClassName: string;
+  /** Leer = Mandanten-Standard verwenden, siehe resolveEffectiveOpeningHours(). */
+  openingHours?: OpeningHoursDay[];
 }) {
-  assertValidLocationEmail(input.leadEmail.trim());
   assertKnownLocationKind(input.kind.trim());
   assertKnownLocationColor(input.accentClassName.trim());
   const address = assertRequiredAddress(input.address);
 
   const access = await requireLocationManager(input.tenantSlug);
+  const lead = input.leadEmployeeId
+    ? await employeeLead({ tenantId: access.tenantId, employeeId: input.leadEmployeeId })
+    : null;
+  const leadName = lead?.leadName ?? input.leadName ?? "";
+  const leadInitials = lead?.leadInitials ?? input.leadInitials ?? "";
+  const leadPhone = lead?.leadPhone ?? input.leadPhone ?? "";
+  const leadEmail = lead?.leadEmail ?? input.leadEmail ?? "";
+
+  assertValidLocationEmail(leadEmail.trim());
   const key = await createUniqueLocationKey({
     tenantId: access.tenantId,
     name: input.name,
@@ -583,17 +703,26 @@ export async function updateTenantLocation(input: {
         },
       },
       status: normalizeStatus(input.status),
-      employeeCount: toInt(input.employeeCount),
-      activeToday: toInt(input.activeToday),
-      shiftCount: toInt(input.shiftCount),
-      openPositions: toInt(input.openPositions),
-      utilization: input.utilization.trim() || "0%",
-      utilizationCaption: input.utilizationCaption.trim(),
-      leadName: input.leadName.trim() || "Keine Leitung",
-      leadInitials: input.leadInitials.trim() || "--",
-      leadPhone: input.leadPhone.trim(),
-      leadEmail: input.leadEmail.trim(),
+      ...(input.employeeCount !== undefined ? { employeeCount: toInt(input.employeeCount) } : {}),
+      ...(input.activeToday !== undefined ? { activeToday: toInt(input.activeToday) } : {}),
+      ...(input.shiftCount !== undefined ? { shiftCount: toInt(input.shiftCount) } : {}),
+      ...(input.openPositions !== undefined ? { openPositions: toInt(input.openPositions) } : {}),
+      ...(input.utilization !== undefined
+        ? { utilization: input.utilization.trim() || "0%" }
+        : {}),
+      ...(input.utilizationCaption !== undefined
+        ? { utilizationCaption: input.utilizationCaption.trim() }
+        : {}),
+      // Leer/kein gültiger Mitarbeiter = Leitung entfernen — Fremdschlüssel
+      // ist jetzt die Quelle der Wahrheit, die Namensfelder darunter bleiben
+      // nur der Anzeige-Schnappschuss (siehe To-Do "Leitung ist Namensabgleich").
+      leadEmployee: lead ? { connect: { id: input.leadEmployeeId } } : { disconnect: true },
+      leadName: leadName.trim() || "Keine Leitung",
+      leadInitials: leadInitials.trim() || "--",
+      leadPhone: leadPhone.trim(),
+      leadEmail: leadEmail.trim(),
       accentClassName: input.accentClassName.trim() || "bg-ink",
+      ...(input.openingHours !== undefined ? { openingHoursJson: input.openingHours } : {}),
     },
     include: { address: true },
   });
@@ -721,6 +850,124 @@ export async function addEmployeesToTenantLocation(input: {
   );
 
   return updated;
+}
+
+/**
+ * Bringt die Standort-Mitgliedschaften (`TenantLocationMember`) eines
+ * Mitarbeiters auf exakt die übergebene Menge von Standortnamen — Teil von
+ * "Mehrere Standorte pro Mitarbeiter" (aufgerufen aus
+ * `createTenantEmployeeRecord`/`updateTenantEmployee` in employee-service.ts).
+ * Bestehende Mitgliedschaften außerhalb der Menge werden entfernt, fehlende
+ * ergänzt; `TenantLocation.employeeCount` wird für jeden betroffenen
+ * Standort neu gezählt (`activeToday` bewusst unangetastet — das ist ein
+ * eigener, noch offener Bug, siehe To-Do "Heute im Dienst ist immer 0").
+ */
+export async function syncEmployeeLocationMemberships(input: {
+  tenantId: string;
+  employeeId: string;
+  employeeInitials: string;
+  employeeName: string;
+  locationNames: string[];
+}) {
+  const names = Array.from(
+    new Set(input.locationNames.map((name) => name.trim()).filter(Boolean)),
+  );
+
+  const [targetLocations, currentMemberships] = await Promise.all([
+    names.length
+      ? prisma.tenantLocation.findMany({
+          where: { tenantId: input.tenantId, name: { in: names } },
+          select: { id: true },
+        })
+      : Promise.resolve([]),
+    prisma.tenantLocationMember.findMany({
+      where: { employeeId: input.employeeId, location: { tenantId: input.tenantId } },
+      select: { id: true, locationId: true },
+    }),
+  ]);
+
+  const targetLocationIds = new Set(targetLocations.map((location) => location.id));
+  const currentLocationIds = new Set(currentMemberships.map((member) => member.locationId));
+  const toRemove = currentMemberships.filter((member) => !targetLocationIds.has(member.locationId));
+  const toAddLocationIds = targetLocations
+    .map((location) => location.id)
+    .filter((id) => !currentLocationIds.has(id));
+
+  if (toRemove.length === 0 && toAddLocationIds.length === 0) {
+    return;
+  }
+
+  await prisma.$transaction([
+    ...(toRemove.length
+      ? [
+          prisma.tenantLocationMember.deleteMany({
+            where: { id: { in: toRemove.map((member) => member.id) } },
+          }),
+        ]
+      : []),
+    ...(toAddLocationIds.length
+      ? [
+          prisma.tenantLocationMember.createMany({
+            data: toAddLocationIds.map((locationId) => ({
+              locationId,
+              employeeId: input.employeeId,
+              initials: input.employeeInitials,
+              name: input.employeeName,
+            })),
+          }),
+        ]
+      : []),
+  ]);
+
+  const affectedLocationIds = new Set([
+    ...toRemove.map((member) => member.locationId),
+    ...toAddLocationIds,
+  ]);
+
+  for (const locationId of affectedLocationIds) {
+    const count = await prisma.tenantLocationMember.count({ where: { locationId } });
+    await prisma.tenantLocation.update({ where: { id: locationId }, data: { employeeCount: count } });
+  }
+}
+
+/** Alle Standortnamen, denen ein Mitarbeiter aktuell zugeordnet ist. */
+export async function getEmployeeLocationNames(
+  tenantId: string,
+  employeeId: string,
+): Promise<string[]> {
+  const memberships = await prisma.tenantLocationMember.findMany({
+    where: { employeeId, location: { tenantId } },
+    select: { location: { select: { name: true } } },
+    orderBy: { location: { name: "asc" } },
+  });
+
+  return memberships.map((membership) => membership.location.name);
+}
+
+/** Standortnamen für mehrere Mitarbeiter auf einmal (Mitarbeiterliste), gruppiert nach `employeeId`. */
+export async function getEmployeeLocationNamesMap(
+  tenantId: string,
+  employeeIds: string[],
+): Promise<Map<string, string[]>> {
+  if (employeeIds.length === 0) {
+    return new Map();
+  }
+
+  const memberships = await prisma.tenantLocationMember.findMany({
+    where: { employeeId: { in: employeeIds }, location: { tenantId } },
+    select: { employeeId: true, location: { select: { name: true } } },
+    orderBy: { location: { name: "asc" } },
+  });
+
+  const map = new Map<string, string[]>();
+
+  for (const membership of memberships) {
+    const list = map.get(membership.employeeId) ?? [];
+    list.push(membership.location.name);
+    map.set(membership.employeeId, list);
+  }
+
+  return map;
 }
 
 export async function deleteTenantLocation(input: {

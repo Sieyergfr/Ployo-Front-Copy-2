@@ -18,6 +18,8 @@ type AddressFieldsProps = {
   defaults?: AddressInput | null;
   required?: boolean;
   className?: string;
+  /** Wenn die Felder außerhalb des `<form>`-Elements gerendert werden, koppelt dies sie per `form`-Attribut an. */
+  formId?: string;
 };
 
 function fieldName(prefix: string | undefined, name: string) {
@@ -34,6 +36,7 @@ export default function AddressFields({
   defaults,
   required = false,
   className = "grid gap-3 sm:grid-cols-2",
+  formId,
 }: AddressFieldsProps) {
   const values = addressDefaults(defaults);
 
@@ -46,6 +49,7 @@ export default function AddressFields({
         <input
           id={`${idPrefix}-care-of`}
           name={fieldName(namePrefix, "careOf")}
+          form={formId}
           className="input bg-white"
           defaultValue={values.careOf}
           placeholder="Optional"
@@ -60,6 +64,7 @@ export default function AddressFields({
         <input
           id={`${idPrefix}-street`}
           name={fieldName(namePrefix, "street")}
+          form={formId}
           className="input bg-white"
           defaultValue={values.street}
           autoComplete="address-line1"
@@ -74,6 +79,7 @@ export default function AddressFields({
         <input
           id={`${idPrefix}-house-number`}
           name={fieldName(namePrefix, "houseNumber")}
+          form={formId}
           className="input bg-white"
           defaultValue={values.houseNumber}
           autoComplete="address-line1"
@@ -88,6 +94,7 @@ export default function AddressFields({
         <input
           id={`${idPrefix}-postal-code`}
           name={fieldName(namePrefix, "postalCode")}
+          form={formId}
           className="input bg-white"
           defaultValue={values.postalCode}
           autoComplete="postal-code"
@@ -102,6 +109,7 @@ export default function AddressFields({
         <input
           id={`${idPrefix}-city`}
           name={fieldName(namePrefix, "city")}
+          form={formId}
           className="input bg-white"
           defaultValue={values.city}
           autoComplete="address-level2"
@@ -116,6 +124,7 @@ export default function AddressFields({
         <SelectOrOtherField
           id={`${idPrefix}-country`}
           name={fieldName(namePrefix, "country")}
+          form={formId}
           options={countryOptions}
           defaultValue={values.country}
         />

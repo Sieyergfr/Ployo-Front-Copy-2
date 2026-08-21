@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { recordTenantAudit } from "@/lib/audit";
 import { fileFolders } from "@/lib/files";
+import { hashFolderPin, isFolderUnlocked, markFolderUnlocked, verifyFolderPin } from "@/lib/folder-pin";
 import { getStorageBucket, type StorageBucketId } from "@/lib/storage/buckets";
 import { buildStorageKey, getFileExtension } from "@/lib/storage/key-builder";
 import { markObjectDeleted } from "@/lib/storage/delete";
@@ -247,7 +248,7 @@ const allowedUploadExtensions = new Set([
   "zip",
 ]);
 
-function validateUploadFile(file: File) {
+export function validateUploadFile(file: File) {
   if (!file || file.size <= 0) {
     throw new Error("Bitte eine Datei auswählen.");
   }
@@ -389,8 +390,17 @@ export async function createTenantFileFolder(input: {
   parentPath?: string;
   ownerName?: string;
   locked?: boolean;
+  pin?: string;
 }) {
   const ownerType = input.ownerType ?? "tenant";
+  const locked = input.locked === true;
+  const pin = input.pin?.trim() ?? "";
+
+  if (locked && !/^\d{6}$/.test(pin)) {
+    throw new Error("Bitte eine 6-stellige PIN für den geschützten Ordner angeben.");
+  }
+
+  const pinHash = locked ? hashFolderPin(pin) : null;
   const access = await requireTenantFileAccess(input.tenantSlug, ownerType);
   const name = input.name.trim();
   const owner = await validateOwner({
@@ -450,15 +460,105 @@ export async function createTenantFileFolder(input: {
       slug,
       path,
       ownerName: input.ownerName?.trim() || access.userName || "HR",
-      locked: input.locked === true,
+      locked,
+      pinHash,
     },
     update: {
       status: "active",
       name,
       ownerName: input.ownerName?.trim() || access.userName || "HR",
-      locked: input.locked === true,
+      locked,
+      pinHash,
     },
   });
+}
+
+/** Prüft die PIN eines geschützten Ordners in der allgemeinen (mandantenweiten) Dateiablage. */
+export async function verifyTenantFileFolderPin(input: {
+  tenantSlug: string;
+  folderPath: string;
+  pin: string;
+}) {
+  const access = await requireTenantAccess(input.tenantSlug, "files", "read");
+  const folder = await prisma.tenantFileFolder.findFirst({
+    where: {
+      tenantId: access.tenantId,
+      scope: "tenant",
+      path: input.folderPath,
+      status: "active",
+    },
+    select: { pinHash: true, locked: true },
+  });
+
+  if (!folder?.locked || !folder.pinHash) {
+    return true;
+  }
+
+  return verifyFolderPin(input.pin, folder.pinHash);
+}
+
+/**
+ * Ordnerpfad einer Datei der zentralen Ablage — für Routen, die vor der
+ * Auslieferung prüfen müssen, ob der Ordner PIN-geschützt ist
+ * (`GET .../signed-url` kennt sonst nur die `fileId`, nicht den Ordner).
+ * Leerer String, wenn die Datei nicht in einem Ordner liegt oder nicht
+ * gefunden wurde (dann greift ohnehin die übliche 404-Behandlung beim
+ * eigentlichen Abruf).
+ */
+export async function resolveTenantFileFolderPath(input: {
+  tenantSlug: string;
+  fileId: string;
+}): Promise<string> {
+  const access = await requireTenantAccess(input.tenantSlug, "files", "read");
+  const file = await prisma.tenantFile.findFirst({
+    where: { tenantId: access.tenantId, id: input.fileId, status: { not: "deleted" } },
+    select: { folderSlug: true },
+  });
+
+  return file?.folderSlug ?? "";
+}
+
+/**
+ * Durchsetzt die PIN-Sperre eines Ordners der zentralen Ablage — bislang
+ * lieferten `GET /files` und `GET /files/[fileId]/signed-url` den Inhalt
+ * eines gesperrten Ordners ungeprüft aus. Nur die Web-Seite
+ * (`FilesPageContent.tsx`) blendete ihn clientseitig hinter
+ * `FolderPinGate` aus, ohne dass die API selbst je eine PIN verlangt hätte
+ * — ein direkter Aufruf der Route mit gültigem Session-Cookie kam ohne PIN
+ * an die Daten. Wirft `FOLDER_LOCKED` (von `mapSelfServiceError` auf 403
+ * gemappt), wenn weder das Freischalt-Cookie (Web) noch eine passende, im
+ * `pin`-Feld übergebene PIN vorliegt — für API-Clients ohne Cookie-Jar
+ * (z. B. die Mobile-App, deren Fetch-Schicht nur den Auth-Cookie manuell
+ * mitschickt, s. `src/lib/api.ts` im App-Repo) ist das der einzige Weg, den
+ * Gate zu passieren — die PIN wird dort pro Anfrage im Header mitgeschickt,
+ * nicht per Set-Cookie gemerkt.
+ */
+export async function assertFolderPinAccess(input: {
+  tenantSlug: string;
+  folderPath: string;
+  pin?: string | null;
+}): Promise<void> {
+  if (!input.folderPath) {
+    return;
+  }
+
+  if (await isFolderUnlocked(input.tenantSlug, input.folderPath)) {
+    return;
+  }
+
+  const pinOk = await verifyTenantFileFolderPin({
+    tenantSlug: input.tenantSlug,
+    folderPath: input.folderPath,
+    pin: input.pin ?? "",
+  });
+
+  if (!pinOk) {
+    throw new Error("FOLDER_LOCKED");
+  }
+
+  if (input.pin) {
+    await markFolderUnlocked(input.tenantSlug, input.folderPath);
+  }
 }
 
 export async function uploadTenantFileVersion(input: {

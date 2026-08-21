@@ -6,6 +6,7 @@ import EmployeeSelector, {
   type EmployeeSelectorOption,
 } from "@/components/EmployeeSelector";
 import FormSubmitButton from "@/components/FormSubmitButton";
+import { OpeningHoursEditor } from "@/components/OpeningHoursEditor";
 import { useUniversalPopup } from "@/components/UniversalPopup";
 import { locationColorPalette, locationKinds } from "@/lib/org-options";
 import { Building2, Check, ChevronDown, Plus } from "lucide-react";
@@ -226,6 +227,11 @@ function CreateLocationForm({
       </div>
 
       <LocationColorPicker />
+
+      <div>
+        <div className="mb-2 label">Öffnungszeiten</div>
+        <OpeningHoursEditor name="openingHours" defaultValue={[]} allowInherit initiallyCustom={false} />
+      </div>
 
       <p className="m-0 text-[12.5px] leading-[1.55] text-muted-2">
         Teams, Mitarbeiter und Schichten können nach dem Anlegen dem Standort

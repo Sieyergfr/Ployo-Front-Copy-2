@@ -455,14 +455,28 @@ export async function resolveScopeFilter(access: TenantAccess): Promise<ScopeFil
       };
     }
 
-    // Standorte: robuster als ein String-Vergleich auf Team-Ebene wäre eine
-    // Relation gewesen, aber `TenantEmployee.location` ist (wie im gesamten
-    // Standort-Modul) ein denormalisierter Name — Abgleich über den Namen.
+    // ACHTUNG — sicherheitsrelevant, bitte separat gegenprüfen: Seit "Mehrere
+    // Standorte pro Mitarbeiter" ist `TenantLocationMember` (nicht mehr der
+    // einzelne `TenantEmployee.location`-String) die Quelle für die
+    // Standort-Zugehörigkeit — analog zur "teams"-Auflösung oben über
+    // `TenantTeamMember`. Vorher lieferte dieser Scope nur den einen
+    // Primär-Standort; jetzt alle zugewiesenen. Wirkt sich auf jede Stelle
+    // aus, die für den "assigned"-Standort-Scope prüft (z. B. Standortliste,
+    // Standort-Dateien) — Verhalten für Mitarbeiter mit mehreren Standorten
+    // ändert sich dadurch von "nur ihr Hauptstandort sichtbar" zu "alle ihre
+    // Standorte sichtbar".
+    const locationMemberships = me
+      ? await prisma.tenantLocationMember.findMany({
+          where: { employeeId: me.id },
+          select: { location: { select: { name: true } } },
+        })
+      : [];
+
     return {
       type: "assigned",
       area: "locations",
       employeeId: me?.id ?? null,
-      locationNames: me?.location ? [me.location] : [],
+      locationNames: locationMemberships.map((membership) => membership.location.name),
     };
   }
 

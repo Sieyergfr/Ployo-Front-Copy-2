@@ -1,0 +1,117 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import Link from "next/link";
+import { ArrowRight } from "lucide-react";
+import { ListSearchBox } from "@/components/ListSearchBox";
+import { type Team, type TeamMember } from "@/lib/teams";
+
+function MemberAvatar({ member }: { member: TeamMember }) {
+  return (
+    <div
+      title={member.name}
+      className="flex size-8 items-center justify-center rounded-full bg-ink text-[10.5px] font-semibold text-white"
+    >
+      {member.initials}
+    </div>
+  );
+}
+
+function TeamCard({ team, tenant }: { team: Team; tenant: string }) {
+  return (
+    <Link
+      href={`/u/${tenant}/teams/${team.id}`}
+      className="flex w-full cursor-pointer flex-col overflow-hidden rounded-card border border-border bg-white p-0 text-left font-sans transition-[border-color,box-shadow] duration-150 hover:border-muted hover:shadow-[0_8px_24px_rgba(0,0,0,0.05)]"
+    >
+      <div className={`h-[3px] w-full ${team.colorClassName}`} />
+      <div className="w-full px-[22px] pt-[22px] pb-[18px]">
+        <div className="mb-4 flex items-start justify-between gap-2.5">
+          <div className="min-w-0">
+            <div className="font-display text-[18px] font-semibold tracking-[-0.4px] text-ink">
+              {team.name}
+            </div>
+            <div className="mt-[5px] font-mono text-[10.5px] text-muted">
+              {team.locations || "Keine Standorte"}
+            </div>
+          </div>
+          <span className="font-display text-[30px] font-semibold leading-none tracking-[-1px] text-ink">
+            {team.members.length}
+          </span>
+        </div>
+
+        <div className="mb-4 flex flex-wrap gap-1.5">
+          {team.members.map((member) => (
+            <MemberAvatar key={member.id ?? `${team.dbId}-${member.initials}`} member={member} />
+          ))}
+        </div>
+
+        <div className="flex items-center justify-between border-t border-border-soft pt-3.5">
+          <div className="flex min-w-0 items-center gap-[9px]">
+            <div
+              className={`flex size-[26px] shrink-0 items-center justify-center rounded-full ${team.colorClassName} text-[9px] font-bold text-white`}
+            >
+              {team.lead.initials}
+            </div>
+            <div className="min-w-0">
+              <div className="truncate text-[12.5px] font-semibold text-ink">
+                {team.lead.name}
+              </div>
+              <div className="font-mono text-[9px] text-muted">Teamleitung</div>
+            </div>
+          </div>
+          <ArrowRight size={14} className="shrink-0 text-muted" />
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+export function TeamsListClient({ teams, tenant }: { teams: Team[]; tenant: string }) {
+  const [query, setQuery] = useState("");
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+
+    if (!q) {
+      return teams;
+    }
+
+    return teams.filter((team) =>
+      [team.name, team.locations, team.lead.name, ...team.members.map((member) => member.name)]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(q),
+    );
+  }, [teams, query]);
+
+  return (
+    <>
+      <ListSearchBox
+        value={query}
+        onChange={setQuery}
+        placeholder="Name, Standort, Leitung oder Mitglied"
+        className="mb-4 max-w-[360px]"
+      />
+
+      {filtered.length > 0 ? (
+        <section className="grid gap-3.5 [grid-template-columns:repeat(auto-fill,minmax(300px,1fr))]">
+          {filtered.map((team) => (
+            <TeamCard key={team.dbId ?? team.id} team={team} tenant={tenant} />
+          ))}
+        </section>
+      ) : (
+        <section className="rounded-card border border-border bg-white px-6 py-10 text-center">
+          <div className="font-display text-[20px] font-semibold text-ink">
+            {teams.length === 0 ? "Noch keine Teams" : "Keine Treffer"}
+          </div>
+          <div className="mt-2 text-[13px] text-muted-2">
+            {teams.length === 0
+              ? "Lege das erste Team an, um Mitarbeiter zu organisieren."
+              : "Für diese Suche wurde kein Team gefunden."}
+          </div>
+        </section>
+      )}
+    </>
+  );
+}

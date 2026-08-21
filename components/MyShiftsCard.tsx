@@ -38,7 +38,15 @@ export default function MyShiftsCard({
             ) : (
               <div className="mt-1.5 flex flex-col gap-1.5">
                 {day.shifts.map((shift) => (
-                  <div key={shift.id}>
+                  <div
+                    key={shift.id}
+                    className="relative overflow-hidden rounded-[6px] py-0.5 pl-2"
+                  >
+                    <span
+                      className={`absolute inset-y-0 left-0 w-[3px] ${
+                        shift.locationAccentClassName ?? "bg-border"
+                      }`}
+                    />
                     <div className="text-[12.5px] font-semibold text-ink">{shift.time}</div>
                     {shift.location && (
                       <div className="truncate text-[11px] text-muted">{shift.location}</div>

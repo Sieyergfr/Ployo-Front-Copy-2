@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useRef } from "react";
+import { useActionState } from "react";
 import {
   createAndLinkOwnEmployeeAction,
   linkOwnEmployeeAction,
@@ -9,7 +9,7 @@ import {
 import EmployeeSelector from "@/components/EmployeeSelector";
 import FormSubmitButton from "@/components/FormSubmitButton";
 import { FieldErrors, FormErrorBanner } from "@/components/FormFeedback";
-import { useUniversalPopup } from "@/components/UniversalPopup";
+import { useCloseOnSuccess, useUniversalPopup } from "@/components/UniversalPopup";
 import type { ActionState } from "@/lib/action-state";
 import { Link2, Unlink, UserPlus } from "lucide-react";
 
@@ -24,27 +24,6 @@ type UnlinkedEmployee = {
   team: string;
   role: string;
 };
-
-/**
- * `linkOwnEmployeeAction`/`createAndLinkOwnEmployeeAction` revalidieren nur
- * die Seite dahinter (kein Redirect wie beim Admin-Anlegeflow) — ohne dies
- * bliebe das Popup nach einer erfolgreichen Verknüpfung offen stehen.
- */
-function useCloseOnSuccess(
-  state: ActionState,
-  isPending: boolean,
-  onDone: () => void,
-) {
-  const wasPending = useRef(false);
-
-  useEffect(() => {
-    if (wasPending.current && !isPending && !state.error) {
-      onDone();
-    }
-
-    wasPending.current = isPending;
-  }, [isPending, state, onDone]);
-}
 
 function LinkExistingForm({
   tenant,

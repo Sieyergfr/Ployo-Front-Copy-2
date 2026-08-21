@@ -11,6 +11,8 @@ import {
   updateSicknessReportAction,
 } from "@/app/(dashboard)/u/[tenant]/krankheit/actions";
 import { updateShiftSettingsAction } from "@/app/(dashboard)/u/[tenant]/schichtplanung/actions";
+import { OpeningHoursEditor } from "@/components/OpeningHoursEditor";
+import type { OpeningHoursDay } from "@/lib/opening-hours";
 import type { ShiftPreset } from "@/lib/shift-presets";
 import {
   createReminderAction,
@@ -40,13 +42,15 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { type ReactNode, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 
 export type ShiftPlanningSettings = {
   weekStart: string;
   minStaffing: number;
   breakRule: string;
   presets: ShiftPreset[];
+  defaultOpeningHours: OpeningHoursDay[];
 };
 
 const sourceLabels = {
@@ -70,7 +74,24 @@ function RightDrawer({
   children: ReactNode;
   onClose: () => void;
 }) {
-  return (
+  // Über ein Portal nach `document.body` rendern: einige Aufrufer sitzen
+  // innerhalb von Zeilen/Karten mit einer (z. B. nur bei Hover aktiven)
+  // `transform`-Utility-Klasse. Ein Vorfahre mit `transform` erzeugt einen
+  // neuen Containing Block für `position: fixed` — die Sidebar würde dann
+  // innerhalb dieser Zeile statt am rechten Fensterrand aufgehen. Erst nach
+  // dem Client-Mount rendern, da `document.body` serverseitig nicht existiert.
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setMounted(true);
+  }, []);
+
+  if (!mounted) {
+    return null;
+  }
+
+  return createPortal(
     <div
       className="action-drawer-backdrop fixed inset-0 z-[1000] flex justify-end bg-black/35 backdrop-blur-[4px]"
       role="presentation"
@@ -109,7 +130,8 @@ function RightDrawer({
         </div>
         {children}
       </aside>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -181,23 +203,26 @@ export function LinkedFileBrowser({
   const selectedOwnerId = owners.some((owner) => owner.id === ownerId)
     ? ownerId
     : owners[0]?.id || (source === "central" ? "central" : "");
+  // Bei aktiver Suche wird der gesamte Quelle-/Besitzer-Bereich durchsucht statt
+  // nur der aktuell geöffnete Ordner — sonst liefert die Suche nichts, sobald
+  // die gesuchte Datei in einem anderen Ordner liegt.
   const visibleFolders = fileBrowserData.folders.filter(
     (folder) =>
       folder.source === source &&
       folder.ownerId === selectedOwnerId &&
-      isDirectChild(folder.path, currentPath) &&
-      (normalizedQuery.length === 0 ||
-        `${folder.name} ${folder.ownerName}`.toLowerCase().includes(normalizedQuery)),
+      (normalizedQuery.length > 0
+        ? `${folder.name} ${folder.ownerName}`.toLowerCase().includes(normalizedQuery)
+        : isDirectChild(folder.path, currentPath)),
   );
   const visibleFiles = fileBrowserData.files.filter(
     (file) =>
       file.source === source &&
       file.ownerId === selectedOwnerId &&
-      file.folderSlug === currentPath &&
-      (normalizedQuery.length === 0 ||
-        `${file.name} ${file.folderName} ${file.ownerName}`
-          .toLowerCase()
-          .includes(normalizedQuery)),
+      (normalizedQuery.length > 0
+        ? `${file.name} ${file.folderName} ${file.ownerName}`
+            .toLowerCase()
+            .includes(normalizedQuery)
+        : file.folderSlug === currentPath),
   );
   const selectedFiles = fileBrowserData.files.filter((file) =>
     selectedIds.includes(file.id),
@@ -1048,6 +1073,19 @@ export function ShiftSettingsDrawerButton({
                 Wochenstart steuert die Kalenderansicht. Mindestbesetzung und
                 Pausenregel werden gespeichert, aber noch nicht automatisch auf
                 Schichten angewendet.
+              </p>
+            </section>
+            <section className="rounded-xl border border-border bg-bg p-4">
+              <div className="mb-3 font-mono text-[11px] font-semibold uppercase tracking-[0.06em] text-muted">
+                Standard-Öffnungszeiten
+              </div>
+              <OpeningHoursEditor
+                name="defaultOpeningHours"
+                defaultValue={settings.defaultOpeningHours}
+              />
+              <p className="mt-3 text-[11.5px] leading-[1.5] text-muted">
+                Gilt für alle Standorte ohne eigene Öffnungszeiten — steuert u. a.
+                die &quot;Schichtlage&quot; auf der Übersicht.
               </p>
             </section>
             <section className="rounded-xl border border-border bg-bg p-4">

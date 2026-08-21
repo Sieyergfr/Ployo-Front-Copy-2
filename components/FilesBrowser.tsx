@@ -141,6 +141,7 @@ export default function FilesBrowser({
   uploadOptions,
   canManageFiles = true,
   canManageReminders = true,
+  emptyFilesLabel = "Keine Dateien in diesem Ordner.",
 }: {
   folders: FileFolder[];
   files: FileItem[];
@@ -152,6 +153,8 @@ export default function FilesBrowser({
   uploadOptions?: FileUploadOptions;
   canManageFiles?: boolean;
   canManageReminders?: boolean;
+  /** Überschreibt den Leer-Text, z. B. bei aktiver Suche ohne Treffer. */
+  emptyFilesLabel?: string;
 }) {
   const currentReturnPath = activeFolder
     ? `${baseHref}/${activeFolder.path ?? activeFolder.slug}`
@@ -233,7 +236,7 @@ export default function FilesBrowser({
           ))
         ) : (
           <div className="rounded-xl border border-dashed border-border bg-bg px-4 py-8 text-center text-[13px] text-muted">
-            Keine Dateien in diesem Ordner.
+            {emptyFilesLabel}
           </div>
         )}
       </div>

@@ -184,6 +184,9 @@ export const defaultUserPreference = {
   timezone: "Europe/Berlin",
   startPage: "overview" as StartPage,
   dateFormat: "dd.mm.yyyy",
+  notifyVacationEvents: true,
+  notifyShiftEvents: true,
+  pushEnabled: true,
 };
 
 export async function getOwnPreferences() {
@@ -203,6 +206,9 @@ export async function getOwnPreferences() {
       ? preference.startPage
       : "overview") as StartPage,
     dateFormat: preference.dateFormat,
+    notifyVacationEvents: preference.notifyVacationEvents,
+    notifyShiftEvents: preference.notifyShiftEvents,
+    pushEnabled: preference.pushEnabled,
   };
 }
 
@@ -211,6 +217,9 @@ export async function updateOwnPreferences(input: {
   timezone: string;
   startPage: string;
   dateFormat: string;
+  notifyVacationEvents?: boolean;
+  notifyShiftEvents?: boolean;
+  pushEnabled?: boolean;
 }) {
   const session = await requireSession();
   const startPage = startPages.includes(input.startPage as StartPage)
@@ -232,6 +241,19 @@ export async function updateOwnPreferences(input: {
     ? input.dateFormat.trim()
     : "dd.mm.yyyy";
 
+  // notify*/pushEnabled sind optional, damit Aufrufer wie switchLanguageAction
+  // (ändert nur die Sprache) sie nicht mitschicken müssen — ohne diesen
+  // Fallback auf den GESPEICHERTEN Wert (statt hart auf true) würde jede
+  // Sprach-/Zeitzonenänderung im Web-Dashboard eine über die Mobile-App
+  // gesetzte Abbestellung stillschweigend wieder aktivieren.
+  const existing = await prisma.userPreference.findUnique({
+    where: { userId: session.user.id },
+    select: { notifyVacationEvents: true, notifyShiftEvents: true, pushEnabled: true },
+  });
+  const notifyVacationEvents = input.notifyVacationEvents ?? existing?.notifyVacationEvents ?? true;
+  const notifyShiftEvents = input.notifyShiftEvents ?? existing?.notifyShiftEvents ?? true;
+  const pushEnabled = input.pushEnabled ?? existing?.pushEnabled ?? true;
+
   await prisma.userPreference.upsert({
     where: { userId: session.user.id },
     create: {
@@ -240,12 +262,18 @@ export async function updateOwnPreferences(input: {
       timezone,
       startPage,
       dateFormat,
+      notifyVacationEvents,
+      notifyShiftEvents,
+      pushEnabled,
     },
     update: {
       language,
       timezone,
       startPage,
       dateFormat,
+      notifyVacationEvents,
+      notifyShiftEvents,
+      pushEnabled,
     },
   });
 }

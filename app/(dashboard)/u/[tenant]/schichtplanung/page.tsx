@@ -60,6 +60,8 @@ export default async function ShiftPlanningPage({
       weekLabel={plan.label}
       weekRange={plan.range}
       conflictCount={plan.conflictCount}
+      status={plan.status}
+      publishedAt={plan.publishedAt}
       days={plan.days}
       employees={options.employees}
       locations={options.locations}

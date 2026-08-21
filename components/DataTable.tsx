@@ -235,17 +235,19 @@ export function DataTableStatus({
   tone = "success",
 }: {
   label: ReactNode;
-  tone?: "success" | "muted" | "neutral";
+  tone?: "success" | "muted" | "neutral" | "danger";
 }) {
   const toneClassName = {
     success: "text-success",
     muted: "text-muted",
     neutral: "text-muted-2",
+    danger: "text-danger",
   }[tone];
   const dotClassName = {
     success: "bg-success",
     muted: "bg-muted",
     neutral: "bg-muted-2",
+    danger: "bg-danger",
   }[tone];
 
   return (

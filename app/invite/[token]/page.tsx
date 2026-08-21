@@ -2,6 +2,7 @@ import AuthHeader from "@/components/AuthHeader";
 import Card from "@/components/Card/card";
 import CardHeader from "@/components/Card/CardHeader";
 import PrimaryButton from "@/components/Buttons/PrimaryButton";
+import Checkbox from "@/components/inputs/checkbox";
 import PasswordInput from "@/components/inputs/password-input";
 import TextInput from "@/components/inputs/text-input";
 import { auth } from "@/lib/auth";
@@ -34,6 +35,7 @@ const errorMessages: Record<string, string> = {
   password_too_short: "Das Passwort muss mindestens 12 Zeichen lang sein.",
   signup_failed:
     "Das Konto konnte nicht erstellt werden. Bitte versuchen Sie es erneut.",
+  terms_required: "Bitte akzeptieren Sie die Nutzungsbedingungen.",
   signin_failed:
     "Das Konto wurde erstellt, die Anmeldung schlug jedoch fehl. Bitte melden Sie sich über die Anmeldeseite an.",
 };
@@ -188,6 +190,17 @@ export default async function InvitePage({
                     minLength={12}
                     required
                   />
+                  <Checkbox id="terms" alignItems="start">
+                    Ich stimme den{" "}
+                    <Link href="/agb" className="text-ink underline underline-offset-2">
+                      Nutzungsbedingungen
+                    </Link>{" "}
+                    und der{" "}
+                    <Link href="/datenschutz" className="text-ink underline underline-offset-2">
+                      Datenschutzerklärung
+                    </Link>{" "}
+                    zu.
+                  </Checkbox>
                   <PrimaryButton type="submit">
                     Konto erstellen & beitreten
                   </PrimaryButton>

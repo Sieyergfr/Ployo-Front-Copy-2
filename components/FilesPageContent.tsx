@@ -1,7 +1,7 @@
-import FilesBrowser from "@/components/FilesBrowser";
 import AuditLogPanel from "@/components/AuditLogPanel";
+import { FilesListClient } from "@/components/FilesListClient";
+import FolderPinGate from "@/components/FolderPinGate";
 import PageHeader from "@/components/PageHeader";
-import PaginationControls from "@/components/PaginationControls";
 import {
   FileDownloadButton,
   FileSoftDeleteButton,
@@ -10,11 +10,12 @@ import {
 } from "@/components/FileActionButtons";
 import { getAuditLogsForEntity } from "@/lib/audit";
 import { getFilesPageData } from "@/lib/files-server";
+import { isFolderUnlocked } from "@/lib/folder-pin";
 import { getFileVersions, type FileItem } from "@/lib/files";
 import { paginate, searchParamPage } from "@/lib/pagination";
 import { hasPermissionLevel } from "@/lib/roles";
 import { getTenantPermissions, withAccessRedirect } from "@/lib/tenant-access";
-import { Archive, ArrowLeft, FileText, Lock } from "lucide-react";
+import { ArrowLeft, FileText, Lock } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -221,6 +222,7 @@ export default async function FilesPageContent({
   const {
     activeFile,
     activeFolder,
+    activeFileParentFolder,
     currentFolderPath,
     folderOptions,
     folders,
@@ -242,15 +244,38 @@ export default async function FilesPageContent({
   const filesPage = paginate(visibleFiles, searchParamPage(pageParam), PAGE_SIZE);
 
   if (activeFile) {
+    const returnPath = activeFile.folderSlug
+      ? `${baseHref}/${activeFile.folderSlug}`
+      : baseHref;
+
+    if (
+      activeFileParentFolder?.locked &&
+      !(await isFolderUnlocked(tenant, activeFileParentFolder.path))
+    ) {
+      return (
+        <>
+          <div className="mb-[18px]">
+            <Link href={baseHref} className="btn btn-secondary btn-sm">
+              <ArrowLeft size={14} />
+              Zurück zur Ablage
+            </Link>
+          </div>
+          <FolderPinGate
+            tenant={tenant}
+            folderPath={activeFileParentFolder.path}
+            folderName={activeFileParentFolder.name}
+            returnPath={returnPath}
+          />
+        </>
+      );
+    }
+
     const auditEntries = await getAuditLogsForEntity({
       tenantSlug: tenant,
       area: "files",
       entityType: "file",
       entityId: activeFile.storageFileId ?? activeFile.slug,
     });
-    const returnPath = activeFile.folderSlug
-      ? `${baseHref}/${activeFile.folderSlug}`
-      : baseHref;
 
     return (
       <>
@@ -273,20 +298,32 @@ export default async function FilesPageContent({
     );
   }
 
+  if (activeFolder?.locked && !(await isFolderUnlocked(tenant, activeFolder.slug))) {
+    return (
+      <>
+        <div className="mb-[18px]">
+          <Link href={baseHref} className="btn btn-secondary btn-sm">
+            <ArrowLeft size={14} />
+            Alle Ordner
+          </Link>
+        </div>
+        <FolderPinGate
+          tenant={tenant}
+          folderPath={activeFolder.slug}
+          folderName={activeFolder.name}
+          returnPath={`${baseHref}/${activeFolder.slug}`}
+        />
+      </>
+    );
+  }
+
   return (
     <>
       <PageHeader
         eyebrow="Dokumentenablage"
         title="Dateien"
         subtitle={`${folders.length} Ordner \u00b7 ${files.length} Dateien`}
-      >
-        {canManageFiles && (
-          <button type="button" className="btn btn-primary">
-            <Archive size={15} />
-            ZIP importieren
-          </button>
-        )}
-      </PageHeader>
+      />
 
       <section className="mb-7 grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(190px,1fr))]">
         {metrics.map((metric) => (
@@ -294,10 +331,17 @@ export default async function FilesPageContent({
         ))}
       </section>
 
-      <FilesBrowser
+      <FilesListClient
         folders={folders}
         tenant={tenant}
-        files={filesPage.items}
+        visibleFiles={visibleFiles}
+        filePageItems={filesPage.items}
+        pageInfo={{
+          page: filesPage.page,
+          pageCount: filesPage.pageCount,
+          total: filesPage.total,
+          pageSize: filesPage.pageSize,
+        }}
         activeFolder={activeFolder}
         currentFolderPath={currentFolderPath}
         folderOptions={folderOptions}
@@ -305,13 +349,6 @@ export default async function FilesPageContent({
         baseHref={baseHref}
         canManageFiles={canManageFiles}
         canManageReminders={canManageReminders}
-      />
-      <PaginationControls
-        page={filesPage.page}
-        pageCount={filesPage.pageCount}
-        total={filesPage.total}
-        pageSize={filesPage.pageSize}
-        basePath={activeFolder ? `${baseHref}/${activeFolder.path ?? activeFolder.slug}` : baseHref}
       />
     </>
   );

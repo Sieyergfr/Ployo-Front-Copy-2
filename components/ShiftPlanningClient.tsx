@@ -7,8 +7,10 @@ import {
   createWishFreeRequestAction,
   deleteShiftAction,
   deleteShiftTemplateAction,
+  publishShiftWeekAction,
   rejectWishFreeRequestAction,
   saveShiftTemplateAction,
+  unpublishShiftWeekAction,
   updateShiftAction,
   updateShiftTemplateAction,
 } from "@/app/(dashboard)/u/[tenant]/schichtplanung/actions";
@@ -19,6 +21,7 @@ import {
 import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
 import DatePickerField from "@/components/DatePickerField";
 import FormSubmitButton from "@/components/FormSubmitButton";
+import { ListSearchBox } from "@/components/ListSearchBox";
 import PageHeader from "@/components/PageHeader";
 import {
   type ShiftLocationOption,
@@ -27,6 +30,7 @@ import {
 import { type Shift, type ShiftDay } from "@/lib/shifts";
 import { calculateBreakMinutes } from "@/lib/shift-break-rule";
 import { type ShiftTemplateEntry } from "@/lib/shift-templates";
+import { openingHoursForWeekday, type OpeningHoursWeekday } from "@/lib/opening-hours";
 import {
   type WishFreeFilter,
   type WishFreeRequest,
@@ -42,6 +46,7 @@ import {
   ChevronRight,
   Pencil,
   Plus,
+  RotateCcw,
   Save,
   Send,
   X,
@@ -62,6 +67,8 @@ type ShiftPlanningClientProps = {
   weekLabel: string;
   weekRange: string;
   conflictCount: number;
+  status: "draft" | "published";
+  publishedAt: string | null;
   days: ShiftDay[];
   employees: ShiftEmployeeOption[];
   locations: ShiftLocationOption[];
@@ -100,6 +107,19 @@ function getWeeksInISOYear(year: number) {
   yearStart.setUTCDate(january4.getUTCDate() - january4Day + 1);
 
   return Math.floor((december28.getTime() - yearStart.getTime()) / 604800000) + 1;
+}
+
+function formatPublishedAt(iso: string) {
+  const date = new Date(iso);
+
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  return `${date.toLocaleDateString("de-DE")} ${date.toLocaleTimeString("de-DE", {
+    hour: "2-digit",
+    minute: "2-digit",
+  })}`;
 }
 
 function getAdjacentWeek(year: number, week: number, direction: -1 | 1) {
@@ -208,9 +228,11 @@ function WishFreeDrawer({
   employees,
   requests,
   activeFilter,
+  searchQuery,
   selectedRequestId,
   isCreating,
   onFilterChange,
+  onSearchChange,
   onSelectRequest,
   onCreateRequest,
   onClose,
@@ -222,18 +244,30 @@ function WishFreeDrawer({
   employees: ShiftEmployeeOption[];
   requests: WishFreeRequest[];
   activeFilter: WishFreeFilter;
+  searchQuery: string;
   selectedRequestId: string | null;
   isCreating: boolean;
   onFilterChange: (filter: WishFreeFilter) => void;
+  onSearchChange: (query: string) => void;
   onSelectRequest: (requestId: string) => void;
   onCreateRequest: () => void;
   onClose: () => void;
   canManage: boolean;
 }) {
-  const filteredRequests =
+  const statusFiltered =
     activeFilter === "all"
       ? requests
       : requests.filter((request) => request.status === activeFilter);
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  const filteredRequests = normalizedQuery
+    ? statusFiltered.filter((request) =>
+        [request.employeeName, request.dateLabel]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase()
+          .includes(normalizedQuery),
+      )
+    : statusFiltered;
   const selectedRequest =
     requests.find((request) => request.id === selectedRequestId) ??
     filteredRequests[0] ??
@@ -326,6 +360,13 @@ function WishFreeDrawer({
               );
             })}
           </div>
+
+          <ListSearchBox
+            value={searchQuery}
+            onChange={onSearchChange}
+            placeholder="Mitarbeiter oder Datum"
+            className="mt-3"
+          />
         </div>
 
         <div className="grid min-h-0 flex-1 grid-cols-[minmax(220px,0.85fr)_minmax(280px,1fr)] max-md:grid-cols-1">
@@ -346,7 +387,7 @@ function WishFreeDrawer({
             )}
             {filteredRequests.length === 0 ? (
               <div className="rounded-xl border border-border bg-white px-4 py-6 text-center text-[12.5px] text-muted">
-                Keine Anfragen in diesem Filter.
+                {normalizedQuery ? "Keine Treffer für diese Suche." : "Keine Anfragen in diesem Filter."}
               </div>
             ) : (
               <div className="flex flex-col gap-2">
@@ -785,11 +826,20 @@ function ShiftDrawer({
               defaultValue={shift?.locationId ?? ""}
             >
               <option value="">Kein Standort</option>
-              {locations.map((location) => (
-                <option key={location.id} value={location.id}>
-                  {location.name} - {location.kind}
-                </option>
-              ))}
+              {locations.map((location) => {
+                const isClosed =
+                  openingHoursForWeekday(
+                    location.openingHours,
+                    drawer.day.weekday as OpeningHoursWeekday,
+                  ).mode === "closed";
+
+                return (
+                  <option key={location.id} value={location.id}>
+                    {location.name} - {location.kind}
+                    {isClosed ? ` (geschlossen am ${drawer.day.weekday})` : ""}
+                  </option>
+                );
+              })}
             </select>
           </div>
 
@@ -1099,6 +1149,8 @@ export default function ShiftPlanningClient({
   weekLabel,
   weekRange,
   conflictCount,
+  status,
+  publishedAt,
   days,
   employees,
   locations,
@@ -1115,6 +1167,7 @@ export default function ShiftPlanningClient({
   const [isWishFreeDrawerOpen, setIsWishFreeDrawerOpen] = useState(false);
   const [isCreatingWishFreeRequest, setIsCreatingWishFreeRequest] = useState(false);
   const [wishFreeFilter, setWishFreeFilter] = useState<WishFreeFilter>("open");
+  const [wishFreeSearch, setWishFreeSearch] = useState("");
   const [selectedWishFreeRequestId, setSelectedWishFreeRequestId] = useState<
     string | null
   >(null);
@@ -1146,6 +1199,7 @@ export default function ShiftPlanningClient({
     setIsWishFreeDrawerOpen(true);
     setIsCreatingWishFreeRequest(false);
     setWishFreeFilter("open");
+    setWishFreeSearch("");
     setSelectedWishFreeRequestId(
       wishFreeRequests.find((request) => request.status === "open")?.id ?? null,
     );
@@ -1243,6 +1297,49 @@ export default function ShiftPlanningClient({
           subtitle={<span className="font-mono">{weekLabel} {"\u00b7"} {weekRange}</span>}
           className="mb-7"
         >
+          {status === "published" ? (
+            <div className="inline-flex items-center gap-2 rounded-[10px] border border-success/20 bg-success/10 px-3.5 py-2.5">
+              <span className="size-[7px] shrink-0 rounded-full bg-success" />
+              <span className="font-mono text-[12px] font-semibold text-success">
+                Veröffentlicht{publishedAt ? ` · ${formatPublishedAt(publishedAt)}` : ""}
+              </span>
+            </div>
+          ) : (
+            <div className="inline-flex items-center gap-2 rounded-[10px] border border-border bg-bg px-3.5 py-2.5">
+              <span className="size-[7px] shrink-0 rounded-full bg-muted" />
+              <span className="font-mono text-[12px] font-semibold text-muted-2">
+                Entwurf
+              </span>
+            </div>
+          )}
+          {canManage && (
+            <form action={publishShiftWeekAction}>
+              <input type="hidden" name="tenant" value={tenant} />
+              <input type="hidden" name="year" value={year} />
+              <input type="hidden" name="week" value={week} />
+              <FormSubmitButton
+                Icon={Send}
+                pendingLabel="Wird veröffentlicht..."
+                className="btn btn-secondary"
+              >
+                {status === "published" ? "Erneut veröffentlichen" : "Veröffentlichen"}
+              </FormSubmitButton>
+            </form>
+          )}
+          {canManage && status === "published" && (
+            <form action={unpublishShiftWeekAction}>
+              <input type="hidden" name="tenant" value={tenant} />
+              <input type="hidden" name="year" value={year} />
+              <input type="hidden" name="week" value={week} />
+              <FormSubmitButton
+                Icon={RotateCcw}
+                pendingLabel="Wird zurückgesetzt..."
+                className="btn btn-secondary"
+              >
+                Zurück auf Entwurf
+              </FormSubmitButton>
+            </form>
+          )}
           <div className="inline-flex items-center gap-2 rounded-[10px] border border-danger/20 bg-danger/10 px-3.5 py-2.5">
             <span className="size-[7px] shrink-0 rounded-full bg-danger" />
             <span className="font-mono text-[12px] font-semibold text-danger">
@@ -1438,6 +1535,7 @@ export default function ShiftPlanningClient({
           requests={wishFreeRequests}
           canManage={canManage}
           activeFilter={wishFreeFilter}
+          searchQuery={wishFreeSearch}
           selectedRequestId={selectedWishFreeRequestId}
           isCreating={isCreatingWishFreeRequest}
           onFilterChange={(filter) => {
@@ -1445,6 +1543,7 @@ export default function ShiftPlanningClient({
             setIsCreatingWishFreeRequest(false);
             setSelectedWishFreeRequestId(null);
           }}
+          onSearchChange={setWishFreeSearch}
           onSelectRequest={(requestId) => {
             setIsCreatingWishFreeRequest(false);
             setSelectedWishFreeRequestId(requestId);

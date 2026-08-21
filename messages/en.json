@@ -114,9 +114,9 @@
         "absenceAlerts": "Send vacation and sick leave notices immediately",
         "shiftAlerts": "Highlight shift schedule conflicts",
         "digestLabel": "Weekly digest",
-        "digestMonday": "Monday, 8:00 AM",
-        "digestFriday": "Friday, 4:00 PM",
-        "digestDisabled": "Disabled"
+        "digestEnabled": "Send weekly digest",
+        "digestWeekdayLabel": "Weekday",
+        "digestTimeLabel": "Time"
       },
       "security": {
         "loginTitle": "Login security",
@@ -157,7 +157,13 @@
         "usageTitle": "Usage",
         "activeEmployees": "active employees",
         "noUsageData": "No usage data available",
-        "totalRecords": "total HR records"
+        "totalRecords": "total HR records",
+        "invoicesTitle": "Invoices",
+        "invoicesLoading": "Loading invoices…",
+        "invoicesError": "Invoices could not be loaded.",
+        "invoicesEmpty": "No invoices yet.",
+        "invoiceView": "View",
+        "invoiceDownload": "PDF"
       },
       "account": {
         "profileTitle": "Profile",
@@ -177,7 +183,7 @@
     "pageTitle": "Employees",
     "subtitle": "{count} entries · all locations",
     "subtitleFiltered": "{count} matches",
-    "searchPlaceholder": "Name, employee number, or team",
+    "searchPlaceholder": "Name, employee number, team, or location",
     "searchAriaLabel": "Search employees",
     "locationFilterLabel": "Location",
     "allLocations": "All locations",
@@ -191,7 +197,13 @@
       "startDate": "Start date",
       "contract": "Contract",
       "status": "Status"
-    }
+    },
+    "statusFilterLabel": "Status",
+    "allStatuses": "All statuses",
+    "statusActive": "Active",
+    "statusVacation": "Vacation",
+    "statusAbsent": "Absent",
+    "statusFormer": "Former"
   },
   "EmployeeQuickView": {
     "title": "Quick View",
@@ -233,7 +245,7 @@
     "defaultLabel": "Employees",
     "placeholder": "Select employees",
     "selectedCount": "{count} employees selected",
-    "searchPlaceholder": "Name, team, or role"
+    "searchPlaceholder": "Name, employee number, location, team, or role"
   },
   "EmployeeContracts": {
     "statusDraft": "Draft",

@@ -1,11 +1,16 @@
 "use client";
 
+import { useActionState } from "react";
 import { createEmployeeInfoRequestAction } from "@/app/(dashboard)/u/[tenant]/employees/actions";
 import DatePickerField from "@/components/DatePickerField";
 import FormSubmitButton from "@/components/FormSubmitButton";
-import { useUniversalPopup } from "@/components/UniversalPopup";
+import { FormErrorBanner } from "@/components/FormFeedback";
+import { useCloseOnSuccess, useUniversalPopup } from "@/components/UniversalPopup";
+import type { ActionState } from "@/lib/action-state";
 import { MessageSquarePlus, Send } from "lucide-react";
 import { useTranslations } from "next-intl";
+
+const initialState: ActionState = {};
 
 function InfoRequestForm({
   tenant,
@@ -21,9 +26,14 @@ function InfoRequestForm({
   onDone: () => void;
 }) {
   const t = useTranslations("EmployeeInfoRequestButton");
+  const [state, formAction, isPending] = useActionState(
+    createEmployeeInfoRequestAction,
+    initialState,
+  );
+  useCloseOnSuccess(state, isPending, onDone);
 
   return (
-    <form className="flex flex-col gap-4" action={createEmployeeInfoRequestAction}>
+    <form className="flex flex-col gap-4" action={formAction}>
       <input type="hidden" name="tenant" value={tenant} />
       <input type="hidden" name="employeeId" value={employeeId} />
       <input type="hidden" name="employeeHandle" value={employeeHandle} />
@@ -52,12 +62,23 @@ function InfoRequestForm({
           </label>
           <DatePickerField id="info-request-due" name="dueAt" />
         </div>
-        <label className="checkbox-row mt-6">
-          <input type="checkbox" name="fileRequested" className="peer sr-only" />
-          <span className="checkbox" />
-          <span className="checkbox-label">{t("fileRequested")}</span>
-        </label>
+        <div className="field">
+          <label htmlFor="info-request-due-time" className="label">
+            {t("dueTime")}
+          </label>
+          <input
+            id="info-request-due-time"
+            name="dueTime"
+            type="time"
+            className="input"
+          />
+        </div>
       </div>
+      <label className="checkbox-row">
+        <input type="checkbox" name="fileRequested" className="peer sr-only" />
+        <span className="checkbox" />
+        <span className="checkbox-label">{t("fileRequested")}</span>
+      </label>
       <div className="field">
         <label htmlFor="info-request-message" className="label">
           {t("message")}
@@ -69,6 +90,7 @@ function InfoRequestForm({
           placeholder={t("messagePlaceholder")}
         />
       </div>
+      <FormErrorBanner message={state.error} />
       <div className="mt-1 flex justify-end gap-2.5 border-t border-border-soft pt-4">
         <button type="button" className="btn btn-secondary" onClick={onDone}>
           {t("cancel")}

@@ -114,9 +114,9 @@
         "absenceAlerts": "Urlaubs- und Krankmeldungen sofort senden",
         "shiftAlerts": "Schichtplan-Konflikte hervorheben",
         "digestLabel": "Wöchentlicher Digest",
-        "digestMonday": "Montag, 08:00 Uhr",
-        "digestFriday": "Freitag, 16:00 Uhr",
-        "digestDisabled": "Deaktiviert"
+        "digestEnabled": "Wöchentlichen Digest versenden",
+        "digestWeekdayLabel": "Wochentag",
+        "digestTimeLabel": "Uhrzeit"
       },
       "security": {
         "loginTitle": "Login-Sicherheit",
@@ -157,7 +157,13 @@
         "usageTitle": "Nutzung",
         "activeEmployees": "aktive Mitarbeiter",
         "noUsageData": "Keine Nutzungsdaten verfügbar",
-        "totalRecords": "Personalakten gesamt"
+        "totalRecords": "Personalakten gesamt",
+        "invoicesTitle": "Rechnungen",
+        "invoicesLoading": "Rechnungen werden geladen…",
+        "invoicesError": "Rechnungen konnten nicht geladen werden.",
+        "invoicesEmpty": "Noch keine Rechnungen vorhanden.",
+        "invoiceView": "Ansehen",
+        "invoiceDownload": "PDF"
       },
       "account": {
         "profileTitle": "Profil",
@@ -177,7 +183,7 @@
     "pageTitle": "Mitarbeiter",
     "subtitle": "{count} Einträge · alle Standorte",
     "subtitleFiltered": "{count} Treffer",
-    "searchPlaceholder": "Name, Personal-Nr. oder Team",
+    "searchPlaceholder": "Name, Personal-Nr., Team oder Standort",
     "searchAriaLabel": "Mitarbeiter suchen",
     "locationFilterLabel": "Standort",
     "allLocations": "Alle Standorte",
@@ -191,7 +197,13 @@
       "startDate": "Eintritt",
       "contract": "Vertrag",
       "status": "Status"
-    }
+    },
+    "statusFilterLabel": "Status",
+    "allStatuses": "Alle Status",
+    "statusActive": "Im Dienst",
+    "statusVacation": "Urlaub",
+    "statusAbsent": "Abwesend",
+    "statusFormer": "Ausgeschieden"
   },
   "EmployeeQuickView": {
     "title": "Quick View",
@@ -233,7 +245,7 @@
     "defaultLabel": "Mitarbeiter",
     "placeholder": "Mitarbeiter auswählen",
     "selectedCount": "{count} Mitarbeiter ausgewählt",
-    "searchPlaceholder": "Name, Team oder Rolle"
+    "searchPlaceholder": "Name, Personal-Nr., Standort, Team oder Rolle"
   },
   "EmployeeContracts": {
     "statusDraft": "Entwurf",

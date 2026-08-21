@@ -25,6 +25,11 @@ import {
 } from "@/lib/employees";
 import { recordTenantAudit } from "@/lib/audit";
 import { mapTenantFileToFileItem } from "@/lib/files";
+import {
+  getEmployeeLocationNames,
+  getEmployeeLocationNamesMap,
+  syncEmployeeLocationMemberships,
+} from "@/lib/location-service";
 import { prisma } from "@/lib/prisma";
 import { purgeTenantFiles } from "@/lib/storage/delete";
 import { headers } from "next/headers";
@@ -40,6 +45,10 @@ import { canAccessFileAcl, getOptionalAreaFileAccess } from "@/lib/file-access";
 import { getISOWeekFromDate, getISOWeekStart } from "@/lib/shift-service";
 import { isStripeConfigured } from "@/lib/stripe/client";
 import { checkEmployeeLimit, planEmployeeLimits } from "@/lib/stripe/plans";
+import { computeVacationAccount } from "@/lib/vacations";
+import { syncMembershipRoleFromEmployeeRole } from "@/lib/role-service";
+
+import { notifyEmployeeOfInfoRequest } from "@/lib/notifications/events";
 
 type EmployeeRecord = {
   id: string;
@@ -68,6 +77,7 @@ type EmployeeRecord = {
   team: string;
   role: string;
   startDate: string;
+  endDate: string;
   contract: string;
   weeklyHours: string;
   tenure: string;
@@ -129,6 +139,7 @@ type ContractDetailsRecord = {
   workLocation: string;
   parties: string;
   compensation: string;
+  compensationGross: string;
   workingTime: string;
   vacation: string;
   noticePeriod: string;
@@ -198,7 +209,10 @@ type EmployeeMutationInput = {
   socialSecurityNumber?: string;
   healthInsurance?: string;
   iban?: string;
+  /** Primärstandort — nur wirksam, wenn `locations` nicht mitgeschickt wird. */
   location?: string;
+  /** "Mehrere Standorte pro Mitarbeiter" — hat Vorrang vor `location`, wenn beide gesetzt sind. */
+  locations?: string[];
   team?: string;
   role?: string;
   startDate?: string;
@@ -225,6 +239,7 @@ type EmployeeMutationInput = {
   parties?: string;
   collectiveAgreement?: string;
   compensation?: string;
+  compensationGross?: string;
   workingTime?: string;
   vacation?: string;
   contractDetailsSubmitted?: boolean;
@@ -300,13 +315,14 @@ async function createUniqueEmployeeKey(input: {
 }
 
 function normalizeStatus(value?: string): EmployeeStatus {
-  return value === "vacation" || value === "absent" ? value : "active";
+  return value === "vacation" || value === "absent" || value === "former" ? value : "active";
 }
 
 const employeeStatusLabels: Record<EmployeeStatus, string> = {
   active: "Im Dienst",
   vacation: "Urlaub",
   absent: "Abwesend",
+  former: "Ausgeschieden",
 };
 
 /**
@@ -366,16 +382,25 @@ export function buildEditTimelineEntries(
  */
 async function assertKnownOrgReferences(
   tenantId: string,
-  refs: { location?: string; team?: string; role?: string },
+  refs: { location?: string; locations?: string[]; team?: string; role?: string },
 ) {
   const location = refs.location?.trim();
+  const locations = Array.from(
+    new Set((refs.locations ?? []).map((name) => name.trim()).filter(Boolean)),
+  );
   const team = refs.team?.trim();
   const role = refs.role?.trim();
 
-  const [locationExists, teamExists, roleExists] = await Promise.all([
+  const [locationExists, knownLocations, teamExists, roleExists] = await Promise.all([
     location
       ? prisma.tenantLocation.findFirst({ where: { tenantId, name: location }, select: { id: true } })
       : null,
+    locations.length
+      ? prisma.tenantLocation.findMany({
+          where: { tenantId, name: { in: locations } },
+          select: { name: true },
+        })
+      : [],
     team
       ? prisma.tenantTeam.findFirst({ where: { tenantId, name: team }, select: { id: true } })
       : null,
@@ -386,6 +411,13 @@ async function assertKnownOrgReferences(
 
   if (location && !locationExists) {
     throw new Error(`Unbekannter Standort: "${location}".`);
+  }
+
+  const knownLocationNames = new Set(knownLocations.map((entry) => entry.name));
+  const unknownLocations = locations.filter((name) => !knownLocationNames.has(name));
+
+  if (unknownLocations.length > 0) {
+    throw new Error(`Unbekannte Standorte: ${unknownLocations.join(", ")}.`);
   }
 
   if (team && !teamExists) {
@@ -447,6 +479,7 @@ function defaultContractDetails(): EmployeeContractDetails {
     workLocation: "",
     parties: "",
     compensation: "",
+    compensationGross: "",
     workingTime: "",
     vacation: "",
     noticePeriod: "",
@@ -521,6 +554,7 @@ function toEmployee(record: EmployeeRecord, sensitiveFieldsVisible = true): Empl
         workLocation: record.contractDetails.workLocation,
         parties: record.contractDetails.parties,
         compensation: record.contractDetails.compensation,
+        compensationGross: record.contractDetails.compensationGross,
         workingTime: record.contractDetails.workingTime,
         vacation: record.contractDetails.vacation,
         noticePeriod: record.contractDetails.noticePeriod,
@@ -544,6 +578,7 @@ function toEmployee(record: EmployeeRecord, sensitiveFieldsVisible = true): Empl
           workLocation: "",
           parties: "",
           compensation: "",
+          compensationGross: "",
           workingTime: "",
           vacation: "",
           noticePeriod: "",
@@ -602,6 +637,7 @@ function toEmployee(record: EmployeeRecord, sensitiveFieldsVisible = true): Empl
     team: record.team,
     role: record.role,
     startDate: record.startDate,
+    endDate: record.endDate,
     contract: record.contract,
     weeklyHours: record.weeklyHours,
     tenure: record.tenure,
@@ -740,6 +776,12 @@ export type EmployeeListFilters = {
   search?: string;
   /** Exakter Standortname, wie er in `TenantEmployee.location` steht. */
   location?: string;
+  /**
+   * Live berechneter Status (siehe `computeLiveEmployeeStatus`) — wird erst
+   * NACH der Live-Berechnung angewendet (in-memory), nicht als Prisma-`where`,
+   * da "vacation"/"absent" nicht direkt aus der DB-Spalte ablesbar sind.
+   */
+  status?: EmployeeStatus;
 };
 
 /** Maximale Länge eines Suchbegriffs — längere werden abgeschnitten. */
@@ -762,6 +804,12 @@ function employeeSearchWhere(search: string): Prisma.TenantEmployeeWhereInput {
       { name: { contains: term, mode: "insensitive" } },
       { employeeNumber: { contains: term, mode: "insensitive" } },
       { team: { contains: term, mode: "insensitive" } },
+      // Freitext deckt auch den Standortnamen ab, nicht nur den separaten
+      // Exact-Match-Dropdown-Filter ("location" in employeeFilterWhere).
+      // Matched den Primär-Standort-String; Mitarbeiter, die nur über eine
+      // zusätzliche (nicht-primäre) Standort-Mitgliedschaft dort zugeordnet
+      // sind, tauchen weiterhin über den Dropdown-Filter auf, nicht hier.
+      { location: { contains: term, mode: "insensitive" } },
     ],
   };
 }
@@ -770,15 +818,95 @@ function employeeSearchWhere(search: string): Prisma.TenantEmployeeWhereInput {
  * Baut die Filter-Klauseln, die **zusätzlich** zur Scope-Bedingung gelten.
  * Getrennt gehalten, damit an der Aufrufstelle sichtbar bleibt, dass Filter
  * den Scope nur weiter einengen und ihn nie aufweichen koennen.
+ *
+ * `location` matcht seit "Mehrere Standorte pro Mitarbeiter" gegen die
+ * Standort-Mitgliedschaften (`TenantLocationMember`), nicht mehr gegen den
+ * (nur noch als Primär-Anzeige gepflegten) `TenantEmployee.location`-String
+ * — sonst würde ein Mitarbeiter mit mehreren Standorten bei allen außer dem
+ * ersten aus der gefilterten Liste fallen.
  */
-function employeeFilterWhere(filters: EmployeeListFilters): Prisma.TenantEmployeeWhereInput {
+async function employeeFilterWhere(
+  tenantId: string,
+  filters: EmployeeListFilters,
+): Promise<Prisma.TenantEmployeeWhereInput> {
   const search = filters.search?.trim() ?? "";
   const location = filters.location?.trim() ?? "";
 
+  const locationEmployeeIds = location
+    ? (
+        await prisma.tenantLocationMember.findMany({
+          where: { location: { tenantId, name: location } },
+          select: { employeeId: true },
+        })
+      ).map((member) => member.employeeId)
+    : null;
+
   return {
-    ...(location ? { location } : {}),
+    ...(locationEmployeeIds ? { id: { in: locationEmployeeIds } } : {}),
     ...(search ? employeeSearchWhere(search) : {}),
   };
+}
+
+/** `YYYY-MM-DD`-Grenzen des laufenden Kalenderjahres — für "genehmigter Urlaub dieses Jahr". */
+function currentYearRange() {
+  const year = new Date().getFullYear();
+
+  return { gte: `${year}-01-01`, lte: `${year}-12-31` };
+}
+
+function todayIso() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function startOfUtcDay(value: Date) {
+  return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
+}
+
+/**
+ * "former" ist persistent/autoritativ (nur über das Ausscheiden setzbar) und
+ * gewinnt immer — Urlaub/Krankheit werden für ausgeschiedene Mitarbeiter nicht
+ * mehr live geprüft. Sonst wie auf der Übersicht (siehe To-Do "Mitarbeiter
+ * Aktiv..."): employee.status wird nirgends automatisch synchron gehalten,
+ * daher live aus genehmigtem Urlaub (heute im Zeitraum) und offener
+ * Krankmeldung (heute im Zeitraum) ableiten statt aus dem Feld zu vertrauen.
+ */
+function computeLiveEmployeeStatus(input: {
+  storedStatus: string;
+  onVacationToday: boolean;
+  sickToday: boolean;
+}): EmployeeStatus {
+  if (input.storedStatus === "former") {
+    return "former";
+  }
+
+  if (input.onVacationToday) {
+    return "vacation";
+  }
+
+  if (input.sickToday) {
+    return "absent";
+  }
+
+  return "active";
+}
+
+/** Batch-Abfrage: welche der übergebenen Mitarbeiter sind heute krankgemeldet (offen, Zeitraum deckt heute ab)? */
+async function getEmployeeIdsSickToday(employeeIds: string[]): Promise<Set<string>> {
+  if (employeeIds.length === 0) {
+    return new Set();
+  }
+
+  const now = startOfUtcDay(new Date());
+  const reports = await prisma.tenantSicknessReport.findMany({
+    where: { employeeId: { in: employeeIds }, status: "open", startDate: { lte: now } },
+    select: { employeeId: true, endDate: true },
+  });
+
+  return new Set(
+    reports
+      .filter((report) => !report.endDate || startOfUtcDay(report.endDate) >= now)
+      .map((report) => report.employeeId),
+  );
 }
 
 export async function getEmployeesForTenant(
@@ -795,7 +923,7 @@ export async function getEmployeesForTenant(
   const records = await prisma.tenantEmployee.findMany({
     // Scope zuerst, Filter danach: beide landen als AND nebeneinander, ein
     // Suchbegriff kann die Sichtbarkeitsgrenze also nicht überschreiben.
-    where: { ...where, ...employeeFilterWhere(filters) },
+    where: { ...where, ...(await employeeFilterWhere(where.tenantId, filters)) },
     orderBy: { createdAt: "asc" },
     include: {
       privateAddress: true,
@@ -812,6 +940,10 @@ export async function getEmployeesForTenant(
       infoRequests: { orderBy: { createdAt: "desc" } },
       timeline: { orderBy: { createdAt: "desc" } },
       contractDetails: true,
+      vacationRequests: {
+        where: { status: "approved", startDate: currentYearRange() },
+        select: { days: true, startDate: true, endDate: true },
+      },
     },
   });
 
@@ -821,9 +953,16 @@ export async function getEmployeesForTenant(
   // bloßem "employees:read" auszuliefern.
   const payrollAccess = await getOptionalTenantAccess(tenantSlug, "payroll", "read");
   const payrollScope = payrollAccess ? await resolveScopeFilter(payrollAccess) : null;
+  const locationNamesByEmployeeId = await getEmployeeLocationNamesMap(
+    where.tenantId,
+    records.map((record) => record.id),
+  );
+  const today = todayIso();
+  const sickEmployeeIds = await getEmployeeIdsSickToday(records.map((record) => record.id));
+  const statusFilter = filters.status;
 
-  return records.map((record) =>
-    toEmployee(
+  return records.map((record) => {
+    const employee = toEmployee(
       {
         ...record,
         storageFiles: fileAccess
@@ -832,8 +971,26 @@ export async function getEmployeesForTenant(
       },
       payrollScope !== null &&
         scopeAllowsTarget(payrollScope, { id: record.id, team: record.team }),
-    ),
-  );
+    );
+    const onVacationToday = record.vacationRequests.some(
+      (r) => r.startDate <= today && r.endDate >= today,
+    );
+
+    return {
+      ...employee,
+      ...computeVacationAccount({
+        contractVacation: employee.contractDetails.vacation,
+        storedVacationTotal: employee.vacationTotal,
+        approvedDaysThisYear: record.vacationRequests.reduce((sum, r) => sum + r.days, 0),
+      }),
+      status: computeLiveEmployeeStatus({
+        storedStatus: record.status,
+        onVacationToday,
+        sickToday: sickEmployeeIds.has(record.id),
+      }),
+      locations: locationNamesByEmployeeId.get(record.id) ?? [],
+    };
+  }).filter((employee) => !statusFilter || employee.status === statusFilter);
 }
 
 export async function getEmployeeForTenant(tenantSlug: string, employeeHandle: string) {
@@ -875,6 +1032,10 @@ export async function getEmployeeForTenant(tenantSlug: string, employeeHandle: s
       infoRequests: { orderBy: { createdAt: "desc" } },
       timeline: { orderBy: { createdAt: "desc" } },
       contractDetails: true,
+      vacationRequests: {
+        where: { status: "approved", startDate: currentYearRange() },
+        select: { days: true, startDate: true, endDate: true },
+      },
     },
   });
 
@@ -898,7 +1059,8 @@ export async function getEmployeeForTenant(tenantSlug: string, employeeHandle: s
       })
     : [];
 
-  return toEmployee(
+  const locations = await getEmployeeLocationNames(where.tenantId, record.id);
+  const employee = toEmployee(
     {
       ...record,
       payrollStatements,
@@ -908,6 +1070,27 @@ export async function getEmployeeForTenant(tenantSlug: string, employeeHandle: s
     },
     canViewPayroll,
   );
+
+  const today = todayIso();
+  const onVacationToday = record.vacationRequests.some(
+    (r) => r.startDate <= today && r.endDate >= today,
+  );
+  const sickToday = (await getEmployeeIdsSickToday([record.id])).has(record.id);
+
+  return {
+    ...employee,
+    ...computeVacationAccount({
+      contractVacation: employee.contractDetails.vacation,
+      storedVacationTotal: employee.vacationTotal,
+      approvedDaysThisYear: record.vacationRequests.reduce((sum, r) => sum + r.days, 0),
+    }),
+    status: computeLiveEmployeeStatus({
+      storedStatus: record.status,
+      onVacationToday,
+      sickToday,
+    }),
+    locations,
+  };
 }
 
 export async function requireEmployeeManager(tenantSlug: string) {
@@ -1039,9 +1222,14 @@ export async function createTenantEmployeeRecord({
   const team = input.team?.trim() || "";
   const weeklyHours = input.weeklyHours?.trim() || "38 Std/Woche";
   const explicitEmployeeNumber = input.employeeNumber?.trim() || "";
+  const locations = input.locations?.length
+    ? Array.from(new Set(input.locations.map((value) => value.trim()).filter(Boolean)))
+    : input.location?.trim()
+      ? [input.location.trim()]
+      : [];
 
   await assertKnownOrgReferences(tenantId, {
-    location: input.location,
+    locations,
     team: input.team,
     role: input.role,
   });
@@ -1101,7 +1289,7 @@ export async function createTenantEmployeeRecord({
       socialSecurityNumber: encryptField(input.socialSecurityNumber?.trim() || ""),
       healthInsurance: encryptField(input.healthInsurance?.trim() || ""),
       iban: encryptField(input.iban?.trim() || ""),
-      location: input.location?.trim() || "",
+      location: locations[0] ?? "",
       team,
       role,
       startDate,
@@ -1184,6 +1372,22 @@ export async function createTenantEmployeeRecord({
     throw new Error("Personalnummer konnte nicht vergeben werden.");
   }
 
+  if (locations.length > 0) {
+    await syncEmployeeLocationMemberships({
+      tenantId,
+      employeeId: record.id,
+      employeeInitials: record.initials,
+      employeeName: record.name,
+      locationNames: locations,
+    });
+  }
+
+  await syncMembershipRoleFromEmployeeRole({
+    tenantId,
+    userId: record.userId,
+    roleName: record.role,
+  });
+
   await recordTenantAudit({
     tenantId,
     actorId,
@@ -1195,7 +1399,7 @@ export async function createTenantEmployeeRecord({
     detail: record.name,
   });
 
-  return toEmployee(record);
+  return { ...toEmployee(record), locations };
 }
 
 export async function createTenantEmployee(input: EmployeeMutationInput) {
@@ -1269,7 +1473,7 @@ export async function linkOwnTenantEmployee(input: { tenantSlug: string; employe
 
   const target = await prisma.tenantEmployee.findFirst({
     where: { id: input.employeeId, tenantId: access.tenantId },
-    select: { id: true, userId: true, name: true },
+    select: { id: true, userId: true, name: true, role: true },
   });
 
   if (!target) {
@@ -1283,6 +1487,15 @@ export async function linkOwnTenantEmployee(input: { tenantSlug: string; employe
   await prisma.tenantEmployee.update({
     where: { id: target.id },
     data: { userId: access.userId },
+  });
+
+  // Falls HR vor der Verknüpfung bereits eine Berechtigungsrolle auf der
+  // Personalakte hinterlegt hat, jetzt auf die frisch entstandene
+  // TenantMembership anwenden (siehe syncMembershipRoleFromEmployeeRole).
+  await syncMembershipRoleFromEmployeeRole({
+    tenantId: access.tenantId,
+    userId: access.userId,
+    roleName: target.role,
   });
 
   await recordTenantAudit({
@@ -1392,8 +1605,18 @@ export async function updateTenantEmployee(input: EmployeeMutationInput & { empl
     throw new Error("Mitarbeiter nicht gefunden.");
   }
 
+  const currentLocationNames = await getEmployeeLocationNames(tenantId, input.employeeId);
+  const locations =
+    input.locations !== undefined
+      ? Array.from(new Set(input.locations.map((value) => value.trim()).filter(Boolean)))
+      : input.location !== undefined
+        ? input.location.trim()
+          ? [input.location.trim()]
+          : []
+        : currentLocationNames;
+
   await assertKnownOrgReferences(tenantId, {
-    location: input.location,
+    locations,
     team: input.team,
     role: input.role,
   });
@@ -1405,7 +1628,7 @@ export async function updateTenantEmployee(input: EmployeeMutationInput & { empl
   const role = input.role?.trim() || current.role;
   const team = input.team?.trim() || current.team;
   const weeklyHours = input.weeklyHours?.trim() || current.weeklyHours;
-  const location = input.location?.trim() ?? current.location;
+  const location = locations[0] ?? "";
   const status = normalizeStatus(input.status ?? current.status);
   const timelineEntries = buildEditTimelineEntries(
     {
@@ -1458,6 +1681,10 @@ export async function updateTenantEmployee(input: EmployeeMutationInput & { empl
     compensation: contractValue(
       input.compensation,
       currentEmployee.contractDetails.compensation,
+    ),
+    compensationGross: contractValue(
+      input.compensationGross,
+      currentEmployee.contractDetails.compensationGross,
     ),
     workingTime: contractValue(
       input.workingTime,
@@ -1561,6 +1788,18 @@ export async function updateTenantEmployee(input: EmployeeMutationInput & { empl
 
   await syncTeamMemberSnapshots(employee);
   await syncLocationTeamSnapshots(employee);
+  await syncEmployeeLocationMemberships({
+    tenantId,
+    employeeId: record.id,
+    employeeInitials: record.initials,
+    employeeName: record.name,
+    locationNames: locations,
+  });
+  await syncMembershipRoleFromEmployeeRole({
+    tenantId,
+    userId: record.userId,
+    roleName: record.role,
+  });
 
   const sensitiveChanges = [
     input.iban !== undefined && input.iban !== currentEmployee.iban ? "IBAN" : null,
@@ -1590,7 +1829,106 @@ export async function updateTenantEmployee(input: EmployeeMutationInput & { empl
       : record.name,
   });
 
-  return employee;
+  return { ...employee, locations };
+}
+
+/**
+ * Markiert einen Mitarbeiter als ausgeschieden — persistenter, autoritativer
+ * Status (siehe `computeLiveEmployeeStatus`), setzt sich nicht von selbst
+ * zurück wie Urlaub/Krankheit. Löscht die Personalakte nicht (siehe
+ * `deleteTenantEmployee` für die DSGVO-Löschung); bleibt sichtbar, damit
+ * historische Daten (Verträge, Abrechnungen, Zeitleiste) erhalten bleiben.
+ */
+export async function offboardEmployee(input: {
+  tenantSlug: string;
+  employeeId: string;
+  endDate: string;
+  reason?: string;
+}) {
+  const access = await requireTenantAccess(input.tenantSlug, "employees", "write");
+  const current = await prisma.tenantEmployee.findFirst({
+    where: { id: input.employeeId, tenantId: access.tenantId },
+    select: { name: true, status: true },
+  });
+
+  if (!current) {
+    throw new Error("Mitarbeiter nicht gefunden.");
+  }
+
+  const endDate = input.endDate.trim();
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
+    throw new Error("Bitte ein gültiges Austrittsdatum angeben.");
+  }
+
+  const reason = input.reason?.trim();
+
+  await prisma.tenantEmployee.update({
+    where: { id: input.employeeId },
+    data: {
+      status: "former",
+      endDate,
+      timeline: {
+        create: {
+          title: reason
+            ? `Ausgeschieden zum ${endDate}: ${reason}`
+            : `Ausgeschieden zum ${endDate}`,
+          tone: "danger",
+          tenant: { connect: { id: access.tenantId } },
+        },
+      },
+    },
+  });
+
+  await recordTenantAudit({
+    tenantId: access.tenantId,
+    actorId: access.userId,
+    actorName: access.userName,
+    action: "Mitarbeiter ausgeschieden",
+    source: "Mitarbeiter",
+    entityType: "employee",
+    entityId: input.employeeId,
+    detail: `${current.name}: Austritt zum ${endDate}`,
+  });
+}
+
+/** Macht ein versehentliches Ausscheiden rückgängig — Status zurück auf aktiv, Austrittsdatum gelöscht. */
+export async function reactivateEmployee(input: { tenantSlug: string; employeeId: string }) {
+  const access = await requireTenantAccess(input.tenantSlug, "employees", "write");
+  const current = await prisma.tenantEmployee.findFirst({
+    where: { id: input.employeeId, tenantId: access.tenantId },
+    select: { name: true },
+  });
+
+  if (!current) {
+    throw new Error("Mitarbeiter nicht gefunden.");
+  }
+
+  await prisma.tenantEmployee.update({
+    where: { id: input.employeeId },
+    data: {
+      status: "active",
+      endDate: "",
+      timeline: {
+        create: {
+          title: "Reaktiviert",
+          tone: "success",
+          tenant: { connect: { id: access.tenantId } },
+        },
+      },
+    },
+  });
+
+  await recordTenantAudit({
+    tenantId: access.tenantId,
+    actorId: access.userId,
+    actorName: access.userName,
+    action: "Mitarbeiter reaktiviert",
+    source: "Mitarbeiter",
+    entityType: "employee",
+    entityId: input.employeeId,
+    detail: current.name,
+  });
 }
 
 /**
@@ -1805,6 +2143,20 @@ export async function createEmployeeInfoRequest(input: {
       fileRequested: input.fileRequested,
       status: "open",
     },
+  });
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: access.tenantId },
+    select: { name: true },
+  });
+
+  await notifyEmployeeOfInfoRequest({
+    tenantId: access.tenantId,
+    tenantName: tenant?.name ?? "",
+    employeeId: employee.id,
+    requestId: request.id,
+    title,
+    dueAt,
   });
 
   await recordTenantAudit({

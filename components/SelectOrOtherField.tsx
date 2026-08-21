@@ -22,6 +22,7 @@ export default function SelectOrOtherField({
   defaultValue,
   placeholder = "Bitte wählen",
   otherPlaceholder = "Bitte angeben",
+  form,
 }: {
   id: string;
   name: string;
@@ -29,6 +30,7 @@ export default function SelectOrOtherField({
   defaultValue: string;
   placeholder?: string;
   otherPlaceholder?: string;
+  form?: string;
 }) {
   const isKnownValue =
     defaultValue === "" || options.some((option) => option.value === defaultValue);
@@ -41,6 +43,7 @@ export default function SelectOrOtherField({
         <input
           id={id}
           name={name}
+          form={form}
           className="input bg-white"
           value={otherValue}
           onChange={(event) => setOtherValue(event.target.value)}
@@ -61,6 +64,7 @@ export default function SelectOrOtherField({
     <select
       id={id}
       name={name}
+      form={form}
       className="input cursor-pointer bg-white"
       defaultValue={defaultValue}
       onChange={(event) => {

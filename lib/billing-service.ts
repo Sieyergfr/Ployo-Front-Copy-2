@@ -163,3 +163,52 @@ export async function createBillingPortalSession(input: {
 
   return session.url;
 }
+
+export type BillingInvoice = {
+  id: string;
+  number: string | null;
+  status: string | null;
+  amountDue: number;
+  currency: string;
+  createdAt: string;
+  hostedInvoiceUrl: string | null;
+  invoicePdf: string | null;
+};
+
+/**
+ * Rechnungshistorie aus Stripe (nur lesend, keine eigene Persistenz) — für
+ * den "Abrechnung"-Tab, der bisher nur Checkout/Portal-Links anbot, ohne
+ * die tatsächlichen Rechnungen selbst zu zeigen.
+ */
+export async function getBillingInvoices(tenantSlug: string): Promise<BillingInvoice[]> {
+  if (!isStripeConfigured()) {
+    return [];
+  }
+
+  const access = await requireSettingsManager(tenantSlug);
+  const tenant = await prisma.tenant.findUniqueOrThrow({
+    where: { id: access.tenantId },
+    select: { stripeCustomerId: true },
+  });
+
+  if (!tenant.stripeCustomerId) {
+    return [];
+  }
+
+  const stripe = getStripeClient();
+  const invoices = await stripe.invoices.list({
+    customer: tenant.stripeCustomerId,
+    limit: 24,
+  });
+
+  return invoices.data.map((invoice) => ({
+    id: invoice.id ?? "",
+    number: invoice.number,
+    status: invoice.status,
+    amountDue: invoice.amount_due,
+    currency: invoice.currency,
+    createdAt: new Date(invoice.created * 1000).toISOString(),
+    hostedInvoiceUrl: invoice.hosted_invoice_url ?? null,
+    invoicePdf: invoice.invoice_pdf ?? null,
+  }));
+}

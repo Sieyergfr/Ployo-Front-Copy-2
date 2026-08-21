@@ -234,6 +234,83 @@ async function filesUploaderScopeWhere(tenant: Awaited<ReturnType<typeof require
   return {};
 }
 
+export type OwnerScopedFileOwnerType = "employee" | "location" | "team";
+
+/**
+ * Antwortform der owner-skopierten Dateiliste. Bewusst nicht `FileItem`:
+ * dessen `updatedAt`/`size` sind bereits deutsch formatierte Anzeigetexte,
+ * während ein API-Client ISO-Datum und Bytes braucht.
+ */
+export type OwnerFileItem = {
+  id: string;
+  name: string;
+  documentType: string;
+  description?: string;
+  folder: string;
+  sizeBytes: number;
+  mimeType: string;
+  /** ISO-8601 */
+  updatedAt: string;
+  version: number;
+};
+
+/**
+ * Dateien, die an einem Mitarbeiter/Standort/Team hängen — die Gegenrichtung
+ * zu `getFilesPageData`, das ausdrücklich **nur** die zentrale Ablage
+ * (employeeId/locationId/teamId alle null) liefert. Ohne diese Funktion
+ * bekäme ein Client, der `ownerType`/`ownerId` mitschickt, still die zentrale
+ * Ablage zurück statt der Akte, die er angefragt hat.
+ *
+ * Rechte wie beim Upload derselben Dateien (storage.service.ts): `files:read`
+ * **und** Leserecht im Fachbereich des Eigentümers, dazu Datei-ACL und der
+ * `files`-Scope auf den Uploader.
+ */
+export async function getOwnerFiles(input: {
+  tenantSlug: string;
+  ownerType: OwnerScopedFileOwnerType;
+  ownerId: string;
+}): Promise<OwnerFileItem[]> {
+  const tenant = await requireTenantAccess(input.tenantSlug, "files", "read");
+  const area =
+    input.ownerType === "employee"
+      ? "employees"
+      : input.ownerType === "location"
+        ? "locations"
+        : "teams";
+
+  await requireTenantAccess(input.tenantSlug, area, "read");
+
+  const uploaderScopeWhere = await filesUploaderScopeWhere(tenant);
+  const records = await prisma.tenantFile.findMany({
+    where: {
+      tenantId: tenant.tenantId,
+      employeeId: input.ownerType === "employee" ? input.ownerId : undefined,
+      locationId: input.ownerType === "location" ? input.ownerId : undefined,
+      teamId: input.ownerType === "team" ? input.ownerId : undefined,
+      status: "active",
+      ...uploaderScopeWhere,
+    },
+    orderBy: { updatedAt: "desc" },
+    include: {
+      parent: { select: { accessRoleIdsJson: true, accessUserIdsJson: true } },
+    },
+  });
+
+  return records
+    .filter((file) => canAccessFileAcl(file.parent ?? file, tenant))
+    .map((file) => ({
+      id: file.id,
+      name: file.displayName || file.originalName,
+      documentType: file.documentType || "Sonstiges",
+      description: file.description || undefined,
+      folder: file.folderName,
+      sizeBytes: file.sizeBytes,
+      mimeType: file.mimeType,
+      updatedAt: (file.updatedAt ?? file.createdAt).toISOString(),
+      version: file.version,
+    }));
+}
+
 export async function getFilesPageData(tenantSlug: string, path: string[] = []) {
   const tenant = await requireTenantAccess(tenantSlug, "files", "read");
   const uploaderScopeWhere = await filesUploaderScopeWhere(tenant);
@@ -335,6 +412,10 @@ export async function getFilesPageData(tenantSlug: string, path: string[] = []) 
   const visibleFiles = activeFolder
     ? storedFiles.filter((file) => file.folderSlug === activeFolder.slug)
     : storedFiles.filter((file) => file.folderSlug === "");
+  const activeFileParentFolder =
+    activeFile && activeFile.folderSlug
+      ? tenantFolders.find((folder) => folder.path === activeFile.folderSlug)
+      : undefined;
   const metrics = [
     {
       label: "Ordner",
@@ -361,6 +442,13 @@ export async function getFilesPageData(tenantSlug: string, path: string[] = []) 
   return {
     activeFile,
     activeFolder,
+    activeFileParentFolder: activeFileParentFolder
+      ? {
+          path: activeFileParentFolder.path,
+          name: activeFileParentFolder.name,
+          locked: activeFileParentFolder.locked,
+        }
+      : undefined,
     currentFolderPath,
     folderOptions,
     folders,

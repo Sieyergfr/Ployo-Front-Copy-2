@@ -6,6 +6,7 @@ import {
   deleteTenantLocation,
   updateTenantLocation,
 } from "@/lib/location-service";
+import { parseOpeningHoursDays } from "@/lib/opening-hours";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -13,6 +14,20 @@ function formString(formData: FormData, key: string, fallback = "") {
   const value = formData.get(key);
 
   return typeof value === "string" ? value.trim() : fallback;
+}
+
+function formOpeningHours(formData: FormData, key: string) {
+  const raw = formData.get(key);
+
+  if (typeof raw !== "string") {
+    return undefined;
+  }
+
+  try {
+    return parseOpeningHoursDays(JSON.parse(raw));
+  } catch {
+    return undefined;
+  }
 }
 
 function locationsPath(tenant: string) {
@@ -47,6 +62,7 @@ export async function createLocationAction(formData: FormData) {
     leadEmployeeId: formString(formData, "lead") || undefined,
     email: formString(formData, "email"),
     accentClassName: formString(formData, "color", "bg-ink"),
+    openingHours: formOpeningHours(formData, "openingHours"),
   });
 
   revalidatePath(locationsPath(tenant));
@@ -76,17 +92,9 @@ export async function updateLocationAction(formData: FormData) {
       country: formString(formData, "country", "DE"),
     },
     status: formString(formData, "status", "active"),
-    employeeCount: formString(formData, "employeeCount"),
-    activeToday: formString(formData, "activeToday"),
-    shiftCount: formString(formData, "shiftCount"),
-    openPositions: formString(formData, "openPositions"),
-    utilization: formString(formData, "utilization"),
-    utilizationCaption: formString(formData, "utilizationCaption"),
-    leadName: formString(formData, "leadName"),
-    leadInitials: formString(formData, "leadInitials"),
-    leadPhone: formString(formData, "leadPhone"),
-    leadEmail: formString(formData, "leadEmail"),
+    leadEmployeeId: formString(formData, "lead"),
     accentClassName: formString(formData, "color", "bg-ink"),
+    openingHours: formOpeningHours(formData, "openingHours"),
   });
 
   revalidatePath(locationsPath(tenant));

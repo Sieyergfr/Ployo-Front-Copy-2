@@ -1,3 +1,5 @@
+import type { OpeningHoursDay } from "@/lib/opening-hours";
+
 export type LocationStatus = "active" | "inactive";
 
 export type LocationMetric = {
@@ -56,11 +58,17 @@ export type Location = {
   activeToday: number;
   shiftCount: number;
   openPositions: number;
+  /** Effektive Öffnungszeiten (eigene Angabe, sonst Mandanten-Standard, sonst eingebauter Standard). */
+  openingHours: OpeningHoursDay[];
+  /** true = Standort hat keine eigene Öffnungszeiten hinterlegt, übernimmt den Mandanten-Standard. */
+  usesDefaultOpeningHours: boolean;
   utilization: string;
   utilizationCaption: string;
   status: LocationStatus;
   accentClassName: string;
   lead: {
+    /** Echte Mitarbeiter-ID der Standortleitung (Fremdschlüssel), falls gesetzt. */
+    employeeId: string | null;
     initials: string;
     name: string;
     phone: string;

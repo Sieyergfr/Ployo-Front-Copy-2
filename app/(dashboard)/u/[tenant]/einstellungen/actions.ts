@@ -9,6 +9,7 @@ import {
   updateTenantSecurity,
 } from "@/lib/settings-service";
 import { updateAccountName } from "@/lib/account-service";
+import type { ActionState } from "@/lib/action-state";
 import { createBillingCheckoutSession, createBillingPortalSession } from "@/lib/billing-service";
 import { isStripeConfigured } from "@/lib/stripe/client";
 import { normalizeBillingCycle, normalizePlan } from "@/lib/tenants";
@@ -25,6 +26,19 @@ function formBool(formData: FormData, key: string) {
   return formData.get(key) === "on";
 }
 
+/** Formular schickt Wochentag/Uhrzeit/Aktiv-Checkbox getrennt — hier zu `"<wochentag>-<HHMM>"` zusammensetzen (Tag/Uhrzeit sind frei wählbar). */
+function digestTimeFromForm(formData: FormData) {
+  if (!formBool(formData, "digestEnabled")) {
+    return "disabled";
+  }
+
+  const weekday = formString(formData, "digestWeekday", "monday");
+  const timeOfDay = formString(formData, "digestTimeOfDay", "08:00");
+  const hhmm = timeOfDay.replace(":", "").padEnd(4, "0").slice(0, 4);
+
+  return `${weekday}-${hhmm}`;
+}
+
 function settingsPath(tenant: string) {
   return `/u/${tenant}/einstellungen`;
 }
@@ -33,33 +47,6 @@ function absoluteTenantUrl(tenant: string) {
   const baseUrl = (process.env.BETTER_AUTH_URL ?? "http://localhost:3000").replace(/\/$/, "");
 
   return `${baseUrl}/u/${tenant}`;
-}
-
-export async function updateTenantProfileAction(formData: FormData) {
-  const tenant = formString(formData, "tenant");
-  const slug = formString(formData, "slug");
-
-  if (!tenant) {
-    throw new Error("Einstellungen konnten nicht gespeichert werden.");
-  }
-
-  const updatedTenant = await updateTenantProfile({
-    tenantSlug: tenant,
-    name: formString(formData, "name"),
-    slug,
-    country: formString(formData, "country"),
-    timezone: formString(formData, "timezone"),
-    size: formString(formData, "size"),
-    industry: formString(formData, "industry"),
-    contactEmail: formString(formData, "contactEmail"),
-    logoUrl: formString(formData, "logoUrl"),
-    primaryColor: formString(formData, "primaryColor"),
-    plan: formString(formData, "plan"),
-    billingCycle: formString(formData, "billingCycle"),
-  });
-
-  revalidatePath(`/u/${tenant}`);
-  redirect(settingsPath(updatedTenant.slug));
 }
 
 export async function updateTenantDefaultsAction(formData: FormData) {
@@ -109,7 +96,7 @@ export async function updateTenantNotificationsAction(formData: FormData) {
     deadlineAlerts: formBool(formData, "deadlineAlerts"),
     absenceAlerts: formBool(formData, "absenceAlerts"),
     shiftAlerts: formBool(formData, "shiftAlerts"),
-    digestTime: formString(formData, "digestTime"),
+    digestTime: digestTimeFromForm(formData),
   });
 
   revalidatePath(settingsPath(tenant));
@@ -168,14 +155,46 @@ export async function deleteTenantInvitationAction(formData: FormData) {
   redirect(settingsPath(tenant));
 }
 
-export async function saveSettingsPopupAction(formData: FormData) {
+/**
+ * Speichert bewusst ohne `redirect()`: das Popup bleibt beim Speichern über
+ * jeder Seite offen (Navigation.tsx), ein Redirect auf `/u/${tenant}` würde
+ * es von der aktuellen Seite wegreißen und wirkte wie ein ungewolltes
+ * Schließen. `useActionState` in Navigation.tsx zeigt stattdessen eine
+ * "Gespeichert"-Bestätigung im Popup selbst.
+ */
+export async function saveSettingsPopupAction(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   const tenant = formString(formData, "tenant");
   const category = formString(formData, "category", "account");
 
   if (!tenant) {
-    throw new Error("Einstellungen konnten nicht gespeichert werden.");
+    return { error: "Einstellungen konnten nicht gespeichert werden." };
   }
 
+  try {
+    await saveSettingsPopupCategory(tenant, category, formData);
+  } catch (error) {
+    return {
+      error:
+        error instanceof Error
+          ? error.message
+          : "Einstellungen konnten nicht gespeichert werden.",
+    };
+  }
+
+  revalidatePath(`/u/${tenant}`);
+  revalidatePath(settingsPath(tenant));
+
+  return {};
+}
+
+async function saveSettingsPopupCategory(
+  tenant: string,
+  category: string,
+  formData: FormData,
+) {
   if (category === "account") {
     await updateAccountName(formString(formData, "accountName"));
   }
@@ -227,7 +246,7 @@ export async function saveSettingsPopupAction(formData: FormData) {
       deadlineAlerts: formBool(formData, "deadlineAlerts"),
       absenceAlerts: formBool(formData, "absenceAlerts"),
       shiftAlerts: formBool(formData, "shiftAlerts"),
-      digestTime: formString(formData, "digestTime"),
+      digestTime: digestTimeFromForm(formData),
     });
   }
 
@@ -269,9 +288,6 @@ export async function saveSettingsPopupAction(formData: FormData) {
       billingCycle: formString(formData, "paymentInterval"),
     });
   }
-
-  revalidatePath(`/u/${tenant}`);
-  redirect(`/u/${tenant}`);
 }
 
 export async function startBillingCheckoutAction(formData: FormData) {

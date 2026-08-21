@@ -385,6 +385,45 @@ export async function getTeamForTenant(tenantSlug: string, teamHandle: string) {
   });
 }
 
+/**
+ * Formt ein `Team` in das Schema um, das die Mobile-API unter
+ * `/api/tenants/[tenant]/teams(/[teamHandle])` liefert. `Team.locations` ist
+ * intern ein einzelner, mit ", " zusammengesetzter String (siehe
+ * `createTenantTeam`/`updateTenantTeam`) — das Dashboard zeigt ihn direkt als
+ * Text an, die App erwartet aber ein Array. Ebenso erwartet die App
+ * `memberId`/`leadName`/`leadEmployeeId`, die es im internen `Team`-Typ
+ * (`lead`, `member.id`) so nicht gibt.
+ */
+export function toTeamAdminPayload(team: Team) {
+  const locations = team.locations
+    .split(",")
+    .map((location) => location.trim())
+    .filter(Boolean);
+  const hasRealLead = Boolean(team.lead?.employeeId);
+
+  return {
+    id: team.id,
+    dbId: team.dbId ?? null,
+    key: team.key ?? team.id,
+    name: team.name,
+    description: team.description ?? "",
+    locations,
+    colorClassName: team.colorClassName,
+    leadEmployeeId: hasRealLead ? team.lead.employeeId : null,
+    leadName: hasRealLead ? team.lead.name : null,
+    members: team.members.map((member) => ({
+      memberId: member.id ?? "",
+      employeeId: member.employeeId ?? "",
+      name: member.name,
+      role: member.role,
+      isLead: Boolean(member.isLead),
+      location: member.location,
+      contract: member.contract,
+      status: member.status,
+    })),
+  };
+}
+
 export function getTeamMetrics(teams: Team[]): TeamMetric[] {
   const totalMembers = teams.reduce((total, team) => total + team.members.length, 0);
   const average = teams.length > 0 ? (totalMembers / teams.length).toFixed(1) : "0.0";
@@ -404,12 +443,6 @@ export function getTeamMetrics(teams: Team[]): TeamMetric[] {
       label: "Durchschnitt",
       value: average,
       caption: "Mitglieder je Team",
-    },
-    {
-      label: "Vakante Stellen",
-      value: "2",
-      caption: "München - Frühschicht",
-      tone: "danger",
     },
   ];
 }

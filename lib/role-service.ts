@@ -90,13 +90,23 @@ function toShiftsLevelMap(
   return map;
 }
 
-function toPermissionRole(role: RoleRecord): PermissionRole {
+/**
+ * `_count.memberships` zählt nur `TenantMembership`-Zeilen mit gesetztem
+ * `roleId` — bei der Einladung wird das aber ausschließlich für die
+ * "employee"-Systemrolle gesetzt (`ensureSystemRoleForInvitation`: "ADMIN/HR
+ * sind über die Legacy-Rolle bereits Tenant-Manager"). Mitglieder mit
+ * `MembershipRole.EMPLOYEE`, aber `roleId: null` (z. B. vor Einführung der
+ * granularen Rollen eingeladen), fehlten dadurch komplett in der
+ * "Mitarbeiter"-Mitgliederzahl. `extraMembers` trägt diese zusätzlich zählten
+ * Mitgliedschaften nach.
+ */
+function toPermissionRole(role: RoleRecord, extraMembers = 0): PermissionRole {
   return {
     id: role.id,
     key: role.key,
     name: role.name,
     description: role.description,
-    members: role._count.memberships,
+    members: role._count.memberships + extraMembers,
     isSystem: role.isSystem,
     permissions: toPermissionMap(role.permissions),
     scopes: toPermissionScopeMap(role.permissions),
@@ -180,8 +190,70 @@ export async function getRolesForTenant(tenantSlug: string) {
       },
     },
   });
+  const unlinkedEmployeeCount = await countUnlinkedEmployeeMemberships(tenantId);
 
-  return roles.map(toPermissionRole);
+  return roles.map((role) =>
+    toPermissionRole(role, role.key === "employee" ? unlinkedEmployeeCount : 0),
+  );
+}
+
+/** Siehe `toPermissionRole` — Mitgliedschaften mit `role: EMPLOYEE`, aber ohne `roleId`. */
+async function countUnlinkedEmployeeMemberships(tenantId: string) {
+  return prisma.tenantMembership.count({
+    where: { tenantId, role: "EMPLOYEE", roleId: null },
+  });
+}
+
+/**
+ * Hält `TenantMembership.roleId` synchron mit dem "Berechtigungsrolle"-Feld
+ * auf der Personalakte (`TenantEmployee.role`, freier String) — dieses Feld
+ * sah bisher wie eine echte Rollenzuweisung aus (gleiche Namen wie die
+ * Rollenverwaltung, Label "Berechtigungsrolle"), wirkte sich aber nie auf
+ * `TenantMembership.roleId` aus und damit weder auf die Mitgliederzahl pro
+ * Rolle noch auf tatsächliche Berechtigungen.
+ *
+ * Nur wirksam, wenn:
+ * - die Personalakte mit einem Konto verknüpft ist (`userId` gesetzt) — ohne
+ *   Konto gibt es keine `TenantMembership`-Zeile, die aktualisiert werden könnte;
+ * - der eingetragene Rollenname exakt (case-insensitiv) zu einer echten Rolle
+ *   im Mandanten passt — ein frei eingetippter Jobtitel wie "Kassierer", der
+ *   zufällig keiner Rolle entspricht, bleibt unangetastet (keine Zuweisung
+ *   erfunden, wo keine gemeint war).
+ *
+ * Für OWNER/ADMIN/HR (Legacy-Rolle) ändert das nichts an den tatsächlichen
+ * Berechtigungen — die haben über `computePermissionLevels` ohnehin immer
+ * "admin" auf alles, unabhängig von `roleId`. Es wirkt sich nur auf die
+ * Mitgliederzahl der entsprechenden Rolle aus, was korrekt ist: auch eine
+ * Admin-Person kann zusätzlich fachlich z. B. "HR-Leitung" sein.
+ */
+export async function syncMembershipRoleFromEmployeeRole(input: {
+  tenantId: string;
+  userId: string | null;
+  roleName: string;
+}) {
+  if (!input.userId) {
+    return;
+  }
+
+  const roleName = input.roleName.trim();
+
+  if (!roleName) {
+    return;
+  }
+
+  const role = await prisma.tenantRole.findFirst({
+    where: { tenantId: input.tenantId, name: { equals: roleName, mode: "insensitive" } },
+    select: { id: true },
+  });
+
+  if (!role) {
+    return;
+  }
+
+  await prisma.tenantMembership.updateMany({
+    where: { tenantId: input.tenantId, userId: input.userId },
+    data: { roleId: role.id },
+  });
 }
 
 export async function getRoleForTenant(tenantSlug: string, roleId: string) {
@@ -206,7 +278,14 @@ export async function getRoleForTenant(tenantSlug: string, roleId: string) {
     },
   });
 
-  return role ? toPermissionRole(role) : null;
+  if (!role) {
+    return null;
+  }
+
+  const extraMembers =
+    role.key === "employee" ? await countUnlinkedEmployeeMemberships(tenantId) : 0;
+
+  return toPermissionRole(role, extraMembers);
 }
 
 export function permissionsFromFormData(formData: FormData) {

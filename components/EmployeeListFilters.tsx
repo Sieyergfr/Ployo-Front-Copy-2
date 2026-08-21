@@ -24,12 +24,18 @@ export default function EmployeeListFilters({
   searchAriaLabel,
   locationFilterLabel,
   allLocationsLabel,
+  statusFilterLabel,
+  allStatusesLabel,
+  statusOptions,
 }: {
   locations: string[];
   searchPlaceholder: string;
   searchAriaLabel: string;
   locationFilterLabel: string;
   allLocationsLabel: string;
+  statusFilterLabel: string;
+  allStatusesLabel: string;
+  statusOptions: { value: string; label: string }[];
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -38,6 +44,7 @@ export default function EmployeeListFilters({
 
   const urlSearch = searchParams.get("search") ?? "";
   const urlLocation = searchParams.get("location") ?? "";
+  const urlStatus = searchParams.get("status") ?? "";
 
   // Das Eingabefeld hängt am lokalen State, nicht an der URL: sonst würde der
   // Cursor bei jeder serverseitigen Aktualisierung springen.
@@ -65,7 +72,7 @@ export default function EmployeeListFilters({
     }
   }
 
-  const apply = (next: { search?: string; location?: string }) => {
+  const apply = (next: { search?: string; location?: string; status?: string }) => {
     const params = new URLSearchParams(searchParams.toString());
 
     for (const [key, value] of Object.entries(next)) {
@@ -131,6 +138,26 @@ export default function EmployeeListFilters({
           {locations.map((location) => (
             <option key={location} value={location}>
               {location}
+            </option>
+          ))}
+        </select>
+        <ChevronDown
+          size={14}
+          className="pointer-events-none absolute top-1/2 right-3.5 -translate-y-1/2 text-muted"
+        />
+      </div>
+
+      <div className="relative">
+        <select
+          aria-label={statusFilterLabel}
+          className="input min-w-36 cursor-pointer appearance-none bg-white pr-9 font-medium"
+          value={urlStatus}
+          onChange={(event) => apply({ status: event.target.value })}
+        >
+          <option value="">{allStatusesLabel}</option>
+          {statusOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
             </option>
           ))}
         </select>

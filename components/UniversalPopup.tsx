@@ -6,9 +6,12 @@ import {
   type ReactNode,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
+import type { ActionState } from "@/lib/action-state";
 
 type PopupOptions = {
   title?: ReactNode;
@@ -125,4 +128,28 @@ export function useUniversalPopup() {
   }
 
   return context;
+}
+
+/**
+ * Schließt ein Popup automatisch, sobald eine mit `useActionState` verdrahtete
+ * Server Action erfolgreich durchgelaufen ist. Nötig für jedes Popup-Formular,
+ * dessen Action nur `revalidatePath` auslöst statt auf eine neue Seite
+ * weiterzuleiten (z. B. weil sie auf derselben Seite bleibt) — sonst bliebe
+ * das Popup nach erfolgreichem Absenden einfach offen stehen, ohne dass für
+ * die Nutzerin/den Nutzer erkennbar ist, dass etwas passiert ist.
+ */
+export function useCloseOnSuccess(
+  state: ActionState,
+  isPending: boolean,
+  onDone: () => void,
+) {
+  const wasPending = useRef(false);
+
+  useEffect(() => {
+    if (wasPending.current && !isPending && !state.error) {
+      onDone();
+    }
+
+    wasPending.current = isPending;
+  }, [isPending, state, onDone]);
 }

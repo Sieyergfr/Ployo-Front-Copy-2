@@ -7,12 +7,18 @@ import {
   requireTenantMembership,
   resolveScopeFilter,
 } from "@/lib/tenant-access";
+import {
+  parseOpeningHoursDays,
+  resolveEffectiveOpeningHours,
+  type OpeningHoursDay,
+} from "@/lib/opening-hours";
 import { parseShiftPresets } from "@/lib/shift-presets";
 import {
   parseShiftTemplateEntries,
   type ShiftTemplateEntry,
 } from "@/lib/shift-templates";
 import { isUniqueConstraintError } from "@/lib/prisma-errors";
+import { notifyEmployeeOfShiftPlanPublished } from "@/lib/notifications/events";
 
 export type ShiftEmployeeOption = {
   id: string;
@@ -28,6 +34,8 @@ export type ShiftLocationOption = {
   name: string;
   kind: string;
   accentClassName: string;
+  /** Effektive Öffnungszeiten (eigene Angabe, sonst Mandanten-Standard) — für die "geschlossen"-Kennzeichnung bei der Standortauswahl. */
+  openingHours: OpeningHoursDay[];
 };
 
 const weekdays = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"] as const;
@@ -212,6 +220,62 @@ async function shiftScopeWhere(tenantSlug: string) {
   return { tenantId: access.tenantId, employeeId: "__none__" };
 }
 
+/**
+ * Fehlt die Zeile für (tenantId, year, week), gilt die Woche implizit als
+ * Entwurf — es wird keine Zeile pro Woche vorab angelegt, nur beim ersten
+ * Veröffentlichen (siehe `publishShiftWeek`).
+ */
+async function getShiftWeekRecord(tenantId: string, year: number, week: number) {
+  return prisma.tenantShiftWeek.findUnique({
+    where: { tenantId_year_week: { tenantId, year, week } },
+  });
+}
+
+async function getShiftWeekForDate(tenantId: string, date: string) {
+  const { year, week } = getISOWeekFromDate(new Date(`${date}T00:00:00Z`));
+  const record = await getShiftWeekRecord(tenantId, year, week);
+
+  return { year, week, published: record?.status === "published" };
+}
+
+/**
+ * Sammel-Mail mit allen aktuellen Schichten eines Mitarbeiters in einer
+ * Woche — dieselbe Mail wie beim Veröffentlichen (`publishShiftWeek`), nur
+ * für einen einzelnen Mitarbeiter. Wird für jede Änderung an einer bereits
+ * veröffentlichten Woche verwendet (Anlegen/Ändern/Löschen einer Schicht),
+ * damit Betroffene immer den vollständigen, aktuellen Stand sehen statt nur
+ * der isolierten Einzeländerung.
+ */
+async function notifyEmployeeWeekOverview(input: {
+  tenantId: string;
+  employeeId: string;
+  year: number;
+  week: number;
+}) {
+  const days = buildWeekDays(input.year, input.week);
+  const dayIds = days.map((day) => day.id);
+
+  const [tenant, shifts] = await Promise.all([
+    prisma.tenant.findUnique({
+      where: { id: input.tenantId },
+      select: { name: true },
+    }),
+    prisma.tenantShift.findMany({
+      where: { tenantId: input.tenantId, employeeId: input.employeeId, date: { in: dayIds } },
+      select: { date: true, startTime: true, endTime: true },
+    }),
+  ]);
+
+  await notifyEmployeeOfShiftPlanPublished({
+    tenantId: input.tenantId,
+    tenantName: tenant?.name ?? "",
+    employeeId: input.employeeId,
+    weekLabel: `KW ${input.week}`,
+    weekRange: formatWeekRange(getISOWeekStart(input.year, input.week)),
+    shifts,
+  });
+}
+
 export async function getShiftPlanForTenant(input: {
   tenantSlug: string;
   year: number;
@@ -226,7 +290,7 @@ export async function getShiftPlanForTenant(input: {
 
   const days = buildWeekDays(input.year, input.week);
   const dayIds = days.map((day) => day.id);
-  const [records, settings] = await Promise.all([
+  const [records, settings, weekRecord] = await Promise.all([
     prisma.tenantShift.findMany({
       where: {
         ...scopeWhere,
@@ -254,6 +318,7 @@ export async function getShiftPlanForTenant(input: {
       where: { tenantId },
       select: { shiftMinStaffing: true },
     }),
+    getShiftWeekRecord(tenantId, input.year, input.week),
   ]);
   const minStaffing = settings?.shiftMinStaffing ?? 0;
   const conflictIds = new Set<string>();
@@ -303,6 +368,8 @@ export async function getShiftPlanForTenant(input: {
     range: formatWeekRange(getISOWeekStart(input.year, input.week)),
     conflictCount: conflictIds.size + records.filter((record) => record.conflict).length,
     minStaffing,
+    status: weekRecord?.status ?? "draft",
+    publishedAt: weekRecord?.publishedAt?.toISOString() ?? null,
     days: days.map((day) => {
       const dayShifts = shiftsByDate.get(day.id) ?? [];
       const staffedCount = dayShifts.filter((shift) => shift.employeeId).length;
@@ -323,7 +390,9 @@ export type MyShift = {
   endTime: string;
   time: string;
   location: string;
+  locationAccentClassName: string | null;
   note: string;
+  breakMinutes: number;
 };
 
 export type MyWeekDay = {
@@ -342,7 +411,10 @@ export type MyWeekDay = {
  * Liefert nur die eigenen Schichten, kein Bearbeiten — dafür gibt es die
  * reguläre Schichtplanung mit den passenden Berechtigungen.
  */
-export async function getMyShiftsForCurrentWeek(tenantSlug: string): Promise<{
+export async function getMyShiftsForCurrentWeek(
+  tenantSlug: string,
+  weekOverride?: { year: number; week: number },
+): Promise<{
   label: string;
   range: string;
   days: MyWeekDay[];
@@ -357,7 +429,7 @@ export async function getMyShiftsForCurrentWeek(tenantSlug: string): Promise<{
     return null;
   }
 
-  const { year, week } = getISOWeekFromDate(new Date());
+  const { year, week } = weekOverride ?? getISOWeekFromDate(new Date());
   const days = buildWeekDays(year, week);
   const dayIds = days.map((day) => day.id);
 
@@ -370,7 +442,8 @@ export async function getMyShiftsForCurrentWeek(tenantSlug: string): Promise<{
       startTime: true,
       endTime: true,
       note: true,
-      location: { select: { name: true } },
+      breakMinutes: true,
+      location: { select: { name: true, accentClassName: true } },
     },
   });
   const shiftsByDate = new Map<string, MyShift[]>();
@@ -382,7 +455,9 @@ export async function getMyShiftsForCurrentWeek(tenantSlug: string): Promise<{
       endTime: record.endTime,
       time: toTimeRange(record.startTime, record.endTime),
       location: record.location?.name ?? "",
+      locationAccentClassName: record.location?.accentClassName ?? null,
       note: record.note,
+      breakMinutes: record.breakMinutes,
     };
     const dateShifts = shiftsByDate.get(record.date) ?? [];
 
@@ -410,7 +485,7 @@ export async function getShiftFormOptions(tenantSlug: string) {
     return null;
   }
 
-  const [employees, locations] = await Promise.all([
+  const [employees, locationRecords, tenantDefaultOpeningHours] = await Promise.all([
     prisma.tenantEmployee.findMany({
       where: { tenantId },
       orderBy: { name: "asc" },
@@ -431,13 +506,26 @@ export async function getShiftFormOptions(tenantSlug: string) {
         name: true,
         kind: true,
         accentClassName: true,
+        openingHoursJson: true,
       },
     }),
+    getDefaultOpeningHours(tenantSlug),
   ]);
+
+  const locations: ShiftLocationOption[] = locationRecords.map((location) => ({
+    id: location.id,
+    name: location.name,
+    kind: location.kind,
+    accentClassName: location.accentClassName,
+    openingHours: resolveEffectiveOpeningHours(
+      parseOpeningHoursDays(location.openingHoursJson),
+      tenantDefaultOpeningHours,
+    ),
+  }));
 
   return {
     employees: employees satisfies ShiftEmployeeOption[],
-    locations: locations satisfies ShiftLocationOption[],
+    locations,
   };
 }
 
@@ -456,6 +544,7 @@ export async function getShiftPlanningSettings(tenantSlug: string) {
           shiftMinStaffing: true,
           shiftBreakRule: true,
           shiftPresetsJson: true,
+          defaultOpeningHoursJson: true,
         },
       })
     : null;
@@ -465,7 +554,21 @@ export async function getShiftPlanningSettings(tenantSlug: string) {
     minStaffing: settings?.shiftMinStaffing ?? 3,
     breakRule: settings?.shiftBreakRule ?? "30-6",
     presets: parseShiftPresets(settings?.shiftPresetsJson ?? []),
+    defaultOpeningHours: parseOpeningHoursDays(settings?.defaultOpeningHoursJson ?? []),
   };
+}
+
+/** Tenant-Standard-Öffnungszeiten — für die Übersicht ("Schichtlage") ohne die volle Planungseinstellungen-Auswahl. */
+export async function getDefaultOpeningHours(tenantSlug: string) {
+  const tenantId = await getTenantIdForShifts(tenantSlug);
+  const settings = tenantId
+    ? await prisma.tenantSettings.findUnique({
+        where: { tenantId },
+        select: { defaultOpeningHoursJson: true },
+      })
+    : null;
+
+  return parseOpeningHoursDays(settings?.defaultOpeningHoursJson ?? []);
 }
 
 export async function requireShiftManager(tenantSlug: string) {
@@ -554,7 +657,7 @@ export async function createTenantShift(input: {
     }
   }
 
-  return prisma.tenantShift.create({
+  const created = await prisma.tenantShift.create({
     data: {
       tenantId: access.tenantId,
       key,
@@ -570,6 +673,27 @@ export async function createTenantShift(input: {
       note: input.note?.trim() || "",
     },
   });
+
+  // Solange die Woche noch Entwurf ist, würde jede einzelne Schicht beim
+  // Anlegen eine eigene Mail auslösen — stattdessen sammelt sich alles bis
+  // zur einmaligen Veröffentlichung (`publishShiftWeek`). Ist die Woche
+  // bereits veröffentlicht, ist eine neue Schicht eine echte nachträgliche
+  // Änderung — der Mitarbeiter bekommt dieselbe Wochenübersicht-Mail wie
+  // beim Veröffentlichen, mit dem aktuellen Gesamtstand seiner Schichten.
+  if (employee) {
+    const shiftWeek = await getShiftWeekForDate(access.tenantId, input.date);
+
+    if (shiftWeek.published) {
+      await notifyEmployeeWeekOverview({
+        tenantId: access.tenantId,
+        employeeId: employee.id,
+        year: shiftWeek.year,
+        week: shiftWeek.week,
+      });
+    }
+  }
+
+  return created;
 }
 
 export async function updateTenantShift(input: {
@@ -622,6 +746,19 @@ export async function updateTenantShift(input: {
       note: input.note?.trim() || "",
     },
   });
+
+  if (employee) {
+    const shiftWeek = await getShiftWeekForDate(access.tenantId, input.date);
+
+    if (shiftWeek.published) {
+      await notifyEmployeeWeekOverview({
+        tenantId: access.tenantId,
+        employeeId: employee.id,
+        year: shiftWeek.year,
+        week: shiftWeek.week,
+      });
+    }
+  }
 }
 
 export async function deleteTenantShift(input: {
@@ -636,7 +773,7 @@ export async function deleteTenantShift(input: {
 
   const current = await prisma.tenantShift.findFirst({
     where: { id: input.shiftId, tenantId: access.tenantId },
-    select: { id: true },
+    select: { id: true, employeeId: true, date: true, startTime: true, endTime: true },
   });
 
   if (!current) {
@@ -646,6 +783,141 @@ export async function deleteTenantShift(input: {
   await prisma.tenantShift.delete({
     where: { id: input.shiftId },
   });
+
+  if (current.employeeId) {
+    const shiftWeek = await getShiftWeekForDate(access.tenantId, current.date);
+
+    if (shiftWeek.published) {
+      await notifyEmployeeWeekOverview({
+        tenantId: access.tenantId,
+        employeeId: current.employeeId,
+        year: shiftWeek.year,
+        week: shiftWeek.week,
+      });
+    }
+  }
+}
+
+/**
+ * Veröffentlicht die Schichtplanung einer Woche: markiert sie als
+ * "published" (Bearbeitung davor gilt immer als Entwurf, siehe
+ * `isShiftWeekPublished`) und verschickt pro betroffenem Mitarbeiter genau
+ * eine Sammel-Mail mit allen seinen Schichten der Woche — statt einer
+ * Einzel-Mail pro Schicht, wie es beim reinen Anlegen/Ändern der Fall wäre.
+ */
+export async function publishShiftWeek(input: {
+  tenantSlug: string;
+  year: number;
+  week: number;
+}) {
+  const access = await requireShiftManager(input.tenantSlug);
+  const days = buildWeekDays(input.year, input.week);
+  const dayIds = days.map((day) => day.id);
+
+  const [tenant, records] = await Promise.all([
+    prisma.tenant.findUnique({
+      where: { id: access.tenantId },
+      select: { name: true },
+    }),
+    prisma.tenantShift.findMany({
+      where: {
+        tenantId: access.tenantId,
+        date: { in: dayIds },
+        employeeId: { not: null },
+      },
+      select: { employeeId: true, date: true, startTime: true, endTime: true },
+    }),
+  ]);
+
+  const weekRecord = await prisma.tenantShiftWeek.upsert({
+    where: {
+      tenantId_year_week: { tenantId: access.tenantId, year: input.year, week: input.week },
+    },
+    create: {
+      tenantId: access.tenantId,
+      year: input.year,
+      week: input.week,
+      status: "published",
+      publishedAt: new Date(),
+      publishedBy: access.userId,
+    },
+    update: {
+      status: "published",
+      publishedAt: new Date(),
+      publishedBy: access.userId,
+    },
+  });
+
+  const shiftsByEmployee = new Map<string, Array<{ date: string; startTime: string; endTime: string }>>();
+
+  for (const record of records) {
+    if (!record.employeeId) {
+      continue;
+    }
+
+    const list = shiftsByEmployee.get(record.employeeId) ?? [];
+
+    list.push({ date: record.date, startTime: record.startTime, endTime: record.endTime });
+    shiftsByEmployee.set(record.employeeId, list);
+  }
+
+  const weekLabel = `KW ${input.week}`;
+  const weekRange = formatWeekRange(getISOWeekStart(input.year, input.week));
+
+  await Promise.all(
+    Array.from(shiftsByEmployee.entries()).map(([employeeId, shifts]) =>
+      notifyEmployeeOfShiftPlanPublished({
+        tenantId: access.tenantId,
+        tenantName: tenant?.name ?? "",
+        employeeId,
+        weekLabel,
+        weekRange,
+        shifts,
+      }),
+    ),
+  );
+
+  return {
+    status: weekRecord.status,
+    publishedAt: weekRecord.publishedAt?.toISOString() ?? null,
+    notified: shiftsByEmployee.size,
+  };
+}
+
+/**
+ * Setzt eine veröffentlichte Woche zurück auf Entwurf — z. B. um größere
+ * Nachbesserungen vorzunehmen, ohne dass jede einzelne Änderung sofort eine
+ * Wochenübersicht-Mail auslöst (siehe `notifyEmployeeWeekOverview`). Verschickt
+ * bewusst keine Mail: "zurück auf Entwurf" ist eine interne Planungsaktion,
+ * kein für Mitarbeiter sichtbares Ereignis — die nächste Veröffentlichung
+ * verschickt wie gewohnt wieder die vollständige Übersicht.
+ */
+export async function unpublishShiftWeek(input: {
+  tenantSlug: string;
+  year: number;
+  week: number;
+}) {
+  const access = await requireShiftManager(input.tenantSlug);
+
+  const weekRecord = await prisma.tenantShiftWeek.upsert({
+    where: {
+      tenantId_year_week: { tenantId: access.tenantId, year: input.year, week: input.week },
+    },
+    create: {
+      tenantId: access.tenantId,
+      year: input.year,
+      week: input.week,
+      status: "draft",
+    },
+    update: {
+      status: "draft",
+    },
+  });
+
+  return {
+    status: weekRecord.status,
+    publishedAt: weekRecord.publishedAt?.toISOString() ?? null,
+  };
 }
 
 export async function getShiftTemplatesForTenant(tenantSlug: string) {

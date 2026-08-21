@@ -1,7 +1,9 @@
 import { FileReminderButton } from "@/components/ActionDrawers";
+import { OwnerFileActions } from "@/components/OwnerFileActions";
 import AddressFields from "@/components/AddressFields";
 import AddLocationEmployeesButton from "@/components/AddLocationEmployeesButton";
 import AuditLogPanel from "@/components/AuditLogPanel";
+import EmployeeSelector from "@/components/EmployeeSelector";
 import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
 import {
   CreateFolderButton,
@@ -10,6 +12,11 @@ import {
 import { UnsavedChangesGuard } from "@/components/EditSafety";
 import FloatingEditBar from "@/components/FloatingEditBar";
 import LocationShiftPlanner from "@/components/LocationShiftPlanner";
+import { OpeningHoursEditor } from "@/components/OpeningHoursEditor";
+import {
+  OPENING_HOURS_WEEKDAY_LABELS,
+  formatOpeningHoursRange,
+} from "@/lib/opening-hours";
 import {
   deleteLocationAction,
   updateLocationAction,
@@ -167,7 +174,7 @@ function EditableSelectField({
   label: string;
   name: string;
   value: string;
-  options: string[];
+  options: (string | { value: string; label: string })[];
 }) {
   return (
     <div className="field">
@@ -181,11 +188,16 @@ function EditableSelectField({
         className="input cursor-pointer bg-white"
         defaultValue={value}
       >
-        {options.map((option) => (
-          <option key={option} value={option}>
-            {option}
-          </option>
-        ))}
+        {options.map((option) => {
+          const optionValue = typeof option === "string" ? option : option.value;
+          const optionLabel = typeof option === "string" ? option : option.label;
+
+          return (
+            <option key={optionValue} value={optionValue}>
+              {optionLabel}
+            </option>
+          );
+        })}
       </select>
     </div>
   );
@@ -287,15 +299,24 @@ function FileFolderCard({
   folder,
   tenant,
   returnPath,
+  filterHref,
+  active,
   canManageReminders,
 }: {
   folder: LocationFileFolder;
   tenant: string;
   returnPath: string;
+  filterHref: string;
+  active: boolean;
   canManageReminders: boolean;
 }) {
   return (
-    <div className="flex w-full cursor-pointer items-center gap-[13px] rounded-xl border border-border bg-white p-[15px] text-left font-sans transition-colors hover:bg-bg">
+    <Link
+      href={filterHref}
+      className={`flex w-full cursor-pointer items-center gap-[13px] rounded-xl border p-[15px] text-left font-sans no-underline transition-colors hover:bg-bg ${
+        active ? "border-ink bg-bg" : "border-border bg-white"
+      }`}
+    >
       <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-border-soft text-muted-2">
         <Folder size={19} />
       </span>
@@ -308,15 +329,17 @@ function FileFolderCard({
         </span>
       </span>
       {folder.locked && <Lock size={13} className="shrink-0 text-muted" />}
-      <FileReminderButton
-        tenant={tenant}
-        returnPath={returnPath}
-        compact
-        name={folder.name}
-        context={`Standortordner \u00b7 ${folder.name}`}
-        canManage={canManageReminders}
-      />
-    </div>
+      <span onClick={(event) => event.preventDefault()}>
+        <FileReminderButton
+          tenant={tenant}
+          returnPath={returnPath}
+          compact
+          name={folder.name}
+          context={`Standortordner \u00b7 ${folder.name}`}
+          canManage={canManageReminders}
+        />
+      </span>
+    </Link>
   );
 }
 
@@ -351,6 +374,7 @@ function FileRow({
         {file.type}
       </span>
       {file.locked && <Lock size={13} className="shrink-0 text-muted" />}
+      <OwnerFileActions tenant={tenant} storageFileId={file.storageFileId} name={file.name} />
       <FileReminderButton
         tenant={tenant}
         returnPath={returnPath}
@@ -392,6 +416,7 @@ function FilesTab({
   uploadOptions,
   canManageFiles,
   canManageReminders,
+  activeFolder,
 }: {
   location: Location;
   tenant: string;
@@ -399,8 +424,12 @@ function FilesTab({
   uploadOptions: FileUploadOptions;
   canManageFiles: boolean;
   canManageReminders: boolean;
+  activeFolder?: string;
 }) {
   const folderOptions = locationFolderOptions(location);
+  const visibleFiles = activeFolder
+    ? location.files.filter((file) => file.folder === activeFolder)
+    : location.files;
 
   return (
     <DetailPanel
@@ -450,16 +479,27 @@ function FilesTab({
               folder={folder}
               tenant={tenant}
               returnPath={`${locationHref}?tab=files`}
+              filterHref={
+                activeFolder === folder.name
+                  ? `${locationHref}?tab=files`
+                  : `${locationHref}?tab=files&folder=${encodeURIComponent(folder.name)}`
+              }
+              active={activeFolder === folder.name}
               canManageReminders={canManageReminders}
             />
         ))}
       </div>
 
       <div className="mt-5">
-        <div className="mb-2 font-mono text-[9.5px] uppercase tracking-[0.6px] text-muted">
-          Dateien
+        <div className="mb-2 flex items-center justify-between gap-3 font-mono text-[9.5px] uppercase tracking-[0.6px] text-muted">
+          <span>{activeFolder ? `Dateien · ${activeFolder}` : "Dateien"}</span>
+          {activeFolder && (
+            <Link href={`${locationHref}?tab=files`} className="normal-case text-link">
+              Alle anzeigen
+            </Link>
+          )}
         </div>
-        {location.files.map((file) => (
+        {visibleFiles.map((file) => (
             <FileRow
               key={`${file.folder}-${file.name}`}
               file={file}
@@ -479,7 +519,8 @@ export default async function LocationDetailPage({
 }: PageProps<"/u/[tenant]/standorte/[locationId]">) {
   const { tenant, locationId } = await params;
   const query = await searchParams;
-  const { tab, edit } = query;
+  const { tab, edit, folder } = query;
+  const activeFolder = typeof folder === "string" ? folder : undefined;
   const currentWeek = getISOWeekFromDate(new Date());
   const year = searchParamNumber(query.year, currentWeek.year);
   const week = searchParamNumber(query.week, currentWeek.week);
@@ -498,6 +539,17 @@ export default async function LocationDetailPage({
   if (!location || !employees || !shiftPlan || !shiftOptions) {
     notFound();
   }
+
+  const leadEmployeeOptions = employees.map((employee) => ({
+    id: employee.dbId ?? employee.id,
+    initials: employee.initials,
+    name: employee.name,
+    employeeNumber: employee.employeeNumber,
+    location: employee.location,
+    team: employee.team,
+    role: employee.role,
+  }));
+  const currentLeadEmployeeId = location.lead.employeeId ?? undefined;
 
   const capabilities = await getTenantCapabilities(tenant);
   const canEditLocation = hasPermissionLevel(capabilities.locations.level, "write");
@@ -583,35 +635,41 @@ export default async function LocationDetailPage({
         <div className="flex flex-wrap items-start gap-6 px-7 py-7">
           <div className="min-w-[240px] flex-1">
             {isEditing ? (
-              <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]">
+              <div className="flex flex-col gap-4">
                 <EditableTextField
                   id="location-name"
                   label="Standortname"
                   name="name"
                   value={location.name}
                 />
-                <EditableSelectField
-                  id="location-kind"
-                  label="Typ"
-                  name="kind"
-                  value={location.kind}
-                  options={[...locationKinds]}
-                />
-                <div className="sm:col-span-2">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <EditableSelectField
+                    id="location-kind"
+                    label="Typ"
+                    name="kind"
+                    value={location.kind}
+                    options={[...locationKinds]}
+                  />
+                  <EditableSelectField
+                    id="location-status"
+                    label="Status"
+                    name="status"
+                    value={location.status}
+                    options={[
+                      { value: "active", label: "Aktiv" },
+                      { value: "inactive", label: "Inaktiv" },
+                    ]}
+                  />
+                </div>
+                <div>
                   <div className="mb-2 label">Adresse</div>
                   <AddressFields
                     idPrefix="location-address"
                     defaults={location.addressFields}
                     required
+                    formId="location-edit-form"
                   />
                 </div>
-                <EditableSelectField
-                  id="location-status"
-                  label="Status"
-                  name="status"
-                  value={location.status}
-                  options={["active", "inactive"]}
-                />
                 <EditableColorField value={location.accentClassName} />
               </div>
             ) : (
@@ -704,6 +762,7 @@ export default async function LocationDetailPage({
           uploadOptions={uploadOptions}
           canManageFiles={canManageFiles}
           canManageReminders={canManageReminders}
+          activeFolder={activeFolder}
         />
       ) : isShiftsTab ? (
         <LocationShiftPlanner
@@ -756,33 +815,17 @@ export default async function LocationDetailPage({
           <div className="grid items-start gap-4 [grid-template-columns:repeat(auto-fit,minmax(320px,1fr))]">
             <DetailPanel title="Leitung & Team">
               {isEditing ? (
-                <div className="mb-5 grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]">
-                  <EditableTextField
-                    id="location-lead-name"
-                    label="Leitung"
-                    name="leadName"
-                    value={location.lead.name}
+                <div className="mb-5">
+                  <EmployeeSelector
+                    label="Standortleitung"
+                    name="lead"
+                    options={leadEmployeeOptions}
+                    defaultSelectedIds={currentLeadEmployeeId ? [currentLeadEmployeeId] : []}
+                    form="location-edit-form"
                   />
-                  <EditableTextField
-                    id="location-lead-initials"
-                    label="Initialen"
-                    name="leadInitials"
-                    value={location.lead.initials}
-                  />
-                  <EditableTextField
-                    id="location-lead-phone"
-                    label="Telefon"
-                    name="leadPhone"
-                    type="tel"
-                    value={location.lead.phone}
-                  />
-                  <EditableTextField
-                    id="location-lead-email"
-                    label="E-Mail"
-                    name="leadEmail"
-                    type="email"
-                    value={location.lead.email}
-                  />
+                  <p className="mt-2 text-[11.5px] leading-[1.5] text-muted">
+                    Telefon und E-Mail werden automatisch aus dem Mitarbeiterprofil übernommen.
+                  </p>
                 </div>
               ) : (
                 <div className="mb-5 flex items-center gap-3.5 rounded-[12px] border border-border-soft bg-bg px-4 py-3.5">
@@ -819,6 +862,39 @@ export default async function LocationDetailPage({
                   />
                 ))}
               </div>
+            </DetailPanel>
+
+            <DetailPanel title="\u00d6ffnungszeiten">
+              {isEditing ? (
+                <OpeningHoursEditor
+                  name="openingHours"
+                  defaultValue={location.openingHours}
+                  allowInherit
+                  initiallyCustom={!location.usesDefaultOpeningHours}
+                  formId="location-edit-form"
+                />
+              ) : (
+                <div className="grid gap-1.5">
+                  {location.openingHours.map((day) => (
+                    <div
+                      key={day.weekday}
+                      className="flex items-center justify-between text-[12.5px]"
+                    >
+                      <span className="text-muted-2">
+                        {OPENING_HOURS_WEEKDAY_LABELS[day.weekday]}
+                      </span>
+                      <span className="font-mono text-ink">
+                        {formatOpeningHoursRange(day)}
+                      </span>
+                    </div>
+                  ))}
+                  {location.usesDefaultOpeningHours && (
+                    <p className="mt-2 text-[11.5px] text-muted">
+                      Standard-\u00d6ffnungszeiten des Unternehmens.
+                    </p>
+                  )}
+                </div>
+              )}
             </DetailPanel>
 
             <DetailPanel

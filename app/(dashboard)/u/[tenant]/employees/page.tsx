@@ -15,7 +15,7 @@ import {
   getMyEmployeeHandle,
   previewNextEmployeeNumber,
 } from "@/lib/employee-service";
-import { employeeStatusConfig, type Employee } from "@/lib/employees";
+import { employeeStatusConfig, type Employee, type EmployeeStatus } from "@/lib/employees";
 import { getLocationsForTenant } from "@/lib/location-service";
 import { paginate, searchParamPage, searchParamString } from "@/lib/pagination";
 import { hasPermissionLevel } from "@/lib/roles";
@@ -60,7 +60,8 @@ function getColumns(
       header: t("columns.location"),
       width: "120px",
       className: "text-[13px] text-ink",
-      render: (employee) => employee.location,
+      render: (employee) =>
+        employee.locations?.length ? employee.locations.join(", ") : employee.location,
     },
     {
       key: "teamRole",
@@ -131,13 +132,20 @@ export default async function EmployeesPage({
   }
 
   // Such-/Standortfilter werden serverseitig angewandt (Prisma-`where`), nicht
-  // erst im Browser — die Antwort enthält damit nur noch die Treffer.
+  // erst im Browser — die Antwort enthält damit nur noch die Treffer. Der
+  // Statusfilter wirkt erst nach der Live-Berechnung (siehe getEmployeesForTenant).
   const search = searchParamString(query.search);
   const locationFilter = searchParamString(query.location);
-  const isFiltered = Boolean(search || locationFilter);
+  const rawStatusFilter = searchParamString(query.status);
+  const statusFilter = (
+    ["active", "vacation", "absent", "former"] as const
+  ).includes(rawStatusFilter as EmployeeStatus)
+    ? (rawStatusFilter as EmployeeStatus)
+    : undefined;
+  const isFiltered = Boolean(search || locationFilter || statusFilter);
 
   const employees = await withAccessRedirect(tenant, () =>
-    getEmployeesForTenant(tenant, { search, location: locationFilter }),
+    getEmployeesForTenant(tenant, { search, location: locationFilter, status: statusFilter }),
   );
 
   if (!employees) {
@@ -182,6 +190,14 @@ export default async function EmployeesPage({
           searchAriaLabel={t("searchAriaLabel")}
           locationFilterLabel={t("locationFilterLabel")}
           allLocationsLabel={t("allLocations")}
+          statusFilterLabel={t("statusFilterLabel")}
+          allStatusesLabel={t("allStatuses")}
+          statusOptions={[
+            { value: "active", label: t("statusActive") },
+            { value: "vacation", label: t("statusVacation") },
+            { value: "absent", label: t("statusAbsent") },
+            { value: "former", label: t("statusFormer") },
+          ]}
         />
 
         {canCreateEmployee && (
@@ -209,7 +225,7 @@ export default async function EmployeesPage({
         total={page.total}
         pageSize={page.pageSize}
         basePath={`/u/${tenant}/employees`}
-        query={{ search, location: locationFilter }}
+        query={{ search, location: locationFilter, status: statusFilter }}
       />
     </>
   );

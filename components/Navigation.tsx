@@ -8,6 +8,7 @@ import {
 } from "@/app/(dashboard)/u/[tenant]/einstellungen/actions";
 import AddressFields from "@/components/AddressFields";
 import type { AddressInput } from "@/lib/address";
+import type { BillingInvoice } from "@/lib/billing-service";
 import FormSubmitButton from "@/components/FormSubmitButton";
 import Checkbox from "@/components/inputs/checkbox";
 import { useSlugAvailability } from "@/lib/hooks/useSlugAvailability";
@@ -22,6 +23,8 @@ import {
   ChevronRight,
   ChevronsUpDown,
   CreditCard,
+  Download,
+  FileText,
   KeyRound,
   Loader2,
   LogOut,
@@ -31,7 +34,6 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   UserCog,
-  UsersRound,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -39,7 +41,9 @@ import { useLocale, useTranslations } from "next-intl";
 import Image from "next/image";
 import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useActionState, useEffect, useMemo, useRef, useState } from "react";
+import type { ActionState } from "@/lib/action-state";
+import { createPortal } from "react-dom";
 
 const availableLocales = [
   { code: "de", label: "DE" },
@@ -166,10 +170,34 @@ function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
 
+const DIGEST_WEEKDAYS = [
+  { value: "monday", label: "Montag" },
+  { value: "tuesday", label: "Dienstag" },
+  { value: "wednesday", label: "Mittwoch" },
+  { value: "thursday", label: "Donnerstag" },
+  { value: "friday", label: "Freitag" },
+  { value: "saturday", label: "Samstag" },
+  { value: "sunday", label: "Sonntag" },
+];
+
+/** Zerlegt `"monday-0800"` in Wochentag + `"08:00"` fürs Formular — Tag/Uhrzeit sind frei wählbar (siehe lib/notifications/digest-schedule.ts). */
+function parseDigestTime(digestTime: string): { weekday: string; timeOfDay: string; enabled: boolean } {
+  if (digestTime === "disabled") {
+    return { weekday: "monday", timeOfDay: "08:00", enabled: false };
+  }
+
+  const [weekday, hhmm] = digestTime.split("-");
+
+  if (!weekday || !hhmm || hhmm.length !== 4) {
+    return { weekday: "monday", timeOfDay: "08:00", enabled: true };
+  }
+
+  return { weekday, timeOfDay: `${hhmm.slice(0, 2)}:${hhmm.slice(2)}`, enabled: true };
+}
+
 type SettingsCategoryId =
   | "account"
   | "company"
-  | "roles"
   | "notifications"
   | "security"
   | "integrations"
@@ -207,14 +235,6 @@ function getSettingsCategories(t: (key: string) => string): SettingsCategory[] {
       icon: Building2,
       area: "settings",
       requiredLevel: "write",
-    },
-    {
-      id: "roles",
-      label: t("categories.roles.label"),
-      description: t("categories.roles.description"),
-      icon: UsersRound,
-      area: "roles",
-      requiredLevel: "admin",
     },
     {
       id: "notifications",
@@ -287,6 +307,98 @@ function SettingsSection({
       </div>
       {children}
     </section>
+  );
+}
+
+/**
+ * Rechnungshistorie aus Stripe — lädt erst, wenn der Abrechnung-Tab
+ * tatsächlich geöffnet wird (dieser Client-Baustein mountet nur dann),
+ * statt Stripe bei jedem Seitenaufruf über die Navigation-Sidebar
+ * mitanzufragen.
+ */
+function InvoicesList({ tenantSlug }: { tenantSlug: string }) {
+  const t = useTranslations("Navigation.settings.billing");
+  const [invoices, setInvoices] = useState<BillingInvoice[] | null>(null);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    fetch(`/api/tenants/${tenantSlug}/billing/invoices`)
+      .then((response) => {
+        if (!response.ok) throw new Error("request failed");
+        return response.json();
+      })
+      .then((data: { invoices: BillingInvoice[] }) => {
+        if (!cancelled) setInvoices(data.invoices);
+      })
+      .catch(() => {
+        if (!cancelled) setError(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [tenantSlug]);
+
+  return (
+    <SettingsSection title={t("invoicesTitle")} icon={FileText}>
+      {error ? (
+        <p className="text-[12.5px] text-danger">{t("invoicesError")}</p>
+      ) : invoices === null ? (
+        <p className="text-[12.5px] text-muted-2">{t("invoicesLoading")}</p>
+      ) : invoices.length === 0 ? (
+        <p className="text-[12.5px] text-muted-2">{t("invoicesEmpty")}</p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {invoices.map((invoice) => (
+            <div
+              key={invoice.id}
+              className="flex flex-wrap items-center justify-between gap-2 rounded-[10px] border border-border-light bg-bg px-3 py-2.5"
+            >
+              <div className="min-w-0">
+                <div className="truncate text-[12.5px] font-semibold text-ink">
+                  {invoice.number ?? invoice.id}
+                </div>
+                <div className="mt-0.5 font-mono text-[10.5px] text-muted-2">
+                  {new Intl.DateTimeFormat("de-DE", { dateStyle: "medium" }).format(
+                    new Date(invoice.createdAt),
+                  )}
+                  {" · "}
+                  {new Intl.NumberFormat("de-DE", {
+                    style: "currency",
+                    currency: invoice.currency.toUpperCase(),
+                  }).format(invoice.amountDue / 100)}
+                </div>
+              </div>
+              <div className="flex shrink-0 gap-2">
+                {invoice.hostedInvoiceUrl && (
+                  <a
+                    href={invoice.hostedInvoiceUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="btn btn-secondary btn-sm"
+                  >
+                    {t("invoiceView")}
+                  </a>
+                )}
+                {invoice.invoicePdf && (
+                  <a
+                    href={invoice.invoicePdf}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="btn btn-secondary btn-sm"
+                  >
+                    <Download size={14} />
+                    {t("invoiceDownload")}
+                  </a>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </SettingsSection>
   );
 }
 
@@ -518,25 +630,6 @@ function SettingsPanel({
     );
   }
 
-  if (activeCategory === "roles") {
-    const tenantSlug = tenant.slug ?? tenantSlugFromHref(tenant.href);
-
-    return (
-      <SettingsSection title={t("roles.title")} icon={UsersRound}>
-        <p className="text-[12.5px] leading-5 text-muted">
-          {t("roles.description")}
-        </p>
-        <Link
-          href={`/u/${tenantSlug}/rollen`}
-          className="btn btn-secondary btn-sm mt-3 w-fit"
-        >
-          <UsersRound size={14} />
-          {t("roles.manageButton")}
-        </Link>
-      </SettingsSection>
-    );
-  }
-
   if (activeCategory === "notifications") {
     return (
       <SettingsSection title={t("notificationsTab.title")} icon={Bell}>
@@ -570,19 +663,41 @@ function SettingsPanel({
             </Checkbox>
           </div>
           <div className="field sm:col-span-2">
-            <label htmlFor="settings-digest-time" className="label">
-              {t("notificationsTab.digestLabel")}
-            </label>
-            <select
-              id="settings-digest-time"
-              name="digestTime"
-              className="input cursor-pointer bg-white"
-              defaultValue={settings.digestTime}
-            >
-              <option value="monday-0800">{t("notificationsTab.digestMonday")}</option>
-              <option value="friday-1600">{t("notificationsTab.digestFriday")}</option>
-              <option value="disabled">{t("notificationsTab.digestDisabled")}</option>
-            </select>
+            <div className="label">{t("notificationsTab.digestLabel")}</div>
+            <Checkbox id="digestEnabled" defaultChecked={parseDigestTime(settings.digestTime).enabled}>
+              {t("notificationsTab.digestEnabled")}
+            </Checkbox>
+            <div className="mt-2.5 grid grid-cols-2 gap-3">
+              <div className="field">
+                <label htmlFor="settings-digest-weekday" className="label">
+                  {t("notificationsTab.digestWeekdayLabel")}
+                </label>
+                <select
+                  id="settings-digest-weekday"
+                  name="digestWeekday"
+                  className="input cursor-pointer bg-white"
+                  defaultValue={parseDigestTime(settings.digestTime).weekday}
+                >
+                  {DIGEST_WEEKDAYS.map((day) => (
+                    <option key={day.value} value={day.value}>
+                      {day.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label htmlFor="settings-digest-time-of-day" className="label">
+                  {t("notificationsTab.digestTimeLabel")}
+                </label>
+                <input
+                  id="settings-digest-time-of-day"
+                  name="digestTimeOfDay"
+                  type="time"
+                  className="input bg-white"
+                  defaultValue={parseDigestTime(settings.digestTime).timeOfDay}
+                />
+              </div>
+            </div>
           </div>
         </div>
       </SettingsSection>
@@ -825,6 +940,10 @@ function SettingsPanel({
             )}
           </div>
         </SettingsSection>
+
+        {isStripeConfigured && (
+          <InvoicesList tenantSlug={tenant.slug ?? tenantSlugFromHref(tenant.href)} />
+        )}
       </div>
     );
   }
@@ -903,6 +1022,30 @@ function SettingsPopupForm({
     useState<SettingsCategoryId>("account");
   const t = useTranslations("Navigation.settings");
 
+  const [state, formAction, isPending] = useActionState<ActionState, FormData>(
+    saveSettingsPopupAction,
+    {},
+  );
+  // Zeigt eine "Gespeichert"-Bestätigung statt das Popup zu schließen — ein
+  // Redirect nach dem Speichern würde die aktuelle Seite dahinter wechseln
+  // und wirkte wie ein ungewolltes Schließen (siehe To-Do "Unternehmen →
+  // Speichern → Bestätigung anzeigen, Fenster dabei nicht schließen").
+  const [justSaved, setJustSaved] = useState(false);
+  const wasPending = useRef(false);
+
+  useEffect(() => {
+    if (wasPending.current && !isPending && !state.error) {
+      setJustSaved(true);
+    }
+    wasPending.current = isPending;
+  }, [isPending, state]);
+
+  useEffect(() => {
+    if (!justSaved) return;
+    const timeout = setTimeout(() => setJustSaved(false), 2500);
+    return () => clearTimeout(timeout);
+  }, [justSaved]);
+
   const visibleCategories = getSettingsCategories(t).filter((category) => {
     if (!category.area || !tenant.permissions) {
       return true;
@@ -920,7 +1063,7 @@ function SettingsPopupForm({
 
   return (
     <form
-      action={saveSettingsPopupAction}
+      action={formAction}
       className="grid h-full min-h-0 bg-white md:grid-cols-[260px_1fr] md:grid-rows-[1fr_auto]"
     >
       <input type="hidden" name="tenant" value={tenant.slug ?? tenantSlugFromHref(tenant.href)} />
@@ -1004,7 +1147,15 @@ function SettingsPopupForm({
         </div>
       </div>
 
-      <div className="flex justify-end gap-2.5 border-t border-border-soft bg-white px-6 py-4">
+      <div className="flex items-center justify-end gap-2.5 border-t border-border-soft bg-white px-6 py-4">
+        {state.error ? (
+          <span className="mr-auto text-[12.5px] text-danger">{state.error}</span>
+        ) : justSaved ? (
+          <span className="mr-auto flex items-center gap-1.5 text-[12.5px] font-semibold text-success">
+            <Check size={14} strokeWidth={2.5} />
+            Gespeichert
+          </span>
+        ) : null}
         <button type="button" className="btn btn-secondary" onClick={onDone}>
           {t("cancel")}
         </button>
@@ -1034,7 +1185,11 @@ function SettingsPopup({
 }) {
   const t = useTranslations("Navigation.settings");
 
-  return (
+  // Portal auf document.body: die `<aside>`-Sidebar setzt `md:translate-x-0`
+  // (Transform), wodurch sie zum Containing Block für `position: fixed`
+  // wird — ohne Portal öffnet sich dieses Overlay dadurch nur innerhalb der
+  // Sidebar-Box statt zentriert über der ganzen Seite.
+  return createPortal(
     <div
       className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/45 backdrop-blur-[6px]"
       role="presentation"
@@ -1068,7 +1223,8 @@ function SettingsPopup({
           onDone={onClose}
         />
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

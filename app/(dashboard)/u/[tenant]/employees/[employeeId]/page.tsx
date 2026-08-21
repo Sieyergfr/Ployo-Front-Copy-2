@@ -8,11 +8,17 @@ import {
   UploadFileButton,
 } from "@/components/FileActionButtons";
 import { FileReminderButton } from "@/components/ActionDrawers";
+import EmployeeDocumentSlots from "@/components/EmployeeDocumentSlots";
 import EmployeeContracts, { type EmployeeContractItem } from "@/components/EmployeeContracts";
-import EmergencyContactsEditor from "@/components/EmergencyContactsEditor";
+import { LocationMultiSelectDropdown } from "@/components/TeamEditControls";
+import EmergencyContactsCard from "@/components/EmergencyContactsCard";
 import PayrollUploadButton from "@/components/PayrollUploadButton";
 import PayrollDownloadButton from "@/components/PayrollDownloadButton";
 import EmployeeInfoRequestButton from "@/components/EmployeeInfoRequestButton";
+import {
+  OffboardEmployeeButton,
+  ReactivateEmployeeButton,
+} from "@/components/OffboardEmployeeButton";
 import { UnsavedChangesGuard } from "@/components/EditSafety";
 import FloatingEditBar from "@/components/FloatingEditBar";
 import {
@@ -40,13 +46,11 @@ import {
 import { getRolesForTenant } from "@/lib/role-service";
 import {
   ArrowLeft,
-  AlertTriangle,
   BriefcaseBusiness,
   Eye,
   FileText,
   Folder,
   Lock,
-  MessageSquare,
   Pencil,
   UserPlus,
 } from "lucide-react";
@@ -55,6 +59,7 @@ import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 import { getFileUploadOptions } from "@/lib/files-server";
 import { type FileFolder, type FileUploadOptions } from "@/lib/files";
+import { OwnerFileActions } from "@/components/OwnerFileActions";
 
 export async function generateMetadata({
   params,
@@ -85,61 +90,6 @@ function DetailCard({
       </h2>
       {children}
     </section>
-  );
-}
-
-function EmergencyContactsCard({
-  employee,
-  isEditing,
-}: {
-  employee: Employee;
-  isEditing: boolean;
-}) {
-  return (
-    <DetailCard
-      title={
-        <span className="flex items-center gap-2 text-danger">
-          <AlertTriangle size={17} />
-          Notfallkontakte
-        </span>
-      }
-      className="border-danger/25 bg-danger/5 [&>h2]:mb-3.5"
-    >
-      {isEditing ? (
-        <EmergencyContactsEditor contacts={employee.emergencyContacts} />
-      ) : (
-        <div className="grid gap-2.5">
-          {employee.emergencyContacts.length === 0 && (
-            <p className="text-[12.5px] text-muted">
-              Keine Notfallkontakte hinterlegt.
-            </p>
-          )}
-          {employee.emergencyContacts.map((contact) => (
-            <div
-              key={contact.id}
-              className="rounded-xl border border-danger/20 bg-white p-3"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="text-[14px] font-semibold text-ink">
-                    {contact.name}
-                  </div>
-                  <div className="mt-0.5 text-[12px] text-muted">
-                    {contact.relation}
-                  </div>
-                </div>
-                <div className="font-mono text-[12px] font-semibold text-danger">
-                  {contact.phone}
-                </div>
-              </div>
-              {contact.note && (
-                <div className="mt-2 text-[12px] text-muted-2">{contact.note}</div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-    </DetailCard>
   );
 }
 
@@ -202,6 +152,20 @@ function PayrollTab({
   );
 }
 
+const infoRequestStatusLabels: Record<Employee["infoRequests"][number]["status"], string> = {
+  open: "Offen",
+  uploaded: "Upload erhalten",
+  review: "Antwort erhalten – zu prüfen",
+  cancelled: "Storniert",
+};
+
+const infoRequestStatusClassNames: Record<Employee["infoRequests"][number]["status"], string> = {
+  open: "border-warning/25 bg-warning/10 text-[#7A4E00]",
+  uploaded: "border-success/25 bg-success/10 text-success",
+  review: "border-success/25 bg-success/10 text-success",
+  cancelled: "border-border-light bg-border-soft text-muted-2",
+};
+
 function InfoRequestsCard({
   employee,
   tenant,
@@ -256,8 +220,10 @@ function InfoRequestsCard({
                 Datei gewünscht
               </span>
             )}
-            <span className="rounded-[7px] border border-border-light px-2 py-[3px] font-mono text-[10px] text-muted">
-              {request.status === "uploaded" ? "Upload erhalten" : "Offen"}
+            <span
+              className={`rounded-[7px] border px-2 py-[3px] font-mono text-[10px] font-semibold ${infoRequestStatusClassNames[request.status]}`}
+            >
+              {infoRequestStatusLabels[request.status]}
             </span>
           </div>
         </div>
@@ -384,15 +350,24 @@ function FileFolderCard({
   folder,
   tenant,
   returnPath,
+  filterHref,
+  active,
   canManageReminders,
 }: {
   folder: EmployeeFileFolder;
   tenant: string;
   returnPath: string;
+  filterHref: string;
+  active: boolean;
   canManageReminders: boolean;
 }) {
   return (
-    <div className="flex w-full cursor-pointer items-center gap-[13px] rounded-xl border border-border bg-white p-[15px] text-left font-sans transition-colors hover:bg-bg">
+    <Link
+      href={filterHref}
+      className={`flex w-full cursor-pointer items-center gap-[13px] rounded-xl border p-[15px] text-left font-sans no-underline transition-colors hover:bg-bg ${
+        active ? "border-ink bg-bg" : "border-border bg-white"
+      }`}
+    >
       <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-border-soft text-muted-2">
         <Folder size={19} />
       </span>
@@ -405,15 +380,17 @@ function FileFolderCard({
         </span>
       </span>
       {folder.locked && <Lock size={13} className="shrink-0 text-muted" />}
-      <FileReminderButton
-        tenant={tenant}
-        returnPath={returnPath}
-        compact
-        name={folder.name}
-        context={`Mitarbeiterordner \u00b7 ${folder.name}`}
-        canManage={canManageReminders}
-      />
-    </div>
+      <span onClick={(event) => event.preventDefault()}>
+        <FileReminderButton
+          tenant={tenant}
+          returnPath={returnPath}
+          compact
+          name={folder.name}
+          context={`Mitarbeiterordner \u00b7 ${folder.name}`}
+          canManage={canManageReminders}
+        />
+      </span>
+    </Link>
   );
 }
 
@@ -448,6 +425,7 @@ function FileRow({
         {file.type}
       </span>
       {file.locked && <Lock size={13} className="shrink-0 text-muted" />}
+      <OwnerFileActions tenant={tenant} storageFileId={file.storageFileId} name={file.name} />
       <FileReminderButton
         tenant={tenant}
         returnPath={returnPath}
@@ -489,6 +467,7 @@ function FilesTab({
   uploadOptions,
   canManageFiles,
   canManageReminders,
+  activeFolder,
 }: {
   employee: Employee;
   tenant: string;
@@ -496,11 +475,23 @@ function FilesTab({
   uploadOptions: FileUploadOptions;
   canManageFiles: boolean;
   canManageReminders: boolean;
+  activeFolder?: string;
 }) {
   const folderOptions = employeeFolderOptions(employee);
+  const visibleFiles = activeFolder
+    ? employee.files.filter((file) => file.folder === activeFolder)
+    : employee.files;
 
   return (
-    <DetailCard
+    <>
+      <EmployeeDocumentSlots
+        tenant={tenant}
+        employeeId={employee.dbId ?? employee.id}
+        employeeHandle={employee.id}
+        files={employee.files}
+        canManage={canManageFiles}
+      />
+      <DetailCard
       title={
         <div className="flex min-w-0 items-center gap-3">
           <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-border-soft text-muted-2">
@@ -548,16 +539,27 @@ function FilesTab({
               folder={folder}
               tenant={tenant}
               returnPath={`${employeeHref}?tab=files`}
+              filterHref={
+                activeFolder === folder.name
+                  ? `${employeeHref}?tab=files`
+                  : `${employeeHref}?tab=files&folder=${encodeURIComponent(folder.name)}`
+              }
+              active={activeFolder === folder.name}
               canManageReminders={canManageReminders}
             />
         ))}
       </div>
 
       <div className="mt-5">
-        <div className="mb-2 font-mono text-[9.5px] uppercase tracking-[0.6px] text-muted">
-          Dateien
+        <div className="mb-2 flex items-center justify-between gap-3 font-mono text-[9.5px] uppercase tracking-[0.6px] text-muted">
+          <span>{activeFolder ? `Dateien · ${activeFolder}` : "Dateien"}</span>
+          {activeFolder && (
+            <Link href={`${employeeHref}?tab=files`} className="normal-case text-link">
+              Alle anzeigen
+            </Link>
+          )}
         </div>
-        {employee.files.map((file) => (
+        {visibleFiles.map((file) => (
             <FileRow
               key={`${file.folder}-${file.name}`}
               file={file}
@@ -568,6 +570,7 @@ function FilesTab({
         ))}
       </div>
     </DetailCard>
+    </>
   );
 }
 
@@ -873,9 +876,19 @@ function LegacyContractTab({
                 value={contract.compensation}
               />
               <EditableTextField
+                id="contract-compensation-gross"
+                label="Vergütung Brutto (€)"
+                name="compensationGross"
+                type="number"
+                min={0}
+                value={contract.compensationGross}
+              />
+              <EditableTextField
                 id="contract-working-time"
-                label="Arbeitszeit"
+                label="Wochenstunden"
                 name="workingTime"
+                type="number"
+                min={0}
                 value={contract.workingTime}
               />
               <EditableTextField
@@ -888,7 +901,14 @@ function LegacyContractTab({
           ) : (
             <div className="flex flex-col gap-4">
               <FieldValue label="Vergütung" value={contract.compensation} />
-              <FieldValue label="Arbeitszeit" value={contract.workingTime} />
+              <FieldValue
+                label="Vergütung Brutto"
+                value={contract.compensationGross ? `${contract.compensationGross} €` : ""}
+              />
+              <FieldValue
+                label="Wochenstunden"
+                value={contract.workingTime ? `${contract.workingTime} Std./Woche` : ""}
+              />
               <FieldValue label="Urlaub" value={contract.vacation} />
             </div>
           )}
@@ -980,8 +1000,9 @@ function ContractTab({
               <EditableTextField id="contract-position" label="Position" name="position" value={details.position} />
               <EditableTextField id="contract-department" label="Abteilung" name="department" value={details.department} />
               <EditableTextField id="contract-work-location" label="Arbeitsort" name="workLocation" value={details.workLocation} />
-              <EditableTextField id="contract-working-time" label="Arbeitszeit" name="workingTime" value={details.workingTime} />
+              <EditableTextField id="contract-working-time" label="Wochenstunden" name="workingTime" type="number" min={0} value={details.workingTime} />
               <EditableTextField id="contract-compensation" label="Vergütung" name="compensation" value={details.compensation} />
+              <EditableTextField id="contract-compensation-gross" label="Vergütung Brutto (€)" name="compensationGross" type="number" min={0} value={details.compensationGross} />
               <EditableTextField id="contract-vacation" label="Urlaub" name="vacation" value={details.vacation} />
               <EditableTextField id="contract-probation" label="Probezeit" name="probation" value={details.probation} />
               <EditableTextField id="contract-notice-period" label="Kündigungsfrist" name="noticePeriod" value={details.noticePeriod} />
@@ -993,8 +1014,18 @@ function ContractTab({
               <FieldValue label="Position" value={value(activeContract?.position, details.position)} />
               <FieldValue label="Abteilung" value={value(activeContract?.department, details.department)} />
               <FieldValue label="Arbeitsort" value={value(activeContract?.workLocation, details.workLocation)} />
-              <FieldValue label="Arbeitszeit" value={value(activeContract?.weeklyHours, details.workingTime || employee.weeklyHours)} />
+              <FieldValue
+                label="Wochenstunden"
+                value={(() => {
+                  const hours = value(activeContract?.weeklyHours, details.workingTime || employee.weeklyHours);
+                  return hours ? `${hours} Std./Woche` : hours;
+                })()}
+              />
               <FieldValue label="Vergütung" value={value(activeContract?.compensation, details.compensation)} />
+              <FieldValue
+                label="Vergütung Brutto"
+                value={details.compensationGross ? `${details.compensationGross} €` : "—"}
+              />
               <FieldValue label="Urlaub" value={activeContract?.vacationDays ? `${activeContract.vacationDays} Tage` : details.vacation} />
               <FieldValue label="Probezeit bis" value={value(activeContract?.probationEndDate, details.probation)} mono />
               <FieldValue label="Kündigungsfrist" value={value(activeContract?.noticePeriod, details.noticePeriod)} />
@@ -1073,7 +1104,8 @@ export default async function EmployeeDetailPage({
   searchParams,
 }: PageProps<"/u/[tenant]/employees/[employeeId]">) {
   const { tenant, employeeId } = await params;
-  const { tab, edit, invited } = await searchParams;
+  const { tab, edit, invited, folder } = await searchParams;
+  const activeFolder = typeof folder === "string" ? folder : undefined;
   const employee = await withAccessRedirect(tenant, () =>
     getEmployeeForTenant(tenant, employeeId),
   );
@@ -1123,6 +1155,7 @@ export default async function EmployeeDetailPage({
         area: "employees",
         entityType: "employee",
         entityId: employee.dbId ?? employee.id,
+        take: 10,
       })
     : [];
   const employeeEditHref = isContractTab
@@ -1195,10 +1228,15 @@ export default async function EmployeeDetailPage({
           </h1>
           <div className="mt-[7px] text-[14px] text-muted-2">
             {employee.role} {"\u00b7"} {employee.team} {"\u00b7"}{" "}
-            {employee.location}
+            {employee.locations?.length ? employee.locations.join(", ") : employee.location}
           </div>
           <div className="mt-[11px] flex flex-wrap items-center gap-3">
             <DataTableStatus label={status.label} tone={status.tone} />
+            {employee.status === "former" && employee.endDate && (
+              <span className="font-mono text-[12px] text-danger">
+                Austritt: {employee.endDate}
+              </span>
+            )}
             <span className="font-mono text-[12px] text-muted">
               {employee.employeeNumber}
             </span>
@@ -1228,10 +1266,12 @@ export default async function EmployeeDetailPage({
             )
           ) : (
             <>
-              <button type="button" className="btn btn-primary btn-sm">
-                <MessageSquare size={14} />
-                Nachricht senden
-              </button>
+              <EmployeeInfoRequestButton
+                tenant={tenant}
+                employeeId={employee.dbId ?? ""}
+                employeeHandle={employee.id}
+                employeeName={employee.name}
+              />
               {canInvite &&
                 !employee.hasAccount &&
                 (employee.email ? (
@@ -1254,6 +1294,21 @@ export default async function EmployeeDetailPage({
                     Einladen
                   </button>
                 ))}
+              {canEditEmployee && employee.status === "former" && (
+                <ReactivateEmployeeButton
+                  tenant={tenant}
+                  employeeId={employee.dbId ?? ""}
+                  employeeHandle={employee.id}
+                />
+              )}
+              {canEditEmployee && employee.status !== "former" && (
+                <OffboardEmployeeButton
+                  tenant={tenant}
+                  employeeId={employee.dbId ?? ""}
+                  employeeHandle={employee.id}
+                  employeeName={employee.name}
+                />
+              )}
               {canEditEmployee && (
                 <Link href={employeeEditHref} className="btn btn-secondary btn-sm">
                   <Pencil size={14} />
@@ -1335,6 +1390,7 @@ export default async function EmployeeDetailPage({
           uploadOptions={uploadOptions}
           canManageFiles={canManageFiles}
           canManageReminders={canManageReminders}
+          activeFolder={activeFolder}
         />
       ) : isPayrollTab ? (
         <PayrollTab employee={employee} tenant={tenant} canManage={canManagePayroll} />
@@ -1632,7 +1688,12 @@ export default async function EmployeeDetailPage({
             </div>
 
             <div className="flex flex-col gap-4">
-              <EmergencyContactsCard employee={employee} isEditing={isEditing} />
+              <EmergencyContactsCard
+                tenant={tenant}
+                employeeId={employee.dbId ?? ""}
+                employeeHandle={employee.id}
+                contacts={employee.emergencyContacts}
+              />
 
             <DetailCard title="Kontakt">
               {isEditing ? (
@@ -1651,11 +1712,8 @@ export default async function EmployeeDetailPage({
                       className="grid gap-3"
                     />
                   </div>
-                  <EditableSelectField
-                    id="employee-location"
-                    label="Standort"
-                    name="location"
-                    value={employee.location}
+                  <LocationMultiSelectDropdown
+                    defaultLocations={employee.locations ?? (employee.location ? [employee.location] : [])}
                     options={locationOptions}
                   />
                 </div>

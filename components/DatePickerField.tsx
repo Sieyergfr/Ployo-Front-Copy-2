@@ -1,7 +1,7 @@
 "use client";
 
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 const monthLabels = [
   "Januar",
@@ -116,7 +116,9 @@ export default function DatePickerField({
     () => visibleMonth.getFullYear() - 5,
   );
   const [isOpen, setIsOpen] = useState(false);
+  const [openUpward, setOpenUpward] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const selectedValue = selectedDate ? dateToInputValue(selectedDate) : "";
   const selectedLabel = selectedDate ? dateToDisplayValue(selectedDate) : placeholder;
   const calendarDays = useMemo(() => {
@@ -156,6 +158,19 @@ export default function DatePickerField({
 
     setYearsWindowStart((current) => current + direction * YEARS_WINDOW_SIZE);
   }
+
+  useLayoutEffect(() => {
+    if (!isOpen || !containerRef.current || !panelRef.current) {
+      return;
+    }
+
+    const containerRect = containerRef.current.getBoundingClientRect();
+    const panelHeight = panelRef.current.offsetHeight;
+    const spaceBelow = window.innerHeight - containerRect.bottom;
+    const spaceAbove = containerRect.top;
+
+    setOpenUpward(spaceBelow < panelHeight + 8 && spaceAbove > spaceBelow);
+  }, [isOpen, mode]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -213,7 +228,12 @@ export default function DatePickerField({
       </button>
 
       {isOpen && (
-        <div className="absolute left-0 top-[calc(100%+8px)] z-[60] w-[280px] rounded-xl border border-border bg-white p-3 shadow-[0_14px_40px_rgba(0,0,0,0.14)]">
+        <div
+          ref={panelRef}
+          className={`absolute left-0 z-[60] w-[280px] rounded-xl border border-border bg-white p-3 shadow-[0_14px_40px_rgba(0,0,0,0.14)] ${
+            openUpward ? "bottom-[calc(100%+8px)]" : "top-[calc(100%+8px)]"
+          }`}
+        >
           <div className="mb-3 flex items-center justify-between gap-2">
             <button
               type="button"

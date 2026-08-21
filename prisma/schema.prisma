@@ -60,6 +60,8 @@ enum EmployeeStatus {
   active
   vacation
   absent
+  /// Beschaeftigung beendet (ueber den Ausscheiden-Button gesetzt) - persistenter, autoritativer Zustand, nicht live aus Urlaub/Krankheit ableitbar.
+  former
 }
 
 enum SicknessStatus {
@@ -90,6 +92,7 @@ enum InfoRequestStatus {
   open
   uploaded
   review
+  cancelled
 }
 
 enum ReminderPriority {
@@ -125,6 +128,11 @@ enum WishFreeRequestStatus {
   rejected
 }
 
+enum ShiftWeekStatus {
+  draft
+  published
+}
+
 enum FileFolderStatus {
   active
   inactive
@@ -147,6 +155,7 @@ model User {
   pushSubscriptions   PushSubscription[]
   twoFactor           TwoFactor[]
   preference          UserPreference?
+  employeeNotifications TenantEmployeeNotification[]
 
   @@map("user")
 }
@@ -161,15 +170,22 @@ model User {
  * angewendet.
  */
 model UserPreference {
-  id         String   @id @default(cuid())
-  userId     String   @unique
-  language   String   @default("de")
-  timezone   String   @default("Europe/Berlin")
-  startPage  String   @default("overview")
-  dateFormat String   @default("dd.mm.yyyy")
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                   String   @id @default(cuid())
+  userId               String   @unique
+  language             String   @default("de")
+  timezone             String   @default("Europe/Berlin")
+  startPage            String   @default("overview")
+  dateFormat           String   @default("dd.mm.yyyy")
+  /// Persönliche Opt-out-Ebene oberhalb der mandantenweiten Alerts
+  /// (TenantSettings.absenceAlerts/shiftAlerts) — steuert, ob DIESER Nutzer
+  /// Urlaubs-Entscheidungs- bzw. Schichtänderungs-Benachrichtigungen (E-Mail
+  /// + In-App) erhält. Für die Mitarbeiter-App (Profil-Screen).
+  notifyVacationEvents Boolean  @default(true)
+  notifyShiftEvents    Boolean  @default(true)
+  pushEnabled          Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 /**
@@ -306,6 +322,7 @@ model Tenant {
   wishFreeRequests         TenantWishFreeRequest[]
   shifts                   TenantShift[]
   shiftTemplates           TenantShiftTemplate[]
+  shiftWeeks               TenantShiftWeek[]
   files                    TenantFile[]
   fileFolders              TenantFileFolder[]
   reminders                TenantReminder[]
@@ -317,6 +334,7 @@ model Tenant {
   locationActivities       TenantLocationActivity[]
   infoRequests             TenantEmployeeInfoRequest[]
   employeeTimeline         TenantEmployeeTimeline[]
+  employeeNotifications    TenantEmployeeNotification[]
   settings                 TenantSettings?
 }
 
@@ -366,6 +384,7 @@ model TenantSettings {
   shiftPresetsJson       Json     @default("[]")
   shiftMinStaffing       Int      @default(3)
   shiftBreakRule         String   @default("30-6")
+  defaultOpeningHoursJson Json    @default("[]")
   employeeNumberRequired Boolean  @default(true)
   employeeNumberPrefix   String   @default("MA-")
   employeeNumberSuffix   String   @default("")
@@ -498,6 +517,7 @@ model TenantLocation {
   activeToday        Int                      @default(0)
   shiftCount         Int                      @default(0)
   openPositions      Int                      @default(0)
+  openingHoursJson   Json                     @default("[]")
   utilization        String                   @default("0%")
   utilizationCaption String                   @default("")
   status             LocationStatus           @default(active)
@@ -506,11 +526,17 @@ model TenantLocation {
   leadName           String                   @default("Keine Leitung")
   leadPhone          String                   @default("")
   leadEmail          String                   @default("")
+  leadEmployeeId     String?
   createdAt          DateTime                 @default(now())
   updatedAt          DateTime                 @updatedAt
   tenantId           String
   address            Address?                 @relation("TenantLocationAddress", fields: [addressId], references: [id], onDelete: SetNull)
   tenant             Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  /// Echte Fremdschlüssel-Referenz auf die Standortleitung (statt reinem
+  /// Namensabgleich) — `leadName`/`leadInitials`/`leadPhone`/`leadEmail`
+  /// bleiben als Anzeige-Schnappschuss bestehen und werden beim Speichern
+  /// aus diesem Mitarbeiter aufgefrischt.
+  leadEmployee       TenantEmployee?          @relation("TenantLocationLead", fields: [leadEmployeeId], references: [id], onDelete: SetNull)
   shifts             TenantShift[]
   storageFiles       TenantFile[]
   storageFileFolders TenantFileFolder[]
@@ -519,6 +545,7 @@ model TenantLocation {
 
   @@unique([tenantId, key])
   @@index([tenantId])
+  @@index([leadEmployeeId])
 }
 
 /**
@@ -574,6 +601,7 @@ model TenantEmployee {
   team                  String                         @default("")
   role                  String                         @default("")
   startDate             String                         @default("")
+  endDate               String                         @default("")
   contract              String                         @default("Unbefristet")
   weeklyHours           String                         @default("")
   tenure                String                         @default("")
@@ -602,6 +630,7 @@ model TenantEmployee {
   infoRequests          TenantEmployeeInfoRequest[]
   timeline              TenantEmployeeTimeline[]
   contractDetails       TenantEmployeeContractDetails?
+  locationsLed          TenantLocation[]               @relation("TenantLocationLead")
 
   @@unique([tenantId, key])
   @@unique([tenantId, employeeNumber])
@@ -613,6 +642,7 @@ model TenantSicknessReport {
   id                String         @id @default(cuid())
   tenantId          String
   employeeId        String
+  attachmentFileId  String?
   startDate         DateTime
   endDate           DateTime?
   status            SicknessStatus @default(open)
@@ -626,10 +656,39 @@ model TenantSicknessReport {
   updatedAt         DateTime       @updatedAt
   tenant            Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   employee          TenantEmployee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  attachmentFile    TenantFile?    @relation(fields: [attachmentFileId], references: [id], onDelete: SetNull)
 
   @@index([tenantId, status])
   @@index([tenantId, startDate])
   @@index([employeeId])
+}
+
+/**
+ * Persistierte In-App-Benachrichtigungen für den eingeloggten Mitarbeiter
+ * (Mobile-App "Benachrichtigungen"-Screen) — anders als der berechnete,
+ * admin-seitige `/api/me/notifications`-Feed (dort keine Persistenz, kein
+ * Read-Status) sind das echte Zeilen mit `read`-Status, erzeugt über
+ * `dispatchNotification` (lib/notifications/dispatch.ts) als dritter Kanal
+ * neben E-Mail und Push.
+ */
+model TenantEmployeeNotification {
+  id         String    @id @default(cuid())
+  tenantId   String
+  userId     String
+  category   String
+  title      String
+  detail     String
+  read       Boolean   @default(false)
+  readAt     DateTime?
+  createdAt  DateTime  @default(now())
+  /// Optionale Referenz fuers Deep-Linking (z.B. "info-request" + die jeweilige ID) - leer, wenn die Benachrichtigung auf keine konkrete Entitaet zeigt.
+  entityType String    @default("")
+  entityId   String    @default("")
+  tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, userId, read])
+  @@index([tenantId, userId, createdAt])
 }
 
 model TenantAuditLog {
@@ -698,6 +757,8 @@ model TenantFile {
   versions             TenantFile[]            @relation("TenantFileVersions")
   employeeContract     TenantEmployeeContract?
   payrollStatement     TenantPayrollStatement?
+  sicknessAttachments  TenantSicknessReport[]
+  infoRequestResponse  TenantEmployeeInfoRequest?
 
   @@index([tenantId, status])
   @@index([tenantId, folderSlug])
@@ -759,6 +820,7 @@ model TenantEmployeeContractDetails {
   workLocation        String         @default("")
   parties             String         @default("")
   compensation        String         @default("")
+  compensationGross   String         @default("")
   workingTime         String         @default("")
   vacation            String         @default("")
   noticePeriod        String         @default("")
@@ -775,19 +837,23 @@ model TenantEmployeeContractDetails {
 }
 
 model TenantEmployeeInfoRequest {
-  id            String            @id @default(cuid())
-  title         String
-  message       String            @default("")
-  requestedBy   String
-  dueAt         DateTime?
-  fileRequested Boolean           @default(false)
-  status        InfoRequestStatus @default(open)
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt
-  tenantId      String
-  employeeId    String
-  tenant        Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  employee      TenantEmployee    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  id              String            @id @default(cuid())
+  title           String
+  message         String            @default("")
+  requestedBy     String
+  dueAt           DateTime?
+  fileRequested   Boolean           @default(false)
+  status          InfoRequestStatus @default(open)
+  responseMessage String            @default("")
+  respondedAt     DateTime?
+  responseFileId  String?           @unique
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  tenantId        String
+  employeeId      String
+  tenant          Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee        TenantEmployee    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  responseFile    TenantFile?       @relation(fields: [responseFileId], references: [id], onDelete: SetNull)
 
   @@index([tenantId, employeeId, status])
   @@index([employeeId, createdAt])
@@ -844,6 +910,7 @@ model TenantFileFolder {
   ownerName  String             @default("HR")
   status     FileFolderStatus   @default(active)
   locked     Boolean            @default(false)
+  pinHash    String?
   createdAt  DateTime           @default(now())
   updatedAt  DateTime           @updatedAt
   tenant     Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -929,6 +996,27 @@ model TenantShiftTemplate {
   tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, name])
+  @@index([tenantId])
+}
+
+/**
+ * Veröffentlichungsstatus einer Planungswoche. Fehlt die Zeile für ein
+ * (tenantId, year, week), gilt die Woche implizit als Entwurf — es wird
+ * keine Zeile pro Woche vorab angelegt, nur beim ersten Veröffentlichen.
+ */
+model TenantShiftWeek {
+  id          String          @id @default(cuid())
+  tenantId    String
+  year        Int
+  week        Int
+  status      ShiftWeekStatus @default(draft)
+  publishedAt DateTime?
+  publishedBy String          @default("")
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  tenant      Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, year, week])
   @@index([tenantId])
 }
 

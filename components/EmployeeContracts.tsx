@@ -9,9 +9,9 @@ import FormSubmitButton from "@/components/FormSubmitButton";
 import DatePickerField from "@/components/DatePickerField";
 import { useUniversalPopup } from "@/components/UniversalPopup";
 import type { ContractStatus } from "@/lib/contract-service";
-import { Eye, FilePlus2, FileText, Power, XCircle } from "lucide-react";
+import { Eye, FilePlus2, FileText, FileUp, Power, XCircle } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 
 export type EmployeeContractItem = {
   id: string;
@@ -63,6 +63,7 @@ function NewContractForm({ tenant, employeeId, employeeHandle }: {
 }) {
   const t = useTranslations("EmployeeContracts");
   const statuses = getStatuses(t);
+  const [fileName, setFileName] = useState("");
 
   return (
     <form action={createEmployeeContractAction} className="grid gap-4 sm:grid-cols-2">
@@ -80,7 +81,28 @@ function NewContractForm({ tenant, employeeId, employeeHandle }: {
       <label className="field"><span className="label">{t("vacationDays")}</span><input className="input" type="number" min="0" name="vacationDays" /></label>
       <label className="field"><span className="label">{t("probationEndDate")}</span><DatePickerField id="contract-probation-end-date" name="probationEndDate" placeholder={t("optionalPlaceholder")} /></label>
       <label className="field"><span className="label">{t("noticePeriod")}</span><input className="input" name="noticePeriod" /></label>
-      <label className="field sm:col-span-2"><span className="label">{t("contractPdf")}</span><input className="input py-2" type="file" name="contractFile" accept="application/pdf,.pdf" required /><span className="mt-1 text-[11px] text-muted">{t("contractPdfHint")}</span></label>
+      <div className="field sm:col-span-2">
+        <span className="label">{t("contractPdf")}</span>
+        <label
+          htmlFor="new-contract-file"
+          className="flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-border bg-bg px-4 py-6 text-center transition-colors hover:border-muted"
+        >
+          <FileUp size={22} className="mb-2 text-muted-2" />
+          <span className="text-[13px] font-semibold text-ink">{t("contractPdf")}</span>
+          <span className="mt-1 max-w-full truncate text-[11.5px] text-muted">
+            {fileName || t("contractPdfHint")}
+          </span>
+        </label>
+        <input
+          id="new-contract-file"
+          className="sr-only"
+          type="file"
+          name="contractFile"
+          accept="application/pdf,.pdf"
+          required
+          onChange={(event) => setFileName(event.currentTarget.files?.[0]?.name ?? "")}
+        />
+      </div>
       <label className="field sm:col-span-2"><span className="label">{t("note")}</span><textarea className="input min-h-20 py-3" name="notes" /></label>
       <div className="sm:col-span-2 flex justify-end border-t border-border-soft pt-4"><FormSubmitButton Icon={FilePlus2} pendingLabel={t("creatingContract")}>{t("createContract")}</FormSubmitButton></div>
     </form>

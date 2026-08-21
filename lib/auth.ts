@@ -1,6 +1,7 @@
 import { betterAuth } from "better-auth";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import { twoFactor } from "better-auth/plugins";
+import { expo } from "@better-auth/expo";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { nextCookies } from "better-auth/next-js";
 import { importPKCS8, SignJWT } from "jose";
@@ -116,6 +117,20 @@ export const auth = betterAuth({
   trustedOrigins: [
     ...developmentOrigins,
     "https://appleid.apple.com",
+    // Deep-Link-Schema der Mobile-App (Expo `app.json` -> expo.scheme).
+    // Muss bei Änderung des Schemas hier mitgezogen werden.
+    "ployo://",
+    // Expo Go im Entwicklungsbetrieb sendet z. B. "exp://192.168.x.x:8081"
+    // als Origin. Das expo()-Plugin würde "exp://" selbst nur unter
+    // NODE_ENV=development automatisch vertrauen — dieses Deployment läuft
+    // aber über `next start`, das NODE_ENV unabhängig von der Umgebung fest
+    // auf "production" setzt, weshalb dieser Automatismus hier nie greift.
+    // Explizit + unconditional statt env-abhängig: ein Browser kann einen
+    // Origin-Header mit einem Nicht-http(s)-Schema wie "exp://" grundsätzlich
+    // nie gültig setzen (das ist allein der Netzwerk-Stack des jeweiligen
+    // Clients), weshalb dieser Eintrag kein CSRF-Risiko für die Web-App
+    // öffnet — nur echte Expo-Go-Clients können ihn je senden.
+    "exp://",
     ...configuredTrustedOrigins,
   ],
   database: prismaAdapter(prisma, {
@@ -249,6 +264,12 @@ export const auth = betterAuth({
     twoFactor({
       issuer: "Ployo",
     }),
+    // Erlaubt der Mobile-App (kein Browser, keine "trusted origin" im
+    // klassischen Sinn), sich über das App-Schema zu authentifizieren:
+    // schreibt den expo-origin-Header auf origin um (Origin-Check oben)
+    // und hängt bei OAuth/Magic-Link/Verify-Redirects das Session-Cookie
+    // an den Deep Link an, damit der native Client es abgreifen kann.
+    expo(),
     nextCookies(),
   ],
 });

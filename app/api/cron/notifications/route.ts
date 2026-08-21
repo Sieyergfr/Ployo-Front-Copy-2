@@ -90,6 +90,8 @@ async function handleNotifications(request: Request, requestId: string) {
           subject: `${urgent.length} fällige Erinnerung(en) bei ${tenant.name}`,
           text: `Diese Woche fällige Erinnerungen bei ${tenant.name}:\n\n${textLines}`,
           html: `<p style="font-size:14px;">Diese Woche fällige Erinnerungen bei ${tenant.name}:</p><ul style="font-size:14px;">${htmlLines}</ul>`,
+          tenantId: tenant.id,
+          category: "system",
         }),
       ),
     );

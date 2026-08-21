@@ -5,7 +5,9 @@ import {
   createTenantShift,
   deleteShiftTemplate,
   deleteTenantShift,
+  publishShiftWeek,
   saveShiftTemplateFromWeek,
+  unpublishShiftWeek,
   updateShiftTemplate,
   updateTenantShift,
 } from "@/lib/shift-service";
@@ -75,7 +77,38 @@ export async function updateShiftSettingsAction(formData: FormData) {
     minStaffing: formString(formData, "minStaffing"),
     breakRule: formString(formData, "breakRule"),
     presetsJson: formString(formData, "presets", "[]"),
+    defaultOpeningHoursJson: formString(formData, "defaultOpeningHours", "[]"),
   });
+
+  revalidateShiftViews(formData, tenant);
+  redirect(redirectPath(formData, tenant));
+}
+
+export async function publishShiftWeekAction(formData: FormData) {
+  const tenant = formString(formData, "tenant");
+  const year = Number.parseInt(formString(formData, "year"), 10);
+  const week = Number.parseInt(formString(formData, "week"), 10);
+
+  if (!tenant || !year || !week) {
+    throw new Error("Schichtplan konnte nicht veröffentlicht werden.");
+  }
+
+  await publishShiftWeek({ tenantSlug: tenant, year, week });
+
+  revalidateShiftViews(formData, tenant);
+  redirect(redirectPath(formData, tenant));
+}
+
+export async function unpublishShiftWeekAction(formData: FormData) {
+  const tenant = formString(formData, "tenant");
+  const year = Number.parseInt(formString(formData, "year"), 10);
+  const week = Number.parseInt(formString(formData, "week"), 10);
+
+  if (!tenant || !year || !week) {
+    throw new Error("Schichtplan konnte nicht auf Entwurf zurückgesetzt werden.");
+  }
+
+  await unpublishShiftWeek({ tenantSlug: tenant, year, week });
 
   revalidateShiftViews(formData, tenant);
   redirect(redirectPath(formData, tenant));

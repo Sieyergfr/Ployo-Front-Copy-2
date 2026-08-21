@@ -6,8 +6,14 @@ import {
   softDeleteTenantFile,
   uploadTenantFile,
   uploadTenantFileVersion,
+  verifyTenantFileFolderPin,
   type FileOwnerType,
 } from "@/lib/storage/storage.service";
+import { markFolderUnlocked } from "@/lib/folder-pin";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { auth } from "@/lib/auth";
+import { type ActionState } from "@/lib/action-state";
+import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -118,6 +124,7 @@ export async function createHrFolderAction(formData: FormData) {
     parentPath,
     ownerName: formString(formData, "ownerName"),
     locked: formData.get("locked") === "on",
+    pin: formString(formData, "pin"),
   });
 
   revalidatePath(filesPath(tenant));
@@ -131,6 +138,45 @@ export async function createHrFolderAction(formData: FormData) {
     revalidatePath(`/u/${tenant}/teams/${ownerId}`);
   }
   revalidatePath(returnPath);
+  redirect(returnPath);
+}
+
+export async function verifyFolderPinAction(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const tenant = formString(formData, "tenant");
+  const folderPath = formString(formData, "folderPath");
+  const pin = formString(formData, "pin");
+  const returnPath = formString(formData, "returnPath") || filesPath(tenant);
+
+  if (!tenant || !folderPath || !/^\d{6}$/.test(pin)) {
+    return { error: "Bitte die 6-stellige PIN eingeben." };
+  }
+
+  const session = await auth.api.getSession({ headers: await headers() });
+
+  if (!session?.user?.id) {
+    return { error: "Nicht angemeldet." };
+  }
+
+  const limit = await checkRateLimit({
+    key: `folder-pin:${session.user.id}:${tenant}:${folderPath}`,
+    limit: 10,
+    windowSeconds: 600,
+  });
+
+  if (!limit.allowed) {
+    return { error: "Zu viele Versuche. Bitte später erneut probieren." };
+  }
+
+  const isValid = await verifyTenantFileFolderPin({ tenantSlug: tenant, folderPath, pin });
+
+  if (!isValid) {
+    return { error: "Falsche PIN." };
+  }
+
+  await markFolderUnlocked(tenant, folderPath);
   redirect(returnPath);
 }
 

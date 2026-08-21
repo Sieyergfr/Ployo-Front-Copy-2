@@ -149,6 +149,7 @@ export async function registerAndAcceptInvitationAction(formData: FormData) {
   const lastName = formString(formData, "lastName");
   const password = String(formData.get("password") ?? "");
   const passwordRepeat = String(formData.get("password_repeat") ?? "");
+  const termsAccepted = formData.get("terms") === "on";
 
   if (!token) {
     redirect("/login");
@@ -164,6 +165,10 @@ export async function registerAndAcceptInvitationAction(formData: FormData) {
     redirect(invitePath(token, "password_mismatch"));
   }
 
+  if (!termsAccepted) {
+    redirect(invitePath(token, "terms_required"));
+  }
+
   const name =
     `${firstName} ${lastName}`.trim() || invitation.email.split("@")[0];
   const requestHeaders = await headers();
@@ -175,6 +180,8 @@ export async function registerAndAcceptInvitationAction(formData: FormData) {
         password,
         name,
         callbackURL: invitePath(token),
+        // @ts-expect-error – zusätzliches Feld, wird im auth.ts-Hook geprüft
+        terms: termsAccepted,
       },
       headers: requestHeaders,
     });

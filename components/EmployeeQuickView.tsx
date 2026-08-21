@@ -2,7 +2,7 @@
 
 import { DataTableStatus } from "@/components/DataTable";
 import { employeeStatusConfig, type Employee } from "@/lib/employees";
-import { AlertTriangle, Eye, FileText, Phone, X } from "lucide-react";
+import { AlertTriangle, CalendarClock, Eye, FileText, Phone, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useState } from "react";
@@ -16,7 +16,9 @@ export default function EmployeeQuickView({
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const status = employeeStatusConfig[employee.status];
-  const primaryEmergency = employee.emergencyContacts[0];
+  const primaryEmergency =
+    employee.emergencyContacts.find((contact) => contact.isPrimary) ??
+    employee.emergencyContacts[0];
   const t = useTranslations("EmployeeQuickView");
 
   return (
@@ -114,6 +116,35 @@ export default function EmployeeQuickView({
                   </div>
                 </div>
               )}
+
+              <div className="rounded-xl border border-border bg-white p-4">
+                <div className="mb-3 flex items-center gap-2">
+                  <CalendarClock size={15} className="text-muted" />
+                  <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-muted">
+                    {t("upcomingShifts")}
+                  </span>
+                </div>
+                {employee.shifts.length === 0 ? (
+                  <p className="m-0 text-[12.5px] text-muted">{t("noUpcomingShifts")}</p>
+                ) : (
+                  employee.shifts.slice(0, 3).map((shift, index) => (
+                    <div
+                      key={`${shift.day}-${index}`}
+                      className="flex items-center gap-3 border-t border-border-soft py-2 first:border-t-0 first:pt-0"
+                    >
+                      <span className="w-7 shrink-0 font-mono text-[11px] font-semibold text-ink">
+                        {shift.day}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink">
+                        {shift.label}
+                      </span>
+                      <span className="shrink-0 font-mono text-[11px] text-muted">
+                        {shift.time}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
 
               <div className="rounded-xl border border-border bg-white p-4">
                 <div className="mb-3 flex items-center gap-2">

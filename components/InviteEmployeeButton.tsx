@@ -6,6 +6,7 @@ import DatePickerField from "@/components/DatePickerField";
 import FormSubmitButton from "@/components/FormSubmitButton";
 import { FieldErrors, FormErrorBanner } from "@/components/FormFeedback";
 import { useUniversalPopup } from "@/components/UniversalPopup";
+import { LocationMultiSelectDropdown } from "@/components/TeamEditControls";
 import type { ActionState } from "@/lib/action-state";
 import { Plus, Send } from "lucide-react";
 import { useTranslations } from "next-intl";
@@ -17,7 +18,7 @@ type InviteEmployeeButtonProps = {
   locations: string[];
   permissionRoles: string[];
   teams: string[];
-  employeeNumberRequired: boolean;
+  employeeNumberPreview: string;
 };
 
 function InviteEmployeeForm({
@@ -25,7 +26,7 @@ function InviteEmployeeForm({
   locations,
   permissionRoles,
   teams,
-  employeeNumberRequired,
+  employeeNumberPreview,
   onDone,
 }: InviteEmployeeButtonProps & { onDone: () => void }) {
   const [state, formAction] = useActionState(createEmployeeAction, initialState);
@@ -79,26 +80,7 @@ function InviteEmployeeForm({
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <div className="field">
-          <label htmlFor="invite-location" className="label">
-            {t("location")}
-          </label>
-          <select
-            id="invite-location"
-            name="location"
-            className="input cursor-pointer bg-bg"
-            defaultValue=""
-          >
-            <option value="" disabled>
-              {t("select")}
-            </option>
-            {locations.map((location) => (
-              <option key={location} value={location}>
-                {location}
-              </option>
-            ))}
-          </select>
-        </div>
+        <LocationMultiSelectDropdown defaultLocations={[]} options={locations} />
 
         <div className="field">
           <label htmlFor="invite-team" className="label">
@@ -169,19 +151,17 @@ function InviteEmployeeForm({
 
         <div className="field">
           <label htmlFor="invite-employee-number" className="label">
-            {employeeNumberRequired ? t("employeeNumber") : t("employeeNumberOptional")}
+            {t("employeeNumber")}
           </label>
           <input
             id="invite-employee-number"
             name="employeeNumber"
-            className="input input-mono"
-            placeholder={
-              employeeNumberRequired
-                ? t("employeeNumberPlaceholder")
-                : t("employeeNumberAutoPlaceholder")
-            }
-            required={employeeNumberRequired}
+            className="input input-mono bg-bg text-muted-2"
+            value={employeeNumberPreview}
+            readOnly
+            aria-readonly="true"
           />
+          <p className="m-0 text-[11px] text-muted">{t("employeeNumberAutoHint")}</p>
         </div>
       </div>
 

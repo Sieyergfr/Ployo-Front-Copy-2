@@ -5,6 +5,7 @@ import { isEmailConfigured, sendInvitationEmail } from "@/lib/email";
 import { buildInvitationUrl } from "@/lib/invitation-service";
 import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
+import { parseOpeningHoursDays } from "@/lib/opening-hours";
 import { parseShiftPresets } from "@/lib/shift-presets";
 import {
   isReservedTenantSlug,
@@ -52,14 +53,22 @@ function normalizeInt(value: string | undefined, fallback: number) {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
 }
 
-// Muss mit den <option>-Werten in components/Navigation.tsx übereinstimmen.
-const digestTimeOptions = new Set(["monday-0800", "friday-1600", "disabled"]);
 const auditRetentionMonthOptions = new Set([12, 24, 60]);
+
+// "<wochentag>-<HHMM>", z. B. "monday-0800" — Tag und Uhrzeit sind frei
+// wählbar (siehe lib/notifications/digest-schedule.ts, das jeden Wochentag
+// und jede Uhrzeit unterstützt), nur das Format muss stimmen.
+const digestWeekdayPattern =
+  /^(sunday|monday|tuesday|wednesday|thursday|friday|saturday)-([01]\d|2[0-3])([0-5]\d)$/;
 
 function normalizeDigestTime(value: string | undefined) {
   const trimmed = value?.trim() ?? "";
 
-  return digestTimeOptions.has(trimmed) ? trimmed : "monday-0800";
+  if (trimmed === "disabled" || digestWeekdayPattern.test(trimmed)) {
+    return trimmed;
+  }
+
+  return "monday-0800";
 }
 
 function normalizeAuditRetentionMonths(value: string | undefined) {
@@ -123,6 +132,7 @@ export async function updateTenantShiftSettings(input: {
   minStaffing?: string;
   breakRule?: string;
   presetsJson?: string;
+  defaultOpeningHoursJson?: string;
 }) {
   const access = await requireSettingsManager(input.tenantSlug);
 
@@ -138,6 +148,16 @@ export async function updateTenantShiftSettings(input: {
 
   const presets = parseShiftPresets(rawPresets);
 
+  let rawOpeningHours: unknown = [];
+
+  try {
+    rawOpeningHours = JSON.parse(input.defaultOpeningHoursJson ?? "[]");
+  } catch {
+    rawOpeningHours = [];
+  }
+
+  const defaultOpeningHours = parseOpeningHoursDays(rawOpeningHours);
+
   return prisma.tenantSettings.update({
     where: { tenantId: access.tenantId },
     data: {
@@ -145,6 +165,7 @@ export async function updateTenantShiftSettings(input: {
       shiftMinStaffing: normalizeInt(input.minStaffing, 3),
       shiftBreakRule: normalizeBreakRule(input.breakRule),
       shiftPresetsJson: presets,
+      defaultOpeningHoursJson: defaultOpeningHours,
     },
   });
 }

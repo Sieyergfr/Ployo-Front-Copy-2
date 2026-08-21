@@ -8,10 +8,10 @@ import {
   requireTenantMembership,
   withAccessRedirect,
 } from "@/lib/tenant-access";
-import { employeeStatusConfig } from "@/lib/employees";
 import { getEmployeesForTenant } from "@/lib/employee-service";
 import { getRecentTenantFiles } from "@/lib/files-server";
 import { getLocationsForTenant } from "@/lib/location-service";
+import { weekdayFromDate, type OpeningHoursWeekday } from "@/lib/opening-hours";
 import { hasPermissionLevel } from "@/lib/roles";
 import { getRemindersForTenant } from "@/lib/reminders";
 import { getISOWeekFromDate, getShiftPlanForTenant } from "@/lib/shift-service";
@@ -26,7 +26,7 @@ import {
   FileText,
   MapPin,
   Plus,
-  UserPlus,
+  UsersRound,
 } from "lucide-react";
 import { headers } from "next/headers";
 import Link from "next/link";
@@ -179,14 +179,36 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
     memberships?.find((membership) => membership.tenant.slug === tenant)?.tenant
       .name ?? tenant;
 
+  // `employee.status` wird nirgends automatisch synchron gehalten (bleibt
+  // z. B. "active", während jemand im Urlaub oder krank ist) — daher live
+  // aus genehmigten Urlaubsanträgen (heute im Zeitraum) und der bereits
+  // korrekt berechneten "aktuell krank"-Liste ableiten statt aus dem Feld.
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const employeeIdsOnVacationToday = new Set(
+    vacationList
+      .filter(
+        (request) =>
+          request.status === "approved" &&
+          !!request.startDateIso &&
+          !!request.endDateIso &&
+          request.startDateIso <= todayIso &&
+          request.endDateIso >= todayIso,
+      )
+      .map((request) => request.employeeId),
+  );
+  const employeeIdsAbsentToday = new Set(
+    currentSickness.map((entry) => entry.employeeId),
+  );
+  const vacationEmployees = employeeList.filter((employee) =>
+    employeeIdsOnVacationToday.has(employee.dbId ?? employee.id),
+  );
+  const absentEmployees = employeeList.filter((employee) =>
+    employeeIdsAbsentToday.has(employee.dbId ?? employee.id),
+  );
   const activeEmployees = employeeList.filter(
-    (employee) => employee.status === "active",
-  );
-  const vacationEmployees = employeeList.filter(
-    (employee) => employee.status === "vacation",
-  );
-  const absentEmployees = employeeList.filter(
-    (employee) => employee.status === "absent",
+    (employee) =>
+      !employeeIdsOnVacationToday.has(employee.dbId ?? employee.id) &&
+      !employeeIdsAbsentToday.has(employee.dbId ?? employee.id),
   );
   const pendingVacations = vacationList.filter(
     (request) => request.status === "pending",
@@ -202,6 +224,27 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
   const activeLocations = locationList.filter(
     (location) => location.status === "active",
   );
+  // Ein Wochentag gilt als "offen" für die "Schichtlage"-Karte, wenn
+  // mindestens ein aktiver Standort an diesem Tag geöffnet hat. Ohne
+  // Standorte (noch keine angelegt) keine Einschränkung — sonst würde die
+  // Karte fälschlich jeden Tag als geschlossen zeigen.
+  const openWeekdays = new Set<OpeningHoursWeekday>();
+
+  for (const location of activeLocations) {
+    for (const day of location.openingHours) {
+      if (day.mode !== "closed") {
+        openWeekdays.add(day.weekday);
+      }
+    }
+  }
+
+  function isClosedDay(dayId: string) {
+    if (activeLocations.length === 0) {
+      return false;
+    }
+
+    return !openWeekdays.has(weekdayFromDate(new Date(`${dayId}T00:00:00Z`)));
+  }
   const activeToday = locationList.reduce(
     (total, location) => total + location.activeToday,
     0,
@@ -283,8 +326,8 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
       >
         {canInviteEmployees && (
           <Link href={`${baseHref}/employees`} className="btn btn-primary">
-            <UserPlus size={15} />
-            Mitarbeiter einladen
+            <UsersRound size={15} />
+            Mitarbeiter
           </Link>
         )}
         <Link href={`${baseHref}/schichtplanung`} className="btn btn-secondary">
@@ -308,7 +351,7 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
           caption="melden Aktivität"
         />
         <MetricCard
-          label="Offene Freigaben"
+          label="Offene Anfragen"
           value={pendingVacations.length + urgentReminders.length}
           change={`${pendingVacations.length} Urlaub`}
           caption={`${urgentReminders.length} dringend`}
@@ -368,11 +411,14 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
                   const assignedCount = day.shifts.filter((shift) => shift.assignee).length;
                   const emptyCount = day.shifts.filter((shift) => !shift.assignee).length;
                   const hasConflict = day.shifts.some((shift) => shift.conflict);
+                  const closed = isClosedDay(day.id);
 
                   return (
                     <div
                       key={day.id}
-                      className="grid grid-cols-[54px_1fr_auto] items-center gap-3 rounded-[10px] border border-border-light bg-bg px-3 py-2.5"
+                      className={`grid grid-cols-[54px_1fr_auto] items-center gap-3 rounded-[10px] border border-border-light bg-bg px-3 py-2.5 ${
+                        closed ? "opacity-60" : ""
+                      }`}
                     >
                       <div>
                         <div className="font-mono text-[11px] font-semibold text-ink">
@@ -384,25 +430,31 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
                       </div>
                       <div className="min-w-0">
                         <div className="text-[12.5px] font-medium text-ink">
-                          {day.shifts.length === 0
-                            ? "Keine Schichten geplant"
-                            : `${assignedCount} besetzt · ${emptyCount} offen`}
+                          {closed
+                            ? "Kein Standort geöffnet"
+                            : day.shifts.length === 0
+                              ? "Keine Schichten geplant"
+                              : `${assignedCount} besetzt · ${emptyCount} offen`}
                         </div>
-                        <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-border">
-                          <div
-                            className={`h-full rounded-full ${
-                              hasConflict || emptyCount > 0 ? "bg-warning" : "bg-success"
-                            }`}
-                            style={{
-                              width:
-                                day.shifts.length === 0
-                                  ? "0%"
-                                  : `${Math.max(18, Math.round((assignedCount / day.shifts.length) * 100))}%`,
-                            }}
-                          />
-                        </div>
+                        {!closed && (
+                          <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-border">
+                            <div
+                              className={`h-full rounded-full ${
+                                hasConflict || emptyCount > 0 ? "bg-warning" : "bg-success"
+                              }`}
+                              style={{
+                                width:
+                                  day.shifts.length === 0
+                                    ? "0%"
+                                    : `${Math.max(18, Math.round((assignedCount / day.shifts.length) * 100))}%`,
+                              }}
+                            />
+                          </div>
+                        )}
                       </div>
-                      {hasConflict ? (
+                      {closed ? (
+                        <StatusPill>Geschlossen</StatusPill>
+                      ) : hasConflict ? (
                         <StatusPill>Konflikt</StatusPill>
                       ) : emptyCount > 0 ? (
                         <StatusPill>Offen</StatusPill>
@@ -511,10 +563,12 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
               ) : vacationEmployees.length + absentEmployees.length === 0 ? (
                 <EmptyHint>Alle Mitarbeiter sind im Dienst.</EmptyHint>
               ) : (
-                [...vacationEmployees, ...absentEmployees].slice(0, 5).map((employee) => {
-                  const status = employeeStatusConfig[employee.status];
-
-                  return (
+                [
+                  ...vacationEmployees.map((employee) => ({ employee, label: "Urlaub" })),
+                  ...absentEmployees.map((employee) => ({ employee, label: "Abwesend" })),
+                ]
+                  .slice(0, 5)
+                  .map(({ employee, label }) => (
                     <Link
                       key={employee.id}
                       href={`${baseHref}/employees/${employee.id}`}
@@ -529,10 +583,9 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
                           {employee.location} · {employee.team}
                         </span>
                       </span>
-                      <StatusPill>{status.label}</StatusPill>
+                      <StatusPill>{label}</StatusPill>
                     </Link>
-                  );
-                })
+                  ))
               )}
             </div>
           </DashboardCard>

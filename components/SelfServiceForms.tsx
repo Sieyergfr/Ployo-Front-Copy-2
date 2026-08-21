@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import {
   reportMySicknessAction,
   requestMyVacationAction,
@@ -159,8 +159,35 @@ export function MyProfileCompletionCard({
   completeness: ProfileCompleteness;
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
-  const [state, formAction] = useActionState(updateMyProfileAction, initialState);
+  const [state, formAction, isPending] = useActionState(updateMyProfileAction, initialState);
   const isComplete = completeness.percent >= 100;
+
+  // Bestätigung + Animation nach dem Speichern, statt kommentarlos einfach
+  // stehen zu bleiben: kurz "Gespeichert" zeigen, dabei zuklappen. Wird die
+  // Angabe dadurch vollständig, verschwindet die Karte danach ganz — bis
+  // dahin bleibt sie sichtbar, damit die Bestätigung nicht sofort
+  // wegspringt (siehe To-Do "Profil vervollständigen ... Bestätigung +
+  // Animation; Tab schließen bzw. bei Vollständigkeit ganz entfernen").
+  const [justSaved, setJustSaved] = useState(false);
+  const wasPending = useRef(false);
+
+  useEffect(() => {
+    if (wasPending.current && !isPending && !state.error) {
+      setJustSaved(true);
+      setIsExpanded(false);
+    }
+    wasPending.current = isPending;
+  }, [isPending, state]);
+
+  useEffect(() => {
+    if (!justSaved) return;
+    const timeout = setTimeout(() => setJustSaved(false), 2200);
+    return () => clearTimeout(timeout);
+  }, [justSaved]);
+
+  if (isComplete && !justSaved) {
+    return null;
+  }
 
   return (
     <section className="rounded-card border border-border bg-white px-6 py-[22px]">
@@ -182,10 +209,21 @@ export function MyProfileCompletionCard({
             <h2 className="font-display text-[16px] font-semibold tracking-[-0.3px] text-ink">
               Profil vervollständigen
             </h2>
-            <div className="mt-0.5 text-[12.5px] text-muted-2">
-              {isComplete
-                ? "Alle Angaben vollständig"
-                : `${completeness.filledCount} von ${completeness.totalCount} Angaben vollständig`}
+            <div
+              className={`mt-0.5 flex items-center gap-1.5 text-[12.5px] ${
+                justSaved ? "toast-card text-success" : "text-muted-2"
+              }`}
+            >
+              {justSaved ? (
+                <>
+                  <Check size={13} strokeWidth={2.5} />
+                  Gespeichert
+                </>
+              ) : isComplete ? (
+                "Alle Angaben vollständig"
+              ) : (
+                `${completeness.filledCount} von ${completeness.totalCount} Angaben vollständig`
+              )}
             </div>
           </div>
         </div>

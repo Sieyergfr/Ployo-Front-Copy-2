@@ -17,6 +17,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1089.0",
     "@aws-sdk/s3-request-presigner": "^3.1089.0",
+    "@better-auth/expo": "^1.6.27",
     "@prisma/client": "^6.19.3",
     "@sentry/nextjs": "^10.70.0",
     "better-auth": "^1.6.23",
