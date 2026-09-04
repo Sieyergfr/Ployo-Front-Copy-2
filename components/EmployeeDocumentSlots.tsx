@@ -15,8 +15,11 @@ import {
 } from "@/lib/employees";
 import { uploadAcceptAttribute } from "@/lib/upload-constraints";
 import { IdCard, Plus, Trash2, UploadCloud } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
+
+type T = ReturnType<typeof useTranslations>;
 
 /**
  * Strukturierte "Felder" für Ausweisdokumente/Zertifikate (siehe
@@ -44,15 +47,17 @@ export default function EmployeeDocumentSlots({
   files: EmployeeFile[];
   canManage: boolean;
 }) {
+  const t = useTranslations("EmployeeDocumentSlots");
+
   return (
     <section className="mb-3.5 overflow-hidden rounded-card border border-border bg-white">
       <div className="border-b border-border px-6 pt-5 pb-3.5">
         <h2 className="m-0 font-display text-[16px] font-semibold tracking-[-0.3px] text-ink">
-          Ausweisdokumente &amp; Zertifikate
+          {t("sectionTitle")}
         </h2>
         {canManage && (
           <p className="mt-1 mb-0 text-[11.5px] text-muted">
-            Dateien lassen sich auch per Drag &amp; Drop auf das jeweilige Feld ziehen.
+            {t("dragDropHint")}
           </p>
         )}
       </div>
@@ -68,6 +73,7 @@ export default function EmployeeDocumentSlots({
               employeeDocumentSlotFolders(slot).includes(file.folder),
             )}
             canManage={canManage}
+            t={t}
           />
         ))}
       </div>
@@ -82,6 +88,7 @@ function DocumentSlotCard({
   slot,
   files,
   canManage,
+  t,
 }: {
   tenant: string;
   employeeId: string;
@@ -89,6 +96,7 @@ function DocumentSlotCard({
   slot: (typeof EMPLOYEE_DOCUMENT_SLOTS)[number];
   files: EmployeeFile[];
   canManage: boolean;
+  t: T;
 }) {
   const router = useRouter();
   const { openPopup, closePopup } = useUniversalPopup();
@@ -137,7 +145,7 @@ function DocumentSlotCard({
         setError(
           uploadError instanceof Error
             ? uploadError.message
-            : "Datei konnte nicht hochgeladen werden.",
+            : t("uploadFailedDefault"),
         );
       }
     });
@@ -145,15 +153,15 @@ function DocumentSlotCard({
 
   const remove = (fileId: string, name: string) => {
     openPopup({
-      title: "Datei entfernen",
+      title: t("removeFileTitle"),
       content: (
         <div>
           <p className="m-0 text-[13px] leading-[1.55] text-muted-2">
-            {`"${name}" wird entfernt.`}
+            {t("removeFileDescription", { name })}
           </p>
           <div className="mt-5 flex justify-end gap-2.5 border-t border-border-soft pt-4">
             <button type="button" className="btn btn-secondary" onClick={closePopup}>
-              Abbrechen
+              {t("cancel")}
             </button>
             <button
               type="button"
@@ -174,7 +182,7 @@ function DocumentSlotCard({
                       setError(
                         deleteError instanceof Error
                           ? deleteError.message
-                          : "Datei konnte nicht entfernt werden.",
+                          : t("removeFailedDefault"),
                       );
                       return;
                     }
@@ -184,7 +192,7 @@ function DocumentSlotCard({
               }}
             >
               <Trash2 size={15} />
-              Entfernen
+              {t("remove")}
             </button>
           </div>
         </div>
@@ -227,7 +235,7 @@ function DocumentSlotCard({
       </div>
 
       {files.length === 0 ? (
-        <p className="text-[11.5px] text-muted">Keine Datei hinterlegt.</p>
+        <p className="text-[11.5px] text-muted">{t("noFileYet")}</p>
       ) : (
         <div className="flex flex-col gap-2">
           {files.map((file) => (
@@ -240,7 +248,7 @@ function DocumentSlotCard({
                 <div className="font-mono text-[10px] text-muted">
                   {file.updatedAt}
                   {file.hiddenFromEmployee && (
-                    <span className="text-danger"> {"·"} verborgen</span>
+                    <span className="text-danger"> {"·"} {t("hiddenSuffix")}</span>
                   )}
                 </div>
               </div>
@@ -262,8 +270,8 @@ function DocumentSlotCard({
                 <button
                   type="button"
                   className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[7px] border border-border bg-white text-muted transition-colors hover:border-danger hover:text-danger"
-                  title="Entfernen"
-                  aria-label={`${file.name} entfernen`}
+                  title={t("remove")}
+                  aria-label={t("removeAria", { name: file.name })}
                   onClick={() => remove(file.storageFileId!, file.name)}
                 >
                   <Trash2 size={13} />
@@ -294,12 +302,12 @@ function DocumentSlotCard({
           >
             <Plus size={12} />
             {isPending
-              ? "Wird hochgeladen..."
+              ? t("uploading")
               : files.length > 0
                 ? slot.multiple
-                  ? "Weitere Datei hinzufügen"
-                  : "Datei ersetzen"
-                : "Datei hochladen"}
+                  ? t("addAnotherFile")
+                  : t("replaceFile")
+                : t("uploadFile")}
           </button>
         </div>
       )}
@@ -313,7 +321,7 @@ function DocumentSlotCard({
       {isDragging && (
         <div className="pointer-events-none absolute inset-1 z-10 flex flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed border-ink/40 bg-white/90 text-[12px] font-medium text-ink">
           <UploadCloud size={18} />
-          Hier ablegen
+          {t("dropHere")}
         </div>
       )}
     </div>

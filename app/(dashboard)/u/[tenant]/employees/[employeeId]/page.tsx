@@ -562,6 +562,7 @@ export default async function EmployeeDetailPage({
   const { tab, edit, invited, folder } = await searchParams;
   const activeFolder = typeof folder === "string" ? folder : undefined;
   const t = await getTranslations("EmployeeDetail");
+  const tAddress = await getTranslations("AddressFields");
   const employee = await withAccessRedirect(tenant, () =>
     getEmployeeForTenant(tenant, employeeId),
   );
@@ -917,6 +918,7 @@ export default async function EmployeeDetailPage({
                         idPrefix="employee-private-address"
                         namePrefix="privateAddress"
                         defaults={employee.privateAddressFields}
+                        t={tAddress}
                       />
                     </div>
                   </fieldset>
@@ -1165,6 +1167,7 @@ export default async function EmployeeDetailPage({
                       namePrefix="address"
                       defaults={employee.addressFields}
                       className="grid gap-3"
+                      t={tAddress}
                     />
                   </div>
                   <LocationMultiSelectDropdown

@@ -1,29 +1,44 @@
 "use client";
 
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
-const monthLabels = [
-  "Januar",
-  "Februar",
-  "März",
-  "April",
-  "Mai",
-  "Juni",
-  "Juli",
-  "August",
-  "September",
-  "Oktober",
-  "November",
-  "Dezember",
-];
+type T = ReturnType<typeof useTranslations>;
+
+function getMonthLabels(t: T) {
+  return [
+    t("monthJanuary"),
+    t("monthFebruary"),
+    t("monthMarch"),
+    t("monthApril"),
+    t("monthMay"),
+    t("monthJune"),
+    t("monthJuly"),
+    t("monthAugust"),
+    t("monthSeptember"),
+    t("monthOctober"),
+    t("monthNovember"),
+    t("monthDecember"),
+  ];
+}
 
 // Fenstergröße der Jahres-Ansicht — analog zur 12er-Monatsraster, 3 Spalten x
 // 4 Zeilen, damit dieselben Grid-Klassen wie im Monats-Modus wiederverwendet
 // werden können.
 const YEARS_WINDOW_SIZE = 12;
 
-const weekdayLabels = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
+function getWeekdayLabels(t: T) {
+  return [
+    t("weekdayMon"),
+    t("weekdayTue"),
+    t("weekdayWed"),
+    t("weekdayThu"),
+    t("weekdayFri"),
+    t("weekdaySat"),
+    t("weekdaySun"),
+  ];
+}
 
 function dateToInputValue(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(
@@ -99,9 +114,13 @@ export default function DatePickerField({
   name,
   defaultValue,
   min,
-  placeholder = "Datum auswählen",
+  placeholder,
   className = "",
 }: DatePickerFieldProps) {
+  const t = useTranslations("DatePickerField");
+  const monthLabels = getMonthLabels(t);
+  const weekdayLabels = getWeekdayLabels(t);
+  const effectivePlaceholder = placeholder ?? t("selectDate");
   const today = useMemo(() => new Date(), []);
   const initialDate = useMemo(() => parseDateValue(defaultValue), [defaultValue]);
   const minDate = useMemo(() => parseDateValue(min), [min]);
@@ -120,7 +139,7 @@ export default function DatePickerField({
   const containerRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const selectedValue = selectedDate ? dateToInputValue(selectedDate) : "";
-  const selectedLabel = selectedDate ? dateToDisplayValue(selectedDate) : placeholder;
+  const selectedLabel = selectedDate ? dateToDisplayValue(selectedDate) : effectivePlaceholder;
   const calendarDays = useMemo(() => {
     const monthStart = new Date(
       visibleMonth.getFullYear(),
@@ -192,16 +211,16 @@ export default function DatePickerField({
 
   const prevAriaLabel =
     mode === "days"
-      ? "Vorheriger Monat"
+      ? t("prevMonth")
       : mode === "months"
-        ? "Vorheriges Jahr"
-        : "Vorherige Jahre";
+        ? t("prevYear")
+        : t("prevYears");
   const nextAriaLabel =
     mode === "days"
-      ? "Nächster Monat"
+      ? t("nextMonth")
       : mode === "months"
-        ? "Nächstes Jahr"
-        : "Nächste Jahre";
+        ? t("nextYear")
+        : t("nextYears");
 
   return (
     <div ref={containerRef} className={`relative ${className}`}>

@@ -7,6 +7,9 @@ import EmployeeSelector, {
 import FormSubmitButton from "@/components/FormSubmitButton";
 import { useUniversalPopup } from "@/components/UniversalPopup";
 import { Plus, UserPlus } from "lucide-react";
+import { useTranslations } from "next-intl";
+
+type T = ReturnType<typeof useTranslations>;
 
 /**
  * "Mitglieder anpassen" öffnete bisher den Bearbeitungsmodus der ganzen
@@ -21,6 +24,7 @@ function AddTeamMembersForm({
   defaultRole,
   employees,
   onDone,
+  t,
 }: {
   tenant: string;
   teamId: string;
@@ -28,6 +32,7 @@ function AddTeamMembersForm({
   defaultRole: string;
   employees: EmployeeSelectorOption[];
   onDone: () => void;
+  t: T;
 }) {
   return (
     <form action={addTeamMembersAction} className="flex flex-col gap-4">
@@ -37,11 +42,11 @@ function AddTeamMembersForm({
 
       {employees.length === 0 ? (
         <p className="m-0 text-[13px] text-muted">
-          Alle Mitarbeiter sind bereits in diesem Team.
+          {t("allMembersAlready")}
         </p>
       ) : (
         <EmployeeSelector
-          label="Mitarbeiter auswählen"
+          label={t("selectEmployees")}
           name="employees"
           mode="multi"
           options={employees}
@@ -50,7 +55,7 @@ function AddTeamMembersForm({
 
       <div className="field">
         <label htmlFor="team-members-role" className="label">
-          Rolle im Team
+          {t("roleInTeam")}
         </label>
         <input
           id="team-members-role"
@@ -62,10 +67,10 @@ function AddTeamMembersForm({
 
       <div className="mt-1 flex justify-end gap-2.5 border-t border-border-soft pt-4">
         <button type="button" className="btn btn-secondary" onClick={onDone}>
-          Abbrechen
+          {t("cancel")}
         </button>
-        <FormSubmitButton Icon={UserPlus} pendingLabel="Wird hinzugefügt...">
-          Hinzufügen
+        <FormSubmitButton Icon={UserPlus} pendingLabel={t("adding")}>
+          {t("add")}
         </FormSubmitButton>
       </div>
     </form>
@@ -88,6 +93,7 @@ export default function AddTeamMembersButton({
   /** "icon": kompaktes Plus neben einer Überschrift. */
   variant?: "button" | "icon";
 }) {
+  const t = useTranslations("AddTeamMembersButton");
   const { openPopup, closePopup } = useUniversalPopup();
 
   return (
@@ -98,11 +104,11 @@ export default function AddTeamMembersButton({
           ? "flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[8px] border border-border bg-white text-muted transition-colors hover:border-muted hover:text-ink"
           : "btn btn-secondary btn-sm"
       }
-      title="Mitglieder hinzufügen"
-      aria-label="Mitglieder hinzufügen"
+      title={t("addMembers")}
+      aria-label={t("addMembers")}
       onClick={() =>
         openPopup({
-          title: "Mitglieder hinzufügen",
+          title: t("addMembers"),
           content: (
             <AddTeamMembersForm
               tenant={tenant}
@@ -111,13 +117,14 @@ export default function AddTeamMembersButton({
               defaultRole={defaultRole}
               employees={employees}
               onDone={closePopup}
+              t={t}
             />
           ),
         })
       }
     >
       <Plus size={14} />
-      {variant === "icon" ? null : "Mitglieder hinzufügen"}
+      {variant === "icon" ? null : t("addMembers")}
     </button>
   );
 }

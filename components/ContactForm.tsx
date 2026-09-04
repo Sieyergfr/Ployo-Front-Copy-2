@@ -2,6 +2,7 @@
 
 import { FormErrorBanner } from "@/components/FormFeedback";
 import { MailCheck } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 /**
@@ -15,6 +16,7 @@ import { useState } from "react";
 const MIN_MESSAGE_LENGTH = 10;
 
 export default function ContactForm() {
+  const t = useTranslations("ContactForm");
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const [isPending, setIsPending] = useState(false);
@@ -24,11 +26,10 @@ export default function ContactForm() {
       <div className="rounded-[10px] border border-success/20 bg-success/5 px-4 py-4 text-[13.5px] text-ink">
         <div className="flex items-center gap-2 font-medium">
           <MailCheck size={16} strokeWidth={2} />
-          Nachricht verschickt
+          {t("messageSentTitle")}
         </div>
         <p className="mt-1.5 leading-[1.55] text-muted">
-          Vielen Dank — wir melden uns an der angegebenen Adresse, in der Regel
-          innerhalb eines Werktags.
+          {t("messageSentBody")}
         </p>
       </div>
     );
@@ -42,11 +43,11 @@ export default function ContactForm() {
       name: String(form.get("name") ?? "").trim(),
       email: String(form.get("email") ?? "").trim(),
       message: String(form.get("message") ?? "").trim(),
-      source: "Webseite (Kontakt)",
+      source: t("sourceLabel"),
     };
 
     if (payload.message.length < MIN_MESSAGE_LENGTH) {
-      setError("Bitte die Nachricht etwas ausführlicher formulieren.");
+      setError(t("messageTooShort"));
       return;
     }
 
@@ -63,13 +64,13 @@ export default function ContactForm() {
       if (!response.ok) {
         const body = (await response.json().catch(() => null)) as { error?: string } | null;
 
-        setError(body?.error ?? "Die Nachricht konnte nicht verschickt werden.");
+        setError(body?.error ?? t("sendFailedDefault"));
         return;
       }
 
       setSent(true);
     } catch {
-      setError("Keine Verbindung zum Server. Bitte später erneut versuchen.");
+      setError(t("noConnection"));
     } finally {
       setIsPending(false);
     }
@@ -79,13 +80,13 @@ export default function ContactForm() {
     <form className="flex flex-col gap-4" onSubmit={submit}>
       <div className="field">
         <label htmlFor="name" className="label">
-          Name
+          {t("nameLabel")}
         </label>
         <input
           id="name"
           name="name"
           className="input"
-          placeholder="Vor- und Nachname"
+          placeholder={t("namePlaceholder")}
           autoComplete="name"
           maxLength={120}
           required
@@ -94,14 +95,14 @@ export default function ContactForm() {
 
       <div className="field">
         <label htmlFor="email" className="label">
-          E-Mail-Adresse
+          {t("emailLabel")}
         </label>
         <input
           id="email"
           name="email"
           type="email"
           className="input"
-          placeholder="name@unternehmen.de"
+          placeholder={t("emailPlaceholder")}
           autoComplete="email"
           maxLength={200}
           required
@@ -110,13 +111,13 @@ export default function ContactForm() {
 
       <div className="field">
         <label htmlFor="message" className="label">
-          Nachricht
+          {t("messageLabel")}
         </label>
         <textarea
           id="message"
           name="message"
           className="input min-h-[140px] resize-y"
-          placeholder="Worum geht es?"
+          placeholder={t("messagePlaceholder")}
           maxLength={5000}
           required
         />
@@ -125,7 +126,7 @@ export default function ContactForm() {
       <FormErrorBanner message={error} />
 
       <button type="submit" className="btn btn-primary w-full" disabled={isPending}>
-        {isPending ? "Wird gesendet …" : "Nachricht senden"}
+        {isPending ? t("sending") : t("send")}
       </button>
     </form>
   );

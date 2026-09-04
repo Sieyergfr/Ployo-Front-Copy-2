@@ -1,16 +1,27 @@
 import { addressDefaults, type AddressInput } from "@/lib/address";
 import SelectOrOtherField from "@/components/SelectOrOtherField";
 
-const countryOptions = [
-  { value: "DE", label: "Deutschland" },
-  { value: "AT", label: "Österreich" },
-  { value: "CH", label: "Schweiz" },
-  { value: "NL", label: "Niederlande" },
-  { value: "BE", label: "Belgien" },
-  { value: "FR", label: "Frankreich" },
-  { value: "PL", label: "Polen" },
-  { value: "IT", label: "Italien" },
-];
+// Diese Datei hat bewusst kein "use client" und ruft next-intl nicht selbst
+// auf: sie wird sowohl direkt aus Server-Component-Seiten (employees/
+// [employeeId]/page.tsx, standorte/[locationId]/page.tsx) als auch aus
+// Client Components (CreateLocationButton.tsx, Navigation.tsx,
+// SelfServiceForms.tsx) heraus gerendert. `t` kommt deshalb als Prop vom
+// jeweiligen Aufrufer (Namespace "AddressFields", per useTranslations bzw.
+// getTranslations je nach Kontext geholt).
+type T = (key: string) => string;
+
+function getCountryOptions(t: T) {
+  return [
+    { value: "DE", label: t("countryGermany") },
+    { value: "AT", label: t("countryAustria") },
+    { value: "CH", label: t("countrySwitzerland") },
+    { value: "NL", label: t("countryNetherlands") },
+    { value: "BE", label: t("countryBelgium") },
+    { value: "FR", label: t("countryFrance") },
+    { value: "PL", label: t("countryPoland") },
+    { value: "IT", label: t("countryItaly") },
+  ];
+}
 
 type AddressFieldsProps = {
   idPrefix: string;
@@ -20,6 +31,7 @@ type AddressFieldsProps = {
   className?: string;
   /** Wenn die Felder außerhalb des `<form>`-Elements gerendert werden, koppelt dies sie per `form`-Attribut an. */
   formId?: string;
+  t: T;
 };
 
 function fieldName(prefix: string | undefined, name: string) {
@@ -37,8 +49,10 @@ export default function AddressFields({
   required = false,
   className = "grid gap-3 sm:grid-cols-2",
   formId,
+  t,
 }: AddressFieldsProps) {
   const values = addressDefaults(defaults);
+  const countryOptions = getCountryOptions(t);
 
   return (
     <div className={className}>
@@ -52,14 +66,14 @@ export default function AddressFields({
           form={formId}
           className="input bg-white"
           defaultValue={values.careOf}
-          placeholder="Optional"
+          placeholder={t("optional")}
           autoComplete="address-line2"
           maxLength={255}
         />
       </div>
       <div className="field">
         <label htmlFor={`${idPrefix}-street`} className="label">
-          Strasse
+          {t("streetLabel")}
         </label>
         <input
           id={`${idPrefix}-street`}
@@ -74,7 +88,7 @@ export default function AddressFields({
       </div>
       <div className="field">
         <label htmlFor={`${idPrefix}-house-number`} className="label">
-          Hausnummer
+          {t("houseNumberLabel")}
         </label>
         <input
           id={`${idPrefix}-house-number`}
@@ -89,7 +103,7 @@ export default function AddressFields({
       </div>
       <div className="field">
         <label htmlFor={`${idPrefix}-postal-code`} className="label">
-          Postleitzahl
+          {t("postalCodeLabel")}
         </label>
         <input
           id={`${idPrefix}-postal-code`}
@@ -104,7 +118,7 @@ export default function AddressFields({
       </div>
       <div className="field">
         <label htmlFor={`${idPrefix}-city`} className="label">
-          Stadt
+          {t("cityLabel")}
         </label>
         <input
           id={`${idPrefix}-city`}
@@ -119,7 +133,7 @@ export default function AddressFields({
       </div>
       <div className="field sm:col-span-2">
         <label htmlFor={`${idPrefix}-country`} className="label">
-          Land
+          {t("countryLabel")}
         </label>
         <SelectOrOtherField
           id={`${idPrefix}-country`}

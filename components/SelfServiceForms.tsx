@@ -162,6 +162,7 @@ export function MyProfileCompletionCard({
   completeness: ProfileCompleteness;
 }) {
   const t = useTranslations("SelfServiceForms");
+  const tAddress = useTranslations("AddressFields");
   const [isExpanded, setIsExpanded] = useState(false);
   const [state, formAction, isPending] = useActionState(updateMyProfileAction, initialState);
   const isComplete = completeness.percent >= 100;
@@ -326,6 +327,7 @@ export function MyProfileCompletionCard({
               idPrefix="my-profile-address"
               namePrefix="privateAddress"
               defaults={profileFields.privateAddress}
+              t={tAddress}
             />
           </div>
 

@@ -4,14 +4,19 @@ import { RightDrawer } from "@/components/ActionDrawers";
 import { OwnerFileActions } from "@/components/OwnerFileActions";
 import type { InfoRequest, InfoRequestStatus } from "@/lib/employees";
 import { CheckCircle2, Clock, FileText, MessageSquare, XCircle } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useState, type ReactNode } from "react";
 
-const statusLabels: Record<InfoRequestStatus, string> = {
-  open: "Offen",
-  uploaded: "Upload erhalten",
-  review: "Antwort erhalten – zu prüfen",
-  cancelled: "Storniert",
-};
+type T = ReturnType<typeof useTranslations>;
+
+function getStatusLabels(t: T): Record<InfoRequestStatus, string> {
+  return {
+    open: t("statusOpen"),
+    uploaded: t("statusUploaded"),
+    review: t("statusReview"),
+    cancelled: t("statusCancelled"),
+  };
+}
 
 const statusClassNames: Record<InfoRequestStatus, string> = {
   open: "border-warning/25 bg-warning/10 text-[#7A4E00]",
@@ -42,6 +47,8 @@ export function InfoRequestRow({
   request: InfoRequest;
   tenant: string;
 }) {
+  const t = useTranslations("InfoRequestDetail");
+  const statusLabels = getStatusLabels(t);
   const [open, setOpen] = useState(false);
 
   return (
@@ -59,13 +66,13 @@ export function InfoRequestRow({
             </div>
           </div>
           <span className="rounded-[7px] bg-border-soft px-2 py-[3px] font-mono text-[10px] text-muted-2">
-            bis {request.dueAt}
+            {t("dueBy", { date: request.dueAt })}
           </span>
         </div>
         <div className="mt-2 flex flex-wrap gap-2">
           {request.fileRequested && (
             <span className="rounded-[7px] border border-border-light px-2 py-[3px] font-mono text-[10px] text-muted">
-              Datei gewünscht
+              {t("fileRequested")}
             </span>
           )}
           <span
@@ -79,7 +86,7 @@ export function InfoRequestRow({
       {open && (
         <RightDrawer
           title={request.title}
-          eyebrow="Info-Anfrage"
+          eyebrow={t("infoRequestEyebrow")}
           onClose={() => setOpen(false)}
         >
           <div className="flex flex-col gap-4">
@@ -92,30 +99,30 @@ export function InfoRequestRow({
               </span>
               {request.fileRequested && (
                 <span className="rounded-[7px] border border-border-light px-2.5 py-1 font-mono text-[11px] text-muted">
-                  Datei gewünscht
+                  {t("fileRequested")}
                 </span>
               )}
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
-              <DetailField label="Angefragt von" value={request.requestedBy} />
-              <DetailField label="Angefragt am" value={request.requestedAt} />
-              <DetailField label="Frist" value={request.dueAt} />
+              <DetailField label={t("requestedByLabel")} value={request.requestedBy} />
+              <DetailField label={t("requestedAtLabel")} value={request.requestedAt} />
+              <DetailField label={t("dueLabel")} value={request.dueAt} />
               <DetailField
-                label="Beantwortet am"
-                value={request.respondedAt ?? "Noch keine Antwort"}
+                label={t("respondedAtLabel")}
+                value={request.respondedAt ?? t("noResponseYet")}
               />
             </div>
 
             {request.message && (
-              <Block icon={<MessageSquare size={14} />} title="Nachricht an den Mitarbeiter">
+              <Block icon={<MessageSquare size={14} />} title={t("messageToEmployeeTitle")}>
                 <p className="m-0 whitespace-pre-wrap text-[13px] leading-[1.55] text-ink">
                   {request.message}
                 </p>
               </Block>
             )}
 
-            <Block icon={<MessageSquare size={14} />} title="Antwort">
+            <Block icon={<MessageSquare size={14} />} title={t("responseTitle")}>
               {request.responseMessage ? (
                 <p className="m-0 whitespace-pre-wrap text-[13px] leading-[1.55] text-ink">
                   {request.responseMessage}
@@ -123,22 +130,22 @@ export function InfoRequestRow({
               ) : (
                 <p className="m-0 text-[13px] text-muted">
                   {request.status === "cancelled"
-                    ? "Die Anfrage wurde storniert."
-                    : "Noch keine Antwort eingegangen."}
+                    ? t("requestCancelled")
+                    : t("noResponseReceived")}
                 </p>
               )}
             </Block>
 
             {request.hasResponseFile && (
-              <Block icon={<FileText size={14} />} title="Hochgeladene Datei">
+              <Block icon={<FileText size={14} />} title={t("uploadedFileTitle")}>
                 <div className="flex items-center gap-3">
                   <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-ink">
-                    {request.responseFileName ?? "Antwortdatei"}
+                    {request.responseFileName ?? t("responseFileDefaultName")}
                   </span>
                   <OwnerFileActions
                     tenant={tenant}
                     storageFileId={request.responseFileId}
-                    name={request.responseFileName ?? "Antwortdatei"}
+                    name={request.responseFileName ?? t("responseFileDefaultName")}
                   />
                 </div>
               </Block>

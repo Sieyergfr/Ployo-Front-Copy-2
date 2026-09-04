@@ -387,6 +387,7 @@ export default async function LocationDetailPage({
   const { tab, edit, folder } = query;
   const activeFolder = typeof folder === "string" ? folder : undefined;
   const t = await getTranslations("LocationDetailPage");
+  const tAddress = await getTranslations("AddressFields");
   const currentWeek = getISOWeekFromDate(new Date());
   const year = searchParamNumber(query.year, currentWeek.year);
   const week = searchParamNumber(query.week, currentWeek.week);
@@ -536,6 +537,7 @@ export default async function LocationDetailPage({
                     defaults={location.addressFields}
                     required
                     formId="location-edit-form"
+                    t={tAddress}
                   />
                 </div>
                 <EditableColorField value={location.accentClassName} t={t} />

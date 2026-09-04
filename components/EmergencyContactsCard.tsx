@@ -10,8 +10,11 @@ import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
 import { useUniversalPopup } from "@/components/UniversalPopup";
 import type { EmergencyContact } from "@/lib/employees";
 import { AlertTriangle, Ellipsis, Pencil, Plus, Star, Trash2 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+
+type T = ReturnType<typeof useTranslations>;
 
 /**
  * Rendert das versteckte Aktions-Formular über ein Portal nach `document.body`.
@@ -67,12 +70,14 @@ function ContactForm({
   employeeHandle,
   contact,
   onDone,
+  t,
 }: {
   tenant: string;
   employeeId: string;
   employeeHandle: string;
   contact?: EmergencyContact;
   onDone: () => void;
+  t: T;
 }) {
   return (
     <form
@@ -87,7 +92,7 @@ function ContactForm({
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="field">
           <label htmlFor="contact-name" className="label">
-            Name
+            {t("nameLabel")}
           </label>
           <input
             id="contact-name"
@@ -99,7 +104,7 @@ function ContactForm({
         </div>
         <div className="field">
           <label htmlFor="contact-relation" className="label">
-            Beziehung
+            {t("relationLabel")}
           </label>
           <input
             id="contact-relation"
@@ -110,7 +115,7 @@ function ContactForm({
         </div>
         <div className="field">
           <label htmlFor="contact-phone" className="label">
-            Telefon
+            {t("phoneLabel")}
           </label>
           <input
             id="contact-phone"
@@ -123,7 +128,7 @@ function ContactForm({
         </div>
         <div className="field">
           <label htmlFor="contact-email" className="label">
-            E-Mail
+            {t("emailLabel")}
           </label>
           <input
             id="contact-email"
@@ -131,30 +136,30 @@ function ContactForm({
             type="email"
             className="input"
             defaultValue={contact?.email}
-            placeholder="Optional"
+            placeholder={t("optional")}
           />
         </div>
       </div>
 
       <div className="field">
         <label htmlFor="contact-note" className="label">
-          Notiz
+          {t("noteLabel")}
         </label>
         <input
           id="contact-note"
           name="note"
           className="input"
           defaultValue={contact?.note}
-          placeholder="Optional"
+          placeholder={t("optional")}
         />
       </div>
 
       <div className="mt-1 flex justify-end gap-2.5 border-t border-border-soft pt-4">
         <button type="button" className="btn btn-secondary" onClick={onDone}>
-          Abbrechen
+          {t("cancel")}
         </button>
         <button type="submit" className="btn btn-primary">
-          {contact ? "Speichern" : "Hinzufügen"}
+          {contact ? t("save") : t("add")}
         </button>
       </div>
     </form>
@@ -165,10 +170,12 @@ function ContactQuickMenu({
   formId,
   contact,
   onEdit,
+  t,
 }: {
   formId: string;
   contact: EmergencyContact;
   onEdit: () => void;
+  t: T;
 }) {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -183,7 +190,7 @@ function ContactQuickMenu({
     >
       <button
         type="button"
-        aria-label="Aktionen"
+        aria-label={t("actionsAria")}
         aria-haspopup="menu"
         aria-expanded={isOpen}
         className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[7px] border border-border bg-white text-muted transition-colors hover:border-muted hover:text-ink"
@@ -207,7 +214,7 @@ function ContactQuickMenu({
             }}
           >
             <Pencil size={13} />
-            Bearbeiten
+            {t("edit")}
           </button>
           {!contact.isPrimary && (
             <button
@@ -218,17 +225,17 @@ function ContactQuickMenu({
               className="flex w-full cursor-pointer items-center gap-2 rounded-[8px] px-2.5 py-2 text-left text-[12.5px] font-medium text-ink hover:bg-bg"
             >
               <Star size={13} />
-              Als Hauptkontakt festlegen
+              {t("setPrimary")}
             </button>
           )}
           <ConfirmSubmitButton
             form={formId}
             formAction={deleteEmergencyContactAction}
             className="flex w-full cursor-pointer items-center gap-2 rounded-[8px] px-2.5 py-2 text-left text-[12.5px] font-medium text-danger hover:bg-danger/5"
-            description={`Der Notfallkontakt "${contact.name}" wird entfernt.`}
+            description={t("deleteConfirmDescription", { name: contact.name })}
           >
             <Trash2 size={13} />
-            Löschen
+            {t("delete")}
           </ConfirmSubmitButton>
         </div>
       )}
@@ -247,11 +254,12 @@ export default function EmergencyContactsCard({
   employeeHandle: string;
   contacts: EmergencyContact[];
 }) {
+  const t = useTranslations("EmergencyContactsCard");
   const { openPopup, closePopup } = useUniversalPopup();
 
   function openContactForm(contact?: EmergencyContact) {
     openPopup({
-      title: contact ? "Notfallkontakt bearbeiten" : "Notfallkontakt hinzufügen",
+      title: contact ? t("editContactTitle") : t("addContactTitle"),
       content: (
         <ContactForm
           tenant={tenant}
@@ -259,6 +267,7 @@ export default function EmergencyContactsCard({
           employeeHandle={employeeHandle}
           contact={contact}
           onDone={closePopup}
+          t={t}
         />
       ),
     });
@@ -269,11 +278,11 @@ export default function EmergencyContactsCard({
       <div className="mb-3.5 flex items-center justify-between gap-3">
         <h2 className="flex items-center gap-2 font-display text-[16px] font-semibold tracking-[-0.3px] text-danger">
           <AlertTriangle size={17} />
-          Notfallkontakte
+          {t("sectionTitle")}
         </h2>
         <button
           type="button"
-          aria-label="Notfallkontakt hinzufügen"
+          aria-label={t("addContactTitle")}
           className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[8px] border border-border bg-white text-muted transition-colors hover:border-muted hover:text-ink"
           onClick={() => openContactForm()}
         >
@@ -283,7 +292,7 @@ export default function EmergencyContactsCard({
 
       <div className="grid gap-2.5">
         {contacts.length === 0 && (
-          <p className="text-[12.5px] text-muted">Keine Notfallkontakte hinterlegt.</p>
+          <p className="text-[12.5px] text-muted">{t("noContactsYet")}</p>
         )}
         {contacts.map((contact) => {
           const formId = `emergency-contact-actions-${contact.id}`;
@@ -304,7 +313,7 @@ export default function EmergencyContactsCard({
                       {contact.name}
                     </span>
                     {contact.isPrimary && (
-                      <span title="Hauptkontakt">
+                      <span title={t("primaryContactTitle")}>
                         <Star size={12} className="shrink-0 text-warning" fill="currentColor" />
                       </span>
                     )}
@@ -319,6 +328,7 @@ export default function EmergencyContactsCard({
                     formId={formId}
                     contact={contact}
                     onEdit={() => openContactForm(contact)}
+                    t={t}
                   />
                 </div>
               </div>

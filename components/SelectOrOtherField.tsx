@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 const OTHER_VALUE = "__other__";
@@ -20,8 +21,8 @@ export default function SelectOrOtherField({
   name,
   options,
   defaultValue,
-  placeholder = "Bitte wählen",
-  otherPlaceholder = "Bitte angeben",
+  placeholder,
+  otherPlaceholder,
   form,
 }: {
   id: string;
@@ -32,6 +33,9 @@ export default function SelectOrOtherField({
   otherPlaceholder?: string;
   form?: string;
 }) {
+  const t = useTranslations("SelectOrOtherField");
+  const effectivePlaceholder = placeholder ?? t("pleaseSelect");
+  const effectiveOtherPlaceholder = otherPlaceholder ?? t("pleaseSpecify");
   const isKnownValue =
     defaultValue === "" || options.some((option) => option.value === defaultValue);
   const [mode, setMode] = useState<"select" | "other">(isKnownValue ? "select" : "other");
@@ -47,14 +51,14 @@ export default function SelectOrOtherField({
           className="input bg-white"
           value={otherValue}
           onChange={(event) => setOtherValue(event.target.value)}
-          placeholder={otherPlaceholder}
+          placeholder={effectiveOtherPlaceholder}
         />
         <button
           type="button"
           className="btn btn-secondary btn-sm shrink-0 px-3"
           onClick={() => setMode("select")}
         >
-          Liste
+          {t("listButton")}
         </button>
       </div>
     );
@@ -73,13 +77,13 @@ export default function SelectOrOtherField({
         }
       }}
     >
-      <option value="">{placeholder}</option>
+      <option value="">{effectivePlaceholder}</option>
       {options.map((option) => (
         <option key={option.value} value={option.value}>
           {option.label}
         </option>
       ))}
-      <option value={OTHER_VALUE}>Sonstige</option>
+      <option value={OTHER_VALUE}>{t("other")}</option>
     </select>
   );
 }

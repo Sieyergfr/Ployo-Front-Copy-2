@@ -165,6 +165,7 @@ function CreateLocationForm({
   onDone: () => void;
 }) {
   const t = useTranslations("CreateLocationButton");
+  const tAddress = useTranslations("AddressFields");
 
   return (
     <form className="flex flex-col gap-4" action={createLocationAction}>
@@ -205,7 +206,7 @@ function CreateLocationForm({
 
       <div>
         <div className="mb-2 label">{t("address")}</div>
-        <AddressFields idPrefix="location-address" required />
+        <AddressFields idPrefix="location-address" required t={tAddress} />
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">

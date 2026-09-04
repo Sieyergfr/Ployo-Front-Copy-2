@@ -472,6 +472,7 @@ function SettingsPanel({
 }) {
   const settings = tenant.settings ?? defaultSettings;
   const t = useTranslations("Navigation.settings");
+  const tAddress = useTranslations("AddressFields");
   const currentLocale = useLocale();
   if (activeCategory === "company") {
     return (
@@ -497,6 +498,7 @@ function SettingsPanel({
                 idPrefix="settings-company-address"
                 namePrefix="companyAddress"
                 defaults={settings.companyAddress}
+                t={tAddress}
               />
             </div>
             <div className="field">
