@@ -10,6 +10,7 @@ import { type LocationMetric } from "@/lib/locations";
 import { hasPermissionLevel } from "@/lib/roles";
 import { getTenantPermissions, withAccessRedirect } from "@/lib/tenant-access";
 import { notFound } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 
 export const metadata = {
   title: "Standorte",
@@ -52,17 +53,19 @@ export default async function LocationsPage({
 
   // Nur für den Mitarbeiter-Picker im "Standort anlegen"-Dialog — fehlende
   // Berechtigung dafür soll die Standortliste selbst nicht sperren.
-  const employees = await getEmployeesForTenant(tenant)
-    .catch(() => null)
-    .then((v) => v ?? []);
-  const permissions = await getTenantPermissions(tenant);
+  const [employees, permissions, t, tMetrics] = await Promise.all([
+    getEmployeesForTenant(tenant).catch(() => null).then((v) => v ?? []),
+    getTenantPermissions(tenant),
+    getTranslations("LocationsPage"),
+    getTranslations("LocationMetrics"),
+  ]);
   const canCreateLocation = hasPermissionLevel(permissions.locations, "write");
 
-  const locationMetrics = getLocationMetrics(locations);
+  const locationMetrics = getLocationMetrics(locations, tMetrics);
 
   return (
     <>
-      <PageHeader eyebrow="Unternehmensstruktur" title="Standorte">
+      <PageHeader eyebrow={t("eyebrow")} title={t("title")}>
         {canCreateLocation && (
           <CreateLocationButton
             tenant={tenant}

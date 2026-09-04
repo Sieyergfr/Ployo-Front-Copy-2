@@ -389,6 +389,19 @@ body {
   will-change: transform;
 }
 
+/* Diagonale Streifen für "Wunschfrei"-Karten in der Schichtplanung
+   (ShiftPlanningClient) — eigene Klasse statt style="", damit style-src im
+   CSP kein unsafe-inline für diesen statischen Gradient braucht. */
+.wish-free-stripes {
+  background-image: repeating-linear-gradient(
+    135deg,
+    rgba(14, 14, 14, 0.055) 0,
+    rgba(14, 14, 14, 0.055) 1px,
+    #ffffff 1px,
+    #ffffff 7px
+  );
+}
+
 @keyframes shift-drawer-in {
   from {
     transform: translateX(100%);

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
+import { deleteUserAccessImmediately } from "@/lib/account-service";
 import { decryptField, encryptField } from "@/lib/encryption";
 import { isUniqueConstraintError } from "@/lib/prisma-errors";
 import {
@@ -9,6 +10,7 @@ import {
   normalizeAddressInput,
   type AddressInput,
 } from "@/lib/address";
+import { decryptAddress, encryptAddress } from "@/lib/employee-address";
 import {
   type Employee,
   CONTRACT_FILE_NOT_UPLOADED,
@@ -32,6 +34,7 @@ import {
 } from "@/lib/location-service";
 import { prisma } from "@/lib/prisma";
 import { purgeTenantFiles } from "@/lib/storage/delete";
+import { ensureEmployeeTemplateFolder } from "@/lib/storage/storage.service";
 import { headers } from "next/headers";
 import {
   getOptionalTenantAccess,
@@ -95,7 +98,7 @@ type EmployeeRecord = {
   vacationRemaining: number;
   vacationTotal: number;
   vacationTaken: number;
-  emergencyContactsJson: unknown;
+  emergencyContactsJson: string;
   infoRequests?: InfoRequestRecord[];
   timeline?: TimelineRecord[];
   contractDetails?: ContractDetailsRecord | null;
@@ -117,6 +120,7 @@ type InfoRequestRecord = {
   responseMessage: string;
   respondedAt: Date | null;
   responseFileId: string | null;
+  responseFile?: { displayName: string } | null;
 };
 
 type TimelineRecord = {
@@ -180,6 +184,7 @@ type TenantFileRecord = {
   version: number;
   accessRoleIdsJson: unknown;
   accessUserIdsJson: unknown;
+  hiddenFromEmployee: boolean;
   parent?: { accessRoleIdsJson: unknown; accessUserIdsJson: unknown } | null;
 };
 
@@ -189,6 +194,7 @@ type TenantFileFolderRecord = {
   path: string;
   ownerName: string;
   locked: boolean;
+  hiddenFromEmployee: boolean;
   updatedAt: Date;
   createdAt: Date;
 };
@@ -246,8 +252,31 @@ type EmployeeMutationInput = {
   emergencyContacts?: EmergencyContact[];
 };
 
-function asJson<T>(value: unknown, fallback: T): T {
-  return (value ?? fallback) as T;
+/**
+ * `emergencyContactsJson` ist jetzt eine `String`-Spalte (Migration
+ * `20260903000000_split_employee_address`), nicht mehr `Json` — die
+ * Feldverschlüsselung (`lib/encryption.ts`) arbeitet nur auf Strings.
+ * Fehlerhaftes JSON (sollte nicht vorkommen, aber sicherer als ein Crash der
+ * ganzen Personalakte) liefert eine leere Liste statt zu werfen.
+ */
+function parseEmergencyContacts(value: string): EmergencyContact[] {
+  const decrypted = decryptField(value);
+
+  if (!decrypted) {
+    return [];
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(decrypted);
+
+    return Array.isArray(parsed) ? (parsed as EmergencyContact[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function serializeEmergencyContacts(contacts: EmergencyContact[]): string {
+  return encryptField(JSON.stringify(contacts));
 }
 
 /** Datum/Frist einer Info-Anfrage formatieren — Uhrzeit nur anzeigen, wenn tatsächlich eine gesetzt wurde. */
@@ -496,29 +525,39 @@ function mergeEmployeeFileFolders(
   const folderMap = new Map<string, EmployeeFileFolder>();
 
   for (const folder of folders) {
-    folderMap.set(folder.name, { ...folder });
+    folderMap.set(folder.path ?? folder.name, { ...folder });
   }
 
+  // Schluessel ist der Ordner-PFAD, nicht der Name (siehe location-service.ts).
   for (const folder of storageFolders) {
-    folderMap.set(folder.name, {
+    folderMap.set(folder.path, {
       name: folder.name,
       path: folder.path,
       fileCount: 0,
       locked: folder.locked,
+      hiddenFromEmployee: folder.hiddenFromEmployee,
     });
   }
 
   for (const file of files) {
-    const current = folderMap.get(file.folder);
+    if (!file.folderSlug) {
+      continue;
+    }
+
+    const current = folderMap.get(file.folderSlug);
 
     if (current) {
       current.fileCount += file.storageFileId ? 1 : 0;
     } else {
-      folderMap.set(file.folder, {
+      // Ordner, den es bisher nur über die Dateien darin gibt: kein
+      // Datensatz, also auch kein eigenes Sichtbarkeits-Flag — es wird beim
+      // ersten Umschalten nachgetragen (setTenantFileFolderEmployeeVisibility).
+      folderMap.set(file.folderSlug, {
         name: file.folder,
-        path: file.folder,
+        path: file.folderSlug,
         fileCount: 1,
-        locked: Boolean(file.storageFileId),
+        locked: false,
+        hiddenFromEmployee: false,
       });
     }
   }
@@ -539,6 +578,8 @@ const REDACTED = "•••";
  * abzulehnen.
  */
 function toEmployee(record: EmployeeRecord, sensitiveFieldsVisible = true): Employee {
+  const decryptedPrivateAddress = decryptAddress(record.privateAddress);
+  const decryptedWorkAddress = decryptAddress(record.workAddress);
   const parsedContractDetails: EmployeeContractDetails = record.contractDetails
     ? {
         linkedFileName: record.contractDetails.linkedFileName,
@@ -553,8 +594,8 @@ function toEmployee(record: EmployeeRecord, sensitiveFieldsVisible = true): Empl
         supervisor: record.contractDetails.supervisor,
         workLocation: record.contractDetails.workLocation,
         parties: record.contractDetails.parties,
-        compensation: record.contractDetails.compensation,
-        compensationGross: record.contractDetails.compensationGross,
+        compensation: decryptField(record.contractDetails.compensation),
+        compensationGross: decryptField(record.contractDetails.compensationGross),
         workingTime: record.contractDetails.workingTime,
         vacation: record.contractDetails.vacation,
         noticePeriod: record.contractDetails.noticePeriod,
@@ -593,11 +634,13 @@ function toEmployee(record: EmployeeRecord, sensitiveFieldsVisible = true): Empl
     return {
       name: mapped.name,
       folder: mapped.folder,
+      folderSlug: mapped.folderSlug,
       type: mapped.type,
       size: mapped.size,
       updatedAt: mapped.updatedAt,
       locked: true,
       storageFileId: mapped.storageFileId,
+      hiddenFromEmployee: file.hiddenFromEmployee,
     };
   });
   const files = storedFiles;
@@ -619,13 +662,13 @@ function toEmployee(record: EmployeeRecord, sensitiveFieldsVisible = true): Empl
     initials: record.initials,
     name: record.name,
     employeeNumber: record.employeeNumber,
-    birthDate: sensitiveFieldsVisible ? record.birthDate : "",
-    birthPlace: sensitiveFieldsVisible ? record.birthPlace : "",
-    nationality: sensitiveFieldsVisible ? record.nationality : "",
-    maritalStatus: sensitiveFieldsVisible ? record.maritalStatus : "",
-    privateAddress: sensitiveFieldsVisible ? formatAddress(record.privateAddress) : "",
+    birthDate: sensitiveFieldsVisible ? decryptField(record.birthDate) : "",
+    birthPlace: sensitiveFieldsVisible ? decryptField(record.birthPlace) : "",
+    nationality: sensitiveFieldsVisible ? decryptField(record.nationality) : "",
+    maritalStatus: sensitiveFieldsVisible ? decryptField(record.maritalStatus) : "",
+    privateAddress: sensitiveFieldsVisible ? formatAddress(decryptedPrivateAddress) : "",
     privateAddressFields: sensitiveFieldsVisible
-      ? addressDefaults(record.privateAddress)
+      ? addressDefaults(decryptedPrivateAddress)
       : addressDefaults(null),
     taxId: sensitiveFieldsVisible ? decryptField(record.taxId) : REDACTED,
     socialSecurityNumber: sensitiveFieldsVisible
@@ -645,20 +688,20 @@ function toEmployee(record: EmployeeRecord, sensitiveFieldsVisible = true): Empl
     email: record.email,
     phone: record.phone,
     hasAccount: Boolean(record.userId),
-    address: formatAddress(record.workAddress),
-    addressFields: addressDefaults(record.workAddress),
+    address: formatAddress(decryptedWorkAddress),
+    addressFields: addressDefaults(decryptedWorkAddress),
     vacationRemaining: record.vacationRemaining,
     vacationTotal: record.vacationTotal,
     vacationTaken: record.vacationTaken,
     fileFolders,
     files,
-    emergencyContacts: asJson<EmergencyContact[]>(record.emergencyContactsJson, []),
+    emergencyContacts: parseEmergencyContacts(record.emergencyContactsJson),
     payrollStatements: (record.payrollStatements ?? []).map((statement) => ({
       id: statement.id,
       period: statement.period,
       issuedAt: statement.issuedAt.toISOString().slice(0, 10),
-      gross: statement.gross,
-      net: statement.net,
+      gross: decryptField(statement.gross),
+      net: decryptField(statement.net),
       fileName: statement.file.displayName,
       storageFileId: statement.file.id,
       status: statement.status === "corrected" ? "corrected" : "available",
@@ -678,6 +721,8 @@ function toEmployee(record: EmployeeRecord, sensitiveFieldsVisible = true): Empl
       responseMessage: request.responseMessage || undefined,
       respondedAt: request.respondedAt ? formatRequestDate(request.respondedAt) : undefined,
       hasResponseFile: Boolean(request.responseFileId),
+      responseFileId: request.responseFileId ?? undefined,
+      responseFileName: request.responseFile?.displayName || undefined,
     })),
     shifts,
     timeline: (record.timeline ?? []).map((entry) => ({
@@ -937,7 +982,10 @@ export async function getEmployeesForTenant(
         where: { status: "active" },
         orderBy: { name: "asc" },
       },
-      infoRequests: { orderBy: { createdAt: "desc" } },
+      infoRequests: {
+        orderBy: { createdAt: "desc" },
+        include: { responseFile: { select: { displayName: true } } },
+      },
       timeline: { orderBy: { createdAt: "desc" } },
       contractDetails: true,
       vacationRequests: {
@@ -1029,7 +1077,10 @@ export async function getEmployeeForTenant(tenantSlug: string, employeeHandle: s
           location: { select: { name: true } },
         },
       },
-      infoRequests: { orderBy: { createdAt: "desc" } },
+      infoRequests: {
+        orderBy: { createdAt: "desc" },
+        include: { responseFile: { select: { displayName: true } } },
+      },
       timeline: { orderBy: { createdAt: "desc" } },
       contractDetails: true,
       vacationRequests: {
@@ -1278,12 +1329,12 @@ export async function createTenantEmployeeRecord({
       initials,
       name,
       employeeNumber,
-      birthDate: input.birthDate?.trim() || "",
-      birthPlace: input.birthPlace?.trim() || "",
-      nationality: input.nationality?.trim() || "",
-      maritalStatus: input.maritalStatus?.trim() || "",
+      birthDate: encryptField(input.birthDate?.trim() || ""),
+      birthPlace: encryptField(input.birthPlace?.trim() || ""),
+      nationality: encryptField(input.nationality?.trim() || ""),
+      maritalStatus: encryptField(input.maritalStatus?.trim() || ""),
       privateAddress: {
-        create: normalizeAddressInput(input.privateAddress),
+        create: encryptAddress(normalizeAddressInput(input.privateAddress)),
       },
       taxId: encryptField(input.taxId?.trim() || ""),
       socialSecurityNumber: encryptField(input.socialSecurityNumber?.trim() || ""),
@@ -1300,12 +1351,12 @@ export async function createTenantEmployeeRecord({
       email: input.email?.trim() || "",
       phone: input.phone?.trim() || "",
       workAddress: {
-        create: normalizeAddressInput(input.address),
+        create: encryptAddress(normalizeAddressInput(input.address)),
       },
       vacationRemaining: toInt(input.vacationRemaining, 0),
       vacationTotal: toInt(input.vacationTotal, 30),
       vacationTaken: toInt(input.vacationTaken, 0),
-      emergencyContactsJson: [] satisfies EmergencyContact[],
+      emergencyContactsJson: serializeEmergencyContacts([]),
       timeline: {
         create: [
           {
@@ -1332,7 +1383,10 @@ export async function createTenantEmployeeRecord({
         where: { status: "active" },
         orderBy: { name: "asc" },
       },
-      infoRequests: { orderBy: { createdAt: "desc" } },
+      infoRequests: {
+        orderBy: { createdAt: "desc" },
+        include: { responseFile: { select: { displayName: true } } },
+      },
       timeline: { orderBy: { createdAt: "desc" } },
       contractDetails: true,
     },
@@ -1380,6 +1434,26 @@ export async function createTenantEmployeeRecord({
       employeeName: record.name,
       locationNames: locations,
     });
+  }
+
+  // Ordnervorlagen (`TenantEmployeeFolderTemplate`) automatisch anwenden —
+  // jeder neue Mitarbeiter bekommt dieselben Ordner wie alle bestehenden.
+  const folderTemplates = await prisma.tenantEmployeeFolderTemplate.findMany({
+    where: { tenantId },
+    select: { name: true },
+  });
+
+  if (folderTemplates.length > 0) {
+    await Promise.all(
+      folderTemplates.map((template) =>
+        ensureEmployeeTemplateFolder({
+          tenantId,
+          employeeId: record.id,
+          name: template.name,
+          ownerName: actorName,
+        }),
+      ),
+    );
   }
 
   await syncMembershipRoleFromEmployeeRole({
@@ -1715,14 +1789,16 @@ export async function updateTenantEmployee(input: EmployeeMutationInput & { empl
       initials: initialsForName(name),
       name,
       employeeNumber: nextNumber,
-      birthDate: input.birthDate?.trim() ?? current.birthDate,
-      birthPlace: input.birthPlace?.trim() ?? current.birthPlace,
-      nationality: input.nationality?.trim() ?? current.nationality,
-      maritalStatus: input.maritalStatus?.trim() ?? current.maritalStatus,
+      birthDate: encryptField(input.birthDate?.trim() ?? currentEmployee.birthDate),
+      birthPlace: encryptField(input.birthPlace?.trim() ?? currentEmployee.birthPlace),
+      nationality: encryptField(input.nationality?.trim() ?? currentEmployee.nationality),
+      maritalStatus: encryptField(input.maritalStatus?.trim() ?? currentEmployee.maritalStatus),
       privateAddress: {
         upsert: {
-          create: normalizeAddressInput(input.privateAddress),
-          update: normalizeAddressInput(input.privateAddress ?? current.privateAddress ?? {}),
+          create: encryptAddress(normalizeAddressInput(input.privateAddress)),
+          update: encryptAddress(
+            normalizeAddressInput(input.privateAddress ?? currentEmployee.privateAddressFields),
+          ),
         },
       },
       taxId: encryptField(input.taxId?.trim() ?? currentEmployee.taxId),
@@ -1745,8 +1821,10 @@ export async function updateTenantEmployee(input: EmployeeMutationInput & { empl
       phone: input.phone?.trim() ?? current.phone,
       workAddress: {
         upsert: {
-          create: normalizeAddressInput(input.address),
-          update: normalizeAddressInput(input.address ?? current.workAddress ?? {}),
+          create: encryptAddress(normalizeAddressInput(input.address)),
+          update: encryptAddress(
+            normalizeAddressInput(input.address ?? currentEmployee.addressFields),
+          ),
         },
       },
       vacationRemaining: toInt(input.vacationRemaining, current.vacationRemaining),
@@ -1754,11 +1832,22 @@ export async function updateTenantEmployee(input: EmployeeMutationInput & { empl
       vacationTaken: toInt(input.vacationTaken, current.vacationTaken),
       contractDetails: {
         upsert: {
-          create: { ...contractDetails, tenant: { connect: { id: tenantId } } },
-          update: { ...contractDetails },
+          create: {
+            ...contractDetails,
+            compensation: encryptField(contractDetails.compensation),
+            compensationGross: encryptField(contractDetails.compensationGross),
+            tenant: { connect: { id: tenantId } },
+          },
+          update: {
+            ...contractDetails,
+            compensation: encryptField(contractDetails.compensation),
+            compensationGross: encryptField(contractDetails.compensationGross),
+          },
         },
       },
-      emergencyContactsJson: emergencyContacts ?? currentEmployee.emergencyContacts,
+      emergencyContactsJson: serializeEmergencyContacts(
+        emergencyContacts ?? currentEmployee.emergencyContacts,
+      ),
       timeline: {
         create: timelineEntries.map((entry) => ({
           title: entry.title,
@@ -1770,7 +1859,10 @@ export async function updateTenantEmployee(input: EmployeeMutationInput & { empl
     include: {
       privateAddress: true,
       workAddress: true,
-      infoRequests: { orderBy: { createdAt: "desc" } },
+      infoRequests: {
+        orderBy: { createdAt: "desc" },
+        include: { responseFile: { select: { displayName: true } } },
+      },
       timeline: { orderBy: { createdAt: "desc" } },
       contractDetails: true,
     },
@@ -1868,6 +1960,10 @@ export async function offboardEmployee(input: {
     data: {
       status: "former",
       endDate,
+      // Startpunkt der Löschfristen-Uhr für die Kategorie-1-Anonymisierung
+      // (lib/data-retention.ts) — separat von endDate, damit eine spätere
+      // Korrektur des Textfelds die Frist nicht verschiebt.
+      offboardedAt: new Date(),
       timeline: {
         create: {
           title: reason
@@ -1892,6 +1988,68 @@ export async function offboardEmployee(input: {
   });
 }
 
+/**
+ * Löscht ausschließlich den Konto-Zugang (Login) der mit dieser Personalakte
+ * verknüpften Person — Zugangsdaten, Sitzungen, Social-Login-Verknüpfungen
+ * und Push-Token, inkl. Widerruf der Apple-/Google-Tokens beim Provider.
+ * Die Personalakte (Stammdaten) bleibt vollständig erhalten, s.
+ * lib/account-service.ts `deleteUserAccessImmediately`.
+ */
+export async function deleteEmployeeAccess(input: { tenantSlug: string; employeeId: string }) {
+  const access = await requireTenantAccess(input.tenantSlug, "employees", "write");
+
+  const employee = await prisma.tenantEmployee.findFirst({
+    where: { id: input.employeeId, tenantId: access.tenantId },
+    select: { id: true, name: true, userId: true },
+  });
+
+  if (!employee) {
+    throw new Error("Mitarbeiter nicht gefunden.");
+  }
+
+  if (!employee.userId) {
+    throw new Error("EMPLOYEE_ACCESS_NOT_LINKED");
+  }
+
+  const linkedUser = await prisma.user.findUnique({
+    where: { id: employee.userId },
+    select: { id: true },
+  });
+
+  if (!linkedUser) {
+    // Konto wurde bereits anderweitig gelöscht (z. B. Self-Service) —
+    // verwaiste Verknüpfung trotzdem aufräumen.
+    await prisma.tenantEmployee.update({ where: { id: employee.id }, data: { userId: null } });
+    throw new Error("EMPLOYEE_ACCESS_NOT_LINKED");
+  }
+
+  await deleteUserAccessImmediately(employee.userId);
+
+  await prisma.tenantEmployee.update({
+    where: { id: employee.id },
+    data: {
+      timeline: {
+        create: {
+          title: "Konto-Zugang gelöscht",
+          tone: "danger",
+          tenant: { connect: { id: access.tenantId } },
+        },
+      },
+    },
+  });
+
+  await recordTenantAudit({
+    tenantId: access.tenantId,
+    actorId: access.userId,
+    actorName: access.userName,
+    action: "Konto-Zugang gelöscht",
+    source: "Personalakte",
+    entityType: "employee",
+    entityId: employee.id,
+    detail: employee.name,
+  });
+}
+
 /** Macht ein versehentliches Ausscheiden rückgängig — Status zurück auf aktiv, Austrittsdatum gelöscht. */
 export async function reactivateEmployee(input: { tenantSlug: string; employeeId: string }) {
   const access = await requireTenantAccess(input.tenantSlug, "employees", "write");
@@ -1909,6 +2067,9 @@ export async function reactivateEmployee(input: { tenantSlug: string; employeeId
     data: {
       status: "active",
       endDate: "",
+      // Reaktivierung setzt die Löschfristen-Uhr zurück — die Person ist
+      // wieder aktiv, "seit wann ausgeschieden" ist nicht mehr aussagekräftig.
+      offboardedAt: null,
       timeline: {
         create: {
           title: "Reaktiviert",
@@ -1939,7 +2100,12 @@ export async function deleteTenantEmployee(input: {
   tenantSlug: string;
   employeeId: string;
 }) {
-  const access = await requireTenantAccess(input.tenantSlug, "employees", "write");
+  const access = await requireTenantAccess(input.tenantSlug, "employees", "read");
+
+  if (!access.canDelete) {
+    throw new Error("FORBIDDEN");
+  }
+
   const tenantId = access.tenantId;
 
   const employee = await prisma.tenantEmployee.findFirst({
@@ -1981,7 +2147,7 @@ export async function deleteTenantEmployee(input: {
   );
 
   if (addressIds.length) {
-    await prisma.address.deleteMany({ where: { id: { in: addressIds } } });
+    await prisma.employeeAddress.deleteMany({ where: { id: { in: addressIds } } });
   }
 
   await purgeTenantFiles(files);
@@ -2010,6 +2176,7 @@ type TenantInfoRequestRecord = {
   responseMessage: string;
   respondedAt: Date | null;
   responseFileId: string | null;
+  responseFile?: { displayName: string } | null;
   employeeId: string;
   employee: {
     id: string;
@@ -2037,6 +2204,8 @@ function toTenantInfoRequest(record: TenantInfoRequestRecord) {
     responseMessage: record.responseMessage || undefined,
     respondedAt: record.respondedAt ? formatRequestDate(record.respondedAt) : undefined,
     hasResponseFile: Boolean(record.responseFileId),
+    responseFileId: record.responseFileId ?? undefined,
+    responseFileName: record.responseFile?.displayName || undefined,
     employeeId: record.employee.id,
     employeeKey: record.employee.key,
     employeeInitials: record.employee.initials,
@@ -2091,6 +2260,7 @@ export async function getInfoRequestsForTenant(tenantSlug: string) {
           team: true,
         },
       },
+      responseFile: { select: { displayName: true } },
     },
   });
 
@@ -2261,7 +2431,7 @@ async function loadEmergencyContacts(tenantId: string, employeeId: string) {
 
   return {
     employee,
-    contacts: asJson<EmergencyContact[]>(employee.emergencyContactsJson, []),
+    contacts: parseEmergencyContacts(employee.emergencyContactsJson),
   };
 }
 
@@ -2273,7 +2443,7 @@ async function saveEmergencyContacts(
 ) {
   await prisma.tenantEmployee.update({
     where: { id: employee.id },
-    data: { emergencyContactsJson: contacts },
+    data: { emergencyContactsJson: serializeEmergencyContacts(contacts) },
   });
 
   await recordTenantAudit({

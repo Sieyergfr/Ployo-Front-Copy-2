@@ -210,6 +210,7 @@ function toTeam(record: TeamRecord): Team {
     return {
       name: mapped.name,
       folder: mapped.folder,
+      folderSlug: mapped.folderSlug,
       updatedAt: mapped.updatedAt,
       size: mapped.size,
       type: mapped.type,
@@ -220,8 +221,9 @@ function toTeam(record: TeamRecord): Team {
   const files = storedFiles;
   const folderMap = new Map<string, TeamFileFolder>();
 
+  // Schluessel ist der Ordner-PFAD, nicht der Name (siehe location-service.ts).
   for (const folder of record.storageFileFolders ?? []) {
-    folderMap.set(folder.name, {
+    folderMap.set(folder.path, {
       name: folder.name,
       path: folder.path,
       fileCount: 0,
@@ -230,15 +232,20 @@ function toTeam(record: TeamRecord): Team {
   }
 
   for (const file of storedFiles) {
-    const current = folderMap.get(file.folder);
+    if (!file.folderSlug) {
+      continue;
+    }
+
+    const current = folderMap.get(file.folderSlug);
 
     if (current) {
       current.fileCount += 1;
     } else {
-      folderMap.set(file.folder, {
+      folderMap.set(file.folderSlug, {
         name: file.folder,
+        path: file.folderSlug,
         fileCount: 1,
-        locked: true,
+        locked: false,
       });
     }
   }
@@ -424,25 +431,29 @@ export function toTeamAdminPayload(team: Team) {
   };
 }
 
-export function getTeamMetrics(teams: Team[]): TeamMetric[] {
+/** `t` kommt aus dem Namespace "TeamMetrics" (next-intl) — bewusst nur als generische Funktionssignatur getippt, damit dieses lib-Modul next-intl nicht selbst importieren muss. */
+export function getTeamMetrics(
+  teams: Team[],
+  t: (key: string) => string,
+): TeamMetric[] {
   const totalMembers = teams.reduce((total, team) => total + team.members.length, 0);
   const average = teams.length > 0 ? (totalMembers / teams.length).toFixed(1) : "0.0";
 
   return [
     {
-      label: "Teams gesamt",
+      label: t("teamsTotal"),
       value: teams.length.toString(),
-      caption: "aktive Gruppen",
+      caption: t("activeGroups"),
     },
     {
-      label: "Mitglieder",
+      label: t("members"),
       value: totalMembers.toString(),
-      caption: "alle Standorte",
+      caption: t("allLocations"),
     },
     {
-      label: "Durchschnitt",
+      label: t("average"),
       value: average,
-      caption: "Mitglieder je Team",
+      caption: t("membersPerTeam"),
     },
   ];
 }
@@ -460,7 +471,14 @@ export async function getAssignableEmployees(tenantSlug: string, teamHandle: str
 
   return employees
     .filter((employee) => !assignedEmployeeIds.has(employee.dbId ?? employee.id))
-    .map((employee) => employeeToMember(employee));
+    .map((employee) => ({
+      // `id` zusätzlich zu `employeeId`: für noch nicht zugeordnete Mitarbeiter
+      // gibt es keine `TenantTeamMember`-Zeile, `id` ist hier also eindeutig
+      // die Mitarbeiter-ID. Ohne dieses Feld kam die Auswahl in der App mit
+      // lauter `undefined`-Werten an und ließ sich nicht auswählen.
+      id: employee.dbId ?? employee.id,
+      ...employeeToMember(employee),
+    }));
 }
 
 export async function requireTeamManager(tenantSlug: string) {

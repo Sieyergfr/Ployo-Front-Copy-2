@@ -2,7 +2,6 @@
 
 import { useActionState } from "react";
 import {
-  createAndLinkOwnEmployeeAction,
   linkOwnEmployeeAction,
   unlinkOwnEmployeeAction,
 } from "@/app/(dashboard)/u/[tenant]/mein-bereich/actions";
@@ -11,7 +10,8 @@ import FormSubmitButton from "@/components/FormSubmitButton";
 import { FieldErrors, FormErrorBanner } from "@/components/FormFeedback";
 import { useCloseOnSuccess, useUniversalPopup } from "@/components/UniversalPopup";
 import type { ActionState } from "@/lib/action-state";
-import { Link2, Unlink, UserPlus } from "lucide-react";
+import { Link2, Unlink } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 const initialState: ActionState = {};
 
@@ -34,6 +34,7 @@ function LinkExistingForm({
   employees: UnlinkedEmployee[];
   onDone: () => void;
 }) {
+  const t = useTranslations("SelfServiceEmployeeLink");
   const [state, formAction, isPending] = useActionState(linkOwnEmployeeAction, initialState);
   useCloseOnSuccess(state, isPending, onDone);
 
@@ -42,7 +43,7 @@ function LinkExistingForm({
       <input type="hidden" name="tenant" value={tenant} />
 
       <EmployeeSelector
-        label="Personalakte"
+        label={t("employeeRecord")}
         name="employeeId"
         mode="single"
         options={employees}
@@ -50,104 +51,17 @@ function LinkExistingForm({
       <FieldErrors errors={state.fieldErrors?.employeeId} />
 
       <p className="m-0 text-[12.5px] leading-[1.55] text-muted-2">
-        Ihr Konto wird mit der ausgewählten, noch unverknüpften Personalakte
-        verbunden.
+        {t("linkDescription")}
       </p>
 
       <FormErrorBanner message={state.error} />
 
       <div className="mt-1 flex justify-end gap-2.5 border-t border-border-soft pt-4">
         <button type="button" className="btn btn-secondary" onClick={onDone}>
-          Abbrechen
+          {t("cancel")}
         </button>
-        <FormSubmitButton Icon={Link2} pendingLabel="Wird verknüpft...">
-          Verknüpfen
-        </FormSubmitButton>
-      </div>
-    </form>
-  );
-}
-
-function CreateOwnForm({
-  tenant,
-  defaultFirstName,
-  defaultLastName,
-  defaultEmail,
-  onDone,
-}: {
-  tenant: string;
-  defaultFirstName: string;
-  defaultLastName: string;
-  defaultEmail: string;
-  onDone: () => void;
-}) {
-  const [state, formAction, isPending] = useActionState(
-    createAndLinkOwnEmployeeAction,
-    initialState,
-  );
-  useCloseOnSuccess(state, isPending, onDone);
-
-  return (
-    <form className="flex flex-col gap-4" action={formAction}>
-      <input type="hidden" name="tenant" value={tenant} />
-
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="field">
-          <label htmlFor="own-first-name" className="label">
-            Vorname
-          </label>
-          <input
-            id="own-first-name"
-            name="firstName"
-            className="input"
-            defaultValue={defaultFirstName}
-            autoComplete="given-name"
-          />
-        </div>
-
-        <div className="field">
-          <label htmlFor="own-last-name" className="label">
-            Nachname
-          </label>
-          <input
-            id="own-last-name"
-            name="lastName"
-            className="input"
-            defaultValue={defaultLastName}
-            autoComplete="family-name"
-          />
-        </div>
-      </div>
-
-      <div className="field">
-        <label htmlFor="own-email" className="label">
-          E-Mail-Adresse
-        </label>
-        <input
-          id="own-email"
-          name="email"
-          type="email"
-          className="input"
-          defaultValue={defaultEmail}
-          autoComplete="email"
-        />
-        <FieldErrors errors={state.fieldErrors?.email} />
-      </div>
-
-      <p className="m-0 text-[12.5px] leading-[1.55] text-muted-2">
-        Ihre Personalakte wird angelegt und automatisch mit Ihrem Konto
-        verknüpft. Weitere Angaben können Sie danach in Mein Bereich
-        ergänzen.
-      </p>
-
-      <FormErrorBanner message={state.error} />
-
-      <div className="mt-1 flex justify-end gap-2.5 border-t border-border-soft pt-4">
-        <button type="button" className="btn btn-secondary" onClick={onDone}>
-          Abbrechen
-        </button>
-        <FormSubmitButton Icon={UserPlus} pendingLabel="Wird angelegt...">
-          Anlegen
+        <FormSubmitButton Icon={Link2} pendingLabel={t("linking")}>
+          {t("link")}
         </FormSubmitButton>
       </div>
     </form>
@@ -163,6 +77,7 @@ function UnlinkConfirmForm({
   employeeName: string;
   onDone: () => void;
 }) {
+  const t = useTranslations("SelfServiceEmployeeLink");
   const [state, formAction, isPending] = useActionState(unlinkOwnEmployeeAction, initialState);
   useCloseOnSuccess(state, isPending, onDone);
 
@@ -171,22 +86,24 @@ function UnlinkConfirmForm({
       <input type="hidden" name="tenant" value={tenant} />
 
       <p className="m-0 text-[13px] leading-[1.55] text-muted-2">
-        Ihr Konto wird von der Personalakte &quot;{employeeName}&quot; getrennt. Die
-        Personalakte selbst bleibt erhalten.
+        {t.rich("unlinkDescription", {
+          name: employeeName,
+          b: (chunks) => <strong className="text-ink">{chunks}</strong>,
+        })}
       </p>
 
       <FormErrorBanner message={state.error} />
 
       <div className="mt-1 flex justify-end gap-2.5 border-t border-border-soft pt-4">
         <button type="button" className="btn btn-secondary" onClick={onDone}>
-          Abbrechen
+          {t("cancel")}
         </button>
         <FormSubmitButton
           Icon={Unlink}
-          pendingLabel="Wird getrennt..."
+          pendingLabel={t("unlinking")}
           className="btn btn-secondary border-danger/25 text-danger hover:border-danger/40 hover:bg-danger/5"
         >
-          Verknüpfung aufheben
+          {t("unlinkConfirm")}
         </FormSubmitButton>
       </div>
     </form>
@@ -200,6 +117,7 @@ export function UnlinkOwnEmployeeButton({
   tenant: string;
   employeeName: string;
 }) {
+  const t = useTranslations("SelfServiceEmployeeLink");
   const { openPopup, closePopup } = useUniversalPopup();
 
   return (
@@ -208,14 +126,14 @@ export function UnlinkOwnEmployeeButton({
       className="btn btn-secondary btn-sm text-danger"
       onClick={() =>
         openPopup({
-          title: "Verknüpfung aufheben",
+          title: t("unlinkConfirm"),
           content: (
             <UnlinkConfirmForm tenant={tenant} employeeName={employeeName} onDone={closePopup} />
           ),
         })
       }
     >
-      Verknüpfung aufheben
+      {t("unlinkConfirm")}
     </button>
   );
 }
@@ -223,64 +141,50 @@ export function UnlinkOwnEmployeeButton({
 type SelfServiceEmployeeLinkProps = {
   tenant: string;
   unlinkedEmployees: UnlinkedEmployee[];
-  defaultFirstName: string;
-  defaultLastName: string;
-  defaultEmail: string;
 };
 
+/**
+ * Nur noch "Bestehendes Profil verknüpfen" — das Anlegen eines neuen,
+ * eigenen Profils per Self-Service wurde bewusst entfernt (To-Do:
+ * "Konto verknüpfen => Mitarbeiter auswählen, statt anlegen"). Fehlt eine
+ * unverknüpfte Personalakte im Betrieb, muss HR eine anlegen bzw.
+ * verknüpfen.
+ */
 export default function SelfServiceEmployeeLink({
   tenant,
   unlinkedEmployees,
-  defaultFirstName,
-  defaultLastName,
-  defaultEmail,
 }: SelfServiceEmployeeLinkProps) {
+  const t = useTranslations("SelfServiceEmployeeLink");
   const { openPopup, closePopup } = useUniversalPopup();
+
+  if (unlinkedEmployees.length === 0) {
+    return (
+      <p className="mt-4 text-center text-[12.5px] leading-[1.55] text-muted-2">
+        {t("noUnlinkedProfile")}
+      </p>
+    );
+  }
 
   return (
     <div className="mt-4 flex flex-wrap justify-center gap-2.5">
-      {unlinkedEmployees.length > 0 && (
-        <button
-          type="button"
-          className="btn btn-secondary"
-          onClick={() =>
-            openPopup({
-              title: "Bestehendes Profil verknüpfen",
-              content: (
-                <LinkExistingForm
-                  tenant={tenant}
-                  employees={unlinkedEmployees}
-                  onDone={closePopup}
-                />
-              ),
-            })
-          }
-        >
-          <Link2 size={15} />
-          Bestehendes Profil verknüpfen
-        </button>
-      )}
-
       <button
         type="button"
         className="btn btn-primary"
         onClick={() =>
           openPopup({
-            title: "Neues Profil anlegen",
+            title: t("linkExisting"),
             content: (
-              <CreateOwnForm
+              <LinkExistingForm
                 tenant={tenant}
-                defaultFirstName={defaultFirstName}
-                defaultLastName={defaultLastName}
-                defaultEmail={defaultEmail}
+                employees={unlinkedEmployees}
                 onDone={closePopup}
               />
             ),
           })
         }
       >
-        <UserPlus size={15} />
-        Neues Profil anlegen
+        <Link2 size={15} />
+        {t("linkExisting")}
       </button>
     </div>
   );

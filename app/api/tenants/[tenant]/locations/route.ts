@@ -82,6 +82,8 @@ export async function POST(
     email?: string;
     accentClassName?: string;
     openingHours?: unknown[];
+    /** `null`/fehlend = Unternehmensvorgabe (TenantSettings.shiftMinStaffing) gilt. */
+    shiftMinStaffing?: number | null;
   } | null;
 
   if (!body?.name?.trim()) {
@@ -106,6 +108,7 @@ export async function POST(
       email: body.email ?? "",
       accentClassName: body.accentClassName || "bg-ink",
       openingHours: body.openingHours ? parseOpeningHoursDays(body.openingHours) : undefined,
+      shiftMinStaffing: body.shiftMinStaffing ?? null,
     });
     const full = await getLocationForTenant(tenant, location.key);
 

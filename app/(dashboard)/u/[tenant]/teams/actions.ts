@@ -127,6 +127,33 @@ export async function addTeamMemberAction(formData: FormData) {
   redirect(`${teamPath(tenant, teamHandle)}?edit=1`);
 }
 
+/**
+ * Mehrere Mitarbeiter auf einmal ins Team holen — Gegenstück zum Popup mit
+ * Mehrfachauswahl (components/AddTeamMembersButton.tsx). Der Einzel-Pfad
+ * `addTeamMemberAction` bleibt für das Formular im Bearbeitungsmodus.
+ */
+export async function addTeamMembersAction(formData: FormData) {
+  const tenant = formString(formData, "tenant");
+  const teamId = formString(formData, "teamId");
+  const teamHandle = formString(formData, "teamHandle");
+  const employeeIds = formData
+    .getAll("employees")
+    .filter((value): value is string => typeof value === "string" && value.trim() !== "");
+
+  if (!tenant || !teamId || !teamHandle || employeeIds.length === 0) {
+    throw new Error("Mitarbeiter konnten nicht hinzugefügt werden.");
+  }
+
+  const role = formString(formData, "role");
+
+  for (const employeeId of employeeIds) {
+    await addTenantTeamMember({ tenantSlug: tenant, teamId, employeeId, role });
+  }
+
+  revalidatePath(teamPath(tenant, teamHandle));
+  redirect(teamPath(tenant, teamHandle));
+}
+
 export async function removeTeamMemberAction(formData: FormData) {
   const tenant = formString(formData, "tenant");
   const teamId = formString(formData, "teamId");

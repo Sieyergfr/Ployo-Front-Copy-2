@@ -23,7 +23,6 @@ export default function RegisterForm({
   const router = useRouter();
   const { toast } = useToast();
   const t = useTranslations("Auth.register");
-  const [error, setError] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
 
   return (
@@ -31,7 +30,6 @@ export default function RegisterForm({
       className="flex flex-col gap-4"
       onSubmit={async (event) => {
         event.preventDefault();
-        setError(null);
 
         const formData = new FormData(event.currentTarget);
         const firstName = String(formData.get("firstName") ?? "").trim();
@@ -42,14 +40,20 @@ export default function RegisterForm({
         const termsAccepted = formData.get("terms") === "on";
 
         if (password !== passwordRepeat) {
-          const message = t("passwordMismatch");
-          setError(message);
+          toast({
+            tone: "error",
+            title: t("signUpErrorTitle"),
+            subtitle: t("passwordMismatch"),
+          });
           return;
         }
 
         if (!termsAccepted) {
-          const message = t("termsRequired");
-          setError(message);
+          toast({
+            tone: "error",
+            title: t("signUpErrorTitle"),
+            subtitle: t("termsRequired"),
+          });
           return;
         }
 
@@ -67,8 +71,13 @@ export default function RegisterForm({
         setIsPending(false);
 
         if (signUpError) {
-          const message = signUpError.message ?? t("signUpErrorFallback");
-          setError(message);
+          // USER_ALREADY_EXISTS wird in lib/auth.ts gesetzt. Eigener Text,
+          // damit die Meldung uebersetzbar bleibt und auf die naechsten
+          // Schritte zeigt (anmelden oder Passwort zuruecksetzen).
+          const message =
+            signUpError.code === "USER_ALREADY_EXISTS"
+              ? t("emailAlreadyRegistered")
+              : (signUpError.message ?? t("signUpErrorFallback"));
           toast({
             tone: "error",
             title: t("signUpErrorTitle"),
@@ -154,12 +163,6 @@ export default function RegisterForm({
           {t("termsSuffix")}
         </Checkbox>
       </div>
-
-      {error && (
-        <p className="rounded-[10px] border border-danger/20 bg-danger/5 px-3 py-2 text-[12.5px] text-danger">
-          {error}
-        </p>
-      )}
 
       <PrimaryButton type="submit" disabled={isPending}>
         <span className="leading-tight">

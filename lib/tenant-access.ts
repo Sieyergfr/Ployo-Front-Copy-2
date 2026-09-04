@@ -515,6 +515,35 @@ export function scopeAllowsTarget(
 }
 
 /**
+ * Wie `scopeAllowsTarget`, lädt den Zieldatensatz aber selbst und wirft
+ * `FORBIDDEN`, wenn er außerhalb des Ausschnitts liegt.
+ *
+ * Für **Schreibpfade** gedacht: der Scope filterte bisher nur Listen. Wer
+ * `sickness: write` mit Scope "own" hatte, konnte über eine mitgeschickte
+ * fremde `employeeId`/`reportId` trotzdem fremde Datensätze anlegen, ändern
+ * oder abschließen — sichtbar waren sie ihm nur nicht.
+ */
+export async function assertEmployeeInScope(
+  access: TenantAccess,
+  employeeId: string | null | undefined,
+) {
+  const scopeFilter = await resolveScopeFilter(access);
+
+  if (scopeFilter.type === "all") return;
+  if (!employeeId) throw new Error("FORBIDDEN");
+
+  const { prisma } = await import("@/lib/prisma");
+  const employee = await prisma.tenantEmployee.findFirst({
+    where: { id: employeeId, tenantId: access.tenantId },
+    select: { id: true, team: true },
+  });
+
+  if (!employee || !scopeAllowsTarget(scopeFilter, employee)) {
+    throw new Error("FORBIDDEN");
+  }
+}
+
+/**
  * Nicht werfende Variante von requireTenantAccess — für Stellen, an denen
  * ein optionaler Datenblock (z. B. Gehaltsabrechnungen in einem
  * Mitarbeiterprofil) nur bei ausreichender Berechtigung mitgeladen werden

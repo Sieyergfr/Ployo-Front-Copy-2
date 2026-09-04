@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { SicknessReportButton } from "@/components/AbsenceActionButtons";
 import { SicknessDrawerButton } from "@/components/ActionDrawers";
 import PageHeader from "@/components/PageHeader";
@@ -10,10 +11,13 @@ import {
 import { getEmployeesForTenant } from "@/lib/employee-service";
 import { hasPermissionLevel } from "@/lib/roles";
 import { getTenantCapabilities, withAccessRedirect } from "@/lib/tenant-access";
+import { getTranslations } from "next-intl/server";
 
 export const metadata = {
   title: "Krankheit",
 };
+
+type T = Awaited<ReturnType<typeof getTranslations>>;
 
 function SicknessMetricCard({ label, value, caption, tone }: SicknessMetric) {
   return (
@@ -38,11 +42,13 @@ function CurrentSicknessRow({
   tenant,
   canManage,
   canDelete,
+  t,
 }: {
   item: CurrentSickness;
   tenant: string;
   canManage: boolean;
   canDelete: boolean;
+  t: T;
 }) {
   return (
     <div className="flex items-center gap-3 border-t border-border-soft py-3.5">
@@ -54,14 +60,14 @@ function CurrentSicknessRow({
           {item.name}
         </div>
         <div className="mt-0.5 truncate text-[12px] text-muted">
-          {item.location} {"·"} seit {item.since}
+          {t("locationSince", { location: item.location, since: item.since })}
         </div>
       </div>
       <div className="shrink-0 text-right">
         <div className="font-mono text-[14px] font-semibold text-muted-2">
           {item.days}
         </div>
-        <div className="text-[10px] text-muted">Tage</div>
+        <div className="text-[10px] text-muted">{t("daysUnit")}</div>
       </div>
       <SicknessDrawerButton tenant={tenant} item={item} canManage={canManage} canDelete={canDelete} />
     </div>
@@ -71,9 +77,11 @@ function CurrentSicknessRow({
 function SicknessHistoryRow({
   item,
   tenant,
+  t,
 }: {
   item: SicknessHistoryItem;
   tenant: string;
+  t: T;
 }) {
   return (
     <div className="flex flex-wrap items-center gap-4 border-t border-border-soft px-6 py-3.5">
@@ -92,13 +100,14 @@ function SicknessHistoryRow({
       </div>
       <SicknessDrawerButton tenant={tenant} item={item} />
       <span className="inline-flex shrink-0 rounded-[7px] bg-success/10 px-[9px] py-0.5 font-mono text-[10.5px] text-success">
-        ✓ Genesen
+        {t("recoveredBadge")}
       </span>
     </div>
   );
 }
 
 export default async function SicknessPage({ params }: PageProps<"/u/[tenant]/krankheit">) {
+  const t = await getTranslations("SicknessPage");
   const { tenant } = await params;
   const sickness = await withAccessRedirect(tenant, () => getSicknessForTenant(tenant));
   // Nur für Namen/Standort im Meldungs-Dialog — fehlende Berechtigung dafür
@@ -118,7 +127,7 @@ export default async function SicknessPage({ params }: PageProps<"/u/[tenant]/kr
   }));
   return (
     <>
-      <PageHeader eyebrow="Abwesenheitsstatistik" title="Krankheit">
+      <PageHeader eyebrow={t("eyebrow")} title={t("title")}>
         {canManage && (
           <SicknessReportButton tenant={tenant} employees={employeeOptions} />
         )}
@@ -135,14 +144,14 @@ export default async function SicknessPage({ params }: PageProps<"/u/[tenant]/kr
           <div className="flex items-center justify-between gap-4 px-6 pt-[22px] pb-4">
             <div>
               <h2 className="m-0 font-display text-[18px] font-semibold tracking-[-0.4px] text-ink">
-                Aktuell krank
+                {t("currentSickTitle")}
               </h2>
               <div className="mt-1 text-[12.5px] text-muted">
-                Laufende Krankmeldungen
+                {t("currentSickSubtitle")}
               </div>
             </div>
             <span className="shrink-0 font-mono text-[12px] font-medium text-muted-2">
-              {currentSickness.length} MA
+              {t("employeeCountBadge", { count: currentSickness.length })}
             </span>
           </div>
           <div className="px-6 pb-5">
@@ -153,6 +162,7 @@ export default async function SicknessPage({ params }: PageProps<"/u/[tenant]/kr
                 tenant={tenant}
                 canManage={canManage}
                 canDelete={canDelete}
+                t={t}
               />
             ))}
           </div>
@@ -161,10 +171,10 @@ export default async function SicknessPage({ params }: PageProps<"/u/[tenant]/kr
         <div className="overflow-hidden rounded-card border border-border bg-white">
           <div className="px-6 pt-[22px] pb-4">
             <h2 className="m-0 font-display text-[18px] font-semibold tracking-[-0.4px] text-ink">
-              Krankenquote
+              {t("rateTitle")}
             </h2>
             <div className="mt-1 text-[12.5px] text-muted">
-              Letzte 6 Monate
+              {t("rateSubtitle")}
             </div>
           </div>
           <div className="px-6 pb-6">
@@ -182,8 +192,8 @@ export default async function SicknessPage({ params }: PageProps<"/u/[tenant]/kr
                     {item.count}
                   </div>
                   <div
-                    className={`w-full rounded-t ${item.current ? "bg-ink" : "bg-border"}`}
-                    style={{ height: item.height }}
+                    className={`w-full h-[var(--bar-h)] rounded-t ${item.current ? "bg-ink" : "bg-border"}`}
+                    style={{ "--bar-h": `${item.height}px` } as CSSProperties}
                   />
                   <div className="font-mono text-[9.5px] text-muted">
                     {item.month}
@@ -198,12 +208,12 @@ export default async function SicknessPage({ params }: PageProps<"/u/[tenant]/kr
       <section className="overflow-hidden rounded-card border border-border bg-white">
         <div className="border-b border-border px-6 pt-5 pb-3.5">
           <h2 className="m-0 font-display text-[18px] font-semibold tracking-[-0.4px] text-ink">
-            Verlauf · letzte 30 Tage
+            {t("historyTitle")}
           </h2>
         </div>
 
         {sicknessHistory.map((item) => (
-          <SicknessHistoryRow key={item.id} item={item} tenant={tenant} />
+          <SicknessHistoryRow key={item.id} item={item} tenant={tenant} t={t} />
         ))}
       </section>
     </>

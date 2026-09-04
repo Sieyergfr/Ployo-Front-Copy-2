@@ -139,22 +139,22 @@ enum FileFolderStatus {
 }
 
 model User {
-  id                  String             @id @default(cuid())
-  name                String
-  email               String             @unique
-  emailVerified       Boolean            @default(false)
-  image               String?
-  twoFactorEnabled    Boolean            @default(false)
-  scheduledDeletionAt DateTime?
-  termsAcceptedAt     DateTime?
-  createdAt           DateTime           @default(now())
-  updatedAt           DateTime           @updatedAt
-  accounts            Account[]
-  memberships         TenantMembership[]
-  sessions            Session[]
-  pushSubscriptions   PushSubscription[]
-  twoFactor           TwoFactor[]
-  preference          UserPreference?
+  id                    String                       @id @default(cuid())
+  name                  String
+  email                 String                       @unique
+  emailVerified         Boolean                      @default(false)
+  image                 String?
+  twoFactorEnabled      Boolean                      @default(false)
+  scheduledDeletionAt   DateTime?
+  termsAcceptedAt       DateTime?
+  createdAt             DateTime                     @default(now())
+  updatedAt             DateTime                     @updatedAt
+  accounts              Account[]
+  memberships           TenantMembership[]
+  sessions              Session[]
+  pushSubscriptions     PushSubscription[]
+  twoFactor             TwoFactor[]
+  preference            UserPreference?
   employeeNotifications TenantEmployeeNotification[]
 
   @@map("user")
@@ -291,6 +291,26 @@ model Verification {
   @@map("verification")
 }
 
+/// Serverseitiger Nachweis der Cookie-Consent-Entscheidung (Art. 7 Abs. 1
+/// DSGVO verlangt, dass der Verantwortliche eine wirksame Einwilligung
+/// belegen kann). Das Cookie selbst (lib/consent.ts) bleibt die technische
+/// Steuerung im Browser; dieser Datensatz ist der davon unabhaengige
+/// Nachweis, der auch nach Cookie-Loeschung bestehen bleibt. Bewusst ohne
+/// automatisches Purging (siehe Cron) - der Nachweiswert nimmt mit der Zeit
+/// nicht ab.
+model ConsentRecord {
+  id            String   @id @default(cuid())
+  userId        String?
+  value         String
+  bannerVersion String
+  ipAddress     String   @default("")
+  userAgent     String   @default("")
+  createdAt     DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
 model Tenant {
   id                       String                          @id @default(cuid())
   slug                     String                          @unique
@@ -335,6 +355,7 @@ model Tenant {
   infoRequests             TenantEmployeeInfoRequest[]
   employeeTimeline         TenantEmployeeTimeline[]
   employeeNotifications    TenantEmployeeNotification[]
+  employeeFolderTemplates  TenantEmployeeFolderTemplate[]
   settings                 TenantSettings?
 }
 
@@ -375,37 +396,44 @@ model TenantInvitation {
 }
 
 model TenantSettings {
-  id                     String   @id @default(cuid())
-  taxId                  String   @default("")
-  defaultLocationId      String   @default("")
-  weekStart              String   @default("monday")
-  workHours              String   @default("40 Stunden pro Woche")
-  vacationDays           Int      @default(30)
-  shiftPresetsJson       Json     @default("[]")
-  shiftMinStaffing       Int      @default(3)
-  shiftBreakRule         String   @default("30-6")
-  defaultOpeningHoursJson Json    @default("[]")
-  employeeNumberRequired Boolean  @default(true)
-  employeeNumberPrefix   String   @default("MA-")
-  employeeNumberSuffix   String   @default("")
-  archiveFormerEmployees Boolean  @default(true)
-  mailNotifications      Boolean  @default(true)
-  inAppNotifications     Boolean  @default(true)
-  mobilePush             Boolean  @default(false)
-  deadlineAlerts         Boolean  @default(true)
-  absenceAlerts          Boolean  @default(true)
-  shiftAlerts            Boolean  @default(true)
-  digestTime             String   @default("monday-0800")
-  twoFactorRequired      Boolean  @default(false)
-  sessionTimeout         Boolean  @default(true)
-  auditRetentionMonths   Int      @default(24)
-  billingNotifications   Boolean  @default(true)
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
-  tenantId               String   @unique
-  companyAddressId       String?  @unique
-  companyAddress         Address? @relation("TenantSettingsCompanyAddress", fields: [companyAddressId], references: [id], onDelete: SetNull)
-  tenant                 Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  id                      String   @id @default(cuid())
+  taxId                   String   @default("")
+  defaultLocationId       String   @default("")
+  weekStart               String   @default("monday")
+  workHours               String   @default("40 Stunden pro Woche")
+  vacationDays            Int      @default(30)
+  shiftPresetsJson        Json     @default("[]")
+  shiftMinStaffing        Int      @default(3)
+  shiftBreakRule          String   @default("30-6")
+  /// Mindest-Ruhezeit zwischen zwei Schichten in Stunden (§5 ArbZG:
+  /// gesetzliches Minimum 11h). Wird bei Schicht-Anlage/-Änderung geprüft.
+  minRestHours            Int      @default(11)
+  /// Maximale Dauer einer einzelnen Schicht in Stunden (§3 ArbZG:
+  /// grundsaetzlich 8h, verlaengerbar auf bis zu 10h bei Ausgleich
+  /// innerhalb von 6 Monaten - 10 als praktikabler Default).
+  maxShiftHours           Int      @default(10)
+  defaultOpeningHoursJson Json     @default("[]")
+  employeeNumberRequired  Boolean  @default(true)
+  employeeNumberPrefix    String   @default("MA-")
+  employeeNumberSuffix    String   @default("")
+  archiveFormerEmployees  Boolean  @default(true)
+  mailNotifications       Boolean  @default(true)
+  inAppNotifications      Boolean  @default(true)
+  mobilePush              Boolean  @default(false)
+  deadlineAlerts          Boolean  @default(true)
+  absenceAlerts           Boolean  @default(true)
+  shiftAlerts             Boolean  @default(true)
+  digestTime              String   @default("monday-0800")
+  twoFactorRequired       Boolean  @default(false)
+  sessionTimeout          Boolean  @default(true)
+  auditRetentionMonths    Int      @default(24)
+  billingNotifications    Boolean  @default(true)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+  tenantId                String   @unique
+  companyAddressId        String?  @unique
+  companyAddress          Address? @relation("TenantSettingsCompanyAddress", fields: [companyAddressId], references: [id], onDelete: SetNull)
+  tenant                  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 }
 
 model Address {
@@ -420,25 +448,52 @@ model Address {
   updatedAt             DateTime        @updatedAt
   tenantSettingsCompany TenantSettings? @relation("TenantSettingsCompanyAddress")
   tenantLocation        TenantLocation? @relation("TenantLocationAddress")
-  tenantEmployeePrivate TenantEmployee? @relation("TenantEmployeePrivateAddress")
-  tenantEmployeeWork    TenantEmployee? @relation("TenantEmployeeWorkAddress")
 
   @@index([country])
   @@index([postalCode, city])
 }
 
+/// Eigenes Modell statt der (mit Standort-/Firmenadressen geteilten)
+/// `Address`-Tabelle: nur hier sind die Felder personenbezogen (Privat-/
+/// Arbeitsadresse eines Mitarbeiters) — Verschlüsselung (lib/encryption.ts)
+/// würde in der gemeinsamen Tabelle auch nicht-personenbezogene Standort-/
+/// Firmenadressen mitverschlüsseln und deren `@@index`e unbrauchbar machen.
+/// Migration `20260903000000_split_employee_address` kopiert bestehende
+/// Adressen (gleiche IDs) aus `Address` hierher; Verschlüsselung selbst
+/// erfolgt App-seitig beim nächsten Speichern (siehe `decryptField`s
+/// Klartext-Passthrough für noch nicht verschlüsselte Altdaten).
+model EmployeeAddress {
+  id                    String          @id @default(cuid())
+  street                String          @default("")
+  houseNumber           String          @default("")
+  postalCode            String          @default("")
+  city                  String          @default("")
+  careOf                String          @default("")
+  country               String          @default("DE")
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+  tenantEmployeePrivate TenantEmployee? @relation("TenantEmployeePrivateAddress")
+  tenantEmployeeWork    TenantEmployee? @relation("TenantEmployeeWorkAddress")
+}
+
 model TenantRole {
-  id          String                 @id @default(cuid())
-  key         String
-  name        String
-  description String                 @default("")
-  isSystem    Boolean                @default(false)
-  createdAt   DateTime               @default(now())
-  updatedAt   DateTime               @updatedAt
-  tenantId    String
-  tenant      Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  memberships TenantMembership[]
-  permissions TenantRolePermission[]
+  id                 String                 @id @default(cuid())
+  key                String
+  name               String
+  description        String                 @default("")
+  isSystem           Boolean                @default(false)
+  /// Ob Trägerinnen und Träger dieser Rolle in der Mitarbeiter-App den Tab
+  /// "Alles" (Gesamtüberblick über Schichten, Anträge und Abwesenheiten des
+  /// Betriebs) sehen. Bewusst ein eigenes Rollen-Flag statt an "shifts"
+  /// gekoppelt: der Tab bündelt mehrere Bereiche, und ein Schichtplan-
+  /// Leserecht allein soll noch keinen Betriebsüberblick öffnen.
+  appOverviewEnabled Boolean                @default(false)
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+  tenantId           String
+  tenant             Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  memberships        TenantMembership[]
+  permissions        TenantRolePermission[]
 
   @@unique([tenantId, key])
   @@index([tenantId])
@@ -518,6 +573,11 @@ model TenantLocation {
   shiftCount         Int                      @default(0)
   openPositions      Int                      @default(0)
   openingHoursJson   Json                     @default("[]")
+  /// Mindestbesetzung pro Tag fuer DIESEN Standort. `null` = Vorgabe des
+  /// Unternehmens (TenantSettings.shiftMinStaffing) gilt weiter -- so bleibt
+  /// ein Standort ohne eigene Einstellung automatisch an der zentralen
+  /// Vorgabe haengen, statt sie beim Anlegen einmalig zu kopieren.
+  shiftMinStaffing   Int?
   utilization        String                   @default("0%")
   utilizationCaption String                   @default("")
   status             LocationStatus           @default(active)
@@ -612,12 +672,29 @@ model TenantEmployee {
   vacationRemaining     Int                            @default(0)
   vacationTotal         Int                            @default(30)
   vacationTaken         Int                            @default(0)
-  emergencyContactsJson Json                           @default("[]")
+  /// String statt Json: Feldverschlüsselung (lib/encryption.ts) arbeitet nur
+  /// auf Strings. Enthält weiterhin JSON (App-seitig via JSON.stringify/parse
+  /// serialisiert), nur die Spalte selbst ist jetzt Text statt jsonb.
+  emergencyContactsJson String                         @default("[]")
+  /// Zeitpunkt des Austritts (offboardEmployee), Startpunkt der Fristuhr für
+  /// die Kategorie-1-Anonymisierung (lib/data-retention.ts). Getrennt von
+  /// endDate (String, frei editierbar), damit die Frist nicht durch eine
+  /// nachträgliche Korrektur von endDate verschoben werden kann. Bei
+  /// reactivateEmployee wieder auf null gesetzt.
+  offboardedAt          DateTime?
+  /// Sperrt jede automatische Löschung/Anonymisierung für diesen Datensatz
+  /// (z. B. laufender Rechtsstreit). Muss von Hand gesetzt/aufgehoben werden,
+  /// beides mit Audit-Pflicht.
+  legalHold             Boolean                        @default(false)
+  legalHoldReason       String                         @default("")
+  /// Zeitpunkt, an dem Kategorie-1-Stammdaten automatisch anonymisiert wurden
+  /// (siehe cron/cleanup). null = noch nicht anonymisiert.
+  piiAnonymizedAt       DateTime?
   createdAt             DateTime                       @default(now())
   updatedAt             DateTime                       @updatedAt
   tenantId              String
-  privateAddress        Address?                       @relation("TenantEmployeePrivateAddress", fields: [privateAddressId], references: [id], onDelete: SetNull)
-  workAddress           Address?                       @relation("TenantEmployeeWorkAddress", fields: [workAddressId], references: [id], onDelete: SetNull)
+  privateAddress        EmployeeAddress?               @relation("TenantEmployeePrivateAddress", fields: [privateAddressId], references: [id], onDelete: SetNull)
+  workAddress           EmployeeAddress?               @relation("TenantEmployeeWorkAddress", fields: [workAddressId], references: [id], onDelete: SetNull)
   tenant                Tenant                         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   vacationRequests      TenantVacationRequest[]
   wishFreeRequests      TenantWishFreeRequest[]
@@ -672,20 +749,22 @@ model TenantSicknessReport {
  * neben E-Mail und Push.
  */
 model TenantEmployeeNotification {
-  id         String    @id @default(cuid())
-  tenantId   String
-  userId     String
-  category   String
-  title      String
-  detail     String
-  read       Boolean   @default(false)
-  readAt     DateTime?
-  createdAt  DateTime  @default(now())
+  id             String    @id @default(cuid())
+  tenantId       String
+  userId         String
+  category       String
+  title          String
+  detail         String
+  read           Boolean   @default(false)
+  readAt         DateTime?
+  createdAt      DateTime  @default(now())
   /// Optionale Referenz fuers Deep-Linking (z.B. "info-request" + die jeweilige ID) - leer, wenn die Benachrichtigung auf keine konkrete Entitaet zeigt.
-  entityType String    @default("")
-  entityId   String    @default("")
-  tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  entityType     String    @default("")
+  entityId       String    @default("")
+  /// Sprachneutrale Quelle (NotificationMessage). title/detail sind beim Versand gerendert und damit in der Sprache, die der Empfaenger DAMALS eingestellt hatte; aus diesem Feld rendert der Posteingang bei jedem Abruf neu. Null bei Zeilen von vor dieser Aenderung - dann gelten title/detail.
+  messagePayload Json?
+  tenant         Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, userId, read])
   @@index([tenantId, userId, createdAt])
@@ -711,50 +790,57 @@ model TenantAuditLog {
 }
 
 model TenantFile {
-  id                   String                  @id @default(cuid())
+  id                   String                     @id @default(cuid())
   tenantId             String
   employeeId           String?
   locationId           String?
   teamId               String?
   parentId             String?
-  bucket               String                  @default("hr-documents")
+  bucket               String                     @default("hr-documents")
   storageKey           String
   originalName         String
   displayName          String
-  mimeType             String                  @default("application/octet-stream")
-  sizeBytes            Int                     @default(0)
-  extension            String                  @default("")
-  folderSlug           String                  @default("allgemein")
-  folderName           String                  @default("Allgemein")
-  ownerName            String                  @default("HR")
-  uploadedById         String                  @default("")
-  uploadedByName       String                  @default("")
-  documentType         String                  @default("Sonstiges")
-  validFrom            String                  @default("")
-  expiresAt            String                  @default("")
-  reminderAt           String                  @default("")
-  description          String                  @default("")
-  tagsJson             Json                    @default("[]")
-  assignedEmployeeId   String                  @default("")
-  assignedEmployeeName String                  @default("")
-  assignedLocationId   String                  @default("")
-  assignedLocationName String                  @default("")
-  accessRoleIdsJson    Json                    @default("[]")
-  accessRoleNamesJson  Json                    @default("[]")
-  accessUserIdsJson    Json                    @default("[]")
-  accessUserNamesJson  Json                    @default("[]")
-  status               FileStatus              @default(active)
-  version              Int                     @default(1)
-  provider             String                  @default("s3")
+  mimeType             String                     @default("application/octet-stream")
+  sizeBytes            Int                        @default(0)
+  extension            String                     @default("")
+  folderSlug           String                     @default("allgemein")
+  folderName           String                     @default("Allgemein")
+  ownerName            String                     @default("HR")
+  uploadedById         String                     @default("")
+  uploadedByName       String                     @default("")
+  documentType         String                     @default("Sonstiges")
+  validFrom            String                     @default("")
+  expiresAt            String                     @default("")
+  reminderAt           String                     @default("")
+  description          String                     @default("")
+  tagsJson             Json                       @default("[]")
+  assignedEmployeeId   String                     @default("")
+  assignedEmployeeName String                     @default("")
+  assignedLocationId   String                     @default("")
+  assignedLocationName String                     @default("")
+  accessRoleIdsJson    Json                       @default("[]")
+  accessRoleNamesJson  Json                       @default("[]")
+  accessUserIdsJson    Json                       @default("[]")
+  accessUserNamesJson  Json                       @default("[]")
+  status               FileStatus                 @default(active)
+  /// Vor dem Mitarbeiter selbst verborgen: HR sieht die Datei weiterhin,
+  /// die eigene Personalakte in App/"Mein Bereich" laesst sie aus.
+  hiddenFromEmployee   Boolean                    @default(false)
+  version              Int                        @default(1)
+  provider             String                     @default("s3")
   deletedAt            DateTime?
-  createdAt            DateTime                @default(now())
-  updatedAt            DateTime                @updatedAt
-  tenant               Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  employee             TenantEmployee?         @relation(fields: [employeeId], references: [id], onDelete: SetNull)
-  location             TenantLocation?         @relation(fields: [locationId], references: [id], onDelete: SetNull)
-  team                 TenantTeam?             @relation(fields: [teamId], references: [id], onDelete: SetNull)
-  parent               TenantFile?             @relation("TenantFileVersions", fields: [parentId], references: [id], onDelete: SetNull)
-  versions             TenantFile[]            @relation("TenantFileVersions")
+  /// Zeitpunkt, an dem eine neue Version hochgeladen und diese Version auf
+  /// status=replaced gesetzt wurde. Grundlage fuer den 30-Tage-Purge-Lauf
+  /// analog zu deletedAt bei status=deleted (siehe cron/cleanup).
+  replacedAt           DateTime?
+  createdAt            DateTime                   @default(now())
+  updatedAt            DateTime                   @updatedAt
+  tenant               Tenant                     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee             TenantEmployee?            @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  location             TenantLocation?            @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  team                 TenantTeam?                @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  parent               TenantFile?                @relation("TenantFileVersions", fields: [parentId], references: [id], onDelete: SetNull)
+  versions             TenantFile[]               @relation("TenantFileVersions")
   employeeContract     TenantEmployeeContract?
   payrollStatement     TenantPayrollStatement?
   sicknessAttachments  TenantSicknessReport[]
@@ -897,28 +983,30 @@ model TenantPayrollStatement {
 }
 
 model TenantFileFolder {
-  id         String             @id @default(cuid())
-  tenantId   String
-  employeeId String?
-  locationId String?
-  teamId     String?
-  parentId   String?
-  scope      String             @default("tenant")
-  name       String
-  slug       String
-  path       String
-  ownerName  String             @default("HR")
-  status     FileFolderStatus   @default(active)
-  locked     Boolean            @default(false)
-  pinHash    String?
-  createdAt  DateTime           @default(now())
-  updatedAt  DateTime           @updatedAt
-  tenant     Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  employee   TenantEmployee?    @relation(fields: [employeeId], references: [id], onDelete: SetNull)
-  location   TenantLocation?    @relation(fields: [locationId], references: [id], onDelete: SetNull)
-  team       TenantTeam?        @relation(fields: [teamId], references: [id], onDelete: SetNull)
-  parent     TenantFileFolder?  @relation("TenantFileFolderChildren", fields: [parentId], references: [id], onDelete: SetNull)
-  children   TenantFileFolder[] @relation("TenantFileFolderChildren")
+  id                 String             @id @default(cuid())
+  tenantId           String
+  employeeId         String?
+  locationId         String?
+  teamId             String?
+  parentId           String?
+  scope              String             @default("tenant")
+  name               String
+  slug               String
+  path               String
+  ownerName          String             @default("HR")
+  status             FileFolderStatus   @default(active)
+  locked             Boolean            @default(false)
+  /// Ordner (inkl. Inhalt) vor dem Mitarbeiter selbst verborgen.
+  hiddenFromEmployee Boolean            @default(false)
+  pinHash            String?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  tenant             Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee           TenantEmployee?    @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  location           TenantLocation?    @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  team               TenantTeam?        @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  parent             TenantFileFolder?  @relation("TenantFileFolderChildren", fields: [parentId], references: [id], onDelete: SetNull)
+  children           TenantFileFolder[] @relation("TenantFileFolderChildren")
 
   @@unique([tenantId, scope, path])
   @@index([tenantId, parentId])
@@ -926,6 +1014,23 @@ model TenantFileFolder {
   @@index([employeeId])
   @@index([locationId])
   @@index([teamId])
+}
+
+/// Ordnervorlage für Mitarbeiter-Personalakten ("Unter Mitarbeiter-Seite
+/// Ordnervorlagen erstellen können, jeder Mitarbeiter hat dann automatisch
+/// einen Ordner x"). Beim Anlegen wird der Ordner sofort für alle
+/// bestehenden Mitarbeiter erzeugt (siehe `createEmployeeFolderTemplate` in
+/// lib/employee-folder-templates.ts); neue Mitarbeiter bekommen ihn beim
+/// Anlegen automatisch mit (siehe `createTenantEmployeeRecord`).
+model TenantEmployeeFolderTemplate {
+  id        String   @id @default(cuid())
+  tenantId  String
+  name      String
+  createdAt DateTime @default(now())
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
 }
 
 model TenantReminder {
@@ -1005,16 +1110,30 @@ model TenantShiftTemplate {
  * keine Zeile pro Woche vorab angelegt, nur beim ersten Veröffentlichen.
  */
 model TenantShiftWeek {
-  id          String          @id @default(cuid())
-  tenantId    String
-  year        Int
-  week        Int
-  status      ShiftWeekStatus @default(draft)
-  publishedAt DateTime?
-  publishedBy String          @default("")
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
-  tenant      Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  id                      String          @id @default(cuid())
+  tenantId                String
+  year                    Int
+  week                    Int
+  status                  ShiftWeekStatus @default(draft)
+  publishedAt             DateTime?
+  publishedBy             String          @default("")
+  /// Schnappschuss { employeeId: Anzahl Schichten } zum Zeitpunkt der letzten
+  /// Veroeffentlichung dieser Woche -- ermoeglicht bei erneutem
+  /// Veroeffentlichen zu erkennen, fuer welche Mitarbeiter sich seitdem
+  /// wirklich etwas geaendert hat (Anzahl weicht ab, oder eine ihrer
+  /// Schichten wurde seit dem letzten Veroeffentlichen angelegt/bearbeitet), statt jedes Mal
+  /// alle erneut zu benachrichtigen.
+  employeeShiftCountsJson Json            @default("{}")
+  /// Schnappschuss aller veroeffentlichten Schichten dieser Woche (Feldform
+  /// entspricht MyShift in lib/shift-service.ts) -- der Self-Service
+  /// (getMyShiftsForCurrentWeek) zeigt Mitarbeitern ausschliesslich diesen
+  /// Stand, nicht die live bearbeiteten TenantShift-Zeilen. Aenderungen an
+  /// bereits veroeffentlichten Wochen werden fuer Mitarbeiter dadurch erst mit
+  /// dem naechsten Veroeffentlichen sichtbar.
+  publishedShiftsJson     Json            @default("[]")
+  createdAt               DateTime        @default(now())
+  updatedAt               DateTime        @updatedAt
+  tenant                  Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, year, week])
   @@index([tenantId])

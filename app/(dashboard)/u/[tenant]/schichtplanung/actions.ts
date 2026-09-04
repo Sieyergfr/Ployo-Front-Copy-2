@@ -6,6 +6,7 @@ import {
   deleteShiftTemplate,
   deleteTenantShift,
   publishShiftWeek,
+  resetShiftWeekToPublished,
   saveShiftTemplateFromWeek,
   unpublishShiftWeek,
   updateShiftTemplate,
@@ -109,6 +110,25 @@ export async function unpublishShiftWeekAction(formData: FormData) {
   }
 
   await unpublishShiftWeek({ tenantSlug: tenant, year, week });
+
+  revalidateShiftViews(formData, tenant);
+  redirect(redirectPath(formData, tenant));
+}
+
+/**
+ * Verwirft alle Änderungen seit dem Veröffentlichen. Destruktiv — der Button
+ * dazu steht hinter einer Bestätigung (ConfirmSubmitButton).
+ */
+export async function resetShiftWeekAction(formData: FormData) {
+  const tenant = formString(formData, "tenant");
+  const year = Number.parseInt(formString(formData, "year"), 10);
+  const week = Number.parseInt(formString(formData, "week"), 10);
+
+  if (!tenant || !year || !week) {
+    throw new Error("Schichtplan konnte nicht zurückgesetzt werden.");
+  }
+
+  await resetShiftWeekToPublished({ tenantSlug: tenant, year, week });
 
   revalidateShiftViews(formData, tenant);
   redirect(redirectPath(formData, tenant));

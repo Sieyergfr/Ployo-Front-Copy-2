@@ -9,6 +9,12 @@ import type { z } from "zod";
 export type ActionState = {
   error?: string;
   fieldErrors?: Record<string, string[]>;
+  /**
+   * Für Actions, die bewusst NICHT per `redirect` enden (z. B. der
+   * PIN-Dialog oder ein Drag-&-Drop-Upload): der Client erkennt daran, dass
+   * er selbst schließen bzw. neu laden soll.
+   */
+  success?: boolean;
 };
 
 export const initialActionState: ActionState = {};

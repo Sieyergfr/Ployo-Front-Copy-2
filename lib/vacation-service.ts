@@ -10,12 +10,14 @@ import { headers } from "next/headers";
 import {
   requireTenantAccess,
   requireTenantMembership,
+  assertEmployeeInScope,
   resolveScopeFilter,
 } from "@/lib/tenant-access";
 import {
   notifyManagersOfNewVacationRequest,
   notifyVacationRequestDecided,
 } from "@/lib/notifications/events";
+import { notifyIfAbsenceConflictsWithPublishedShifts } from "@/lib/shift-service";
 
 type VacationRecord = {
   id: string;
@@ -230,6 +232,7 @@ export async function getVacationRequestsForTenant(tenantSlug: string) {
 export function getVacationMetrics(
   requests: VacationRequest[],
   employees: Array<{ vacationRemaining: number }>,
+  t: (key: string) => string,
 ): VacationMetric[] {
   const pending = requests.filter((request) => request.status === "pending").length;
   const approved = requests.filter((request) => request.status === "approved").length;
@@ -248,26 +251,26 @@ export function getVacationMetrics(
 
   return [
     {
-      label: "Ausstehend",
+      label: t("metricPendingLabel"),
       value: pending.toString(),
-      caption: "warten auf Genehmigung",
+      caption: t("metricPendingCaption"),
       tone: "warning",
     },
     {
-      label: "Genehmigt",
+      label: t("metricApprovedLabel"),
       value: approved.toString(),
-      caption: "gesamt",
+      caption: t("metricApprovedCaption"),
       tone: "success",
     },
     {
-      label: "\u00d8 Resturlaub",
+      label: t("metricAvgRemainingLabel"),
       value: averageRemaining.toString(),
-      caption: "Tage \u00b7 alle Mitarbeiter",
+      caption: t("metricAvgRemainingCaption"),
     },
     {
-      label: "Beantragte Tage",
+      label: t("metricRequestedDaysLabel"),
       value: requestedDays.toString(),
-      caption: "gesamt",
+      caption: t("metricRequestedDaysCaption"),
     },
   ];
 }
@@ -344,6 +347,14 @@ export async function createTenantVacationRequest(input: {
   if (!employee) {
     throw new Error("Mitarbeiter nicht gefunden.");
   }
+
+  // Mit Scope "nur eigene" ist "Urlaub für jemand anderen eintragen" keine
+  // erlaubte Aktion — die Mitarbeiterauswahl der App blendet sie dort auch
+  // aus, durchgesetzt wird sie aber erst hier.
+  await assertEmployeeInScope(
+    await requireTenantAccess(input.tenantSlug, "vacation", "write"),
+    employee.id,
+  );
 
   validateVacationDateRange(input.startDate, input.endDate);
 
@@ -432,6 +443,7 @@ export async function createMyVacationRequest(input: {
     tenantId: access.tenantId,
     tenantName: tenant?.name ?? input.tenantSlug,
     employeeName: employee.name,
+    requestId: request.id,
     startDate: input.startDate,
     endDate: input.endDate,
   });
@@ -469,6 +481,13 @@ export async function setTenantVacationRequestStatus(input: {
     throw new Error("Urlaubsantrag nicht gefunden.");
   }
 
+  // Über den eigenen Antrag entscheidet man nicht selbst: der Scope begrenzt
+  // sonst nur die Liste, nicht das Genehmigen/Ablehnen per requestId.
+  await assertEmployeeInScope(
+    await requireTenantAccess(input.tenantSlug, "vacation", "write"),
+    request.employeeId,
+  );
+
   await prisma.tenantVacationRequest.update({
     where: { id: input.requestId },
     data: {
@@ -503,10 +522,26 @@ export async function setTenantVacationRequestStatus(input: {
     tenantId,
     tenantName: tenant?.name ?? input.tenantSlug,
     employeeId: request.employeeId,
+    requestId: request.id,
     status: input.status,
     startDate: request.startDate,
     endDate: request.endDate,
   });
+
+  // Nachträglich genehmigter Urlaub kann bereits veröffentlichte Schichten
+  // betreffen (Urlaub wurde erst NACH dem Veröffentlichen beantragt/genehmigt)
+  // — dann bekommen alle mit Schichtplan-Admin-Recht eine Konflikt-Meldung.
+  if (input.status === "approved") {
+    await notifyIfAbsenceConflictsWithPublishedShifts({
+      tenantId,
+      tenantName: tenant?.name ?? input.tenantSlug,
+      employeeId: request.employeeId,
+      employeeName: request.employee.name,
+      startDate: request.startDate,
+      endDate: request.endDate,
+      reason: "vacation",
+    });
+  }
 }
 
 export async function updateTenantVacationRequest(input: {
@@ -522,12 +557,14 @@ export async function updateTenantVacationRequest(input: {
 
   const request = await prisma.tenantVacationRequest.findFirst({
     where: { id: input.requestId, tenantId },
-    select: { id: true, employee: { select: { name: true } } },
+    select: { id: true, employeeId: true, employee: { select: { name: true } } },
   });
 
   if (!request) {
     throw new Error("Urlaubsantrag nicht gefunden.");
   }
+
+  await assertEmployeeInScope(access, request.employeeId);
 
   // Bestehende Anträge dürfen auch auf vergangene Zeiträume korrigiert
   // werden (z. B. nachträgliche Erfassung) – nur das Format und die

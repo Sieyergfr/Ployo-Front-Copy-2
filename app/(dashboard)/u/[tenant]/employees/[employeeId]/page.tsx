@@ -4,17 +4,16 @@ import AuditLogPanel from "@/components/AuditLogPanel";
 import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
 import DatePickerField from "@/components/DatePickerField";
 import {
-  CreateFolderButton,
-  UploadFileButton,
 } from "@/components/FileActionButtons";
-import { FileReminderButton } from "@/components/ActionDrawers";
 import EmployeeDocumentSlots from "@/components/EmployeeDocumentSlots";
+import OwnerFilesTab from "@/components/OwnerFilesTab";
 import EmployeeContracts, { type EmployeeContractItem } from "@/components/EmployeeContracts";
 import { LocationMultiSelectDropdown } from "@/components/TeamEditControls";
 import EmergencyContactsCard from "@/components/EmergencyContactsCard";
 import PayrollUploadButton from "@/components/PayrollUploadButton";
 import PayrollDownloadButton from "@/components/PayrollDownloadButton";
 import EmployeeInfoRequestButton from "@/components/EmployeeInfoRequestButton";
+import { InfoRequestRow } from "@/components/InfoRequestDetail";
 import {
   OffboardEmployeeButton,
   ReactivateEmployeeButton,
@@ -23,11 +22,14 @@ import { UnsavedChangesGuard } from "@/components/EditSafety";
 import FloatingEditBar from "@/components/FloatingEditBar";
 import {
   deleteEmployeeAction,
+  deleteEmployeeDataByCategoryAction,
   inviteEmployeeAction,
   updateEmployeeAction,
 } from "@/app/(dashboard)/u/[tenant]/employees/actions";
 import { getAuditLogsForEntity } from "@/lib/audit";
 import { getEmployeeForTenant } from "@/lib/employee-service";
+import { getDeletionEligibilityForEmployee, type CategoryEligibility } from "@/lib/retention-service";
+import { RETENTION_POLICIES } from "@/lib/data-retention";
 import { hasPermissionLevel } from "@/lib/roles";
 import { getTenantCapabilities, withAccessRedirect } from "@/lib/tenant-access";
 import { getInvitationStatusForEmail } from "@/lib/invitation-service";
@@ -39,38 +41,35 @@ import {
   employeeStatusConfig,
   type EmployeeStatus,
   type Employee,
-  type EmployeeFile,
-  type EmployeeFileFolder,
   type EmployeeTimelineItem,
 } from "@/lib/employees";
 import { getRolesForTenant } from "@/lib/role-service";
 import {
   ArrowLeft,
   BriefcaseBusiness,
-  Eye,
-  FileText,
-  Folder,
-  Lock,
   Pencil,
   UserPlus,
 } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { getFileUploadOptions } from "@/lib/files-server";
-import { type FileFolder, type FileUploadOptions } from "@/lib/files";
-import { OwnerFileActions } from "@/components/OwnerFileActions";
+import { type FileUploadOptions } from "@/lib/files";
+import { getTranslations } from "next-intl/server";
 
 export async function generateMetadata({
   params,
 }: PageProps<"/u/[tenant]/employees/[employeeId]">) {
   const { tenant, employeeId } = await params;
   const employee = await getEmployeeForTenant(tenant, employeeId);
+  const t = await getTranslations("EmployeeDetail");
 
   return {
-    title: employee?.name ?? "Mitarbeiter",
+    title: employee?.name ?? t("metadataFallbackTitle"),
   };
 }
+
+type T = Awaited<ReturnType<typeof getTranslations>>;
 
 function DetailCard({
   title,
@@ -97,16 +96,18 @@ function PayrollTab({
   employee,
   tenant,
   canManage,
+  t,
 }: {
   employee: Employee;
   tenant: string;
   canManage: boolean;
+  t: T;
 }) {
   return (
     <DetailCard
       title={
         <span className="flex flex-wrap items-center justify-between gap-2">
-          Gehaltsabrechnungen
+          {t("payrollTitle")}
           {canManage && (
             <PayrollUploadButton
               tenant={tenant}
@@ -120,7 +121,7 @@ function PayrollTab({
     >
       {employee.payrollStatements.length === 0 && (
         <p className="border-t border-border-soft pt-3 text-[12.5px] text-muted">
-          Noch keine Abrechnungen hochgeladen.
+          {t("noPayrollStatements")}
         </p>
       )}
       {employee.payrollStatements.map((statement) => (
@@ -137,14 +138,22 @@ function PayrollTab({
             </div>
           </div>
           <div className="font-mono text-[12px] text-muted-2">
-            Brutto {statement.gross}
+            {t("gross", { amount: statement.gross })}
           </div>
           <div className="font-mono text-[12px] text-ink">
-            Netto {statement.net}
+            {t("net", { amount: statement.net })}
           </div>
-          <span className="h-fit rounded-[7px] border border-border-light px-2 py-[3px] text-center font-mono text-[10px] text-muted-2">
-            {statement.status === "corrected" ? "Korrigiert" : "Verfügbar"}
-          </span>
+          {/* Nur "Korrigiert" sagt etwas aus. "Verfügbar" stand an jeder
+              Zeile, die ohnehin da ist — reines Rauschen neben dem
+              Download-Knopf. Die Spalte bleibt, damit die Zeilen bündig
+              bleiben. */}
+          {statement.status === "corrected" ? (
+            <span className="h-fit rounded-[7px] border border-border-light px-2 py-[3px] text-center font-mono text-[10px] text-muted-2">
+              {t("corrected")}
+            </span>
+          ) : (
+            <span />
+          )}
           <PayrollDownloadButton tenant={tenant} fileId={statement.storageFileId} />
         </div>
       ))}
@@ -152,36 +161,24 @@ function PayrollTab({
   );
 }
 
-const infoRequestStatusLabels: Record<Employee["infoRequests"][number]["status"], string> = {
-  open: "Offen",
-  uploaded: "Upload erhalten",
-  review: "Antwort erhalten – zu prüfen",
-  cancelled: "Storniert",
-};
-
-const infoRequestStatusClassNames: Record<Employee["infoRequests"][number]["status"], string> = {
-  open: "border-warning/25 bg-warning/10 text-[#7A4E00]",
-  uploaded: "border-success/25 bg-success/10 text-success",
-  review: "border-success/25 bg-success/10 text-success",
-  cancelled: "border-border-light bg-border-soft text-muted-2",
-};
-
 function InfoRequestsCard({
   employee,
   tenant,
   employeeHandle,
   canManage,
+  t,
 }: {
   employee: Employee;
   tenant: string;
   employeeHandle: string;
   canManage: boolean;
+  t: T;
 }) {
   return (
     <DetailCard
       title={
         <span className="flex flex-wrap items-center justify-between gap-2">
-          Info-Anfragen
+          {t("infoRequestsTitle")}
           {canManage && (
             <EmployeeInfoRequestButton
               tenant={tenant}
@@ -196,37 +193,11 @@ function InfoRequestsCard({
     >
       {employee.infoRequests.length === 0 && (
         <p className="border-t border-border-soft pt-3 text-[12.5px] text-muted">
-          Noch keine Info-Anfragen erfasst.
+          {t("noInfoRequests")}
         </p>
       )}
       {employee.infoRequests.map((request) => (
-        <div key={request.id} className="border-t border-border-soft py-3">
-          <div className="flex flex-wrap items-start justify-between gap-2">
-            <div className="min-w-0">
-              <div className="truncate text-[13px] font-semibold text-ink">
-                {request.title}
-              </div>
-              <div className="mt-0.5 font-mono text-[10.5px] text-muted">
-                {request.requestedBy} · {request.requestedAt}
-              </div>
-            </div>
-            <span className="rounded-[7px] bg-border-soft px-2 py-[3px] font-mono text-[10px] text-muted-2">
-              bis {request.dueAt}
-            </span>
-          </div>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {request.fileRequested && (
-              <span className="rounded-[7px] border border-border-light px-2 py-[3px] font-mono text-[10px] text-muted">
-                Datei gewünscht
-              </span>
-            )}
-            <span
-              className={`rounded-[7px] border px-2 py-[3px] font-mono text-[10px] font-semibold ${infoRequestStatusClassNames[request.status]}`}
-            >
-              {infoRequestStatusLabels[request.status]}
-            </span>
-          </div>
-        </div>
+        <InfoRequestRow key={request.id} request={request} tenant={tenant} />
       ))}
     </DetailCard>
   );
@@ -346,142 +317,23 @@ function EditableSelectField({
   );
 }
 
-function FileFolderCard({
-  folder,
-  tenant,
-  returnPath,
-  filterHref,
-  active,
-  canManageReminders,
-}: {
-  folder: EmployeeFileFolder;
-  tenant: string;
-  returnPath: string;
-  filterHref: string;
-  active: boolean;
-  canManageReminders: boolean;
-}) {
-  return (
-    <Link
-      href={filterHref}
-      className={`flex w-full cursor-pointer items-center gap-[13px] rounded-xl border p-[15px] text-left font-sans no-underline transition-colors hover:bg-bg ${
-        active ? "border-ink bg-bg" : "border-border bg-white"
-      }`}
-    >
-      <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-border-soft text-muted-2">
-        <Folder size={19} />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-[13.5px] font-semibold text-ink">
-          {folder.name}
-        </span>
-        <span className="mt-[3px] block font-mono text-[10.5px] text-muted">
-          {folder.fileCount} Dateien
-        </span>
-      </span>
-      {folder.locked && <Lock size={13} className="shrink-0 text-muted" />}
-      <span onClick={(event) => event.preventDefault()}>
-        <FileReminderButton
-          tenant={tenant}
-          returnPath={returnPath}
-          compact
-          name={folder.name}
-          context={`Mitarbeiterordner \u00b7 ${folder.name}`}
-          canManage={canManageReminders}
-        />
-      </span>
-    </Link>
-  );
-}
-
-function FileRow({
-  file,
-  tenant,
-  returnPath,
-  canManageReminders,
-}: {
-  file: EmployeeFile;
-  tenant: string;
-  returnPath: string;
-  canManageReminders: boolean;
-}) {
-  return (
-    <div className="flex w-full cursor-pointer items-center gap-3.5 border-t border-border-soft py-3 text-left font-sans transition-colors hover:bg-bg">
-      <span className="flex size-[30px] shrink-0 items-center justify-center rounded-lg bg-border-soft text-muted-2">
-        <FileText size={14} />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-[13.5px] font-medium text-ink">
-          {file.name}
-        </span>
-        <span className="mt-0.5 block truncate font-mono text-[10.5px] text-muted">
-          {file.folder} {"\u00b7"} {file.updatedAt}
-        </span>
-      </span>
-      <span className="hidden font-mono text-[10.5px] text-muted md:block">
-        {file.size}
-      </span>
-      <span className="rounded-[7px] border border-border-light px-2 py-[3px] font-mono text-[10px] text-muted-2">
-        {file.type}
-      </span>
-      {file.locked && <Lock size={13} className="shrink-0 text-muted" />}
-      <OwnerFileActions tenant={tenant} storageFileId={file.storageFileId} name={file.name} />
-      <FileReminderButton
-        tenant={tenant}
-        returnPath={returnPath}
-        compact
-        name={file.name}
-        context={`${file.folder} \u00b7 Mitarbeiterdatei`}
-        canManage={canManageReminders}
-      />
-    </div>
-  );
-}
-
-function folderOptionSlug(value: string) {
-  return value
-    .toLowerCase()
-    .trim()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
-
-function employeeFolderOptions(employee: Employee): FileFolder[] {
-  return employee.fileFolders.map((folder) => ({
-    slug: folder.path ?? folderOptionSlug(folder.name),
-    path: folder.path ?? folderOptionSlug(folder.name),
-    name: folder.name,
-    fileCount: folder.fileCount,
-    owner: "HR",
-    updatedAt: "",
-    locked: folder.locked,
-  }));
-}
-
 function FilesTab({
   employee,
   tenant,
   employeeHref,
   uploadOptions,
   canManageFiles,
-  canManageReminders,
   activeFolder,
+  t,
 }: {
   employee: Employee;
   tenant: string;
   employeeHref: string;
   uploadOptions: FileUploadOptions;
   canManageFiles: boolean;
-  canManageReminders: boolean;
   activeFolder?: string;
+  t: T;
 }) {
-  const folderOptions = employeeFolderOptions(employee);
-  const visibleFiles = activeFolder
-    ? employee.files.filter((file) => file.folder === activeFolder)
-    : employee.files;
-
   return (
     <>
       <EmployeeDocumentSlots
@@ -491,128 +343,20 @@ function FilesTab({
         files={employee.files}
         canManage={canManageFiles}
       />
-      <DetailCard
-      title={
-        <div className="flex min-w-0 items-center gap-3">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-border-soft text-muted-2">
-            <Folder size={18} />
-          </span>
-          <span className="min-w-0">
-            <span className="block truncate">Dateiablage</span>
-            <span className="mt-[3px] block font-mono text-[10.5px] font-normal tracking-normal text-muted">
-              Ordner und Dateien
-            </span>
-          </span>
-        </div>
-      }
-      className="[&>h2]:mb-4"
-    >
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <span className="font-mono text-[10.5px] text-muted">
-          {employee.fileFolders.length} Ordner {"\u00b7"} {employee.files.length}{" "}
-          Dateien
-        </span>
-        {canManageFiles && (
-          <div className="flex flex-wrap gap-2">
-            <CreateFolderButton
-              tenant={tenant}
-              returnPath={`${employeeHref}?tab=files`}
-              ownerType="employee"
-              ownerId={employee.dbId}
-            />
-            <UploadFileButton
-              tenant={tenant}
-              returnPath={`${employeeHref}?tab=files`}
-              ownerType="employee"
-              ownerId={employee.dbId}
-              folderOptions={folderOptions}
-              uploadOptions={uploadOptions}
-            />
-          </div>
-        )}
-      </div>
-
-      <div className="grid gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(210px,1fr))]">
-        {employee.fileFolders.map((folder) => (
-            <FileFolderCard
-              key={folder.name}
-              folder={folder}
-              tenant={tenant}
-              returnPath={`${employeeHref}?tab=files`}
-              filterHref={
-                activeFolder === folder.name
-                  ? `${employeeHref}?tab=files`
-                  : `${employeeHref}?tab=files&folder=${encodeURIComponent(folder.name)}`
-              }
-              active={activeFolder === folder.name}
-              canManageReminders={canManageReminders}
-            />
-        ))}
-      </div>
-
-      <div className="mt-5">
-        <div className="mb-2 flex items-center justify-between gap-3 font-mono text-[9.5px] uppercase tracking-[0.6px] text-muted">
-          <span>{activeFolder ? `Dateien · ${activeFolder}` : "Dateien"}</span>
-          {activeFolder && (
-            <Link href={`${employeeHref}?tab=files`} className="normal-case text-link">
-              Alle anzeigen
-            </Link>
-          )}
-        </div>
-        {visibleFiles.map((file) => (
-            <FileRow
-              key={`${file.folder}-${file.name}`}
-              file={file}
-              tenant={tenant}
-              returnPath={`${employeeHref}?tab=files`}
-              canManageReminders={canManageReminders}
-            />
-        ))}
-      </div>
-    </DetailCard>
+      <OwnerFilesTab
+        tenant={tenant}
+        ownerType="employee"
+        ownerId={employee.dbId ?? ""}
+        basePath={employeeHref}
+        folders={employee.fileFolders}
+        files={employee.files}
+        uploadOptions={uploadOptions}
+        canManageFiles={canManageFiles}
+        initialFolderPath={activeFolder ?? ""}
+        emptyLabel={t("noFilesInRecord")}
+        employeeHandle={employee.id}
+      />
     </>
-  );
-}
-
-function ContractDocumentCard({
-  employee,
-  fileHref,
-}: {
-  employee: Employee;
-  fileHref: string;
-}) {
-  const contract = employee.contractDetails;
-
-  return (
-    <DetailCard title="Vertragsdatei" className="[&>h2]:mb-3.5">
-      <div className="rounded-xl border border-border bg-bg p-4">
-        <div className="flex items-start gap-3.5">
-          <span className="flex size-11 shrink-0 items-center justify-center rounded-[10px] bg-white text-muted-2">
-            <FileText size={19} />
-          </span>
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-[14px] font-semibold text-ink">
-              {contract.linkedFileName}
-            </div>
-            <div className="mt-1 block truncate font-mono text-[10.5px] text-muted">
-              {contract.linkedFileMeta}
-            </div>
-            <div className="mt-3 grid grid-cols-2 gap-2 font-mono text-[10px] uppercase tracking-[0.5px] text-muted">
-              <span className="rounded-[7px] border border-border-light bg-white px-2 py-[5px]">
-                PDF
-              </span>
-              <span className="rounded-[7px] border border-border-light bg-white px-2 py-[5px]">
-                Verknüpft
-              </span>
-            </div>
-          </div>
-        </div>
-        <Link href={fileHref} className="btn btn-primary btn-sm mt-4 w-full justify-center">
-          <Eye size={14} />
-          Öffnen
-        </Link>
-      </div>
-    </DetailCard>
   );
 }
 
@@ -652,9 +396,11 @@ function hasContractDetails(employee: Employee) {
 function ContractDetailsPrompt({
   employeeName,
   href,
+  t,
 }: {
   employeeName: string;
   href: string;
+  t: T;
 }) {
   return (
     <section className="rounded-card border border-warning/30 bg-[#FFF7EA] px-5 py-4">
@@ -664,312 +410,34 @@ function ContractDetailsPrompt({
         </span>
         <div className="min-w-[220px] flex-1">
           <div className="text-[14px] font-semibold text-ink">
-            Vertragsdetails fehlen
+            {t("contractDetailsMissingTitle")}
           </div>
           <p className="mt-1 text-[12.5px] leading-5 text-muted-2">
-            Ergänze Vertragsdetails für {employeeName}, damit Fristen,
-            Arbeitszeit und Konditionen vollständig in der Personalakte stehen.
+            {t("contractDetailsMissingBody", { name: employeeName })}
           </p>
         </div>
         <Link href={href} className="btn btn-primary btn-sm">
-          Vertragsdetails einfügen
+          {t("insertContractDetails")}
         </Link>
       </div>
     </section>
   );
 }
 
-// Kept temporarily as a reference while legacy JSON contract fields are migrated.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function LegacyContractTab({
-  employee,
-  isEditing,
-  fileHref,
-  roleOptions,
-}: {
-  employee: Employee;
-  isEditing: boolean;
-  fileHref: string;
-  roleOptions: string[];
-}) {
-  const contract = employee.contractDetails;
-  const contractHistory = [
-    {
-      id: "current",
-      title: contract.contractType || employee.contract,
-      status: "Aktiv",
-      period: `${contract.entryDate || employee.startDate || "ohne Start"} - ${contract.exitDate || "laufend"}`,
-      meta: contract.linkedFileMeta || "Keine Datei verknüpft",
-    },
-    {
-      id: "previous",
-      title: "Vorherige Vertragsfassung",
-      status: "Ersetzt",
-      period: "01.01.2025 - 31.12.2025",
-      meta: "Archiviert im Vertragsverlauf",
-    },
-    {
-      id: "inactive",
-      title: "Nebenvereinbarung Arbeitszeit",
-      status: "Inaktiv",
-      period: "01.06.2024 - 31.12.2024",
-      meta: "Inaktiv gesetzt, bleibt für die Historie erhalten",
-    },
-  ];
-
-  return (
-    <div className="grid items-start gap-4 lg:grid-cols-[1.15fr_0.85fr]">
-      {isEditing && <input type="hidden" name="contractDetailsSubmitted" value="1" />}
-      <div className="flex flex-col gap-4">
-        <DetailCard
-          title={
-            <div className="flex min-w-0 items-center gap-3">
-              <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-border-soft text-muted-2">
-                <BriefcaseBusiness size={18} />
-              </span>
-              <span className="min-w-0">
-                <span className="block truncate">Aktueller Vertrag</span>
-                <span className="mt-[3px] block font-mono text-[10.5px] font-normal tracking-normal text-muted">
-                  Datei, Status und Eckdaten
-                </span>
-              </span>
-            </div>
-          }
-          className="[&>h2]:mb-4"
-        >
-          <div className="mb-4 flex flex-wrap gap-2">
-            <button type="button" className="btn btn-primary btn-sm">
-              Vertrag hinzufügen
-            </button>
-            <button type="button" className="btn btn-secondary btn-sm">
-              Vertrag ersetzen
-            </button>
-            <button type="button" className="btn btn-secondary btn-sm">
-              Inaktiv setzen
-            </button>
-            <button type="button" className="btn btn-secondary btn-sm text-danger">
-              Aufheben / kündigen
-            </button>
-          </div>
-          {isEditing ? (
-            <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]">
-              <EditableTextField
-                id="contract-type"
-                label="Vertragsart"
-                name="contractType"
-                value={contract.contractType}
-              />
-              <EditableSelectField
-                id="contract-permission-role"
-                label="Berechtigungsrolle"
-                name="role"
-                value={employee.role}
-                options={roleOptions}
-              />
-              <EditableDateField
-                id="contract-entry-date"
-                label="Eintritt"
-                name="entryDate"
-                value={contract.entryDate}
-              />
-              <EditableDateField
-                id="contract-exit-date"
-                label="Austritt"
-                name="exitDate"
-                value={contract.exitDate}
-              />
-              <EditableTextField
-                id="contract-fixed-term"
-                label="Befristung"
-                name="fixedTerm"
-                value={contract.fixedTerm}
-              />
-              <EditableTextField
-                id="contract-probation"
-                label="Probezeit"
-                name="probation"
-                value={contract.probation}
-              />
-              <EditableTextField
-                id="contract-notice-period"
-                label="Kündigungsfrist"
-                name="noticePeriod"
-                value={contract.noticePeriod}
-              />
-            </div>
-          ) : (
-            <div className="grid gap-y-[18px] gap-x-[22px] [grid-template-columns:repeat(auto-fit,minmax(170px,1fr))]">
-              <FieldValue label="Vertragsart" value={contract.contractType} />
-              <FieldValue label="Eintritt" value={contract.entryDate} mono />
-              <FieldValue label="Austritt" value={contract.exitDate} mono />
-              <FieldValue label="Befristung" value={contract.fixedTerm} />
-              <FieldValue label="Probezeit" value={contract.probation} />
-              <FieldValue label="Kündigungsfrist" value={contract.noticePeriod} />
-            </div>
-          )}
-        </DetailCard>
-
-        <DetailCard title="Position & Organisation">
-          {isEditing ? (
-            <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]">
-              <EditableTextField
-                id="contract-position"
-                label="Position / Stelle"
-                name="position"
-                value={contract.position}
-              />
-              <EditableTextField
-                id="contract-department"
-                label="Abteilung"
-                name="department"
-                value={contract.department}
-              />
-              <EditableTextField
-                id="contract-supervisor"
-                label="Vorgesetzter"
-                name="supervisor"
-                value={contract.supervisor}
-              />
-              <EditableTextField
-                id="contract-work-location"
-                label="Ort"
-                name="workLocation"
-                value={contract.workLocation}
-              />
-              <EditableTextField
-                id="contract-parties"
-                label="Parteien"
-                name="parties"
-                value={contract.parties}
-              />
-              <EditableTextField
-                id="contract-collective-agreement"
-                label="Tarif / Regelwerk"
-                name="collectiveAgreement"
-                value={contract.collectiveAgreement}
-              />
-            </div>
-          ) : (
-            <div className="grid gap-y-[18px] gap-x-[22px] [grid-template-columns:repeat(auto-fit,minmax(170px,1fr))]">
-              <FieldValue label="Position / Stelle" value={contract.position} />
-              <FieldValue label="Abteilung" value={contract.department} />
-              <FieldValue label="Vorgesetzter" value={contract.supervisor} />
-              <FieldValue label="Ort" value={contract.workLocation} />
-              <FieldValue label="Parteien" value={contract.parties} />
-              <FieldValue
-                label="Tarif / Regelwerk"
-                value={contract.collectiveAgreement}
-              />
-            </div>
-          )}
-        </DetailCard>
-      </div>
-
-      <div className="flex flex-col gap-4">
-        <DetailCard title="Konditionen">
-          {isEditing ? (
-            <div className="grid gap-3">
-              <EditableTextField
-                id="contract-compensation"
-                label="Vergütung"
-                name="compensation"
-                value={contract.compensation}
-              />
-              <EditableTextField
-                id="contract-compensation-gross"
-                label="Vergütung Brutto (€)"
-                name="compensationGross"
-                type="number"
-                min={0}
-                value={contract.compensationGross}
-              />
-              <EditableTextField
-                id="contract-working-time"
-                label="Wochenstunden"
-                name="workingTime"
-                type="number"
-                min={0}
-                value={contract.workingTime}
-              />
-              <EditableTextField
-                id="contract-vacation"
-                label="Urlaub"
-                name="vacation"
-                value={contract.vacation}
-              />
-            </div>
-          ) : (
-            <div className="flex flex-col gap-4">
-              <FieldValue label="Vergütung" value={contract.compensation} />
-              <FieldValue
-                label="Vergütung Brutto"
-                value={contract.compensationGross ? `${contract.compensationGross} €` : ""}
-              />
-              <FieldValue
-                label="Wochenstunden"
-                value={contract.workingTime ? `${contract.workingTime} Std./Woche` : ""}
-              />
-              <FieldValue label="Urlaub" value={contract.vacation} />
-            </div>
-          )}
-        </DetailCard>
-
-        <ContractDocumentCard employee={employee} fileHref={fileHref} />
-        <DetailCard title="Vertragshistorie" className="[&>h2]:mb-3.5">
-          <div className="flex flex-col gap-2.5">
-            {contractHistory.map((item) => (
-              <article
-                key={item.id}
-                className="rounded-xl border border-border bg-bg p-3"
-              >
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="truncate text-[13.5px] font-semibold text-ink">
-                      {item.title}
-                    </div>
-                    <div className="mt-1 font-mono text-[10.5px] text-muted">
-                      {item.period}
-                    </div>
-                  </div>
-                  <span className="rounded-[7px] border border-border-light bg-white px-2 py-[3px] font-mono text-[10px] text-muted-2">
-                    {item.status}
-                  </span>
-                </div>
-                <div className="mt-2 text-[12px] text-muted-2">{item.meta}</div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <button type="button" className="btn btn-secondary btn-sm">
-                    Ersetzen
-                  </button>
-                  <button type="button" className="btn btn-secondary btn-sm">
-                    Inaktiv setzen
-                  </button>
-                  <button type="button" className="btn btn-secondary btn-sm text-danger">
-                    Aufheben
-                  </button>
-                </div>
-              </article>
-            ))}
-          </div>
-        </DetailCard>
-      </div>
-    </div>
-  );
-}
-
 function ContractTab({
   employee,
-  isEditing,
-  roleOptions,
   tenant,
   contracts,
   canManagePayroll,
+  locationOptions,
+  t,
 }: {
   employee: Employee;
-  isEditing: boolean;
-  roleOptions: string[];
   tenant: string;
   contracts: EmployeeContractItem[];
   canManagePayroll: boolean;
+  locationOptions: string[];
+  t: T;
 }) {
   const details = employee.contractDetails;
   const activeContract = contracts.find((contract) => contract.status === "active");
@@ -978,73 +446,60 @@ function ContractTab({
 
   return (
     <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.05fr)_minmax(340px,0.95fr)]">
-      {isEditing && <input type="hidden" name="contractDetailsSubmitted" value="1" />}
       <div className="flex flex-col gap-4">
         <DetailCard
           title={
             <div className="flex items-center justify-between gap-3">
               <span className="flex items-center gap-3">
                 <span className="flex size-9 items-center justify-center rounded-lg bg-border-soft text-muted-2"><BriefcaseBusiness size={18} /></span>
-                <span><span className="block">Vertragsdetails</span><span className="mt-0.5 block font-mono text-[10.5px] font-normal text-muted">Die wichtigsten Informationen auf einen Blick</span></span>
+                <span><span className="block">{t("contractDetailsTitle")}</span><span className="mt-0.5 block font-mono text-[10.5px] font-normal text-muted">{t("contractDetailsSubtitle")}</span></span>
               </span>
-              {activeContract && <span className="rounded-[7px] bg-success/10 px-2.5 py-1 font-mono text-[10px] text-success">Aktiv</span>}
+              {activeContract && <span className="rounded-[7px] bg-success/10 px-2.5 py-1 font-mono text-[10px] text-success">{t("active")}</span>}
             </div>
           }
         >
-          {isEditing ? (
-            <div className="grid gap-3 sm:grid-cols-2">
-              <EditableTextField id="contract-type" label="Vertragsart" name="contractType" value={details.contractType} />
-              <EditableSelectField id="contract-permission-role" label="Berechtigungsrolle" name="role" value={employee.role} options={roleOptions} />
-              <EditableDateField id="contract-entry-date" label="Eintritt" name="entryDate" value={details.entryDate} />
-              <EditableDateField id="contract-exit-date" label="Austritt" name="exitDate" value={details.exitDate} />
-              <EditableTextField id="contract-position" label="Position" name="position" value={details.position} />
-              <EditableTextField id="contract-department" label="Abteilung" name="department" value={details.department} />
-              <EditableTextField id="contract-work-location" label="Arbeitsort" name="workLocation" value={details.workLocation} />
-              <EditableTextField id="contract-working-time" label="Wochenstunden" name="workingTime" type="number" min={0} value={details.workingTime} />
-              <EditableTextField id="contract-compensation" label="Vergütung" name="compensation" value={details.compensation} />
-              <EditableTextField id="contract-compensation-gross" label="Vergütung Brutto (€)" name="compensationGross" type="number" min={0} value={details.compensationGross} />
-              <EditableTextField id="contract-vacation" label="Urlaub" name="vacation" value={details.vacation} />
-              <EditableTextField id="contract-probation" label="Probezeit" name="probation" value={details.probation} />
-              <EditableTextField id="contract-notice-period" label="Kündigungsfrist" name="noticePeriod" value={details.noticePeriod} />
-            </div>
-          ) : (
-            <div className="grid gap-x-6 gap-y-5 sm:grid-cols-2">
-              <FieldValue label="Vertragsart" value={value(activeContract?.contractType, details.contractType || employee.contract)} />
-              <FieldValue label="Beginn" value={value(activeContract?.startDate, details.entryDate || employee.startDate)} mono />
-              <FieldValue label="Position" value={value(activeContract?.position, details.position)} />
-              <FieldValue label="Abteilung" value={value(activeContract?.department, details.department)} />
-              <FieldValue label="Arbeitsort" value={value(activeContract?.workLocation, details.workLocation)} />
-              <FieldValue
-                label="Wochenstunden"
-                value={(() => {
-                  const hours = value(activeContract?.weeklyHours, details.workingTime || employee.weeklyHours);
-                  return hours ? `${hours} Std./Woche` : hours;
-                })()}
-              />
-              <FieldValue label="Vergütung" value={value(activeContract?.compensation, details.compensation)} />
-              <FieldValue
-                label="Vergütung Brutto"
-                value={details.compensationGross ? `${details.compensationGross} €` : "—"}
-              />
-              <FieldValue label="Urlaub" value={activeContract?.vacationDays ? `${activeContract.vacationDays} Tage` : details.vacation} />
-              <FieldValue label="Probezeit bis" value={value(activeContract?.probationEndDate, details.probation)} mono />
-              <FieldValue label="Kündigungsfrist" value={value(activeContract?.noticePeriod, details.noticePeriod)} />
-            </div>
-          )}
+          {/*
+            Bearbeiten passiert seit dem "Alle Verträge"-Umbau ausschließlich
+            über den Bearbeiten-Button je Vertragsbox (EmployeeContracts.tsx)
+            — die Seiten-weite "Bearbeiten"-Umschaltung wirkt bewusst nicht
+            mehr auf diesen Tab, daher hier immer die Lese-Ansicht.
+          */}
+          <div className="grid gap-x-6 gap-y-5 sm:grid-cols-2">
+            <FieldValue label={t("contractType")} value={value(activeContract?.contractType, details.contractType || employee.contract)} />
+            <FieldValue label={t("entryDate")} value={value(activeContract?.startDate, details.entryDate || employee.startDate)} mono />
+            <FieldValue label={t("position")} value={value(activeContract?.position, details.position)} />
+            <FieldValue label={t("department")} value={value(activeContract?.department, details.department)} />
+            <FieldValue label={t("workLocation")} value={value(activeContract?.workLocation, details.workLocation)} />
+            <FieldValue
+              label={t("weeklyHours")}
+              value={(() => {
+                const hours = value(activeContract?.weeklyHours, details.workingTime || employee.weeklyHours);
+                return hours ? t("weeklyHoursPerWeek", { hours }) : hours;
+              })()}
+            />
+            <FieldValue
+              label={t("grossCompensation")}
+              value={details.compensationGross ? `${details.compensationGross} €` : "—"}
+            />
+            <FieldValue label={t("vacation")} value={activeContract?.vacationDays ? t("vacationDaysCount", { count: activeContract.vacationDays }) : details.vacation} />
+            <FieldValue label={t("probationUntil")} value={value(activeContract?.probationEndDate, details.probation)} mono />
+            <FieldValue label={t("noticePeriod")} value={value(activeContract?.noticePeriod, details.noticePeriod)} />
+          </div>
         </DetailCard>
 
-        {!isEditing && activeContract?.notes && (
-          <DetailCard title="Hinweise"><p className="whitespace-pre-wrap text-[13px] leading-6 text-muted-2">{activeContract.notes}</p></DetailCard>
+        {activeContract?.notes && (
+          <DetailCard title={t("notes")}><p className="whitespace-pre-wrap text-[13px] leading-6 text-muted-2">{activeContract.notes}</p></DetailCard>
         )}
       </div>
 
-      <DetailCard title={`Alle Verträge · ${contracts.length}`} className="[&>h2]:mb-3.5">
+      <DetailCard title={t("allContracts", { count: contracts.length })} className="[&>h2]:mb-3.5">
         <EmployeeContracts
           tenant={tenant}
           employeeId={employee.dbId ?? employee.id}
           employeeHandle={employee.id}
           contracts={contracts}
           canManage={canManagePayroll}
+          locationOptions={locationOptions}
         />
       </DetailCard>
     </div>
@@ -1106,6 +561,7 @@ export default async function EmployeeDetailPage({
   const { tenant, employeeId } = await params;
   const { tab, edit, invited, folder } = await searchParams;
   const activeFolder = typeof folder === "string" ? folder : undefined;
+  const t = await getTranslations("EmployeeDetail");
   const employee = await withAccessRedirect(tenant, () =>
     getEmployeeForTenant(tenant, employeeId),
   );
@@ -1122,7 +578,10 @@ export default async function EmployeeDetailPage({
   const canViewPayroll = hasPermissionLevel(capabilities.payroll.level, "read");
   const canManagePayroll = hasPermissionLevel(capabilities.payroll.level, "write");
   const canManageFiles = capabilities.employees.canUploadFiles;
-  const canManageReminders = hasPermissionLevel(capabilities.reminders.level, "write");
+  const deletionEligibility =
+    canDeleteEmployee && employee.status === "former" && employee.dbId
+      ? await getDeletionEligibilityForEmployee(tenant, employee.dbId)
+      : null;
 
   // Rollen/Teams/Standorte/Uploadoptionen sind hier nur Zusatzinfo für
   // Dropdowns im Bearbeiten-Formular — fehlende Berechtigung dafür (z. B.
@@ -1174,14 +633,14 @@ export default async function EmployeeDetailPage({
   const hasPendingInvitation =
     invitation?.status === "PENDING" && !invitation.expired;
   const invitationHint = hasPendingInvitation
-    ? "Einladung ausstehend"
+    ? t("invitationPending")
     : invitation?.status === "PENDING" && invitation.expired
-      ? "Einladung abgelaufen"
+      ? t("invitationExpired")
       : null;
   const wasInvited = invited === "1" && Boolean(employee.email);
   const roleOptions = roles.length > 0
     ? roles.map((role) => role.name)
-    : ["Mitarbeiter"];
+    : [t("defaultRoleName")];
   const teamOptions = teams.map((team) => team.name);
   const locationOptions = locations.map((location) => location.name);
 
@@ -1200,10 +659,10 @@ export default async function EmployeeDetailPage({
       <div className="mb-[22px] flex flex-wrap items-center gap-3.5">
         <Link href={`/u/${tenant}/employees`} className="btn btn-secondary btn-sm">
           <ArrowLeft size={14} />
-          Mitarbeiter
+          {t("backToEmployees")}
         </Link>
         <span className="font-mono text-[11px] uppercase tracking-[0.5px] text-muted">
-          Personalakte / {employee.employeeNumber}
+          {t("personnelFileOf", { number: employee.employeeNumber })}
         </span>
       </div>
 
@@ -1219,7 +678,7 @@ export default async function EmployeeDetailPage({
                 className="input max-w-[420px] bg-white font-display text-[26px] font-semibold text-ink sm:text-[34px]"
                 name="name"
                 defaultValue={employee.name}
-                aria-label="Name"
+                aria-label={t("nameAriaLabel")}
                 required
               />
             ) : (
@@ -1234,7 +693,7 @@ export default async function EmployeeDetailPage({
             <DataTableStatus label={status.label} tone={status.tone} />
             {employee.status === "former" && employee.endDate && (
               <span className="font-mono text-[12px] text-danger">
-                Austritt: {employee.endDate}
+                {t("departureLabel", { date: employee.endDate })}
               </span>
             )}
             <span className="font-mono text-[12px] text-muted">
@@ -1242,7 +701,7 @@ export default async function EmployeeDetailPage({
             </span>
             {employee.hasAccount ? (
               <span className="font-mono text-[12px] text-muted">
-                Account verknüpft
+                {t("accountLinked")}
               </span>
             ) : invitationHint ? (
               <span className="font-mono text-[12px] text-muted">
@@ -1259,9 +718,9 @@ export default async function EmployeeDetailPage({
                 className="btn btn-secondary btn-sm text-danger"
                 form="employee-edit-form"
                 formAction={deleteEmployeeAction}
-                description={`Der Mitarbeiter "${employee.name}" wird dauerhaft gelöscht.`}
+                description={t("deleteConfirmDescription", { name: employee.name })}
               >
-                Löschen
+                {t("delete")}
               </ConfirmSubmitButton>
             )
           ) : (
@@ -1281,17 +740,17 @@ export default async function EmployeeDetailPage({
                     className="btn btn-secondary btn-sm"
                   >
                     <UserPlus size={14} />
-                    {hasPendingInvitation ? "Erneut einladen" : "Einladen"}
+                    {hasPendingInvitation ? t("inviteAgain") : t("invite")}
                   </button>
                 ) : (
                   <button
                     type="button"
                     className="btn btn-secondary btn-sm"
                     disabled
-                    title="Zum Einladen zuerst eine E-Mail-Adresse hinterlegen"
+                    title={t("inviteDisabledTitle")}
                   >
                     <UserPlus size={14} />
-                    Einladen
+                    {t("invite")}
                   </button>
                 ))}
               {canEditEmployee && employee.status === "former" && (
@@ -1312,7 +771,7 @@ export default async function EmployeeDetailPage({
               {canEditEmployee && (
                 <Link href={employeeEditHref} className="btn btn-secondary btn-sm">
                   <Pencil size={14} />
-                  Bearbeiten
+                  {t("edit")}
                 </Link>
               )}
             </>
@@ -1322,9 +781,10 @@ export default async function EmployeeDetailPage({
 
       {wasInvited && (
         <div className="mb-4 rounded-card border border-success/25 bg-success/5 px-5 py-3.5 text-[13px] text-ink">
-          Einladung an <span className="font-medium">{employee.email}</span>{" "}
-          versendet. Sobald sie angenommen wurde, ist der Account mit dieser
-          Personalakte verknüpft.
+          {t.rich("invitedBanner", {
+            email: employee.email,
+            b: (chunks) => <span className="font-medium">{chunks}</span>,
+          })}
         </div>
       )}
 
@@ -1337,7 +797,7 @@ export default async function EmployeeDetailPage({
               : "border-transparent font-medium text-muted"
           }`}
         >
-          Home
+          {t("tabHome")}
         </Link>
         {canViewPayroll && (
           <Link
@@ -1348,7 +808,7 @@ export default async function EmployeeDetailPage({
                 : "border-transparent font-medium text-muted"
             }`}
           >
-            Vertrag
+            {t("tabContract")}
             <span className="font-mono text-[11px] text-muted">{contracts.length}</span>
           </Link>
         )}
@@ -1360,7 +820,7 @@ export default async function EmployeeDetailPage({
               : "border-transparent font-medium text-muted"
           }`}
         >
-          Dateien
+          {t("tabFiles")}
           <span className="font-mono text-[11px] text-muted">
             {employee.files.length + employee.fileFolders.length}
           </span>
@@ -1374,7 +834,7 @@ export default async function EmployeeDetailPage({
                 : "border-transparent font-medium text-muted"
             }`}
           >
-            Abrechnungen
+            {t("tabPayroll")}
             <span className="font-mono text-[11px] text-muted">
               {employee.payrollStatements.length}
             </span>
@@ -1389,19 +849,19 @@ export default async function EmployeeDetailPage({
           employeeHref={employeeHref}
           uploadOptions={uploadOptions}
           canManageFiles={canManageFiles}
-          canManageReminders={canManageReminders}
           activeFolder={activeFolder}
+          t={t}
         />
       ) : isPayrollTab ? (
-        <PayrollTab employee={employee} tenant={tenant} canManage={canManagePayroll} />
+        <PayrollTab employee={employee} tenant={tenant} canManage={canManagePayroll} t={t} />
       ) : isContractTab ? (
         <ContractTab
           employee={employee}
-          isEditing={isEditing}
-          roleOptions={roleOptions}
           tenant={tenant}
           contracts={contracts as EmployeeContractItem[]}
           canManagePayroll={canManagePayroll}
+          locationOptions={locationOptions}
+          t={t}
         />
       ) : (
         <div className="flex flex-col gap-4">
@@ -1409,18 +869,19 @@ export default async function EmployeeDetailPage({
             <ContractDetailsPrompt
               employeeName={employee.name}
               href={contractEditHref}
+              t={t}
             />
           )}
 
           <div className="grid items-start gap-4 [grid-template-columns:repeat(auto-fit,minmax(320px,1fr))]">
             <div className="flex flex-col gap-4">
-              <DetailCard title="Stamminformationen">
+              <DetailCard title={t("masterDataTitle")}>
               {isEditing ? (
                 <>
                 <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]">
                   <EditableTextField
                     id="employee-number"
-                    label="Personalnummer"
+                    label={t("employeeNumber")}
                     name="employeeNumber"
                     value={employee.employeeNumber}
                     mono
@@ -1428,30 +889,30 @@ export default async function EmployeeDetailPage({
                   <fieldset disabled={!canViewPayroll} className="contents border-0 p-0 m-0">
                     <EditableDateField
                       id="employee-birth-date"
-                      label="Geburtsdatum"
+                      label={t("birthDate")}
                       name="birthDate"
                       value={employee.birthDate}
                     />
                     <EditableTextField
                       id="employee-birth-place"
-                      label="Geburtsort"
+                      label={t("birthPlace")}
                       name="birthPlace"
                       value={employee.birthPlace}
                     />
                     <EditableTextField
                       id="employee-nationality"
-                      label="Nationalität"
+                      label={t("nationality")}
                       name="nationality"
                       value={employee.nationality}
                     />
                     <EditableTextField
                       id="employee-marital-status"
-                      label="Familienstand"
+                      label={t("maritalStatus")}
                       name="maritalStatus"
                       value={employee.maritalStatus}
                     />
                     <div className="sm:col-span-2">
-                      <div className="mb-2 label">Anschrift</div>
+                      <div className="mb-2 label">{t("address")}</div>
                       <AddressFields
                         idPrefix="employee-private-address"
                         namePrefix="privateAddress"
@@ -1461,7 +922,7 @@ export default async function EmployeeDetailPage({
                   </fieldset>
                   <EditableTextField
                     id="employee-master-email"
-                    label="E-Mail"
+                    label={t("email")}
                     name="email"
                     type="email"
                     value={employee.email}
@@ -1469,7 +930,7 @@ export default async function EmployeeDetailPage({
                   />
                   <EditableTextField
                     id="employee-master-phone"
-                    label="Telefon"
+                    label={t("phone")}
                     name="phone"
                     type="tel"
                     value={employee.phone}
@@ -1478,27 +939,27 @@ export default async function EmployeeDetailPage({
                   <fieldset disabled={!canViewPayroll} className="contents border-0 p-0 m-0">
                     <EditableTextField
                       id="employee-tax-id"
-                      label="Steuer-ID"
+                      label={t("taxId")}
                       name="taxId"
                       value={employee.taxId}
                       mono
                     />
                     <EditableTextField
                       id="employee-social-security-number"
-                      label="Sozialversicherungsnummer"
+                      label={t("socialSecurityNumber")}
                       name="socialSecurityNumber"
                       value={employee.socialSecurityNumber}
                       mono
                     />
                     <EditableTextField
                       id="employee-health-insurance"
-                      label="Krankenkasse"
+                      label={t("healthInsurance")}
                       name="healthInsurance"
                       value={employee.healthInsurance}
                     />
                     <EditableTextField
                       id="employee-iban"
-                      label="IBAN"
+                      label={t("iban")}
                       name="iban"
                       value={employee.iban}
                       mono
@@ -1507,94 +968,87 @@ export default async function EmployeeDetailPage({
                 </div>
                 {!canViewPayroll && (
                   <p className="mt-3 text-[11.5px] leading-[1.5] text-muted">
-                    Geburts-, Adress- und Finanzdaten sind ausgeblendet — dafür
-                    fehlt die Berechtigung &bdquo;Gehaltsabrechnungen&ldquo;.
+                    {t("payrollFieldsHiddenNote")}
                   </p>
                 )}
                 </>
               ) : (
                 <div className="grid gap-y-[18px] gap-x-[22px] [grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]">
                   <FieldValue
-                    label="Personalnummer"
+                    label={t("employeeNumber")}
                     value={employee.employeeNumber}
                     mono
                   />
                   <FieldValue
-                    label="Geburtsdatum"
+                    label={t("birthDate")}
                     value={employee.birthDate}
                     mono
                   />
-                  <FieldValue label="Geburtsort" value={employee.birthPlace} />
-                  <FieldValue label="Nationalität" value={employee.nationality} />
-                  <FieldValue label="Familienstand" value={employee.maritalStatus} />
-                  <FieldValue label="Anschrift" value={employee.privateAddress} />
-                  <FieldValue label="E-Mail" value={employee.email} mono />
-                  <FieldValue label="Telefon" value={employee.phone} mono />
-                  <FieldValue label="Steuer-ID" value={employee.taxId} mono />
+                  <FieldValue label={t("birthPlace")} value={employee.birthPlace} />
+                  <FieldValue label={t("nationality")} value={employee.nationality} />
+                  <FieldValue label={t("maritalStatus")} value={employee.maritalStatus} />
+                  <FieldValue label={t("address")} value={employee.privateAddress} />
+                  <FieldValue label={t("email")} value={employee.email} mono />
+                  <FieldValue label={t("phone")} value={employee.phone} mono />
+                  <FieldValue label={t("taxId")} value={employee.taxId} mono />
                   <FieldValue
-                    label="Sozialversicherungsnummer"
+                    label={t("socialSecurityNumber")}
                     value={employee.socialSecurityNumber}
                     mono
                   />
                   <FieldValue
-                    label="Krankenkasse"
+                    label={t("healthInsurance")}
                     value={employee.healthInsurance}
                   />
-                  <FieldValue label="IBAN" value={employee.iban} mono />
+                  <FieldValue label={t("iban")} value={employee.iban} mono />
                 </div>
               )}
             </DetailCard>
 
-            <DetailCard title={"Besch\u00e4ftigung"}>
+            <DetailCard title={t("employmentTitle")}>
               {isEditing ? (
                 <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]">
                   <EditableSelectField
                     id="employee-contract"
-                    label="Vertragsart"
+                    label={t("contractType")}
                     name="contract"
                     value={employee.contract}
                     options={[
-                      "Unbefristet",
-                      "Teilzeit",
-                      "Befristet",
-                      "Werkstudentin",
+                      t("contractUnlimited"),
+                      t("contractPartTime"),
+                      t("contractFixedTerm"),
+                      t("contractWorkingStudent"),
                     ]}
-                  />
-                  <EditableTextField
-                    id="employee-weekly-hours"
-                    label="Wochenstunden"
-                    name="weeklyHours"
-                    value={employee.weeklyHours}
                   />
                   <EditableDateField
                     id="employee-start-date"
-                    label="Eintrittsdatum"
+                    label={t("entryDate")}
                     name="startDate"
                     value={employee.startDate}
                   />
                   <EditableTextField
                     id="employee-tenure"
-                    label="Beschäftigt seit"
+                    label={t("employedSince")}
                     name="tenure"
                     value={employee.tenure}
                   />
                   <EditableSelectField
                     id="employee-team"
-                    label="Team"
+                    label={t("team")}
                     name="team"
                     value={employee.team}
                     options={teamOptions}
                   />
                   <EditableSelectField
                     id="employee-role"
-                    label="Berechtigungsrolle"
+                    label={t("permissionRole")}
                     name="role"
                     value={employee.role}
                     options={roleOptions}
                   />
                   <EditableSelectField
                     id="employee-status"
-                    label="Status"
+                    label={t("status")}
                     name="status"
                     value={employee.status}
                     options={statusOptions}
@@ -1602,29 +1056,29 @@ export default async function EmployeeDetailPage({
                 </div>
               ) : (
                 <div className="grid gap-y-[18px] gap-x-[22px] [grid-template-columns:repeat(auto-fit,minmax(130px,1fr))]">
-                  <FieldValue label="Vertragsart" value={employee.contract} />
-                  <FieldValue label="Wochenstunden" value={employee.weeklyHours} />
+                  <FieldValue label={t("contractType")} value={employee.contract} />
+                  <FieldValue label={t("weeklyHours")} value={employee.weeklyHours} />
                   <FieldValue
-                    label="Eintrittsdatum"
+                    label={t("entryDate")}
                     value={employee.startDate}
                     mono
                   />
                   <FieldValue
-                    label={"Besch\u00e4ftigt seit"}
+                    label={t("employedSince")}
                     value={employee.tenure}
                   />
-                  <FieldValue label="Team" value={employee.team} />
-                  <FieldValue label="Berechtigungsrolle" value={employee.role} />
+                  <FieldValue label={t("team")} value={employee.team} />
+                  <FieldValue label={t("permissionRole")} value={employee.role} />
                 </div>
               )}
             </DetailCard>
 
-            <DetailCard title="Abwesenheit & Urlaub">
+            <DetailCard title={t("vacationTitle")}>
               {isEditing ? (
                 <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(160px,1fr))]">
                   <EditableTextField
                     id="employee-vacation-remaining"
-                    label="Resturlaub"
+                    label={t("vacationRemainingField")}
                     name="vacationRemaining"
                     type="number"
                     value={employee.vacationRemaining}
@@ -1632,7 +1086,7 @@ export default async function EmployeeDetailPage({
                   />
                   <EditableTextField
                     id="employee-vacation-total"
-                    label="Urlaub gesamt"
+                    label={t("vacationTotalField")}
                     name="vacationTotal"
                     type="number"
                     value={employee.vacationTotal}
@@ -1640,7 +1094,7 @@ export default async function EmployeeDetailPage({
                   />
                   <EditableTextField
                     id="employee-vacation-taken"
-                    label="Genommen"
+                    label={t("vacationTakenField")}
                     name="vacationTaken"
                     type="number"
                     value={employee.vacationTaken}
@@ -1654,24 +1108,24 @@ export default async function EmployeeDetailPage({
                       {employee.vacationRemaining}
                     </span>
                     <span className="mb-[5px] text-[13px] text-muted">
-                      von {employee.vacationTotal} Tagen Resturlaub
+                      {t("vacationOfTotal", { total: employee.vacationTotal })}
                     </span>
                   </div>
                   <div className="my-4 h-2 overflow-hidden rounded-full bg-border-soft">
                     <div
-                      className="h-full rounded-full bg-ink"
-                      style={{ width: `${vacationPercent}%` }}
+                      className="h-full w-[var(--pct)] rounded-full bg-ink"
+                      style={{ "--pct": `${vacationPercent}%` } as CSSProperties}
                     />
                   </div>
                   <div className="flex justify-between font-mono text-[11px] text-muted">
-                    <span>{employee.vacationTaken} Tage genommen</span>
+                    <span>{t("vacationDaysTaken", { count: employee.vacationTaken })}</span>
                     <span>{vacationPercent}%</span>
                   </div>
                 </>
               )}
             </DetailCard>
 
-            <DetailCard title="Schichten diese Woche" className="[&>h2]:mb-3.5">
+            <DetailCard title={t("shiftsThisWeek")} className="[&>h2]:mb-3.5">
               <div className="flex flex-col gap-2">
                 {employee.shifts.map((shift) => (
                   <ShiftRow key={shift.day} shift={shift} />
@@ -1684,6 +1138,7 @@ export default async function EmployeeDetailPage({
                 tenant={tenant}
                 employeeHandle={employee.id}
                 canManage={canEditEmployee}
+                t={t}
               />
             </div>
 
@@ -1695,16 +1150,16 @@ export default async function EmployeeDetailPage({
                 contacts={employee.emergencyContacts}
               />
 
-            <DetailCard title="Kontakt">
+            <DetailCard title={t("contactTitle")}>
               {isEditing ? (
                 <div className="grid gap-3">
-                  <FieldValue label="E-Mail" value={employee.email} mono />
-                  <FieldValue label="Telefon" value={employee.phone} mono />
+                  <FieldValue label={t("email")} value={employee.email} mono />
+                  <FieldValue label={t("phone")} value={employee.phone} mono />
                   <p className="text-[12px] text-muted -mt-1">
-                    E-Mail und Telefon werden unter „Stamminformationen“ bearbeitet.
+                    {t("contactFieldsHint")}
                   </p>
                   <div>
-                    <div className="mb-2 label">Standort-Adresse</div>
+                    <div className="mb-2 label">{t("locationAddress")}</div>
                     <AddressFields
                       idPrefix="employee-address"
                       namePrefix="address"
@@ -1719,14 +1174,14 @@ export default async function EmployeeDetailPage({
                 </div>
               ) : (
                 <div className="flex flex-col gap-4">
-                  <FieldValue label="E-Mail" value={employee.email} mono />
-                  <FieldValue label="Telefon" value={employee.phone} mono />
-                  <FieldValue label="Standort-Adresse" value={employee.address} />
+                  <FieldValue label={t("email")} value={employee.email} mono />
+                  <FieldValue label={t("phone")} value={employee.phone} mono />
+                  <FieldValue label={t("locationAddress")} value={employee.address} />
                 </div>
               )}
             </DetailCard>
 
-            <DetailCard title="Verlauf" className="[&>h2]:mb-4">
+            <DetailCard title={t("historyTitle")} className="[&>h2]:mb-4">
               {employee.timeline.map((item, index) => (
                 <TimelineItem
                   key={`${item.title}-${item.date}`}
@@ -1737,6 +1192,57 @@ export default async function EmployeeDetailPage({
               </DetailCard>
             </div>
           </div>
+        </div>
+      )}
+
+      {deletionEligibility && (
+        <div className="mt-4">
+          <DetailCard title={t("retentionTitle")}>
+            <p className="mb-4 text-[13px] leading-[1.55] text-muted-2">
+              {t("retentionDescription")}
+            </p>
+            <form id="employee-retention-form" className="flex flex-col gap-2">
+              <input type="hidden" name="tenant" value={tenant} />
+              <input type="hidden" name="employeeId" value={employee.dbId ?? ""} />
+              <input type="hidden" name="employeeHandle" value={employee.id} />
+              {deletionEligibility.map((entry: CategoryEligibility) => (
+                <label
+                  key={entry.category}
+                  className={`flex items-start gap-2.5 rounded-btn border px-3 py-2.5 text-[13px] ${
+                    entry.eligible
+                      ? "border-danger/25 bg-danger/5"
+                      : "border-border-light bg-bg text-muted-2"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    name="categories"
+                    value={entry.category}
+                    disabled={!entry.eligible}
+                    className="mt-0.5"
+                  />
+                  <span>
+                    <span className="font-semibold text-ink">
+                      {RETENTION_POLICIES[entry.category].beschreibung}
+                    </span>
+                    <br />
+                    {entry.reason}
+                  </span>
+                </label>
+              ))}
+            </form>
+            <div className="mt-3 flex justify-end">
+              <ConfirmSubmitButton
+                className="btn btn-secondary btn-sm text-danger"
+                form="employee-retention-form"
+                formAction={deleteEmployeeDataByCategoryAction}
+                title={t("retentionDeleteSelected")}
+                description={t("retentionDeleteConfirmDescription")}
+              >
+                {t("retentionDeleteSelected")}
+              </ConfirmSubmitButton>
+            </div>
+          </DetailCard>
         </div>
       )}
 

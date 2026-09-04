@@ -4,6 +4,7 @@ import { useState } from "react";
 import { authClient } from "@/lib/auth-client";
 import { useToast } from "@/components/Toasts";
 import { ShieldCheck, ShieldOff } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 function extractSecret(totpUri: string) {
   try {
@@ -19,6 +20,7 @@ export default function TwoFactorSettingsCard({
 }: {
   initialEnabled: boolean;
 }) {
+  const t = useTranslations("TwoFactorSettingsCard");
   const { toast } = useToast();
   const [enabled, setEnabled] = useState(initialEnabled);
   const [step, setStep] = useState<"idle" | "password" | "setup" | "disable">("idle");
@@ -39,7 +41,7 @@ export default function TwoFactorSettingsCard({
     setIsPending(false);
 
     if (enableError || !data) {
-      setError(enableError?.message ?? "2FA konnte nicht aktiviert werden.");
+      setError(enableError?.message ?? t("enableFailedDefault"));
       return;
     }
 
@@ -60,13 +62,12 @@ export default function TwoFactorSettingsCard({
 
     if (verifyError) {
       setError(
-        verifyError.message ??
-          "Der Code war ungültig. Bitte prüfen Sie Ihre Authenticator-App.",
+        verifyError.message ?? t("invalidCodeError"),
       );
       return;
     }
 
-    toast({ tone: "success", title: "2FA aktiviert", subtitle: "Zwei-Faktor-Authentifizierung ist jetzt aktiv." });
+    toast({ tone: "success", title: t("toastEnabledTitle"), subtitle: t("toastEnabledSubtitle") });
     setEnabled(true);
     setStep("idle");
     setTotpUri(null);
@@ -84,11 +85,11 @@ export default function TwoFactorSettingsCard({
     setIsPending(false);
 
     if (disableError) {
-      setError(disableError.message ?? "2FA konnte nicht deaktiviert werden.");
+      setError(disableError.message ?? t("disableFailedDefault"));
       return;
     }
 
-    toast({ tone: "success", title: "2FA deaktiviert" });
+    toast({ tone: "success", title: t("toastDisabledTitle") });
     setEnabled(false);
     setStep("idle");
     setPassword("");
@@ -100,15 +101,14 @@ export default function TwoFactorSettingsCard({
     return (
       <div className="flex flex-col gap-3">
         <p className="text-[12.5px] leading-5 text-muted">
-          Fügen Sie diesen Schlüssel manuell in Ihrer Authenticator-App
-          hinzu (z. B. Google Authenticator, 1Password, Authy):
+          {t("addKeyInstructions")}
         </p>
         <code className="break-all rounded-[10px] border border-border-light bg-bg px-3 py-2.5 font-mono text-[12px] text-ink">
           {secret}
         </code>
 
         <p className="mt-2 text-[12.5px] font-semibold text-danger">
-          Backup-Codes — sicher aufbewahren, jeder Code ist einmal gültig:
+          {t("backupCodesLabel")}
         </p>
         <div className="grid grid-cols-2 gap-1.5 rounded-[10px] border border-danger/20 bg-danger/5 p-3 font-mono text-[12px] text-ink">
           {backupCodes.map((backupCode) => (
@@ -119,7 +119,7 @@ export default function TwoFactorSettingsCard({
         <form onSubmit={handleVerify} className="mt-2 flex flex-col gap-3">
           <div className="field">
             <label htmlFor="twofa-verify-code" className="label">
-              Bestätigungscode aus der App
+              {t("confirmationCodeLabel")}
             </label>
             <input
               id="twofa-verify-code"
@@ -147,10 +147,10 @@ export default function TwoFactorSettingsCard({
                 setBackupCodes(null);
               }}
             >
-              Abbrechen
+              {t("cancel")}
             </button>
             <button type="submit" className="btn btn-primary" disabled={isPending}>
-              {isPending ? "Wird geprüft..." : "Bestätigen und aktivieren"}
+              {isPending ? t("checking") : t("confirmAndActivate")}
             </button>
           </div>
         </form>
@@ -165,7 +165,7 @@ export default function TwoFactorSettingsCard({
       <form onSubmit={disabling ? handleDisable : handleEnable} className="flex flex-col gap-3">
         <div className="field">
           <label htmlFor="twofa-password" className="label">
-            Passwort zur Bestätigung
+            {t("passwordConfirmLabel")}
           </label>
           <input
             id="twofa-password"
@@ -193,14 +193,14 @@ export default function TwoFactorSettingsCard({
               setError(null);
             }}
           >
-            Abbrechen
+            {t("cancel")}
           </button>
           <button
             type="submit"
             className={disabling ? "btn btn-secondary border-danger/25 text-danger" : "btn btn-primary"}
             disabled={isPending}
           >
-            {isPending ? "Wird verarbeitet..." : disabling ? "2FA deaktivieren" : "Weiter"}
+            {isPending ? t("processing") : disabling ? t("disable2fa") : t("continueLabel")}
           </button>
         </div>
       </form>
@@ -213,18 +213,17 @@ export default function TwoFactorSettingsCard({
         {enabled ? (
           <>
             <ShieldCheck size={16} className="text-success" />
-            Aktiv
+            {t("active")}
           </>
         ) : (
           <>
             <ShieldOff size={16} className="text-muted" />
-            Nicht aktiv
+            {t("notActive")}
           </>
         )}
       </div>
       <p className="text-[12.5px] leading-5 text-muted">
-        Mit Zwei-Faktor-Authentifizierung (TOTP) benötigen Sie beim Anmelden
-        zusätzlich zum Passwort einen Code aus einer Authenticator-App.
+        {t("description")}
       </p>
       <div className="flex justify-end">
         {enabled ? (
@@ -233,11 +232,11 @@ export default function TwoFactorSettingsCard({
             className="btn btn-secondary border-danger/25 text-danger hover:border-danger/40 hover:bg-danger/5"
             onClick={() => setStep("disable")}
           >
-            2FA deaktivieren
+            {t("disable2fa")}
           </button>
         ) : (
           <button type="button" className="btn btn-primary" onClick={() => setStep("password")}>
-            2FA aktivieren
+            {t("enable2fa")}
           </button>
         )}
       </div>

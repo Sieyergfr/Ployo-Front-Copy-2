@@ -1,10 +1,22 @@
 import { prisma } from "@/lib/prisma";
 import { purgeTenantFiles } from "@/lib/storage/delete";
 import { logger, runWithRequestId } from "@/lib/logger";
+import {
+  anonymizeFormerEmployeePii,
+  findEmployeesDueForPersonaldatenAnonymisierung,
+  remindHrAboutExpiredHealthDataFreetext,
+} from "@/lib/retention-service";
 
 export const runtime = "nodejs";
 
 const SOFT_DELETE_GRACE_DAYS = 30;
+/**
+ * Die App frischt ihren Push-Token bei jedem Login auf. Bleibt ein Eintrag so
+ * lange unberührt, ist das Gerät weg (deinstalliert, verloren, ersetzt) —
+ * einen Push würde es nie sehen. Beim nächsten Start trägt sich die App
+ * ohnehin von selbst wieder ein, das Löschen kostet also nichts.
+ */
+const PUSH_SUBSCRIPTION_STALE_DAYS = 90;
 
 /**
  * Aufräum-Job für Retention (DSGVO-Löschkonzept). Per externem Scheduler
@@ -13,9 +25,13 @@ const SOFT_DELETE_GRACE_DAYS = 30;
  *
  * - löscht abgelaufene Sessions und Verification-Einträge
  * - setzt die Audit-Log-Aufbewahrung je Mandant durch
- * - entfernt soft-gelöschte Dateien nach Ablauf der Karenzzeit endgültig
- *   (inkl. S3-Objekt)
+ * - entfernt soft-gelöschte und durch eine neue Version ersetzte Dateien
+ *   nach Ablauf der Karenzzeit endgültig (inkl. S3-Objekt)
  * - markiert abgelaufene Einladungen
+ * - entfernt Push-Tokens von Geräten, die sich lange nicht mehr gemeldet haben
+ * - anonymisiert Kategorie-1-Stammdaten ehemaliger Mitarbeiter nach Ablauf
+ *   der Frist (lib/data-retention.ts), erinnert HR an ablaufende
+ *   Gesundheitsdaten-Freitexte statt sie automatisch zu löschen
  */
 export async function GET(request: Request) {
   return runWithRequestId((requestId) => handleCleanup(request, requestId));
@@ -55,6 +71,13 @@ async function handleCleanup(request: Request, requestId: string) {
     data: { status: "EXPIRED" },
   });
 
+  const pushCutoff = new Date(
+    now.getTime() - PUSH_SUBSCRIPTION_STALE_DAYS * 24 * 60 * 60 * 1000,
+  );
+  const stalePushSubscriptions = await prisma.pushSubscription.deleteMany({
+    where: { updatedAt: { lt: pushCutoff } },
+  });
+
   let auditDeleted = 0;
   const tenants = await prisma.tenant.findMany({
     select: {
@@ -78,12 +101,31 @@ async function handleCleanup(request: Request, requestId: string) {
     now.getTime() - SOFT_DELETE_GRACE_DAYS * 24 * 60 * 60 * 1000,
   );
   const filesToPurge = await prisma.tenantFile.findMany({
-    where: { status: "deleted", deletedAt: { lt: purgeCutoff } },
+    where: {
+      OR: [
+        { status: "deleted", deletedAt: { lt: purgeCutoff } },
+        // Durch eine neue Version ersetzte Dateiversionen (siehe
+        // uploadTenantFileVersion) blieben bisher für immer liegen — analog
+        // zum Soft-Delete-Purge nach derselben Karenzzeit endgültig entfernen.
+        { status: "replaced", replacedAt: { lt: purgeCutoff } },
+      ],
+    },
     select: { id: true, bucket: true, storageKey: true },
     take: 200,
   });
 
   await purgeTenantFiles(filesToPurge);
+
+  // Löschkonzept (Datenschutz-Sicherheitsaudit-und-Umbauplan.md, Teil 4):
+  // Kategorie 1 (Stammdaten) automatisch anonymisieren, sobald die Frist
+  // abgelaufen ist. Kategorie 3/4/5 (Lohn/SV/Gesundheit) NIE automatisch
+  // löschen — für Gesundheitsdaten stattdessen nur eine HR-Erinnerung.
+  const dueForAnonymisierung = await findEmployeesDueForPersonaldatenAnonymisierung(now);
+  for (const employee of dueForAnonymisierung) {
+    await anonymizeFormerEmployeePii(employee);
+  }
+
+  const healthDataReminders = await remindHrAboutExpiredHealthDataFreetext(now);
 
   // Konten, deren 30-tägige Schutzfrist nach einer Selbst-Löschung
   // (siehe lib/account-service.ts) abgelaufen ist, endgültig löschen.
@@ -134,6 +176,9 @@ async function handleCleanup(request: Request, requestId: string) {
     expiredInvitations: expiredInvitations.count,
     accounts: accountsDeleted,
     staleRateLimits: staleRateLimits.count,
+    stalePushSubscriptions: stalePushSubscriptions.count,
+    anonymizedFormerEmployees: dueForAnonymisierung.length,
+    healthDataRemindersCreated: healthDataReminders.remindersCreated,
   };
 
   logger.info("Cron cleanup abgeschlossen.", { deleted, accountDeletionsSkipped });

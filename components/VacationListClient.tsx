@@ -9,20 +9,25 @@ import { VacationDrawerButton } from "@/components/ActionDrawers";
 import FormSubmitButton from "@/components/FormSubmitButton";
 import { ListSearchBox } from "@/components/ListSearchBox";
 import PaginationControls from "@/components/PaginationControls";
-import { vacationStatusConfig, type VacationRequest } from "@/lib/vacations";
+import { getVacationStatusConfig, type VacationRequest } from "@/lib/vacations";
+import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
 
-type StatusFilterLabel = "Alle" | "Ausstehend" | "Genehmigt" | "Abgelehnt";
+type T = ReturnType<typeof useTranslations>;
+type StatusFilterValue = VacationRequest["status"] | "all";
 
-const statusFilters: { label: StatusFilterLabel; status: VacationRequest["status"] | null }[] = [
-  { label: "Alle", status: null },
-  { label: "Ausstehend", status: "pending" },
-  { label: "Genehmigt", status: "approved" },
-  { label: "Abgelehnt", status: "rejected" },
-];
+function getStatusFilters(t: T): { label: string; value: StatusFilterValue }[] {
+  return [
+    { label: t("filterAll"), value: "all" },
+    { label: t("filterPending"), value: "pending" },
+    { label: t("filterApproved"), value: "approved" },
+    { label: t("filterRejected"), value: "rejected" },
+  ];
+}
 
 function VacationStatusBadge({ status }: { status: VacationRequest["status"] }) {
-  const config = vacationStatusConfig[status];
+  const tStatus = useTranslations("VacationStatus");
+  const config = getVacationStatusConfig(tStatus)[status];
 
   return (
     <span
@@ -39,18 +44,20 @@ function DecisionForm({
   action,
   children,
   className,
+  t,
 }: {
   tenant: string;
   request: VacationRequest;
   action: (formData: FormData) => Promise<void>;
   children: ReactNode;
   className: string;
+  t: T;
 }) {
   return (
     <form action={action}>
       <input type="hidden" name="tenant" value={tenant} />
       <input type="hidden" name="requestId" value={request.dbId ?? ""} />
-      <FormSubmitButton className={className} pendingLabel="Läuft...">
+      <FormSubmitButton className={className} pendingLabel={t("decisionPending")}>
         {children}
       </FormSubmitButton>
     </form>
@@ -62,11 +69,13 @@ function VacationRequestRow({
   request,
   canManage,
   canDelete,
+  t,
 }: {
   tenant: string;
   request: VacationRequest;
   canManage: boolean;
   canDelete: boolean;
+  t: T;
 }) {
   const isPending = request.status === "pending";
 
@@ -103,16 +112,18 @@ function VacationRequestRow({
             request={request}
             action={approveVacationRequestAction}
             className="cursor-pointer rounded-lg border-0 bg-success px-[13px] py-[7px] text-[12px] font-semibold text-white transition-colors hover:bg-[#2B6845]"
+            t={t}
           >
-            Genehmigen
+            {t("approve")}
           </DecisionForm>
           <DecisionForm
             tenant={tenant}
             request={request}
             action={rejectVacationRequestAction}
             className="cursor-pointer rounded-lg border border-danger/30 bg-white px-[13px] py-[7px] text-[12px] font-medium text-danger transition-colors hover:border-danger/50 hover:bg-danger/5"
+            t={t}
           >
-            Ablehnen
+            {t("reject")}
           </DecisionForm>
         </div>
       )}
@@ -137,17 +148,19 @@ export function VacationListClient({
   canManage: boolean;
   canDelete: boolean;
 }) {
+  const t = useTranslations("VacationListClient");
+  const statusFilters = getStatusFilters(t);
   const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<StatusFilterLabel>("Alle");
+  const [statusFilter, setStatusFilter] = useState<StatusFilterValue>("all");
 
-  const isFiltering = query.trim() !== "" || statusFilter !== "Alle";
+  const isFiltering = query.trim() !== "" || statusFilter !== "all";
 
   const filtered = useMemo(() => {
     if (!isFiltering) {
       return pageItems;
     }
 
-    const activeStatus = statusFilters.find((f) => f.label === statusFilter)?.status ?? null;
+    const activeStatus = statusFilter === "all" ? null : statusFilter;
     const q = query.trim().toLowerCase();
 
     return allRequests.filter((request) => {
@@ -173,14 +186,14 @@ export function VacationListClient({
         <div className="flex w-fit gap-1 rounded-xl border border-border bg-white p-[5px]">
           {statusFilters.map((filter) => (
             <button
-              key={filter.label}
+              key={filter.value}
               type="button"
               className={`cursor-pointer rounded-lg px-3.5 py-[7px] text-[13px] transition-colors ${
-                statusFilter === filter.label
+                statusFilter === filter.value
                   ? "bg-border-soft font-semibold text-ink"
                   : "bg-transparent font-normal text-muted hover:text-ink"
               }`}
-              onClick={() => setStatusFilter(filter.label)}
+              onClick={() => setStatusFilter(filter.value)}
             >
               {filter.label}
             </button>
@@ -190,7 +203,7 @@ export function VacationListClient({
         <ListSearchBox
           value={query}
           onChange={setQuery}
-          placeholder="Mitarbeiter, Standort oder Team"
+          placeholder={t("searchPlaceholder")}
           className="max-w-[320px] flex-1"
         />
       </div>
@@ -198,10 +211,12 @@ export function VacationListClient({
       <section className="overflow-hidden rounded-card border border-border bg-white">
         <div className="flex items-center justify-between gap-4 border-b border-border px-6 pt-5 pb-3.5">
           <h2 className="m-0 font-display text-[18px] font-semibold tracking-[-0.4px] text-ink">
-            Urlaubsanträge
+            {t("title")}
           </h2>
           <span className="shrink-0 font-mono text-[11px] text-muted">
-            {isFiltering ? `${filtered.length} von ${allRequests.length}` : `${allRequests.length}`} Einträge
+            {isFiltering
+              ? t("entriesFiltered", { filtered: filtered.length, total: allRequests.length })
+              : t("entriesTotal", { total: allRequests.length })}
           </span>
         </div>
 
@@ -213,13 +228,12 @@ export function VacationListClient({
               request={request}
               canManage={canManage}
               canDelete={canDelete}
+              t={t}
             />
           ))
         ) : (
           <div className="border-t border-border-soft px-6 py-10 text-[13px] text-muted">
-            {allRequests.length === 0
-              ? "Noch keine Urlaubsanträge erfasst."
-              : "Keine Anträge für diese Suche/diesen Filter."}
+            {allRequests.length === 0 ? t("emptyNone") : t("emptyFiltered")}
           </div>
         )}
 

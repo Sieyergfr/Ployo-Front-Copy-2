@@ -12,6 +12,7 @@ import {
   type PermissionScope,
 } from "@/lib/roles";
 import { Users } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 // Own/team gelten nur, wenn der Bereich die allgemeine own/team/all-Auswahl
 // unterstützt — "assigned" wird separat für locations/teams angeboten.
@@ -35,6 +36,7 @@ export default function RolePermissionAreaFields({
   defaultLevel: PermissionLevel;
   defaultScope: PermissionScope;
 }) {
+  const t = useTranslations("RolePermissionAreaFields");
   const [level, setLevel] = useState(defaultLevel);
   const hasAccess = level !== "none";
 
@@ -42,7 +44,7 @@ export default function RolePermissionAreaFields({
     <div className="grid min-w-0 gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
       <div className="min-w-0 rounded-xl border border-border-soft bg-bg p-3">
         <div className="mb-3 font-mono text-[9.5px] uppercase tracking-[0.6px] text-muted">
-          Rechte
+          {t("permissions")}
         </div>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {permissionLevels.map((permission) => (
@@ -64,12 +66,11 @@ export default function RolePermissionAreaFields({
 
       <div className="min-w-0 rounded-xl border border-border-soft bg-bg p-3">
         <div className="mb-3 font-mono text-[9.5px] uppercase tracking-[0.6px] text-muted">
-          Sichtbarkeit
+          {t("visibility")}
         </div>
         {!hasAccess ? (
           <p className="text-[12px] leading-[1.5] text-muted">
-            Kein Zugriff auf diesen Bereich — Navigation und Route sind für
-            diese Rolle automatisch ausgeblendet.
+            {t("noAccessHint")}
           </p>
         ) : area.supportsScope ? (
           <>
@@ -121,8 +122,7 @@ export default function RolePermissionAreaFields({
           </>
         ) : (
           <p className="text-[12px] leading-[1.5] text-muted">
-            Zugriff gilt mandantenweit — für diesen Bereich gibt es keine
-            Einschränkung auf eigene oder Team-Daten.
+            {t("tenantWideHint")}
           </p>
         )}
       </div>

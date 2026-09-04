@@ -11,6 +11,7 @@ import { useUniversalPopup } from "@/components/UniversalPopup";
 import { locationColorPalette, locationKinds } from "@/lib/org-options";
 import { Building2, Check, ChevronDown, Plus } from "lucide-react";
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 
 type DropdownOption = {
   value: string;
@@ -123,11 +124,12 @@ function CustomDropdownField({
 }
 
 function LocationColorPicker() {
+  const t = useTranslations("CreateLocationButton");
   const [selectedColor, setSelectedColor] = useState<string>(locationColors[0].value);
 
   return (
     <div className="field">
-      <div className="label">Standortfarbe</div>
+      <div className="label">{t("locationColor")}</div>
       <input type="hidden" name="color" value={selectedColor} />
       <div className="flex flex-wrap gap-2">
         {locationColors.map((color) => {
@@ -162,58 +164,60 @@ function CreateLocationForm({
   employees: EmployeeSelectorOption[];
   onDone: () => void;
 }) {
+  const t = useTranslations("CreateLocationButton");
+
   return (
     <form className="flex flex-col gap-4" action={createLocationAction}>
       <input type="hidden" name="tenant" value={tenant} />
       <div className="field">
         <label htmlFor="location-name" className="label">
-          Standortname
+          {t("locationName")}
         </label>
         <input
           id="location-name"
           name="name"
           className="input"
-          placeholder="Filiale München Zentrum"
+          placeholder={t("locationNamePlaceholder")}
           required
         />
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
         <CustomDropdownField
-          label="Typ"
+          label={t("type")}
           name="kind"
-          placeholder="Auswählen"
+          placeholder={t("select")}
           defaultValue="Filiale"
           options={locationKinds.map((kind) => ({ value: kind, label: kind }))}
         />
 
         <CustomDropdownField
-          label="Status"
+          label={t("status")}
           name="status"
-          placeholder="Auswählen"
+          placeholder={t("select")}
           defaultValue="active"
           options={[
-            { value: "active", label: "Aktiv" },
-            { value: "inactive", label: "Inaktiv" },
+            { value: "active", label: t("active") },
+            { value: "inactive", label: t("inactive") },
           ]}
         />
       </div>
 
       <div>
-        <div className="mb-2 label">Adresse</div>
+        <div className="mb-2 label">{t("address")}</div>
         <AddressFields idPrefix="location-address" required />
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
         <EmployeeSelector
-          label="Standortleitung"
+          label={t("locationLead")}
           name="lead"
           options={employees}
         />
 
         <div className="field">
           <label htmlFor="location-email" className="label">
-            Kontakt E-Mail
+            {t("contactEmail")}
           </label>
           <input
             id="location-email"
@@ -228,25 +232,42 @@ function CreateLocationForm({
 
       <LocationColorPicker />
 
+      <div className="field max-w-[280px]">
+        <label htmlFor="location-min-staffing" className="label">
+          {t("minStaffingPerDay")}
+        </label>
+        <input
+          id="location-min-staffing"
+          name="shiftMinStaffing"
+          type="number"
+          min={0}
+          max={99}
+          className="input"
+          placeholder={t("companyDefault")}
+        />
+        <p className="m-0 text-[11px] text-muted">
+          {t("minStaffingHint")}
+        </p>
+      </div>
+
       <div>
-        <div className="mb-2 label">Öffnungszeiten</div>
+        <div className="mb-2 label">{t("openingHours")}</div>
         <OpeningHoursEditor name="openingHours" defaultValue={[]} allowInherit initiallyCustom={false} />
       </div>
 
       <p className="m-0 text-[12.5px] leading-[1.55] text-muted-2">
-        Teams, Mitarbeiter und Schichten können nach dem Anlegen dem Standort
-        zugeordnet werden.
+        {t("assignmentHint")}
       </p>
 
       <div className="mt-1 flex justify-end gap-2.5 border-t border-border-soft pt-4">
         <button type="button" className="btn btn-secondary" onClick={onDone}>
-          Abbrechen
+          {t("cancel")}
         </button>
         <FormSubmitButton
           Icon={Building2}
-          pendingLabel="Standort wird erstellt..."
+          pendingLabel={t("creatingLocation")}
         >
-          Standort erstellen
+          {t("createLocation")}
         </FormSubmitButton>
       </div>
     </form>
@@ -260,6 +281,7 @@ export default function CreateLocationButton({
   tenant: string;
   employees: EmployeeSelectorOption[];
 }) {
+  const t = useTranslations("CreateLocationButton");
   const { openPopup, closePopup } = useUniversalPopup();
 
   return (
@@ -268,7 +290,7 @@ export default function CreateLocationButton({
       className="btn btn-primary"
       onClick={() => {
         openPopup({
-          title: "Standort erstellen",
+          title: t("createLocation"),
           content: (
             <CreateLocationForm
               tenant={tenant}
@@ -280,7 +302,7 @@ export default function CreateLocationButton({
       }}
     >
       <Plus size={15} strokeWidth={2} />
-      Standort anlegen
+      {t("addLocation")}
     </button>
   );
 }

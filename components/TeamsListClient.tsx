@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { ListSearchBox } from "@/components/ListSearchBox";
 import { type Team, type TeamMember } from "@/lib/teams";
+import { useTranslations } from "next-intl";
 
 function MemberAvatar({ member }: { member: TeamMember }) {
   return (
@@ -17,7 +18,15 @@ function MemberAvatar({ member }: { member: TeamMember }) {
   );
 }
 
-function TeamCard({ team, tenant }: { team: Team; tenant: string }) {
+function TeamCard({
+  team,
+  tenant,
+  t,
+}: {
+  team: Team;
+  tenant: string;
+  t: ReturnType<typeof useTranslations>;
+}) {
   return (
     <Link
       href={`/u/${tenant}/teams/${team.id}`}
@@ -31,7 +40,7 @@ function TeamCard({ team, tenant }: { team: Team; tenant: string }) {
               {team.name}
             </div>
             <div className="mt-[5px] font-mono text-[10.5px] text-muted">
-              {team.locations || "Keine Standorte"}
+              {team.locations || t("noLocations")}
             </div>
           </div>
           <span className="font-display text-[30px] font-semibold leading-none tracking-[-1px] text-ink">
@@ -56,7 +65,7 @@ function TeamCard({ team, tenant }: { team: Team; tenant: string }) {
               <div className="truncate text-[12.5px] font-semibold text-ink">
                 {team.lead.name}
               </div>
-              <div className="font-mono text-[9px] text-muted">Teamleitung</div>
+              <div className="font-mono text-[9px] text-muted">{t("teamLead")}</div>
             </div>
           </div>
           <ArrowRight size={14} className="shrink-0 text-muted" />
@@ -67,6 +76,7 @@ function TeamCard({ team, tenant }: { team: Team; tenant: string }) {
 }
 
 export function TeamsListClient({ teams, tenant }: { teams: Team[]; tenant: string }) {
+  const t = useTranslations("TeamsListClient");
   const [query, setQuery] = useState("");
 
   const filtered = useMemo(() => {
@@ -90,25 +100,25 @@ export function TeamsListClient({ teams, tenant }: { teams: Team[]; tenant: stri
       <ListSearchBox
         value={query}
         onChange={setQuery}
-        placeholder="Name, Standort, Leitung oder Mitglied"
+        placeholder={t("searchPlaceholder")}
         className="mb-4 max-w-[360px]"
       />
 
       {filtered.length > 0 ? (
         <section className="grid gap-3.5 [grid-template-columns:repeat(auto-fill,minmax(300px,1fr))]">
           {filtered.map((team) => (
-            <TeamCard key={team.dbId ?? team.id} team={team} tenant={tenant} />
+            <TeamCard key={team.dbId ?? team.id} team={team} tenant={tenant} t={t} />
           ))}
         </section>
       ) : (
         <section className="rounded-card border border-border bg-white px-6 py-10 text-center">
           <div className="font-display text-[20px] font-semibold text-ink">
-            {teams.length === 0 ? "Noch keine Teams" : "Keine Treffer"}
+            {teams.length === 0 ? t("noTeamsYet") : t("noResults")}
           </div>
           <div className="mt-2 text-[13px] text-muted-2">
             {teams.length === 0
-              ? "Lege das erste Team an, um Mitarbeiter zu organisieren."
-              : "Für diese Suche wurde kein Team gefunden."}
+              ? t("noTeamsYetDescription")
+              : t("noResultsDescription")}
           </div>
         </section>
       )}

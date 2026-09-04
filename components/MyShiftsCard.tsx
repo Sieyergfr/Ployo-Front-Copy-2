@@ -1,7 +1,8 @@
 import type { MyWeekDay } from "@/lib/shift-service";
 import { Clock } from "lucide-react";
+import { getTranslations } from "next-intl/server";
 
-export default function MyShiftsCard({
+export default async function MyShiftsCard({
   label,
   range,
   days,
@@ -10,12 +11,14 @@ export default function MyShiftsCard({
   range: string;
   days: MyWeekDay[];
 }) {
+  const t = await getTranslations("MyShiftsCard");
+
   return (
     <section className="rounded-card border border-border bg-white px-6 py-[22px]">
       <div className="mb-3.5 flex flex-wrap items-center justify-between gap-2">
         <h2 className="flex items-center gap-2 font-display text-[16px] font-semibold tracking-[-0.3px] text-ink">
           <Clock size={17} />
-          Meine Schichten
+          {t("title")}
         </h2>
         <span className="font-mono text-[11px] text-muted">
           {label} · {range}

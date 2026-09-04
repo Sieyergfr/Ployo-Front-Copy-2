@@ -2,7 +2,7 @@
 
 import { Check, ChevronDown, Search } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 
 type EmployeeSelectorMode = "single" | "multi";
@@ -166,17 +166,19 @@ export default function EmployeeSelector({
             ref={listRef}
             role="listbox"
             aria-multiselectable={mode === "multi"}
-            style={{
-              position: "fixed",
-              left: listPosition?.left ?? 0,
-              width: listPosition?.width,
-              top: listPosition && !listPosition.openUpward ? listPosition.top : undefined,
-              bottom: listPosition?.openUpward ? listPosition.bottom : undefined,
-              // Erste Messung, bevor `listPosition` berechnet ist: unsichtbar
-              // rendern statt an Position (0,0) aufzublitzen.
-              visibility: listPosition ? "visible" : "hidden",
-            }}
-            className="z-[1200] rounded-[12px] border border-border bg-white p-2 shadow-[0_12px_32px_rgba(0,0,0,0.12)]"
+            style={
+              {
+                "--pos-left": `${listPosition?.left ?? 0}px`,
+                "--pos-width": `${listPosition?.width ?? 0}px`,
+                "--pos-top":
+                  listPosition && !listPosition.openUpward ? `${listPosition.top}px` : "auto",
+                "--pos-bottom":
+                  listPosition?.openUpward ? `${listPosition.bottom}px` : "auto",
+              } as CSSProperties
+            }
+            // Erste Messung, bevor `listPosition` berechnet ist: unsichtbar
+            // rendern statt an Position (0,0) aufzublitzen.
+            className={`fixed left-[var(--pos-left)] top-[var(--pos-top)] bottom-[var(--pos-bottom)] w-[var(--pos-width)] z-[1200] rounded-[12px] border border-border bg-white p-2 shadow-[0_12px_32px_rgba(0,0,0,0.12)] ${listPosition ? "visible" : "invisible"}`}
           >
             <div className="input-wrapper mb-2">
               <Search size={14} className="input-icon-left" />

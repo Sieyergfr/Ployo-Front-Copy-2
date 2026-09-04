@@ -2,7 +2,8 @@
 
 import { teamColorPalette } from "@/lib/org-options";
 import { Check, ChevronDown } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useTranslations } from "next-intl";
 
 const teamColorOptions = teamColorPalette.map((color) => ({
   value: color.value,
@@ -11,11 +12,12 @@ const teamColorOptions = teamColorPalette.map((color) => ({
 }));
 
 export function TeamColorButtons({ defaultValue }: { defaultValue: string }) {
+  const t = useTranslations("TeamEditControls");
   const [selectedColor, setSelectedColor] = useState(defaultValue);
 
   return (
     <div className="field">
-      <span className="label">Farbmarkierung</span>
+      <span className="label">{t("colorMarker")}</span>
       <input type="hidden" name="color" value={selectedColor} />
       <div className="flex flex-wrap gap-2">
         {teamColorOptions.map((color) => {
@@ -52,10 +54,16 @@ export function TeamColorButtons({ defaultValue }: { defaultValue: string }) {
 export function LocationMultiSelectDropdown({
   defaultLocations,
   options,
+  name = "locations",
+  label,
 }: {
   defaultLocations: string[];
   options?: string[];
+  /** Feldname der versteckten Inputs — mehrere Inputs mit demselben Namen, serverseitig per `formData.getAll(name)` gelesen. */
+  name?: string;
+  label?: string;
 }) {
+  const t = useTranslations("TeamEditControls");
   const [isOpen, setIsOpen] = useState(false);
   const [selectedLocations, setSelectedLocations] = useState(defaultLocations);
   const [dropdownRect, setDropdownRect] = useState<{
@@ -68,11 +76,11 @@ export function LocationMultiSelectDropdown({
   const locationOptions = options ?? ["München", "Berlin", "Hamburg"];
   const summary = useMemo(() => {
     if (selectedLocations.length === 0) {
-      return "Standorte auswählen";
+      return t("selectLocations");
     }
 
     return selectedLocations.join(", ");
-  }, [selectedLocations]);
+  }, [selectedLocations, t]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -111,6 +119,8 @@ export function LocationMultiSelectDropdown({
     );
   }
 
+  const dropdownId = `${name}-dropdown`;
+
   return (
     <div
       ref={wrapperRef}
@@ -121,16 +131,16 @@ export function LocationMultiSelectDropdown({
         if (
           !event.currentTarget.contains(nextTarget) &&
           !document
-            .getElementById("team-location-dropdown")
+            .getElementById(dropdownId)
             ?.contains(nextTarget)
         ) {
           setIsOpen(false);
         }
       }}
     >
-      <span className="label">Standorte</span>
+      <span className="label">{label ?? t("locations")}</span>
       {selectedLocations.map((location) => (
-        <input key={location} type="hidden" name="locations" value={location} />
+        <input key={location} type="hidden" name={name} value={location} />
       ))}
       <button
         ref={triggerRef}
@@ -151,15 +161,17 @@ export function LocationMultiSelectDropdown({
 
       {isOpen && dropdownRect && (
         <div
-          id="team-location-dropdown"
+          id={dropdownId}
           role="listbox"
           aria-multiselectable="true"
-          className="fixed z-[1200] flex max-h-60 flex-col gap-1.5 overflow-y-auto rounded-[10px] border border-border bg-white p-1.5 shadow-[0_12px_32px_rgba(0,0,0,0.12)]"
-          style={{
-            top: dropdownRect.top,
-            left: dropdownRect.left,
-            width: dropdownRect.width,
-          }}
+          className="fixed top-[var(--pos-top)] left-[var(--pos-left)] w-[var(--pos-width)] z-[1200] flex max-h-60 flex-col gap-1.5 overflow-y-auto rounded-[10px] border border-border bg-white p-1.5 shadow-[0_12px_32px_rgba(0,0,0,0.12)]"
+          style={
+            {
+              "--pos-top": `${dropdownRect.top}px`,
+              "--pos-left": `${dropdownRect.left}px`,
+              "--pos-width": `${dropdownRect.width}px`,
+            } as CSSProperties
+          }
         >
           {locationOptions.map((location) => {
             const isSelected = selectedLocations.includes(location);

@@ -19,6 +19,8 @@
 
 # next.js
 /.next/
+# Probe-Build (NEXT_BUILD_DIR) - nur zur Verifikation, wird nie ausgeliefert.
+/.next-check/
 /out/
 
 # production

@@ -20,6 +20,8 @@ export type TeamFileFolder = {
 export type TeamFile = {
   name: string;
   folder: string;
+  /** Ordnerpfad (TenantFile.folderSlug); leer = Home-Ebene des Teams. */
+  folderSlug: string;
   updatedAt: string;
   size: string;
   type: string;

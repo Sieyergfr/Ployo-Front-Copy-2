@@ -7,6 +7,15 @@ type CheckboxProps = {
   alignItems?: 'center' | 'start' | 'end';
 };
 
+// Volle Klassennamen literal aufschreiben statt per Template-String
+// zusammenzusetzen — Tailwinds Scanner erkennt nur statisch im Quelltext
+// vorkommende Klassennamen, keine zur Laufzeit gebauten Strings.
+const alignItemsClassName: Record<NonNullable<CheckboxProps["alignItems"]>, string> = {
+  center: "items-center",
+  start: "items-start",
+  end: "items-end",
+};
+
 export default function Checkbox({
   id,
   defaultChecked = false,
@@ -14,7 +23,10 @@ export default function Checkbox({
   alignItems = "center"
 }: CheckboxProps) {
   return (
-    <label htmlFor={id} className="checkbox-row cursor-pointer" style={{ alignItems }}>
+    <label
+      htmlFor={id}
+      className={`checkbox-row cursor-pointer ${alignItemsClassName[alignItems]}`}
+    >
       <input
         id={id}
         name={id}

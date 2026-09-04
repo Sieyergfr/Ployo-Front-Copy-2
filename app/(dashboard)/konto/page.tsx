@@ -38,12 +38,6 @@ function getInitials(name: string) {
   return initials || "U";
 }
 
-const savedMessages: Record<string, string> = {
-  name: "Anzeigename gespeichert.",
-  password: "Passwort geändert.",
-  preferences: "Einstellungen gespeichert.",
-};
-
 function Card({
   title,
   icon: Icon,
@@ -69,20 +63,26 @@ export default async function AccountPage({
 }: {
   searchParams: Promise<{ saved?: string | string[] }>;
 }) {
-  const [account, preferences, t] = await Promise.all([
+  const [account, preferences, t, tPage] = await Promise.all([
     getAccountOverview(),
     getOwnPreferences(),
     getTranslations("AccountPreferences"),
+    getTranslations("AccountPage"),
   ]);
   const savedParam = (await searchParams).saved;
   const saved = Array.isArray(savedParam) ? savedParam[0] : savedParam;
+  const savedMessages: Record<string, string> = {
+    name: tPage("savedName"),
+    password: tPage("savedPassword"),
+    preferences: tPage("savedPreferences"),
+  };
   const savedMessage = saved ? savedMessages[saved] : undefined;
 
   return (
     <>
       <PageHeader
-        eyebrow="Persönliche Einstellungen"
-        title="Konto"
+        eyebrow={tPage("eyebrow")}
+        title={tPage("title")}
         subtitle={account.email}
       />
 
@@ -94,14 +94,14 @@ export default async function AccountPage({
 
       <div className="grid items-start gap-4 [grid-template-columns:repeat(auto-fit,minmax(340px,1fr))]">
         <div className="flex flex-col gap-4">
-          <Card title="Profil" icon={UserCog}>
+          <Card title={tPage("cardProfileTitle")} icon={UserCog}>
             <div className="mb-4 border-b border-border-soft pb-4">
               <AvatarUploadForm image={account.image} initials={getInitials(account.name)} />
             </div>
             <form action={updateAccountNameAction} className="flex flex-col gap-3">
               <div className="field">
                 <label htmlFor="account-name" className="label">
-                  Anzeigename
+                  {tPage("displayNameLabel")}
                 </label>
                 <input
                   id="account-name"
@@ -119,17 +119,17 @@ export default async function AccountPage({
                 smtpConfigured={isEmailConfigured()}
               />
               <div className="flex justify-end border-t border-border-soft pt-4">
-                <FormSubmitButton Icon={Save} pendingLabel="Wird gespeichert...">
-                  Speichern
+                <FormSubmitButton icon={<Save size={15} strokeWidth={2} />} pendingLabel={tPage("saving")}>
+                  {tPage("save")}
                 </FormSubmitButton>
               </div>
             </form>
           </Card>
 
-          <Card title="Zugehörigkeiten" icon={UserCog}>
+          <Card title={tPage("cardMembershipsTitle")} icon={UserCog}>
             {account.memberships.length === 0 ? (
               <p className="text-[12.5px] text-muted">
-                Sie gehören derzeit keinem Unternehmen an.
+                {tPage("noMemberships")}
               </p>
             ) : (
               <div className="flex flex-col gap-2">
@@ -150,11 +150,11 @@ export default async function AccountPage({
               </div>
             )}
             <p className="mt-3 text-[11.5px] text-muted">
-              Aktive Sitzungen: {account.sessionCount}
+              {tPage("activeSessions", { count: account.sessionCount })}
             </p>
             <div className="mt-3 border-t border-border-soft pt-3">
               <a href="/api/me/export" className="text-link">
-                Eigene Daten exportieren (JSON)
+                {tPage("exportOwnData")}
               </a>
             </div>
           </Card>
@@ -227,7 +227,7 @@ export default async function AccountPage({
               </div>
               <p className="text-[11px] text-muted-2">{t("disclaimer")}</p>
               <div className="flex justify-end border-t border-border-soft pt-4">
-                <FormSubmitButton Icon={Save} pendingLabel={t("saving")}>
+                <FormSubmitButton icon={<Save size={15} strokeWidth={2} />} pendingLabel={t("saving")}>
                   {t("save")}
                 </FormSubmitButton>
               </div>
@@ -236,11 +236,11 @@ export default async function AccountPage({
         </div>
 
         <div className="flex flex-col gap-4">
-          <Card title="Passwort ändern" icon={KeyRound}>
+          <Card title={tPage("cardPasswordTitle")} icon={KeyRound}>
             <form action={changePasswordAction} className="flex flex-col gap-3">
               <div className="field">
                 <label htmlFor="account-current-password" className="label">
-                  Aktuelles Passwort
+                  {tPage("currentPasswordLabel")}
                 </label>
                 <input
                   id="account-current-password"
@@ -253,7 +253,7 @@ export default async function AccountPage({
               </div>
               <div className="field">
                 <label htmlFor="account-new-password" className="label">
-                  Neues Passwort
+                  {tPage("newPasswordLabel")}
                 </label>
                 <input
                   id="account-new-password"
@@ -265,12 +265,12 @@ export default async function AccountPage({
                   required
                 />
                 <p className="mt-1 text-[11.5px] text-muted">
-                  Mindestens 12 Zeichen.
+                  {tPage("minLength12Hint")}
                 </p>
               </div>
               <div className="field">
                 <label htmlFor="account-new-password-repeat" className="label">
-                  Neues Passwort wiederholen
+                  {tPage("repeatNewPasswordLabel")}
                 </label>
                 <input
                   id="account-new-password-repeat"
@@ -291,30 +291,24 @@ export default async function AccountPage({
                 />
                 <span className="checkbox" />
                 <span className="checkbox-label">
-                  Andere Sitzungen abmelden
+                  {tPage("revokeOtherSessionsLabel")}
                 </span>
               </label>
               <div className="flex justify-end border-t border-border-soft pt-4">
-                <FormSubmitButton Icon={KeyRound} pendingLabel="Wird geändert...">
-                  Passwort ändern
+                <FormSubmitButton icon={<KeyRound size={15} strokeWidth={2} />} pendingLabel={tPage("changingPassword")}>
+                  {tPage("changePassword")}
                 </FormSubmitButton>
               </div>
             </form>
           </Card>
 
-          <Card title="Zwei-Faktor-Authentifizierung" icon={ShieldCheck}>
+          <Card title={tPage("cardTwoFactorTitle")} icon={ShieldCheck}>
             <TwoFactorSettingsCard initialEnabled={account.twoFactorEnabled} />
           </Card>
 
-          <Card title="Konto löschen" icon={ShieldAlert}>
+          <Card title={tPage("cardDeleteTitle")} icon={ShieldAlert}>
             <p className="text-[12.5px] leading-5 text-muted">
-              Das Konto wird zur Löschung vorgemerkt und Sie werden sofort
-              abgemeldet. Innerhalb von 30 Tagen können Sie sich erneut
-              anmelden, um die Löschung abzubrechen — danach wird das Konto
-              inklusive aller Sitzungen und Mandanten-Zugehörigkeiten
-              endgültig gelöscht. Personalakten des Unternehmens bleiben
-              bestehen. Sind Sie alleinige/r Inhaber/in eines Unternehmens,
-              muss zuvor eine andere Person als Inhaber/in eingetragen werden.
+              {tPage("deleteAccountDescription")}
             </p>
             <form
               id="delete-account-form"
@@ -323,7 +317,7 @@ export default async function AccountPage({
             >
               <div className="field">
                 <label htmlFor="account-delete-password" className="label">
-                  Passwort zur Bestätigung
+                  {tPage("deleteConfirmPasswordLabel")}
                 </label>
                 <input
                   id="account-delete-password"
@@ -339,11 +333,11 @@ export default async function AccountPage({
               <ConfirmSubmitButton
                 form="delete-account-form"
                 className="btn btn-secondary border-danger/25 text-danger hover:border-danger/40 hover:bg-danger/5"
-                title="Konto zur Löschung vormerken?"
-                confirmLabel="Konto löschen"
-                description="Sie werden sofort abgemeldet. Innerhalb von 30 Tagen können Sie sich erneut anmelden, um die Löschung abzubrechen."
+                title={tPage("deleteConfirmDialogTitle")}
+                confirmLabel={tPage("cardDeleteTitle")}
+                description={tPage("deleteConfirmDescription")}
               >
-                Konto löschen
+                {tPage("cardDeleteTitle")}
               </ConfirmSubmitButton>
             </div>
           </Card>

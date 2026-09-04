@@ -30,6 +30,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 
 type RoleTemplate = {
   id: string;
@@ -37,10 +38,22 @@ type RoleTemplate = {
   permissions: Partial<Record<string, PermissionLevel>>;
 };
 
-const roleTemplates: RoleTemplate[] = [
+const roleTemplateLabelKeys: Record<string, string> = {
+  "location-lead": "templateLocationLead",
+  "hr-team": "templateHrTeam",
+  "employee-service": "templateEmployeeService",
+};
+
+function getRoleTemplates(t: ReturnType<typeof useTranslations>): RoleTemplate[] {
+  return roleTemplateData.map((template) => ({
+    ...template,
+    label: t(roleTemplateLabelKeys[template.id]),
+  }));
+}
+
+const roleTemplateData: Omit<RoleTemplate, "label">[] = [
   {
     id: "location-lead",
-    label: "Standortleitung",
     permissions: {
       employees: "read",
       locations: "write",
@@ -54,7 +67,6 @@ const roleTemplates: RoleTemplate[] = [
   },
   {
     id: "hr-team",
-    label: "HR-Team",
     permissions: {
       employees: "write",
       payroll: "read",
@@ -70,7 +82,6 @@ const roleTemplates: RoleTemplate[] = [
   },
   {
     id: "employee-service",
-    label: "Mitarbeiter (Self-Service)",
     permissions: {
       employees: "read",
       payroll: "read",
@@ -170,6 +181,8 @@ function CreateRoleForm({
   tenant: string;
   onClose: () => void;
 }) {
+  const t = useTranslations("CreateRoleButton");
+  const roleTemplates = useMemo(() => getRoleTemplates(t), [t]);
   const defaultTemplate = roleTemplates[2] ?? roleTemplates[0];
   const [activeTemplateId, setActiveTemplateId] = useState(defaultTemplate.id);
   const [permissions, setPermissions] = useState<Record<string, PermissionLevel>>(
@@ -275,16 +288,16 @@ function CreateRoleForm({
       <div className="flex items-start justify-between gap-4 border-b border-border px-6 py-5">
         <div>
           <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
-            Neue Rolle · {configuredCount} von {permissionAreas.length} Bereichen konfiguriert
+            {t("newRoleProgress", { configured: configuredCount, total: permissionAreas.length })}
           </div>
           <h2 className="mt-1 font-display text-[24px] font-semibold leading-tight text-ink">
-            Rolle erstellen
+            {t("createRole")}
           </h2>
         </div>
         <button
           type="button"
-          aria-label="Popup schließen"
-          title="Schließen"
+          aria-label={t("closePopup")}
+          title={t("close")}
           className="flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-[10px] border border-border bg-white text-muted transition-colors hover:border-muted hover:text-ink"
           onClick={onClose}
         >
@@ -296,32 +309,48 @@ function CreateRoleForm({
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="field">
             <label htmlFor="role-name" className="label">
-              Rollenname
+              {t("roleName")}
             </label>
             <input
               id="role-name"
               name="name"
               className="input"
-              placeholder="z. B. Standortleitung"
+              placeholder={t("roleNamePlaceholder")}
               required
             />
           </div>
           <div className="field">
             <label htmlFor="role-description" className="label">
-              Beschreibung
+              {t("description")}
             </label>
             <input
               id="role-description"
               name="description"
               className="input"
-              placeholder="Kurzbeschreibung"
+              placeholder={t("descriptionPlaceholder")}
             />
           </div>
         </div>
 
+        <label className="mt-4 flex items-start gap-2.5 rounded-[12px] border border-border bg-bg p-3">
+          <input
+            type="checkbox"
+            name="appOverviewEnabled"
+            className="mt-0.5"
+          />
+          <span className="min-w-0">
+            <span className="block text-[13.5px] font-semibold text-ink">
+              {t("appOverviewTitle")}
+            </span>
+            <span className="mt-0.5 block text-[12px] leading-[1.35] text-muted">
+              {t("appOverviewDescription")}
+            </span>
+          </span>
+        </label>
+
         <section className="mt-5">
           <div className="mb-2 font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
-            Vorlage anwenden
+            {t("applyTemplate")}
           </div>
           <div className="flex flex-wrap gap-2">
             {roleTemplates.map((template) => {
@@ -356,10 +385,10 @@ function CreateRoleForm({
           <div className="flex flex-col gap-3 border-b border-border bg-[#FAFAF8] px-4 py-4 md:flex-row md:items-center md:justify-between">
             <div>
               <h3 className="text-[15px] font-semibold text-ink">
-                Rechte je Bereich
+                {t("permissionsPerArea")}
               </h3>
               <p className="mt-0.5 text-[12px] leading-[1.4] text-muted">
-                Lege fest, welche Bereiche diese Rolle sehen oder bearbeiten darf.
+                {t("permissionsPerAreaHint")}
               </p>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row">
@@ -372,7 +401,7 @@ function CreateRoleForm({
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                   className="h-9 w-full rounded-[10px] border border-border bg-white pl-9 pr-3 text-[13px] outline-none transition-colors placeholder:text-muted-2 focus:border-ink"
-                  placeholder="Bereich suchen..."
+                  placeholder={t("searchAreaPlaceholder")}
                 />
               </label>
               <button
@@ -385,7 +414,7 @@ function CreateRoleForm({
                 }}
               >
                 <RotateCcw size={14} />
-                Zurücksetzen
+                {t("reset")}
               </button>
             </div>
           </div>
@@ -442,7 +471,7 @@ function CreateRoleForm({
                               }}
                             >
                               {level === "none"
-                                ? "Kein"
+                                ? t("none")
                                 : permissionLevelLabels[level]}
                             </button>
                           );
@@ -464,7 +493,7 @@ function CreateRoleForm({
                             }))
                           }
                         >
-                          Löschen erlaubt
+                          {t("deleteAllowed")}
                         </ToggleChip>
                         <ToggleChip
                           active={capabilities.canViewAudit[area.id] ?? false}
@@ -478,7 +507,7 @@ function CreateRoleForm({
                             }))
                           }
                         >
-                          Audit-Log sichtbar
+                          {t("auditLogVisible")}
                         </ToggleChip>
                         {area.fileRelevant && (
                           <>
@@ -494,7 +523,7 @@ function CreateRoleForm({
                                 }))
                               }
                             >
-                              Hochladen
+                              {t("upload")}
                             </ToggleChip>
                             <ToggleChip
                               active={capabilities.canEditFiles[area.id] ?? false}
@@ -508,7 +537,7 @@ function CreateRoleForm({
                                 }))
                               }
                             >
-                              Bearbeiten
+                              {t("edit")}
                             </ToggleChip>
                             <ToggleChip
                               active={capabilities.canViewFiles[area.id] ?? false}
@@ -522,7 +551,7 @@ function CreateRoleForm({
                                 }))
                               }
                             >
-                              Dateien sehen
+                              {t("viewFiles")}
                             </ToggleChip>
                           </>
                         )}
@@ -545,7 +574,7 @@ function CreateRoleForm({
                           >
                             {permissionLevels.map((level) => (
                               <option key={level} value={level}>
-                                Schichten: {permissionLevelLabels[level]}
+                                {t("shiftsLevel", { level: permissionLevelLabels[level] })}
                               </option>
                             ))}
                           </select>
@@ -557,7 +586,7 @@ function CreateRoleForm({
               })
             ) : (
               <div className="px-4 py-8 text-center text-[13px] text-muted">
-                Kein Bereich gefunden.
+                {t("noAreaFound")}
               </div>
             )}
           </div>
@@ -567,24 +596,24 @@ function CreateRoleForm({
       <div className="flex flex-col gap-3 border-t border-border bg-white px-6 py-4 md:flex-row md:items-center md:justify-between">
         <div className="flex flex-wrap gap-2">
           <span className="rounded-full bg-[#2A6FDB]/10 px-3 py-1.5 text-[12px] font-semibold text-[#2A6FDB]">
-            {summary.read} Lesen
+            {t("summaryRead", { count: summary.read })}
           </span>
           <span className="rounded-full bg-success/10 px-3 py-1.5 text-[12px] font-semibold text-success">
-            {summary.write} Schreiben
+            {t("summaryWrite", { count: summary.write })}
           </span>
           <span className="rounded-full bg-danger/10 px-3 py-1.5 text-[12px] font-semibold text-danger">
-            {summary.admin} Admin
+            {t("summaryAdmin", { count: summary.admin })}
           </span>
         </div>
         <div className="flex justify-end gap-2.5">
           <button type="button" className="btn btn-secondary" onClick={onClose}>
-            Abbrechen
+            {t("cancel")}
           </button>
           <FormSubmitButton
             Icon={ShieldCheck}
-            pendingLabel="Rolle wird erstellt..."
+            pendingLabel={t("creatingRole")}
           >
-            Rolle erstellen
+            {t("createRole")}
           </FormSubmitButton>
         </div>
       </div>
@@ -593,6 +622,7 @@ function CreateRoleForm({
 }
 
 export default function CreateRoleButton({ tenant }: { tenant: string }) {
+  const t = useTranslations("CreateRoleButton");
   const { openPopup, closePopup } = useUniversalPopup();
 
   return (
@@ -610,7 +640,7 @@ export default function CreateRoleButton({ tenant }: { tenant: string }) {
       }
     >
       <Plus size={15} />
-      Rolle erstellen
+      {t("createRole")}
     </button>
   );
 }

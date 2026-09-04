@@ -5,6 +5,7 @@ import { authClient } from "@/lib/auth-client";
 import { useToast } from "@/components/Toasts";
 import { UnsavedChangesGuard } from "@/components/EditSafety";
 import { Mail } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 export default function ChangeEmailForm({
   currentEmail,
@@ -15,6 +16,7 @@ export default function ChangeEmailForm({
   emailVerified: boolean;
   smtpConfigured: boolean;
 }) {
+  const t = useTranslations("ChangeEmailForm");
   const { toast } = useToast();
   const [isEditing, setIsEditing] = useState(false);
   const [newEmail, setNewEmail] = useState("");
@@ -25,11 +27,10 @@ export default function ChangeEmailForm({
   if (requested) {
     return (
       <div className="field">
-        <label className="label">E-Mail</label>
+        <label className="label">{t("emailLabel")}</label>
         <input className="input bg-bg" defaultValue={currentEmail} readOnly />
         <p className="mt-1 text-[11.5px] text-success">
-          Bestätigungslink an {currentEmail} gesendet. Klicken Sie darauf, um
-          den Wechsel zu {newEmail} abzuschließen.
+          {t("confirmationSentTo", { current: currentEmail, newEmail })}
         </p>
       </div>
     );
@@ -52,23 +53,23 @@ export default function ChangeEmailForm({
           setIsPending(false);
 
           if (changeError) {
-            const message = changeError.message ?? "E-Mail-Änderung fehlgeschlagen.";
+            const message = changeError.message ?? t("changeFailedDefault");
             setError(message);
-            toast({ tone: "error", title: "Fehlgeschlagen", subtitle: message });
+            toast({ tone: "error", title: t("toastErrorTitle"), subtitle: message });
             return;
           }
 
           setRequested(true);
           toast({
             tone: "success",
-            title: "Bestätigung erforderlich",
-            subtitle: `Ein Bestätigungslink wurde an ${currentEmail} gesendet.`,
+            title: t("toastSuccessTitle"),
+            subtitle: t("toastSuccessSubtitle", { email: currentEmail }),
           });
         }}
       >
         <UnsavedChangesGuard active={isEditing} />
         <label htmlFor="account-new-email" className="label">
-          Neue E-Mail
+          {t("newEmailLabel")}
         </label>
         <input
           id="account-new-email"
@@ -76,7 +77,7 @@ export default function ChangeEmailForm({
           className="input"
           value={newEmail}
           onChange={(event) => setNewEmail(event.target.value)}
-          placeholder="neue-adresse@unternehmen.de"
+          placeholder={t("newEmailPlaceholder")}
           required
           autoFocus
         />
@@ -91,10 +92,10 @@ export default function ChangeEmailForm({
               setNewEmail("");
             }}
           >
-            Abbrechen
+            {t("cancel")}
           </button>
           <button type="submit" className="btn btn-primary btn-sm" disabled={isPending}>
-            {isPending ? "Wird gesendet..." : "Bestätigungslink senden"}
+            {isPending ? t("sending") : t("sendConfirmationLink")}
           </button>
         </div>
       </form>
@@ -104,11 +105,11 @@ export default function ChangeEmailForm({
   return (
     <div className="field">
       <label htmlFor="account-email" className="label">
-        E-Mail
+        {t("emailLabel")}
       </label>
       <input id="account-email" className="input bg-bg" defaultValue={currentEmail} readOnly />
       <p className="mt-1 text-[11.5px] text-muted">
-        {emailVerified ? "Bestätigt." : "Noch nicht bestätigt."}
+        {emailVerified ? t("verified") : t("notVerified")}
       </p>
       {smtpConfigured ? (
         <button
@@ -117,11 +118,11 @@ export default function ChangeEmailForm({
           onClick={() => setIsEditing(true)}
         >
           <Mail size={13} />
-          E-Mail ändern
+          {t("changeEmail")}
         </button>
       ) : (
         <p className="mt-1 text-[11.5px] text-muted">
-          E-Mail-Änderung erfordert konfigurierten Mailversand.
+          {t("smtpNotConfiguredHint")}
         </p>
       )}
     </div>

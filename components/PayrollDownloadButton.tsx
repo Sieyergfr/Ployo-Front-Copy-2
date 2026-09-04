@@ -1,9 +1,15 @@
 "use client";
 
-import { useTransition } from "react";
-import { getHrFileSignedUrlAction } from "@/app/(dashboard)/u/[tenant]/dateien/actions";
-import { Download } from "lucide-react";
+import { Download, Eye } from "lucide-react";
 
+/**
+ * Ansehen/Herunterladen einer Gehaltsabrechnung.
+ *
+ * Bewusst NICHT über eine vorsignierte S3-URL wie die übrigen Dateien: die
+ * ist, solange sie gültig ist, für jeden aufrufbar, der den Link hat. Der
+ * Stream-Endpunkt darunter verlangt bei jedem Aufruf eine gültige Anmeldung
+ * und gibt die Speicher-URL nie heraus (siehe lib/storage/file-stream.ts).
+ */
 export default function PayrollDownloadButton({
   tenant,
   fileId,
@@ -11,27 +17,29 @@ export default function PayrollDownloadButton({
   tenant: string;
   fileId: string;
 }) {
-  const [isPending, startTransition] = useTransition();
+  const href = (disposition: "inline" | "attachment") =>
+    `/api/tenants/${encodeURIComponent(tenant)}/files/${encodeURIComponent(fileId)}/content?disposition=${disposition}`;
 
   return (
-    <button
-      type="button"
-      className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-[8px] border border-border bg-white text-muted transition-colors hover:border-muted hover:text-ink disabled:cursor-wait disabled:opacity-60"
-      title="Herunterladen"
-      aria-label="Gehaltsabrechnung herunterladen"
-      disabled={isPending}
-      onClick={() =>
-        startTransition(async () => {
-          const url = await getHrFileSignedUrlAction({
-            tenant,
-            fileId,
-            disposition: "attachment",
-          });
-          window.open(url, "_blank", "noopener,noreferrer");
-        })
-      }
-    >
-      <Download size={14} />
-    </button>
+    <div className="flex shrink-0 gap-1.5">
+      <a
+        href={href("inline")}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-[8px] border border-border bg-white text-muted transition-colors hover:border-muted hover:text-ink"
+        title="Ansehen"
+        aria-label="Gehaltsabrechnung ansehen"
+      >
+        <Eye size={14} />
+      </a>
+      <a
+        href={href("attachment")}
+        className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-[8px] border border-border bg-white text-muted transition-colors hover:border-muted hover:text-ink"
+        title="Herunterladen"
+        aria-label="Gehaltsabrechnung herunterladen"
+      >
+        <Download size={14} />
+      </a>
+    </div>
   );
 }

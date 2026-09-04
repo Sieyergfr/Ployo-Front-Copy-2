@@ -1,0 +1,123 @@
+"use client";
+
+import { addTeamMembersAction } from "@/app/(dashboard)/u/[tenant]/teams/actions";
+import EmployeeSelector, {
+  type EmployeeSelectorOption,
+} from "@/components/EmployeeSelector";
+import FormSubmitButton from "@/components/FormSubmitButton";
+import { useUniversalPopup } from "@/components/UniversalPopup";
+import { Plus, UserPlus } from "lucide-react";
+
+/**
+ * "Mitglieder anpassen" öffnete bisher den Bearbeitungsmodus der ganzen
+ * Team-Seite, obwohl es nur darum geht, Mitarbeiter hinzuzufügen. Hier
+ * stattdessen ein Popup mit Mehrfachauswahl — mehrere Mitarbeiter in einem
+ * Schritt statt einer Dropdown-Auswahl pro Person.
+ */
+function AddTeamMembersForm({
+  tenant,
+  teamId,
+  teamHandle,
+  defaultRole,
+  employees,
+  onDone,
+}: {
+  tenant: string;
+  teamId: string;
+  teamHandle: string;
+  defaultRole: string;
+  employees: EmployeeSelectorOption[];
+  onDone: () => void;
+}) {
+  return (
+    <form action={addTeamMembersAction} className="flex flex-col gap-4">
+      <input type="hidden" name="tenant" value={tenant} />
+      <input type="hidden" name="teamId" value={teamId} />
+      <input type="hidden" name="teamHandle" value={teamHandle} />
+
+      {employees.length === 0 ? (
+        <p className="m-0 text-[13px] text-muted">
+          Alle Mitarbeiter sind bereits in diesem Team.
+        </p>
+      ) : (
+        <EmployeeSelector
+          label="Mitarbeiter auswählen"
+          name="employees"
+          mode="multi"
+          options={employees}
+        />
+      )}
+
+      <div className="field">
+        <label htmlFor="team-members-role" className="label">
+          Rolle im Team
+        </label>
+        <input
+          id="team-members-role"
+          name="role"
+          className="input"
+          defaultValue={defaultRole}
+        />
+      </div>
+
+      <div className="mt-1 flex justify-end gap-2.5 border-t border-border-soft pt-4">
+        <button type="button" className="btn btn-secondary" onClick={onDone}>
+          Abbrechen
+        </button>
+        <FormSubmitButton Icon={UserPlus} pendingLabel="Wird hinzugefügt...">
+          Hinzufügen
+        </FormSubmitButton>
+      </div>
+    </form>
+  );
+}
+
+export default function AddTeamMembersButton({
+  tenant,
+  teamId,
+  teamHandle,
+  defaultRole,
+  employees,
+  variant = "button",
+}: {
+  tenant: string;
+  teamId: string;
+  teamHandle: string;
+  defaultRole: string;
+  employees: EmployeeSelectorOption[];
+  /** "icon": kompaktes Plus neben einer Überschrift. */
+  variant?: "button" | "icon";
+}) {
+  const { openPopup, closePopup } = useUniversalPopup();
+
+  return (
+    <button
+      type="button"
+      className={
+        variant === "icon"
+          ? "flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[8px] border border-border bg-white text-muted transition-colors hover:border-muted hover:text-ink"
+          : "btn btn-secondary btn-sm"
+      }
+      title="Mitglieder hinzufügen"
+      aria-label="Mitglieder hinzufügen"
+      onClick={() =>
+        openPopup({
+          title: "Mitglieder hinzufügen",
+          content: (
+            <AddTeamMembersForm
+              tenant={tenant}
+              teamId={teamId}
+              teamHandle={teamHandle}
+              defaultRole={defaultRole}
+              employees={employees}
+              onDone={closePopup}
+            />
+          ),
+        })
+      }
+    >
+      <Plus size={14} />
+      {variant === "icon" ? null : "Mitglieder hinzufügen"}
+    </button>
+  );
+}

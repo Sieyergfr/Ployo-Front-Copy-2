@@ -13,7 +13,7 @@ export default async function AuthLayout ({
 
     return (
         <div className="min-h-svh flex items-center justify-center p-6">
-            <div className="w-full" style={{ maxWidth: '420px' }}>
+            <div className="w-full max-w-[420px]">
                 <AuthHeader />
                 <AuthSegmented />
                 <Card>

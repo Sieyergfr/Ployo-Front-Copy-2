@@ -12,6 +12,12 @@ export type SendEmailInput = {
   subject: string;
   text: string;
   html?: string;
+  /**
+   * Antwortadresse, falls sie vom Absender abweicht. Gebraucht beim
+   * Kontaktformular: Absender bleibt SMTP_FROM (sonst scheitert SPF/DKIM),
+   * antworten soll das Postfach aber an den Einsender.
+   */
+  replyTo?: string;
 };
 
 export function isEmailConfigured() {
@@ -55,6 +61,7 @@ export async function sendEmail(input: SendEmailInput) {
     subject: input.subject,
     text: input.text,
     html: input.html,
+    replyTo: input.replyTo,
   });
 }
 
@@ -74,6 +81,15 @@ function emailLayout(title: string, bodyHtml: string) {
 </html>`;
 }
 
+/** Minimal-Escaping fuer die HTML-Variante, wie lib/notifications/messages.ts. */
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 function actionButton(url: string, label: string) {
   return `<p style="margin:20px 0;">
     <a href="${url}" style="display:inline-block;background:#2a6fdb;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:10px;font-size:14px;">${label}</a>
@@ -89,6 +105,22 @@ export async function sendPasswordResetEmail(input: { to: string; url: string })
     html: emailLayout(
       "Passwort zurücksetzen",
       `<p style="font-size:14px;line-height:1.5;">Sie haben angefordert, Ihr Ployo-Passwort zurückzusetzen. Der Link ist zeitlich begrenzt gültig.</p>${actionButton(input.url, "Neues Passwort festlegen")}`,
+    ),
+  });
+}
+
+export async function sendAccountDeletionRequestEmail(input: { to: string; url: string }) {
+  await sendEmail({
+    to: input.to,
+    subject: "Ployo-Konto loeschen",
+    text: `Sie haben angefordert, Ihr Ployo-Konto zu loeschen.
+
+Link (15 Minuten gueltig): ${input.url}
+
+Ueber diesen Link werden Ihre Zugangsdaten, aktive Sitzungen, Social-Login-Verknuepfungen und Push-Benachrichtigungs-Token unwiderruflich geloescht. Personal- und Beschaeftigungsdaten, die Ihr Arbeitgeber gesetzlich aufbewahren muss, bleiben davon unberuehrt. Wenn Sie das nicht waren, ignorieren Sie diese E-Mail - es passiert nichts.`,
+    html: emailLayout(
+      "Ployo-Konto loeschen",
+      `<p style="font-size:14px;line-height:1.5;">Sie haben angefordert, Ihr Ployo-Konto zu loeschen. Der Link ist 15 Minuten gueltig und loescht Ihre Zugangsdaten, Sitzungen, Social-Login-Verknuepfungen und Push-Token. Personaldaten, die Ihr Arbeitgeber gesetzlich aufbewahren muss, bleiben unberuehrt.</p>${actionButton(input.url, "Konto endgueltig loeschen")}`,
     ),
   });
 }
@@ -133,6 +165,52 @@ export async function sendInvitationEmail(input: {
     html: emailLayout(
       `Einladung zu ${input.tenantName}`,
       `<p style="font-size:14px;line-height:1.5;">Sie wurden eingeladen, dem Arbeitsbereich „${input.tenantName}“ bei Ployo beizutreten.</p>${actionButton(input.url, "Einladung annehmen")}`,
+    ),
+  });
+}
+
+/** Postfach fuer Kontaktanfragen aus App und Website (siehe Impressum). */
+export const CONTACT_EMAIL = process.env.CONTACT_EMAIL?.trim() || "info@ployo.io";
+
+/**
+ * Kontaktanfrage aus dem Formular der Mobile-App (POST /api/contact).
+ *
+ * Absender bleibt SMTP_FROM — eine fremde Adresse als `from` wuerde an
+ * SPF/DKIM scheitern und die Mail im Spam landen. Die eingegebene Adresse
+ * steht stattdessen im `replyTo`, sodass eine Antwort direkt beim Einsender
+ * landet.
+ */
+export async function sendContactRequestEmail(input: {
+  name: string;
+  email: string;
+  message: string;
+  /** Woher die Anfrage kam, z. B. "App (Anmeldung)" — nur zur Einordnung. */
+  source?: string;
+}) {
+  const source = input.source ?? "App";
+  const lines = [
+    `Name: ${input.name}`,
+    `E-Mail: ${input.email}`,
+    `Quelle: ${source}`,
+    "",
+    input.message,
+  ].join("\n");
+
+  await sendEmail({
+    to: CONTACT_EMAIL,
+    replyTo: input.email,
+    subject: `Kontaktanfrage von ${input.name}`,
+    text: lines,
+    html: emailLayout(
+      "Neue Kontaktanfrage",
+      `<p style="font-size:14px;line-height:1.5;margin:0 0 12px;">
+        <strong>Name:</strong> ${escapeHtml(input.name)}<br />
+        <strong>E-Mail:</strong> ${escapeHtml(input.email)}<br />
+        <strong>Quelle:</strong> ${escapeHtml(source)}
+      </p>
+      <p style="font-size:14px;line-height:1.6;white-space:pre-wrap;margin:0;">${escapeHtml(
+        input.message,
+      )}</p>`,
     ),
   });
 }

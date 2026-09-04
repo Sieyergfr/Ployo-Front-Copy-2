@@ -1,7 +1,10 @@
 import "server-only";
 
+import crypto from "node:crypto";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { revokeProviderToken } from "@/lib/oauth-revocation";
+import { sendAccountDeletionRequestEmail } from "@/lib/email";
 import { headers } from "next/headers";
 
 async function requireSession() {
@@ -84,6 +87,81 @@ export async function changeAccountPassword(input: {
 export const ACCOUNT_DELETION_GRACE_DAYS = 30;
 
 /**
+ * Verhindert, dass ein Konto gelöscht/vom Zugang getrennt wird, solange es
+ * alleiniger Inhaber eines Mandanten ist — der Mandant würde sonst
+ * verwaisen. Von `scheduleOwnAccountDeletion` und
+ * `deleteUserAccessImmediately` genutzt.
+ */
+async function assertNoOrphanedTenantOwnership(userId: string) {
+  const ownerships = await prisma.tenantMembership.findMany({
+    where: { userId, role: "OWNER" },
+    select: { tenantId: true, tenant: { select: { name: true } } },
+  });
+
+  for (const ownership of ownerships) {
+    const otherOwners = await prisma.tenantMembership.count({
+      where: {
+        tenantId: ownership.tenantId,
+        userId: { not: userId },
+        role: "OWNER",
+      },
+    });
+
+    if (otherOwners === 0) {
+      throw new Error(
+        `Diese Person ist alleinige/r Inhaber/in von „${ownership.tenant.name}“. Bitte zuerst eine andere Person als Inhaber/in eintragen oder den Mandanten löschen.`,
+      );
+    }
+  }
+}
+
+/**
+ * Löscht sofort und vollständig den Konto-Zugang (Login) eines Nutzers:
+ * widerruft zuerst dessen Social-Login-Tokens beim Provider (best-effort,
+ * s. lib/oauth-revocation.ts), löscht dann den `User`-Datensatz — Sitzungen,
+ * Zugangsdaten/Social-Login-Verknüpfungen (`Account`) und Push-Token
+ * kaskadieren dabei per Schema (`onDelete: Cascade`). Verknüpfte
+ * `TenantEmployee`-Personalakten (Stammdaten) werden NICHT gelöscht, nur
+ * von der gelöschten `userId` abgehängt — sie haben keine harte
+ * DB-Relation zu `User` und würden sonst auf eine nicht mehr existierende
+ * ID verweisen.
+ *
+ * Bewusst ein hartes Löschen statt nur Zugangsdaten/Sitzungen zu entfernen:
+ * better-auths Passwort-Reset-Flow legt für einen weiterhin existierenden
+ * Nutzer ohne Credential-Account automatisch einen neuen an (s.
+ * node_modules/better-auth/dist/api/routes/password.mjs resetPassword) —
+ * ein bloßes Entfernen der Zugangsdaten würde die erneute Anmeldung also
+ * NICHT zuverlässig verhindern.
+ */
+export async function deleteUserAccessImmediately(userId: string) {
+  await assertNoOrphanedTenantOwnership(userId);
+
+  const accounts = await prisma.account.findMany({
+    where: { userId },
+    select: { providerId: true, accessToken: true, refreshToken: true },
+  });
+
+  await Promise.allSettled(accounts.map((account) => revokeProviderToken(account)));
+
+  await prisma.$transaction([
+    prisma.tenantEmployee.updateMany({ where: { userId }, data: { userId: null } }),
+    prisma.user.delete({ where: { id: userId } }),
+  ]);
+}
+
+/**
+ * Self-Service-Variante von `deleteUserAccessImmediately` für das eigene,
+ * eingeloggte Konto — ohne Karenzzeit (anders als
+ * `scheduleOwnAccountDeletion`). Für die eigene Personalakte (Stammdaten)
+ * ändert sich nichts, sie bleibt beim Arbeitgeber erhalten.
+ */
+export async function deleteOwnAccountAccess() {
+  const session = await requireSession();
+
+  await deleteUserAccessImmediately(session.user.id);
+}
+
+/**
  * Merkt das eigene Konto zur Löschung vor, statt sofort hart zu löschen.
  * Mandanten, in denen der Nutzer alleiniger Inhaber ist, würden verwaisen –
  * das wird vorher geprüft. Nach dem Vormerken werden alle Sitzungen
@@ -94,26 +172,7 @@ export const ACCOUNT_DELETION_GRACE_DAYS = 30;
 export async function scheduleOwnAccountDeletion(password: string) {
   const session = await requireSession();
 
-  const ownerships = await prisma.tenantMembership.findMany({
-    where: { userId: session.user.id, role: "OWNER" },
-    select: { tenantId: true, tenant: { select: { name: true } } },
-  });
-
-  for (const ownership of ownerships) {
-    const otherOwners = await prisma.tenantMembership.count({
-      where: {
-        tenantId: ownership.tenantId,
-        userId: { not: session.user.id },
-        role: "OWNER",
-      },
-    });
-
-    if (otherOwners === 0) {
-      throw new Error(
-        `Sie sind alleinige/r Inhaber/in von „${ownership.tenant.name}“. Bitte zuerst eine andere Person als Inhaber/in eintragen oder den Mandanten löschen.`,
-      );
-    }
-  }
+  await assertNoOrphanedTenantOwnership(session.user.id);
 
   try {
     await auth.api.signInEmail({
@@ -293,4 +352,87 @@ export function startPagePath(tenantSlug: string, startPage: StartPage) {
     default:
       return `/u/${tenantSlug}`;
   }
+}
+
+const ACCOUNT_DELETION_REQUEST_TTL_MINUTES = 15;
+const ACCOUNT_DELETION_VERIFICATION_PREFIX = "account-deletion-request:";
+
+function getAppBaseUrl() {
+  return process.env.BETTER_AUTH_URL ?? "http://localhost:3000";
+}
+
+/**
+ * Oeffentlicher, login-loser Ablauf fuer die Kontoloeschung (Google-Play-
+ * Vorgabe: ein funktionierender Link ausserhalb der App). Nennt bewusst
+ * nicht, ob zur E-Mail ein Konto existiert - verhindert, dass sich die
+ * Seite zum Durchprobieren registrierter Adressen eignet. Die eigentliche
+ * Loeschung passiert erst nach explizitem Klick auf der Bestaetigungsseite
+ * (confirmAccountDeletionByToken), damit ein E-Mail-Sicherheitsscanner, der
+ * Links vorab abruft, nicht versehentlich Konten loescht.
+ */
+export async function requestAccountDeletionByEmail(rawEmail: string) {
+  const email = rawEmail.trim().toLowerCase();
+
+  if (!email || !email.includes("@")) {
+    throw new Error("Bitte eine gueltige E-Mail-Adresse angeben.");
+  }
+
+  const user = await prisma.user.findFirst({
+    where: { email: { equals: email, mode: "insensitive" } },
+    select: { id: true, email: true },
+  });
+
+  if (!user) {
+    return;
+  }
+
+  const token = crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
+
+  await prisma.verification.create({
+    data: {
+      identifier: ACCOUNT_DELETION_VERIFICATION_PREFIX + token,
+      value: user.id,
+      expiresAt: new Date(Date.now() + ACCOUNT_DELETION_REQUEST_TTL_MINUTES * 60 * 1000),
+    },
+  });
+
+  const url = `${getAppBaseUrl()}/konto-loeschung/bestaetigen?token=${token}`;
+
+  await sendAccountDeletionRequestEmail({ to: user.email, url });
+}
+
+/** Liest vor, ob ein Bestaetigungs-Token (noch) gueltig ist, ohne ihn zu verbrauchen. */
+export async function peekAccountDeletionToken(token: string) {
+  const record = await prisma.verification.findFirst({
+    where: {
+      identifier: ACCOUNT_DELETION_VERIFICATION_PREFIX + token,
+      expiresAt: { gt: new Date() },
+    },
+  });
+
+  return Boolean(record);
+}
+
+/**
+ * Vollzieht die per E-Mail angeforderte Kontoloeschung: prueft den Token
+ * (15 Minuten gueltig, Einmalgebrauch), loescht dann sofort und vollstaendig
+ * ueber deleteUserAccessImmediately - Zugangsdaten, Sitzungen,
+ * Social-Login-Verknuepfungen und Push-Token fallen dabei per Kaskade weg.
+ */
+export async function confirmAccountDeletionByToken(token: string) {
+  const identifier = ACCOUNT_DELETION_VERIFICATION_PREFIX + token;
+
+  const record = await prisma.verification.findFirst({
+    where: { identifier, expiresAt: { gt: new Date() } },
+  });
+
+  if (!record) {
+    throw new Error(
+      "Dieser Link ist ungueltig oder abgelaufen. Bitte die Loeschung erneut anfordern.",
+    );
+  }
+
+  await prisma.verification.delete({ where: { id: record.id } }).catch(() => {});
+
+  await deleteUserAccessImmediately(record.value);
 }

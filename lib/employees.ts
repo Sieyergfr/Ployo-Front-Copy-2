@@ -11,16 +11,22 @@ export type EmployeeFileFolder = {
   fileCount: number;
   locked?: boolean;
   path?: string;
+  /** Vor dem Mitarbeiter selbst verborgen — samt Inhalt und Unterordnern. */
+  hiddenFromEmployee?: boolean;
 };
 
 export type EmployeeFile = {
   name: string;
   folder: string;
+  /** Ordnerpfad (TenantFile.folderSlug); leer = Home-Ebene der Akte. */
+  folderSlug: string;
   type: string;
   size: string;
   updatedAt: string;
   locked?: boolean;
   storageFileId?: string;
+  /** Vor dem Mitarbeiter selbst verborgen (HR sieht die Datei weiterhin). */
+  hiddenFromEmployee?: boolean;
 };
 
 /**
@@ -36,15 +42,38 @@ export type EmployeeFile = {
  * vorherige Datei beim Ersetzen entfernt).
  */
 export const EMPLOYEE_DOCUMENT_SLOTS = [
-  { key: "ausweis", label: "Ausweis", multiple: false },
-  { key: "reisepass", label: "Reisepass", multiple: false },
-  { key: "aufenthaltstitel", label: "Aufenthaltstitel", multiple: false },
+  // Ausweis, Reisepass und Aufenthaltstitel waren drei getrennte Felder. Ein
+  // Betrieb braucht sie nicht nebeneinander — es zählt, dass *ein* gültiges
+  // Ausweisdokument vorliegt. Deshalb ein Feld, und `multiple`, damit die
+  // Dateien aus den drei alten Ordnern nebeneinander bestehen bleiben
+  // (mehrseitige Dokumente passen ohnehin besser so).
+  //
+  // `legacyLabels`: Ordner früherer Felder. Bereits abgelegte Dateien liegen
+  // weiterhin dort und werden hier mit angezeigt; neue landen im neuen Ordner.
+  {
+    key: "ausweisdokument",
+    label: "Ausweisdokument",
+    multiple: true,
+    legacyLabels: ["Ausweis", "Reisepass", "Aufenthaltstitel"],
+  },
   { key: "fuehrerschein", label: "Führerschein", multiple: false },
   { key: "arbeitserlaubnis", label: "Arbeitserlaubnis", multiple: false },
   { key: "erste-hilfe-nachweis", label: "Erste-Hilfe-Nachweis", multiple: false },
   { key: "gesundheitszeugnis", label: "Gesundheitszeugnis (Lebensmittel)", multiple: false },
   { key: "zusatzfuehrerschein", label: "Zusatzführerschein", multiple: true },
-] as const;
+] as const satisfies readonly {
+  key: string;
+  label: string;
+  multiple: boolean;
+  legacyLabels?: readonly string[];
+}[];
+
+/** Ordnernamen, aus denen ein Feld seine Dateien bezieht — inkl. der zusammengefassten Vorgänger. */
+export function employeeDocumentSlotFolders(
+  slot: (typeof EMPLOYEE_DOCUMENT_SLOTS)[number],
+): readonly string[] {
+  return [slot.label, ...("legacyLabels" in slot ? slot.legacyLabels : [])];
+}
 
 export type EmergencyContact = {
   id: string;
@@ -82,6 +111,9 @@ export type InfoRequest = {
   responseMessage?: string;
   respondedAt?: string;
   hasResponseFile: boolean;
+  /** Datei-ID der Antwort — für Ansehen/Herunterladen im Detail-Drawer. */
+  responseFileId?: string;
+  responseFileName?: string;
 };
 
 export type EmployeeShift = {

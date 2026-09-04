@@ -60,6 +60,7 @@ export async function GET(request: Request) {
           where: { id: access.roleId },
           select: {
             name: true,
+            appOverviewEnabled: true,
             permissions: {
               select: {
                 area: true,
@@ -91,6 +92,14 @@ export async function GET(request: Request) {
       role: access.membershipRole,
       roleName: roleRow?.name ?? null,
       isManager: ["OWNER", "ADMIN", "HR"].includes(access.membershipRole),
+      /**
+       * Tab "Alles" in der Mitarbeiter-App. Anders als die Bereichsrechte
+       * hängt er an der Rolle als Ganzes (TenantRole.appOverviewEnabled) —
+       * Mandanten-Manager (OWNER/ADMIN/HR) haben ihn wie alles andere immer.
+       */
+      appOverviewEnabled:
+        ["OWNER", "ADMIN", "HR"].includes(access.membershipRole) ||
+        (roleRow?.appOverviewEnabled ?? false),
       permissions: Object.fromEntries(
         tenantPermissionAreas.map((area) => [area, capabilities[area].level]),
       ),

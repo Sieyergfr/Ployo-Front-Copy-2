@@ -11,6 +11,7 @@ import { type VacationMetric } from "@/lib/vacations";
 import { hasPermissionLevel } from "@/lib/roles";
 import { getTenantCapabilities, withAccessRedirect } from "@/lib/tenant-access";
 import { notFound } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 
 export const metadata = {
   title: "Urlaub",
@@ -45,6 +46,7 @@ export default async function VacationPage({
   params,
   searchParams,
 }: PageProps<"/u/[tenant]/urlaub">) {
+  const t = await getTranslations("VacationPage");
   const { tenant } = await params;
   const query = await searchParams;
   const vacationRequests = await withAccessRedirect(tenant, () =>
@@ -64,7 +66,7 @@ export default async function VacationPage({
   const canManage = hasPermissionLevel(capabilities.vacation.level, "write");
   const canDelete = capabilities.vacation.canDelete;
 
-  const vacationMetrics = getVacationMetrics(vacationRequests, employees);
+  const vacationMetrics = getVacationMetrics(vacationRequests, employees, t);
   const page = paginate(vacationRequests, searchParamPage(query.page), PAGE_SIZE);
   const employeeOptions = employees
     .filter((employee) => employee.dbId)
@@ -76,7 +78,7 @@ export default async function VacationPage({
 
   return (
     <>
-      <PageHeader eyebrow="Abwesenheitsverwaltung" title="Urlaub">
+      <PageHeader eyebrow={t("eyebrow")} title={t("title")}>
         {canManage && (
           <VacationRequestButton tenant={tenant} employees={employeeOptions} />
         )}

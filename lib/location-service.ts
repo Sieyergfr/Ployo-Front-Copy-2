@@ -90,6 +90,7 @@ type LocationRecord = {
   shiftCount: number;
   openPositions: number;
   openingHoursJson: unknown;
+  shiftMinStaffing: number | null;
   utilization: string;
   utilizationCaption: string;
   status: string;
@@ -181,6 +182,22 @@ function toInt(value: number | string) {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
 }
 
+/**
+ * Mindestbesetzung eines Standorts. `null`/leer bedeutet ausdrücklich
+ * "Unternehmensvorgabe verwenden" und ist etwas anderes als eine
+ * eingetragene 0 ("dieser Standort braucht keine Mindestbesetzung") — deshalb
+ * bleibt der Wert nullable statt auf 0 normalisiert zu werden.
+ */
+function normalizeMinStaffing(value: number | null | undefined) {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  const parsed = Number.parseInt(String(value), 10);
+
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.min(parsed, 99) : null;
+}
+
 async function employeeLead(input: { tenantId: string; employeeId?: string }) {
   if (!input.employeeId) {
     return null;
@@ -211,7 +228,11 @@ async function employeeLead(input: { tenantId: string; employeeId?: string }) {
   };
 }
 
-function toLocation(record: LocationRecord, tenantDefaultOpeningHours: OpeningHoursDay[]): Location {
+function toLocation(
+  record: LocationRecord,
+  tenantDefaultOpeningHours: OpeningHoursDay[],
+  tenantMinStaffing: number,
+): Location {
   const openingHoursOverride = parseOpeningHoursDays(record.openingHoursJson);
   const openingHours = resolveEffectiveOpeningHours(openingHoursOverride, tenantDefaultOpeningHours);
   const storedFiles: LocationFile[] = (record.storageFiles ?? []).map((file) => {
@@ -220,6 +241,7 @@ function toLocation(record: LocationRecord, tenantDefaultOpeningHours: OpeningHo
     return {
       name: mapped.name,
       folder: mapped.folder,
+      folderSlug: mapped.folderSlug,
       updatedAt: mapped.updatedAt,
       size: mapped.size,
       type: mapped.type,
@@ -230,8 +252,11 @@ function toLocation(record: LocationRecord, tenantDefaultOpeningHours: OpeningHo
   const files = storedFiles;
   const folderMap = new Map<string, LocationFileFolder>();
 
+  // Schluessel ist der Ordner-PFAD, nicht der Name: nur so lassen sich
+  // gleichnamige Unterordner in verschiedenen Zweigen auseinanderhalten und
+  // die Ordnernavigation (components/OwnerFilesTab.tsx) verschachteln.
   for (const folder of record.storageFileFolders ?? []) {
-    folderMap.set(folder.name, {
+    folderMap.set(folder.path, {
       name: folder.name,
       path: folder.path,
       fileCount: 0,
@@ -240,15 +265,20 @@ function toLocation(record: LocationRecord, tenantDefaultOpeningHours: OpeningHo
   }
 
   for (const file of storedFiles) {
-    const current = folderMap.get(file.folder);
+    if (!file.folderSlug) {
+      continue;
+    }
+
+    const current = folderMap.get(file.folderSlug);
 
     if (current) {
       current.fileCount += 1;
     } else {
-      folderMap.set(file.folder, {
+      folderMap.set(file.folderSlug, {
         name: file.folder,
+        path: file.folderSlug,
         fileCount: 1,
-        locked: true,
+        locked: false,
       });
     }
   }
@@ -282,6 +312,8 @@ function toLocation(record: LocationRecord, tenantDefaultOpeningHours: OpeningHo
     openPositions: record.openPositions,
     openingHours,
     usesDefaultOpeningHours: openingHoursOverride.length === 0,
+    shiftMinStaffing: record.shiftMinStaffing,
+    effectiveMinStaffing: record.shiftMinStaffing ?? tenantMinStaffing,
     utilization: record.utilization,
     utilizationCaption: record.utilizationCaption,
     status: normalizeStatus(record.status),
@@ -351,6 +383,7 @@ export async function getLocationsForTenant(tenantSlug: string) {
   const where = await locationScopeWhere(access);
   const fileAccess = await getOptionalAreaFileAccess(tenantSlug, "locations");
   const tenantDefaultOpeningHours = await getDefaultOpeningHours(tenantSlug);
+  const tenantMinStaffing = await getTenantMinStaffing(access.tenantId);
 
   const records = await prisma.tenantLocation.findMany({
     where,
@@ -380,7 +413,17 @@ export async function getLocationsForTenant(tenantSlug: string) {
     storageFiles: fileAccess
       ? record.storageFiles.filter((file) => canAccessFileAcl(file.parent ?? file, fileAccess))
       : [],
-  }, tenantDefaultOpeningHours));
+  }, tenantDefaultOpeningHours, tenantMinStaffing));
+}
+
+/** Unternehmensweite Mindestbesetzung — Rückfallwert für Standorte ohne eigenen Wert. */
+async function getTenantMinStaffing(tenantId: string) {
+  const settings = await prisma.tenantSettings.findUnique({
+    where: { tenantId },
+    select: { shiftMinStaffing: true },
+  });
+
+  return settings?.shiftMinStaffing ?? 3;
 }
 
 export async function getLocationForTenant(tenantSlug: string, locationHandle: string) {
@@ -388,6 +431,7 @@ export async function getLocationForTenant(tenantSlug: string, locationHandle: s
   const where = await locationScopeWhere(access);
   const fileAccess = await getOptionalAreaFileAccess(tenantSlug, "locations");
   const tenantDefaultOpeningHours = await getDefaultOpeningHours(tenantSlug);
+  const tenantMinStaffing = await getTenantMinStaffing(access.tenantId);
 
   const record = await prisma.tenantLocation.findFirst({
     where: {
@@ -419,10 +463,14 @@ export async function getLocationForTenant(tenantSlug: string, locationHandle: s
     storageFiles: fileAccess
       ? record.storageFiles.filter((file) => canAccessFileAcl(file.parent ?? file, fileAccess))
       : [],
-  }, tenantDefaultOpeningHours) : null;
+  }, tenantDefaultOpeningHours, tenantMinStaffing) : null;
 }
 
-export function getLocationMetrics(locations: Location[]): LocationMetric[] {
+/** `t` kommt aus dem Namespace "LocationMetrics" (next-intl) — bewusst nur als generische Funktionssignatur getippt, damit dieses lib-Modul next-intl nicht selbst importieren muss. */
+export function getLocationMetrics(
+  locations: Location[],
+  t: (key: string, values?: Record<string, string | number>) => string,
+): LocationMetric[] {
   const active = locations.filter((location) => location.status === "active").length;
   const inactive = locations.length - active;
   const employeeCount = locations.reduce(
@@ -436,24 +484,24 @@ export function getLocationMetrics(locations: Location[]): LocationMetric[] {
 
   return [
     {
-      label: "Standorte gesamt",
+      label: t("locationsTotal"),
       value: locations.length.toString(),
-      caption: `${active} aktiv`,
+      caption: t("activeCount", { count: active }),
     },
     {
-      label: "Aktive Standorte",
+      label: t("activeLocations"),
       value: active.toString(),
-      caption: `${inactive} inaktiv`,
+      caption: t("inactiveCount", { count: inactive }),
     },
     {
-      label: "Mitarbeiter gesamt",
+      label: t("employeesTotal"),
       value: employeeCount.toString(),
-      caption: "aller Standorte",
+      caption: t("allLocationsCaption"),
     },
     {
-      label: "Offene Schichten",
+      label: t("openShifts"),
       value: openShifts.toString(),
-      caption: "diese Woche",
+      caption: t("thisWeek"),
       tone: "danger",
     },
   ];
@@ -494,6 +542,8 @@ export function toLocationAdminPayload(location: Location) {
     utilizationCaption: location.utilizationCaption,
     openingHours: location.openingHours,
     usesDefaultOpeningHours: location.usesDefaultOpeningHours,
+    shiftMinStaffing: location.shiftMinStaffing,
+    effectiveMinStaffing: location.effectiveMinStaffing,
   };
 }
 
@@ -584,6 +634,8 @@ export async function createTenantLocation(input: {
   accentClassName: string;
   /** Leer = Mandanten-Standard verwenden, siehe resolveEffectiveOpeningHours(). */
   openingHours?: OpeningHoursDay[];
+  /** `null` = Unternehmensvorgabe (TenantSettings.shiftMinStaffing) gilt weiter. */
+  shiftMinStaffing?: number | null;
 }) {
   assertValidLocationEmail(input.email.trim());
   assertKnownLocationKind(input.kind.trim());
@@ -619,6 +671,7 @@ export async function createTenantLocation(input: {
       leadPhone: lead?.leadPhone ?? "",
       leadEmail: input.email.trim() || lead?.leadEmail || "",
       openingHoursJson: input.openingHours ?? [],
+      shiftMinStaffing: normalizeMinStaffing(input.shiftMinStaffing),
     },
     include: { address: true },
   });
@@ -661,6 +714,8 @@ export async function updateTenantLocation(input: {
   accentClassName: string;
   /** Leer = Mandanten-Standard verwenden, siehe resolveEffectiveOpeningHours(). */
   openingHours?: OpeningHoursDay[];
+  /** `null` = Unternehmensvorgabe (TenantSettings.shiftMinStaffing) gilt weiter. */
+  shiftMinStaffing?: number | null;
 }) {
   assertKnownLocationKind(input.kind.trim());
   assertKnownLocationColor(input.accentClassName.trim());
@@ -723,6 +778,9 @@ export async function updateTenantLocation(input: {
       leadEmail: leadEmail.trim(),
       accentClassName: input.accentClassName.trim() || "bg-ink",
       ...(input.openingHours !== undefined ? { openingHoursJson: input.openingHours } : {}),
+      ...(input.shiftMinStaffing !== undefined
+        ? { shiftMinStaffing: normalizeMinStaffing(input.shiftMinStaffing) }
+        : {}),
     },
     include: { address: true },
   });
@@ -847,6 +905,88 @@ export async function addEmployeesToTenantLocation(input: {
     "Mitarbeiter zu Standort hinzugefügt",
     input.locationId,
     newMembers.map((member) => member.name).join(", "),
+  );
+
+  return updated;
+}
+
+/**
+ * Entfernt Mitarbeiter aus einem Standort (Gegenstück zu
+ * `addEmployeesToTenantLocation`) — für die "Mitarbeiter zuweisen"-Ansicht,
+ * die Standort-Mitgliedschaften als Multiselect abbildet: bereits
+ * zugewiesene Mitarbeiter erscheinen dort vorausgewählt, ein Abwählen muss
+ * sie also wieder entfernen können.
+ */
+export async function removeEmployeesFromTenantLocation(input: {
+  tenantSlug: string;
+  locationId: string;
+  employeeIds: string[];
+}) {
+  const access = await requireLocationManager(input.tenantSlug);
+  const employeeIds = Array.from(
+    new Set(input.employeeIds.map((id) => id.trim()).filter(Boolean)),
+  );
+
+  if (employeeIds.length === 0) {
+    throw new Error("Keine Mitarbeiter ausgewählt.");
+  }
+
+  const location = await prisma.tenantLocation.findFirst({
+    where: {
+      id: input.locationId,
+      tenantId: access.tenantId,
+    },
+  });
+
+  if (!location) {
+    throw new Error("Standort nicht gefunden.");
+  }
+
+  const members = await prisma.tenantLocationMember.findMany({
+    where: { locationId: input.locationId, employeeId: { in: employeeIds } },
+    select: { id: true, name: true },
+  });
+
+  if (members.length === 0) {
+    return location;
+  }
+
+  const actorName = (
+    await requireTenantAccess(input.tenantSlug, "locations", "write")
+  ).userName;
+
+  await prisma.$transaction([
+    prisma.tenantLocationMember.deleteMany({
+      where: { id: { in: members.map((member) => member.id) } },
+    }),
+    prisma.tenantLocationActivity.create({
+      data: {
+        tenantId: access.tenantId,
+        locationId: input.locationId,
+        actor: actorName,
+        text:
+          members.length === 1
+            ? `hat ${members[0].name} vom Standort entfernt`
+            : `hat ${members.length} Mitarbeiter vom Standort entfernt`,
+        tone: "danger",
+      },
+    }),
+  ]);
+
+  const remaining = await prisma.tenantLocationMember.count({
+    where: { locationId: input.locationId },
+  });
+
+  const updated = await prisma.tenantLocation.update({
+    where: { id: input.locationId, tenantId: access.tenantId },
+    data: { employeeCount: remaining },
+  });
+
+  await recordLocationAudit(
+    access,
+    "Mitarbeiter von Standort entfernt",
+    input.locationId,
+    members.map((member) => member.name).join(", "),
   );
 
   return updated;

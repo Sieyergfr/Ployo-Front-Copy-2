@@ -5,6 +5,8 @@ import { requireTenantMembership } from "@/lib/tenant-access";
 import { canAccessFileAcl, requireFileAcl } from "@/lib/file-access";
 import { decryptField, encryptField } from "@/lib/encryption";
 import { normalizeAddressInput, type AddressInput } from "@/lib/address";
+import { decryptAddress, encryptAddress } from "@/lib/employee-address";
+import { EMPLOYEE_DOCUMENT_SLOTS, employeeDocumentSlotFolders } from "@/lib/employees";
 import type { EmergencyContact, InfoRequestStatus } from "@/lib/employees";
 import { computeVacationAccount } from "@/lib/vacations";
 import { recordTenantAudit } from "@/lib/audit";
@@ -14,8 +16,29 @@ import { createReadSignedUrl } from "@/lib/storage/signed-url";
 import { uploadObject } from "@/lib/storage/upload";
 import { validateUploadFile } from "@/lib/storage/storage.service";
 
-function asJson<T>(value: unknown, fallback: T): T {
-  return (value ?? fallback) as T;
+/**
+ * `emergencyContactsJson` ist eine `String`-Spalte (Migration
+ * `20260903000000_split_employee_address`) — die Feldverschlüsselung
+ * (`lib/encryption.ts`) arbeitet nur auf Strings.
+ */
+function parseEmergencyContacts(value: string): EmergencyContact[] {
+  const decrypted = decryptField(value);
+
+  if (!decrypted) {
+    return [];
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(decrypted);
+
+    return Array.isArray(parsed) ? (parsed as EmergencyContact[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function serializeEmergencyContacts(contacts: EmergencyContact[]): string {
+  return encryptField(JSON.stringify(contacts));
 }
 
 export type SelfServiceEmployee = {
@@ -58,24 +81,48 @@ export type ProfileCompleteness = {
   missingLabels: string[];
 };
 
-const profileFieldLabels: Record<
-  Exclude<keyof MyProfileFields, "privateAddress" | "emergencyContacts">,
-  string
-> = {
-  birthDate: "Geburtsdatum",
-  birthPlace: "Geburtsort",
-  nationality: "Staatsangehörigkeit",
-  maritalStatus: "Familienstand",
-  phone: "Telefonnummer",
-  taxId: "Steuer-ID",
-  socialSecurityNumber: "Sozialversicherungsnummer",
-  healthInsurance: "Krankenversicherung",
-  iban: "IBAN",
+/**
+ * `t` fehlt beim Aufruf aus `GET /api/me/overview` (kein next-intl-Kontext in
+ * Route Handlern) — Default liefert dieselben deutschen Texte wie vor der
+ * i18n-Umstellung, damit sich diese API-Antwort für die App nicht ändert.
+ */
+const defaultProfileFieldLabels: Record<string, string> = {
+  birthDateLabel: "Geburtsdatum",
+  birthPlaceLabel: "Geburtsort",
+  nationalityLabel: "Staatsangehörigkeit",
+  maritalStatusLabel: "Familienstand",
+  phoneLabel: "Telefonnummer",
+  taxIdLabel: "Steuer-ID",
+  ssnLabel: "Sozialversicherungsnummer",
+  healthInsuranceLabel: "Krankenversicherung",
+  ibanLabel: "IBAN",
+  privateAddressLabel: "Privatadresse",
+  emergencyContactLabel: "Notfallkontakt",
 };
 
-export function computeProfileCompleteness(fields: MyProfileFields): ProfileCompleteness {
+function getProfileFieldLabels(
+  t: (key: string) => string,
+): Record<Exclude<keyof MyProfileFields, "privateAddress" | "emergencyContacts">, string> {
+  return {
+    birthDate: t("birthDateLabel"),
+    birthPlace: t("birthPlaceLabel"),
+    nationality: t("nationalityLabel"),
+    maritalStatus: t("maritalStatusLabel"),
+    phone: t("phoneLabel"),
+    taxId: t("taxIdLabel"),
+    socialSecurityNumber: t("ssnLabel"),
+    healthInsurance: t("healthInsuranceLabel"),
+    iban: t("ibanLabel"),
+  };
+}
+
+export function computeProfileCompleteness(
+  fields: MyProfileFields,
+  t: (key: string) => string = (key) => defaultProfileFieldLabels[key] ?? key,
+): ProfileCompleteness {
   const missingLabels: string[] = [];
   let filledCount = 0;
+  const profileFieldLabels = getProfileFieldLabels(t);
   const scalarKeys = Object.keys(profileFieldLabels) as Array<
     keyof typeof profileFieldLabels
   >;
@@ -92,13 +139,13 @@ export function computeProfileCompleteness(fields: MyProfileFields): ProfileComp
   if (fields.privateAddress.street && fields.privateAddress.postalCode && fields.privateAddress.city) {
     filledCount += 1;
   } else {
-    missingLabels.push("Privatadresse");
+    missingLabels.push(t("privateAddressLabel"));
   }
 
   if (fields.emergencyContacts.length > 0) {
     filledCount += 1;
   } else {
-    missingLabels.push("Notfallkontakt");
+    missingLabels.push(t("emergencyContactLabel"));
   }
 
   return {
@@ -133,6 +180,20 @@ export type SelfServiceDocument = {
   updatedAt: string;
   /** Echter Ordnername (`TenantFile.folderName`) — für die Ordneransicht im Personalakte-Screen der App. */
   folder: string;
+  /** Ordnerpfad (`TenantFile.folderSlug`), leer = Wurzel der Akte. Schlüssel gegen `SelfServiceFolder.slug`. */
+  folderSlug: string;
+};
+
+/**
+ * Ordner der eigenen Akte — genau die, die auf dem Mitarbeiterprofil
+ * existieren. Bewusst mit Pfad statt nur Name: die App gruppiert Dateien
+ * darüber und navigiert in Unterordner, ein Name allein ist dafür nicht
+ * eindeutig.
+ */
+export type SelfServiceFolder = {
+  name: string;
+  /** Vollständiger Ordnerpfad, `/`-getrennt. */
+  slug: string;
 };
 
 export type SelfServiceInfoRequest = {
@@ -154,6 +215,8 @@ export type SelfServiceOverview = {
   vacationRequests: SelfServiceVacationRequest[];
   sicknessReports: SelfServiceSicknessReport[];
   documents: SelfServiceDocument[];
+  /** Auch Ordner ohne Datei — sonst zeigte "Meine Personalakte" nur Ordner, die bereits mindestens eine Datei enthalten. */
+  folders: SelfServiceFolder[];
   infoRequests: SelfServiceInfoRequest[];
   profileFields: MyProfileFields | null;
   profileCompleteness: ProfileCompleteness | null;
@@ -172,6 +235,7 @@ export async function getMyEmployeeId(tenantSlug: string) {
 
 export async function getMySelfServiceOverview(
   tenantSlug: string,
+  t?: (key: string) => string,
 ): Promise<SelfServiceOverview> {
   const access = await requireTenantMembership(tenantSlug);
   const employeeRecord = await prisma.tenantEmployee.findFirst({
@@ -185,34 +249,36 @@ export async function getMySelfServiceOverview(
       vacationRequests: [],
       sicknessReports: [],
       documents: [],
+      folders: [],
       infoRequests: [],
       profileFields: null,
       profileCompleteness: null,
     };
   }
 
+  const decryptedPrivateAddress = decryptAddress(employeeRecord.privateAddress);
   const profileFields: MyProfileFields = {
-    birthDate: employeeRecord.birthDate,
-    birthPlace: employeeRecord.birthPlace,
-    nationality: employeeRecord.nationality,
-    maritalStatus: employeeRecord.maritalStatus,
+    birthDate: decryptField(employeeRecord.birthDate),
+    birthPlace: decryptField(employeeRecord.birthPlace),
+    nationality: decryptField(employeeRecord.nationality),
+    maritalStatus: decryptField(employeeRecord.maritalStatus),
     phone: employeeRecord.phone,
     privateAddress: {
-      street: employeeRecord.privateAddress?.street ?? "",
-      houseNumber: employeeRecord.privateAddress?.houseNumber ?? "",
-      postalCode: employeeRecord.privateAddress?.postalCode ?? "",
-      city: employeeRecord.privateAddress?.city ?? "",
-      careOf: employeeRecord.privateAddress?.careOf ?? "",
-      country: employeeRecord.privateAddress?.country ?? "DE",
+      street: decryptedPrivateAddress?.street ?? "",
+      houseNumber: decryptedPrivateAddress?.houseNumber ?? "",
+      postalCode: decryptedPrivateAddress?.postalCode ?? "",
+      city: decryptedPrivateAddress?.city ?? "",
+      careOf: decryptedPrivateAddress?.careOf ?? "",
+      country: decryptedPrivateAddress?.country ?? "DE",
     },
     taxId: decryptField(employeeRecord.taxId),
     socialSecurityNumber: decryptField(employeeRecord.socialSecurityNumber),
     healthInsurance: decryptField(employeeRecord.healthInsurance),
     iban: decryptField(employeeRecord.iban),
-    emergencyContacts: asJson<EmergencyContact[]>(employeeRecord.emergencyContactsJson, []),
+    emergencyContacts: parseEmergencyContacts(employeeRecord.emergencyContactsJson),
   };
 
-  const [vacationRequests, sicknessReports, files, infoRequests] = await Promise.all([
+  const [vacationRequests, sicknessReports, files, folders, infoRequests] = await Promise.all([
     prisma.tenantVacationRequest.findMany({
       where: { employeeId: employeeRecord.id },
       orderBy: { createdAt: "desc" },
@@ -222,7 +288,14 @@ export async function getMySelfServiceOverview(
       orderBy: { startDate: "desc" },
     }),
     prisma.tenantFile.findMany({
-      where: { employeeId: employeeRecord.id, status: "active" },
+      // `hiddenFromEmployee`: von HR ausdrücklich vor genau diesem Mitarbeiter
+      // verborgen (setTenantFileEmployeeVisibility) — in der Akte vorhanden,
+      // in der Selbstauskunft nicht.
+      where: {
+        employeeId: employeeRecord.id,
+        status: "active",
+        hiddenFromEmployee: false,
+      },
       orderBy: { updatedAt: "desc" },
       select: {
         id: true,
@@ -230,15 +303,33 @@ export async function getMySelfServiceOverview(
         documentType: true,
         updatedAt: true,
         folderName: true,
+        folderSlug: true,
         accessRoleIdsJson: true,
         accessUserIdsJson: true,
       },
+    }),
+    // Alle Ebenen, nicht nur die oberste: die App navigiert über den Pfad
+    // auch in Unterordner — und ein verborgener Ordner muss hier vorkommen,
+    // damit die Dateien darunter mitgefiltert werden können.
+    prisma.tenantFileFolder.findMany({
+      where: { employeeId: employeeRecord.id, status: "active" },
+      orderBy: { name: "asc" },
+      select: { name: true, path: true, hiddenFromEmployee: true },
     }),
     prisma.tenantEmployeeInfoRequest.findMany({
       where: { employeeId: employeeRecord.id },
       orderBy: [{ status: "asc" }, { createdAt: "desc" }],
     }),
   ]);
+
+  // Ein verborgener Ordner verbirgt alles darunter: Unterordner und die
+  // Dateien beider Ebenen. Geprüft wird über den Pfad-Präfix, damit dafür
+  // kein Flag auf jedem einzelnen Datensatz nachgezogen werden muss.
+  const hiddenFolderPaths = folders
+    .filter((folder) => folder.hiddenFromEmployee)
+    .map((folder) => folder.path);
+  const isHiddenPath = (path: string) =>
+    hiddenFolderPaths.some((hidden) => path === hidden || path.startsWith(`${hidden}/`));
 
   const currentYear = new Date().getFullYear();
   const approvedDaysThisYear = vacationRequests
@@ -282,17 +373,22 @@ export async function getMySelfServiceOverview(
       startDate: report.startDate.toISOString().slice(0, 10),
       endDate: report.endDate ? report.endDate.toISOString().slice(0, 10) : null,
       status: report.status,
-      note: report.note,
+      note: decryptField(report.note),
     })),
     documents: files
       .filter((file) => canAccessFileAcl(file, access))
+      .filter((file) => !isHiddenPath(file.folderSlug))
       .map((file) => ({
         id: file.id,
         name: file.displayName,
         documentType: file.documentType,
         updatedAt: file.updatedAt.toISOString(),
         folder: file.folderName,
+        folderSlug: file.folderSlug,
       })),
+    folders: folders
+      .filter((folder) => !isHiddenPath(folder.path))
+      .map((folder) => ({ name: folder.name, slug: folder.path })),
     infoRequests: infoRequests.map((request) => ({
       id: request.id,
       title: request.title,
@@ -307,7 +403,130 @@ export async function getMySelfServiceOverview(
       hasResponseFile: Boolean(request.responseFileId),
     })),
     profileFields,
-    profileCompleteness: computeProfileCompleteness(profileFields),
+    profileCompleteness: t
+      ? computeProfileCompleteness(profileFields, t)
+      : computeProfileCompleteness(profileFields),
+  };
+}
+
+export type SelfServiceContract = {
+  id: string;
+  title: string;
+  contractType: string;
+  status: string;
+  startDate: string;
+  endDate: string;
+  position: string;
+  department: string;
+  workLocation: string;
+  weeklyHours: string;
+  compensation: string;
+  vacationDays: number;
+  terminationDate: string;
+  terminationReason: string;
+};
+
+export type SelfServiceContractDetails = {
+  contractType: string;
+  entryDate: string;
+  exitDate: string;
+  position: string;
+  department: string;
+  workLocation: string;
+  compensation: string;
+  compensationGross: string;
+  workingTime: string;
+  vacation: string;
+  noticePeriod: string;
+  collectiveAgreement: string;
+};
+
+export type SelfServiceTimelineEntry = {
+  title: string;
+  tone: string;
+  createdAt: string;
+};
+
+export type PersonalakteExport = SelfServiceOverview & {
+  contracts: SelfServiceContract[];
+  contractDetails: SelfServiceContractDetails | null;
+  payrollStatements: SelfServicePayrollStatement[];
+  timeline: SelfServiceTimelineEntry[];
+};
+
+/**
+ * Vollständiger Export der eigenen Personalakte (Art. 15 / Art. 20 DSGVO) —
+ * Pendant zu `/api/me/export` (Konto-/Mitgliedschaftsdaten), aber für die
+ * Mandanten-Personalakte selbst. Baut auf `getMySelfServiceOverview` und
+ * `getMyPayrollStatements` auf (gleiche ACL-Filterung: `hiddenFromEmployee`,
+ * `canAccessFileAcl`, verborgene Ordner) und ergänzt strukturierte
+ * Vertrags-/Verlaufsdaten, die dort nicht für die Bildschirmansicht
+ * gebraucht werden. Bewusst ausgeschlossen: `TenantEmployeeContract.notes`
+ * (interne HR-Vermerke, keine reine Selbstauskunft) und
+ * `linkedFileName`/`linkedFileMeta` (UI-Metadaten, keine personenbezogenen
+ * Daten).
+ */
+export async function getMyPersonalakteExport(tenantSlug: string): Promise<PersonalakteExport> {
+  const overview = await getMySelfServiceOverview(tenantSlug);
+
+  if (!overview.employee) {
+    return { ...overview, contracts: [], contractDetails: null, payrollStatements: [], timeline: [] };
+  }
+
+  const employeeId = overview.employee.id;
+  const [contracts, contractDetails, payrollStatements, timeline] = await Promise.all([
+    prisma.tenantEmployeeContract.findMany({
+      where: { employeeId },
+      orderBy: { startDate: "desc" },
+    }),
+    prisma.tenantEmployeeContractDetails.findUnique({ where: { employeeId } }),
+    getMyPayrollStatements(tenantSlug),
+    prisma.tenantEmployeeTimeline.findMany({
+      where: { employeeId },
+      orderBy: { createdAt: "desc" },
+    }),
+  ]);
+
+  return {
+    ...overview,
+    contracts: contracts.map((contract) => ({
+      id: contract.id,
+      title: contract.title,
+      contractType: contract.contractType,
+      status: contract.status,
+      startDate: contract.startDate,
+      endDate: contract.endDate,
+      position: contract.position,
+      department: contract.department,
+      workLocation: contract.workLocation,
+      weeklyHours: contract.weeklyHours,
+      compensation: contract.compensation,
+      vacationDays: contract.vacationDays,
+      terminationDate: contract.terminationDate,
+      terminationReason: contract.terminationReason,
+    })),
+    contractDetails: contractDetails
+      ? {
+          contractType: contractDetails.contractType,
+          entryDate: contractDetails.entryDate,
+          exitDate: contractDetails.exitDate,
+          position: contractDetails.position,
+          department: contractDetails.department,
+          workLocation: contractDetails.workLocation,
+          compensation: decryptField(contractDetails.compensation),
+          compensationGross: decryptField(contractDetails.compensationGross),
+          workingTime: contractDetails.workingTime,
+          vacation: contractDetails.vacation,
+          noticePeriod: contractDetails.noticePeriod,
+          collectiveAgreement: contractDetails.collectiveAgreement,
+        }
+      : null,
+    payrollStatements,
+    timeline: timeline.map((entry) => ({
+      title: entry.title,
+      tone: entry.tone,
+      createdAt: entry.createdAt.toISOString(),
+    })),
   };
 }
 
@@ -329,7 +548,7 @@ export async function updateMyProfile(tenantSlug: string, input: Partial<MyProfi
     throw new Error("Kein Mitarbeiterprofil mit diesem Konto verknüpft.");
   }
 
-  const currentContacts = asJson<EmergencyContact[]>(current.emergencyContactsJson, []);
+  const currentContacts = parseEmergencyContacts(current.emergencyContactsJson);
   const existingContactIds = new Set(currentContacts.map((contact) => contact.id));
   const emergencyContacts = input.emergencyContacts?.map((contact) => ({
     ...contact,
@@ -339,15 +558,21 @@ export async function updateMyProfile(tenantSlug: string, input: Partial<MyProfi
   await prisma.tenantEmployee.update({
     where: { id: current.id },
     data: {
-      birthDate: input.birthDate?.trim() ?? current.birthDate,
-      birthPlace: input.birthPlace?.trim() ?? current.birthPlace,
-      nationality: input.nationality?.trim() ?? current.nationality,
-      maritalStatus: input.maritalStatus?.trim() ?? current.maritalStatus,
+      birthDate: encryptField(input.birthDate?.trim() ?? decryptField(current.birthDate)),
+      birthPlace: encryptField(input.birthPlace?.trim() ?? decryptField(current.birthPlace)),
+      nationality: encryptField(input.nationality?.trim() ?? decryptField(current.nationality)),
+      maritalStatus: encryptField(
+        input.maritalStatus?.trim() ?? decryptField(current.maritalStatus),
+      ),
       phone: input.phone?.trim() ?? current.phone,
       privateAddress: {
         upsert: {
-          create: normalizeAddressInput(input.privateAddress),
-          update: normalizeAddressInput(input.privateAddress ?? current.privateAddress ?? {}),
+          create: encryptAddress(normalizeAddressInput(input.privateAddress)),
+          update: encryptAddress(
+            normalizeAddressInput(
+              input.privateAddress ?? decryptAddress(current.privateAddress) ?? {},
+            ),
+          ),
         },
       },
       taxId: encryptField(input.taxId?.trim() ?? decryptField(current.taxId)),
@@ -358,7 +583,7 @@ export async function updateMyProfile(tenantSlug: string, input: Partial<MyProfi
         input.healthInsurance?.trim() ?? decryptField(current.healthInsurance),
       ),
       iban: encryptField(input.iban?.trim() ?? decryptField(current.iban)),
-      emergencyContactsJson: emergencyContacts ?? currentContacts,
+      emergencyContactsJson: serializeEmergencyContacts(emergencyContacts ?? currentContacts),
     },
   });
 }
@@ -377,11 +602,21 @@ export type SelfServiceDocumentType = (typeof selfServiceDocumentTypes)[number];
  * kein Dokument als "Vertrag"/"Gehaltsabrechnung" (HR-reservierte Typen)
  * einschleusen kann.
  */
+export type EmployeeDocumentSlotKey = (typeof EMPLOYEE_DOCUMENT_SLOTS)[number]["key"];
+
 export async function uploadMyDocument(input: {
   tenantSlug: string;
   file: File;
   documentType: SelfServiceDocumentType;
   description?: string;
+  /**
+   * Zielfeld unter "Ausweisdokumente & Zertifikate" (siehe
+   * `EMPLOYEE_DOCUMENT_SLOTS`). Ohne Angabe landet die Datei wie bisher in
+   * "Eigene Uploads". Der Slug kommt NICHT als freier Ordnername vom Client —
+   * nur der Schlüssel wird übergeben, Ordner und Dokumenttyp stammen aus der
+   * festen Liste hier.
+   */
+  slot?: string;
 }) {
   const access = await requireTenantMembership(input.tenantSlug);
   const employee = await prisma.tenantEmployee.findFirst({
@@ -393,7 +628,15 @@ export async function uploadMyDocument(input: {
     throw new Error("Ihr Konto ist noch keiner Personalakte zugeordnet. Bitte an HR wenden.");
   }
 
-  if (!selfServiceDocumentTypes.includes(input.documentType)) {
+  const slot = input.slot
+    ? EMPLOYEE_DOCUMENT_SLOTS.find((entry) => entry.key === input.slot)
+    : undefined;
+
+  if (input.slot && !slot) {
+    throw new Error("Unbekanntes Dokumentfeld.");
+  }
+
+  if (!slot && !selfServiceDocumentTypes.includes(input.documentType)) {
     throw new Error("Ungültiger Dokumenttyp.");
   }
 
@@ -425,16 +668,33 @@ export async function uploadMyDocument(input: {
       mimeType: input.file.type || "application/octet-stream",
       sizeBytes: input.file.size,
       extension: getFileExtension(originalName),
-      folderSlug: "eigene-uploads",
-      folderName: "Eigene Uploads",
+      folderSlug: slot ? slot.key : "eigene-uploads",
+      folderName: slot ? slot.label : "Eigene Uploads",
       ownerName: employee.name,
       uploadedById: access.userId,
       uploadedByName: access.userName,
-      documentType: input.documentType,
+      documentType: slot ? slot.label : input.documentType,
       description: input.description?.trim() ?? "",
       provider: uploaded.provider,
     },
   });
+
+  // Ein Feld ohne `multiple` hält genau den aktuell gültigen Nachweis. Ersetzt
+  // wird dabei ausschließlich, was der Mitarbeiter selbst hochgeladen hat —
+  // eine von HR abgelegte Datei darf ein Upload von hier aus nicht entfernen.
+  if (slot && !slot.multiple) {
+    await prisma.tenantFile.updateMany({
+      where: {
+        tenantId: access.tenantId,
+        employeeId: employee.id,
+        status: "active",
+        id: { not: created.id },
+        uploadedById: access.userId,
+        folderName: { in: [...employeeDocumentSlotFolders(slot)] },
+      },
+      data: { status: "deleted", deletedAt: new Date() },
+    });
+  }
 
   await recordTenantAudit({
     tenantId: access.tenantId,
@@ -453,6 +713,7 @@ export async function uploadMyDocument(input: {
     documentType: created.documentType,
     updatedAt: created.updatedAt.toISOString(),
     folder: created.folderName,
+    folderSlug: created.folderSlug,
   };
 
   return document;
@@ -581,6 +842,91 @@ export async function submitInfoRequestResponse(input: {
 }
 
 /**
+ * Pfade der Ordner, die HR vor genau diesem Mitarbeiter verborgen hat.
+ * Ein verborgener Ordner verbirgt alles darunter, geprüft wird deshalb über
+ * den Pfad-Präfix (`isUnderHiddenFolder`).
+ */
+async function hiddenFolderPathsFor(tenantId: string, employeeId: string) {
+  const folders = await prisma.tenantFileFolder.findMany({
+    where: { tenantId, employeeId, status: "active", hiddenFromEmployee: true },
+    select: { path: true },
+  });
+
+  return folders.map((folder) => folder.path);
+}
+
+function isUnderHiddenFolder(folderSlug: string, hiddenPaths: string[]) {
+  return hiddenPaths.some(
+    (hidden) => folderSlug === hidden || folderSlug.startsWith(`${hidden}/`),
+  );
+}
+
+/**
+ * Eigene Gehaltsabrechnungen. Bewusst getrennt von `getPayrollStatements`
+ * (payroll-service.ts): das prüft "payroll:read" über beliebige Mitarbeiter
+ * hinweg, hier reicht Mitgliedschaft — der Mitarbeiter ist serverseitig fest
+ * der eigene Datensatz, und verborgene Abrechnungen fallen wie überall in der
+ * Selbstauskunft heraus.
+ */
+export type SelfServicePayrollStatement = {
+  id: string;
+  period: string;
+  /** `YYYY-MM-DD` */
+  issuedAt: string;
+  gross: string;
+  net: string;
+  status: "available" | "corrected";
+  /** Für `GET /api/me/documents/[fileId]/download`. */
+  fileId: string;
+  fileName: string;
+};
+
+export async function getMyPayrollStatements(
+  tenantSlug: string,
+): Promise<SelfServicePayrollStatement[]> {
+  const access = await requireTenantMembership(tenantSlug);
+  const employee = await prisma.tenantEmployee.findFirst({
+    where: { tenantId: access.tenantId, userId: access.userId },
+    select: { id: true },
+  });
+
+  if (!employee) {
+    return [];
+  }
+
+  const [statements, hiddenPaths] = await Promise.all([
+    prisma.tenantPayrollStatement.findMany({
+      where: {
+        tenantId: access.tenantId,
+        employeeId: employee.id,
+        file: { status: "active", hiddenFromEmployee: false },
+      },
+      include: {
+        file: {
+          include: { parent: { select: { accessRoleIdsJson: true, accessUserIdsJson: true } } },
+        },
+      },
+      orderBy: [{ issuedAt: "desc" }, { createdAt: "desc" }],
+    }),
+    hiddenFolderPathsFor(access.tenantId, employee.id),
+  ]);
+
+  return statements
+    .filter((statement) => canAccessFileAcl(statement.file.parent ?? statement.file, access))
+    .filter((statement) => !isUnderHiddenFolder(statement.file.folderSlug, hiddenPaths))
+    .map((statement) => ({
+      id: statement.id,
+      period: statement.period,
+      issuedAt: statement.issuedAt.toISOString().slice(0, 10),
+      gross: decryptField(statement.gross),
+      net: decryptField(statement.net),
+      status: statement.status === "corrected" ? ("corrected" as const) : ("available" as const),
+      fileId: statement.fileId,
+      fileName: statement.file.displayName || statement.file.originalName,
+    }));
+}
+
+/**
  * Signierte Download-URL für ein EIGENES Personalakte-Dokument. Bewusst
  * enger als `getTenantFileSignedUrl` (Admin-Pfad, "files:read" + ACL über
  * beliebige Mitarbeiter hinweg) — hier zusätzlich zur ACL-Prüfung eine
@@ -607,10 +953,20 @@ export async function getMyDocumentDownloadUrl(input: {
       tenantId: access.tenantId,
       employeeId: employee.id,
       status: { not: "deleted" },
+      // Vor dem Mitarbeiter verborgen heißt auch: nicht über die ID abrufbar.
+      // Ohne diese Zeile bliebe die Datei jedem erreichbar, der sie einmal
+      // gesehen hat.
+      hiddenFromEmployee: false,
     },
   });
 
   if (!file) {
+    throw new Error("Datei nicht gefunden.");
+  }
+
+  const hiddenPaths = await hiddenFolderPathsFor(access.tenantId, employee.id);
+
+  if (isUnderHiddenFolder(file.folderSlug, hiddenPaths)) {
     throw new Error("Datei nicht gefunden.");
   }
 

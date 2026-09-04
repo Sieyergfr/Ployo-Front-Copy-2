@@ -6,7 +6,10 @@ import DatePickerField from "@/components/DatePickerField";
 import FormSubmitButton from "@/components/FormSubmitButton";
 import { useUniversalPopup } from "@/components/UniversalPopup";
 import { CalendarPlus, Plus, Stethoscope, X } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
+
+type T = ReturnType<typeof useTranslations>;
 
 type EmployeeOption = {
   id: string;
@@ -24,14 +27,16 @@ function todayInputValue() {
 function EmployeeSelect({
   employees,
   name = "employee",
+  t,
 }: {
   employees: EmployeeOption[];
   name?: string;
+  t: T;
 }) {
   return (
     <div className="field">
       <label htmlFor="absence-employee" className="label">
-        Mitarbeiter
+        {t("employeeLabel")}
       </label>
       <select
         id="absence-employee"
@@ -41,7 +46,7 @@ function EmployeeSelect({
         required
       >
         <option value="" disabled>
-          Auswählen
+          {t("employeeSelectPlaceholder")}
         </option>
         {employees.map((employee) => (
           <option key={employee.id} value={employee.id}>
@@ -57,77 +62,88 @@ function VacationRequestForm({
   tenant,
   employees,
   onDone,
+  t,
 }: {
   tenant: string;
   employees: EmployeeOption[];
   onDone: () => void;
+  t: T;
 }) {
   const today = todayInputValue();
 
   return (
     <form className="flex flex-col gap-4" action={createVacationRequestAction}>
       <input type="hidden" name="tenant" value={tenant} />
-      <EmployeeSelect employees={employees} name="employeeId" />
+      <EmployeeSelect employees={employees} name="employeeId" t={t} />
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="field">
           <label htmlFor="vacation-start" className="label">
-            Von
+            {t("vacationFromLabel")}
           </label>
           <DatePickerField id="vacation-start" name="startDate" min={today} />
         </div>
         <div className="field">
           <label htmlFor="vacation-end" className="label">
-            Bis
+            {t("vacationToLabel")}
           </label>
           <DatePickerField id="vacation-end" name="endDate" min={today} />
         </div>
       </div>
       <div className="field">
         <label htmlFor="vacation-note" className="label">
-          Notiz
+          {t("noteLabel")}
         </label>
         <textarea
           id="vacation-note"
           name="note"
           className="input min-h-20 resize-none"
-          placeholder="Optionaler Hinweis"
+          placeholder={t("vacationNotePlaceholder")}
         />
       </div>
       <div className="mt-1 flex justify-end gap-2.5 border-t border-border-soft pt-4">
         <button type="button" className="btn btn-secondary" onClick={onDone}>
-          Abbrechen
+          {t("cancel")}
         </button>
         <FormSubmitButton
           Icon={CalendarPlus}
-          pendingLabel="Antrag wird erfasst..."
+          pendingLabel={t("vacationSubmitPending")}
         >
-          Antrag erfassen
+          {t("vacationSubmit")}
         </FormSubmitButton>
       </div>
     </form>
   );
 }
 
-function SicknessReportForm({ tenant, employees, onDone }: { tenant: string; employees: EmployeeOption[]; onDone: () => void }) {
+function SicknessReportForm({
+  tenant,
+  employees,
+  onDone,
+  t,
+}: {
+  tenant: string;
+  employees: EmployeeOption[];
+  onDone: () => void;
+  t: T;
+}) {
   return (
     <form className="flex flex-col gap-4" action={createSicknessReportAction}>
       <input type="hidden" name="tenant" value={tenant} />
       <div className="rounded-xl border border-border bg-bg p-3 text-[12.5px] leading-5 text-muted-2">
-        Krankmeldung erfassen und optional direkt eine AU-Bescheinigung oder
-        vorhandene Datei verknuepfen.
+        {t("sicknessInfoBox")}
       </div>
 
-      <EmployeeSelect employees={employees} name="employeeId" />
+      <EmployeeSelect employees={employees} name="employeeId" t={t} />
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="field">
           <label htmlFor="sick-start" className="label">
-            Krank seit
+            {t("sickSinceLabel")}
           </label>
           <DatePickerField id="sick-start" name="startDate" />
         </div>
         <div className="field">
           <label htmlFor="sick-end" className="label">
-            Voraussichtlich bis
+            {t("sickUntilLabel")}
           </label>
           <DatePickerField id="sick-end" name="endDate" />
         </div>
@@ -135,7 +151,7 @@ function SicknessReportForm({ tenant, employees, onDone }: { tenant: string; emp
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="field">
           <label htmlFor="sick-certificate-status" className="label">
-            Bescheinigung
+            {t("certificateLabel")}
           </label>
           <select
             id="sick-certificate-status"
@@ -143,14 +159,14 @@ function SicknessReportForm({ tenant, employees, onDone }: { tenant: string; emp
             className="input cursor-pointer bg-bg"
             defaultValue="pending"
           >
-            <option value="pending">Wird nachgereicht</option>
-            <option value="received">Liegt vor</option>
-            <option value="not-required">Nicht erforderlich</option>
+            <option value="pending">{t("certificatePending")}</option>
+            <option value="received">{t("certificateReceived")}</option>
+            <option value="not-required">{t("certificateNotRequired")}</option>
           </select>
         </div>
         <div className="field">
           <label htmlFor="sick-report-channel" className="label">
-            Meldeweg
+            {t("reportChannelLabel")}
           </label>
           <select
             id="sick-report-channel"
@@ -158,30 +174,30 @@ function SicknessReportForm({ tenant, employees, onDone }: { tenant: string; emp
             className="input cursor-pointer bg-bg"
             defaultValue="phone"
           >
-            <option value="phone">Telefonisch</option>
-            <option value="email">E-Mail</option>
-            <option value="app">Mitarbeiter-App</option>
-            <option value="manager">Fuehrungskraft</option>
+            <option value="phone">{t("reportChannelPhone")}</option>
+            <option value="email">{t("reportChannelEmail")}</option>
+            <option value="app">{t("reportChannelApp")}</option>
+            <option value="manager">{t("reportChannelManager")}</option>
           </select>
         </div>
       </div>
 
       <div className="field">
         <label htmlFor="sick-note" className="label">
-          Notiz
+          {t("noteLabel")}
         </label>
         <textarea
           id="sick-note"
           name="note"
           className="input min-h-24 resize-none"
-          placeholder="Rueckmeldung, Vertretung oder Besonderheiten"
+          placeholder={t("sicknessNotePlaceholder")}
         />
       </div>
       <div className="mt-1 flex justify-end gap-2.5 border-t border-border-soft pt-4">
         <button type="button" className="btn btn-secondary" onClick={onDone}>
-          Abbrechen
+          {t("cancel")}
         </button>
-        <FormSubmitButton Icon={Stethoscope} pendingLabel="Wird erfasst...">Krankmeldung erfassen</FormSubmitButton>
+        <FormSubmitButton Icon={Stethoscope} pendingLabel={t("sicknessSubmitPending")}>{t("sicknessSubmit")}</FormSubmitButton>
       </div>
     </form>
   );
@@ -192,11 +208,13 @@ function SicknessReportDrawer({
   employees,
   isOpen,
   onClose,
+  t,
 }: {
   tenant: string;
   employees: EmployeeOption[];
   isOpen: boolean;
   onClose: () => void;
+  t: T;
 }) {
   if (!isOpen) {
     return null;
@@ -221,19 +239,19 @@ function SicknessReportDrawer({
         <div className="mb-5 flex items-start justify-between gap-4">
           <div>
             <div className="font-mono text-[11px] font-semibold text-muted">
-              Abwesenheit
+              {t("sicknessDrawerEyebrow")}
             </div>
             <h2
               id="sickness-report-drawer-title"
               className="mt-1 font-display text-[22px] font-semibold leading-tight text-ink"
             >
-              Krankmeldung erfassen
+              {t("sicknessSubmit")}
             </h2>
           </div>
           <button
             type="button"
-            aria-label="Drawer schliessen"
-            title="Schliessen"
+            aria-label={t("closeDrawer")}
+            title={t("close")}
             className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-[9px] border border-border bg-white text-muted transition-colors hover:border-muted hover:text-ink"
             onClick={onClose}
           >
@@ -241,7 +259,7 @@ function SicknessReportDrawer({
           </button>
         </div>
 
-        <SicknessReportForm tenant={tenant} employees={employees} onDone={onClose} />
+        <SicknessReportForm tenant={tenant} employees={employees} onDone={onClose} t={t} />
       </aside>
     </div>
   );
@@ -254,6 +272,7 @@ export function VacationRequestButton({
   tenant: string;
   employees: EmployeeOption[];
 }) {
+  const t = useTranslations("AbsenceActionButtons");
   const { openPopup, closePopup } = useUniversalPopup();
 
   return (
@@ -262,24 +281,26 @@ export function VacationRequestButton({
       className="btn btn-primary"
       onClick={() =>
         openPopup({
-          title: "Urlaubsantrag erfassen",
+          title: t("vacationDialogTitle"),
           content: (
             <VacationRequestForm
               tenant={tenant}
               employees={employees}
               onDone={closePopup}
+              t={t}
             />
           ),
         })
       }
     >
       <Plus size={15} strokeWidth={2} />
-      Antrag erfassen
+      {t("vacationSubmit")}
     </button>
   );
 }
 
 export function SicknessReportButton({ tenant, employees }: { tenant: string; employees: EmployeeOption[] }) {
+  const t = useTranslations("AbsenceActionButtons");
   const [isOpen, setIsOpen] = useState(false);
 
   return (
@@ -290,9 +311,9 @@ export function SicknessReportButton({ tenant, employees }: { tenant: string; em
         onClick={() => setIsOpen(true)}
       >
         <Plus size={15} strokeWidth={2} />
-        Krankmeldung erfassen
+        {t("sicknessSubmit")}
       </button>
-      <SicknessReportDrawer tenant={tenant} employees={employees} isOpen={isOpen} onClose={() => setIsOpen(false)} />
+      <SicknessReportDrawer tenant={tenant} employees={employees} isOpen={isOpen} onClose={() => setIsOpen(false)} t={t} />
     </>
   );
 }

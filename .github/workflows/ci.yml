@@ -47,6 +47,22 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Install ClamAV
+        # Optional: die Virenscan-Tests (tests/virus-scan.test.ts) laufen nur
+        # gegen einen echten clamd — ohne ihn überspringen sie sich selbst.
+        # continue-on-error, damit ein Netzwerk-Hänger beim Signatur-Download
+        # nicht die ganze Pipeline blockiert.
+        continue-on-error: true
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y clamav-daemon clamav-freshclam
+          sudo freshclam --quiet || true
+          sudo systemctl start clamav-daemon || true
+          for i in $(seq 1 30); do
+            [ -S /var/run/clamav/clamd.ctl ] && break
+            sleep 1
+          done
+
       - name: Test
         run: npm test
 

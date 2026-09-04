@@ -13,7 +13,7 @@ import { useToast } from "@/components/Toasts";
 import { slugify } from "@/lib/slug";
 import { tenantIndustries, tenantSizes } from "@/lib/tenant-options";
 import Link from "next/link";
-import { type ChangeEvent, useEffect, useState } from "react";
+import { type ChangeEvent, type CSSProperties, useEffect, useState } from "react";
 
 type PlanId = "starter" | "professional" | "business";
 
@@ -469,8 +469,8 @@ export default function CompanyCreateWizard() {
       <div className="overflow-hidden rounded-[20px] border border-border bg-white shadow-[0_4px_28px_rgba(0,0,0,0.055)]">
         <div className="h-[3px] bg-border-soft">
           <div
-            className="h-full bg-ink transition-[width] duration-300"
-            style={{ width: `${step * 20}%` }}
+            className="h-full w-[var(--pct)] bg-ink transition-[width] duration-300"
+            style={{ "--pct": `${step * 20}%` } as CSSProperties}
           />
         </div>
 
@@ -478,10 +478,12 @@ export default function CompanyCreateWizard() {
           <div className="relative grid w-full grid-cols-5">
             <div className="absolute top-[10px] right-[10%] left-[10%] h-[1.5px] rounded-full bg-border" />
             <div
-              className="absolute top-[10px] left-[10%] h-[1.5px] rounded-full bg-ink transition-[width] duration-300"
-              style={{
-                width: step === 1 ? "0%" : `${((step - 1) / 4) * 80}%`,
-              }}
+              className="absolute top-[10px] left-[10%] h-[1.5px] w-[var(--pct)] rounded-full bg-ink transition-[width] duration-300"
+              style={
+                {
+                  "--pct": step === 1 ? "0%" : `${((step - 1) / 4) * 80}%`,
+                } as CSSProperties
+              }
             />
           {stepLabels.map((label, index) => {
             const stepNumber = index + 1;
@@ -729,8 +731,8 @@ export default function CompanyCreateWizard() {
               <div className="grid gap-4">
                 <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-[13px] border border-dashed border-[#D4D2CC] bg-bg px-5 py-6 text-center transition-colors hover:border-muted">
                   <span
-                    className="flex size-[58px] items-center justify-center overflow-hidden rounded-[14px] text-white"
-                    style={{ backgroundColor: primaryColor }}
+                    className="flex size-[58px] items-center justify-center overflow-hidden rounded-[14px] bg-[var(--swatch)] text-white"
+                    style={{ "--swatch": primaryColor } as CSSProperties}
                   >
                     {logoUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
@@ -759,12 +761,12 @@ export default function CompanyCreateWizard() {
                         title={color}
                         aria-label={`Farbe ${color}`}
                         className={cx(
-                          "size-[38px] cursor-pointer rounded-[10px] border-2 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.06)]",
+                          "size-[38px] cursor-pointer rounded-[10px] border-2 bg-[var(--swatch)] shadow-[inset_0_0_0_1px_rgba(0,0,0,0.06)]",
                           primaryColor.toLowerCase() === color.toLowerCase()
                             ? "border-ink"
                             : "border-transparent",
                         )}
-                        style={{ backgroundColor: color }}
+                        style={{ "--swatch": color } as CSSProperties}
                         onClick={() => setPrimaryColor(color)}
                       />
                     ))}
@@ -781,8 +783,8 @@ export default function CompanyCreateWizard() {
                   <span className="label">Live-Vorschau</span>
                   <div className="flex h-[158px] overflow-hidden rounded-[14px] border border-border bg-white">
                     <div
-                      className="flex w-16 shrink-0 flex-col items-center gap-3.5 px-0 py-[13px]"
-                      style={{ backgroundColor: primaryColor }}
+                      className="flex w-16 shrink-0 flex-col items-center gap-3.5 bg-[var(--swatch)] px-0 py-[13px]"
+                      style={{ "--swatch": primaryColor } as CSSProperties}
                     >
                       <div className="flex size-[30px] items-center justify-center overflow-hidden rounded-[9px] bg-white/90">
                         {logoUrl ? (
@@ -790,8 +792,8 @@ export default function CompanyCreateWizard() {
                           <img src={logoUrl} alt="" className="size-full object-cover" />
                         ) : (
                           <span
-                            className="font-display text-[13px] font-bold"
-                            style={{ color: primaryColor }}
+                            className="font-display text-[13px] font-bold text-[var(--swatch)]"
+                            style={{ "--swatch": primaryColor } as CSSProperties}
                           >
                             {companyName.charAt(0).toUpperCase()}
                           </span>
@@ -811,8 +813,8 @@ export default function CompanyCreateWizard() {
                           {companyName}
                         </span>
                         <span
-                          className="size-[22px] shrink-0 rounded-full"
-                          style={{ backgroundColor: primaryColor }}
+                          className="size-[22px] shrink-0 rounded-full bg-[var(--swatch)]"
+                          style={{ "--swatch": primaryColor } as CSSProperties}
                         />
                       </div>
                       <div className="flex flex-1 flex-col gap-[9px] px-3.5 py-[13px]">
@@ -822,8 +824,8 @@ export default function CompanyCreateWizard() {
                         </div>
                         <div className="h-2 w-[70%] rounded bg-[#EDEBE6]" />
                         <div
-                          className="mt-auto w-fit rounded-[7px] px-[11px] py-[5px] text-[10.5px] font-semibold text-white"
-                          style={{ backgroundColor: primaryColor }}
+                          className="mt-auto w-fit rounded-[7px] bg-[var(--swatch)] px-[11px] py-[5px] text-[10.5px] font-semibold text-white"
+                          style={{ "--swatch": primaryColor } as CSSProperties}
                         >
                           Primäre Aktion
                         </div>

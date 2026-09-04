@@ -8,6 +8,7 @@ import {
   deleteShiftAction,
   deleteShiftTemplateAction,
   publishShiftWeekAction,
+  resetShiftWeekAction,
   rejectWishFreeRequestAction,
   saveShiftTemplateAction,
   unpublishShiftWeekAction,
@@ -42,6 +43,7 @@ import {
   CalendarDays,
   CalendarX,
   Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Pencil,
@@ -49,10 +51,14 @@ import {
   RotateCcw,
   Save,
   Send,
+  Undo2,
   X,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useTranslations } from "next-intl";
+
+type T = ReturnType<typeof useTranslations>;
 
 type ShiftTemplateSummary = {
   id: string;
@@ -69,6 +75,8 @@ type ShiftPlanningClientProps = {
   conflictCount: number;
   status: "draft" | "published";
   publishedAt: string | null;
+  /** Veröffentlicht, seither aber bearbeitet — Mitarbeiter sehen diesen Stand noch nicht. */
+  hasUnpublishedChanges?: boolean;
   days: ShiftDay[];
   employees: ShiftEmployeeOption[];
   locations: ShiftLocationOption[];
@@ -85,18 +93,22 @@ type DrawerState = {
   shift?: Shift;
 };
 
-const wishFreeStatusLabels: Record<WishFreeRequestStatus, string> = {
-  open: "Offen",
-  approved: "Genehmigt",
-  rejected: "Abgelehnt",
-};
+function getWishFreeStatusLabels(t: T): Record<WishFreeRequestStatus, string> {
+  return {
+    open: t("wishFreeStatusOpen"),
+    approved: t("wishFreeStatusApproved"),
+    rejected: t("wishFreeStatusRejected"),
+  };
+}
 
-const wishFreeFilters: { label: string; value: WishFreeFilter }[] = [
-  { label: "Offen", value: "open" },
-  { label: "Genehmigt", value: "approved" },
-  { label: "Abgelehnt", value: "rejected" },
-  { label: "Alle", value: "all" },
-];
+function getWishFreeFilters(t: T): { label: string; value: WishFreeFilter }[] {
+  return [
+    { label: t("wishFreeStatusOpen"), value: "open" },
+    { label: t("wishFreeStatusApproved"), value: "approved" },
+    { label: t("wishFreeStatusRejected"), value: "rejected" },
+    { label: t("wishFreeFilterAll"), value: "all" },
+  ];
+}
 
 function getWeeksInISOYear(year: number) {
   const december28 = new Date(Date.UTC(year, 11, 28));
@@ -143,9 +155,11 @@ function getAdjacentWeek(year: number, week: number, direction: -1 | 1) {
 function ShiftCard({
   shift,
   onClick,
+  t,
 }: {
   shift: Shift;
   onClick: () => void;
+  t: T;
 }) {
   const isOpen = !shift.assignee;
   const accentClassName = shift.locationAccentClassName ?? "bg-border";
@@ -168,7 +182,7 @@ function ShiftCard({
         {shift.conflict && <AlertCircle size={13} className="text-danger" />}
       </div>
       {isOpen ? (
-        <div className="text-[11px] text-[#C0BFBA]">Offen</div>
+        <div className="text-[11px] text-[#C0BFBA]">{t("openShift")}</div>
       ) : (
         <>
           <div className="truncate text-[12px] font-semibold text-ink">
@@ -186,9 +200,11 @@ function ShiftCard({
 function WishFreeBlock({
   requests,
   onRequestClick,
+  t,
 }: {
   requests: WishFreeRequest[];
   onRequestClick: (request: WishFreeRequest) => void;
+  t: T;
 }) {
   if (requests.length === 0) {
     return null;
@@ -196,14 +212,10 @@ function WishFreeBlock({
 
   return (
     <div
-      className="rounded-[9px] border border-ink/10 px-3 py-2.5 text-left"
-      style={{
-        backgroundImage:
-          "repeating-linear-gradient(135deg, rgba(14,14,14,0.055) 0, rgba(14,14,14,0.055) 1px, #ffffff 1px, #ffffff 7px)",
-      }}
+      className="wish-free-stripes rounded-[9px] border border-ink/10 px-3 py-2.5 text-left"
     >
       <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
-        Wunschfrei
+        {t("wishFree")}
       </div>
       <div className="mt-1.5 flex flex-wrap gap-1.5">
         {requests.map((request) => (
@@ -237,6 +249,7 @@ function WishFreeDrawer({
   onCreateRequest,
   onClose,
   canManage,
+  t,
 }: {
   tenant: string;
   year: number;
@@ -253,7 +266,10 @@ function WishFreeDrawer({
   onCreateRequest: () => void;
   onClose: () => void;
   canManage: boolean;
+  t: T;
 }) {
+  const wishFreeStatusLabels = getWishFreeStatusLabels(t);
+  const wishFreeFilters = getWishFreeFilters(t);
   const statusFiltered =
     activeFilter === "all"
       ? requests
@@ -293,13 +309,13 @@ function WishFreeDrawer({
           <div className="flex items-start justify-between gap-4">
             <div>
               <div className="font-mono text-[11px] font-semibold text-muted">
-                Anfragen
+                {t("requestsEyebrow")}
               </div>
               <h2
                 id="wishfree-drawer-title"
                 className="mt-1 font-display text-[22px] font-semibold leading-tight text-ink"
               >
-                Wunschfrei
+                {t("wishFree")}
               </h2>
             </div>
             <div className="flex shrink-0 items-center gap-2">
@@ -314,13 +330,13 @@ function WishFreeDrawer({
                   onClick={onCreateRequest}
                 >
                   <Plus size={14} />
-                  Neue Anfrage
+                  {t("newRequest")}
                 </button>
               )}
               <button
                 type="button"
-                aria-label="Drawer schliessen"
-                title="Schliessen"
+                aria-label={t("closeDrawer")}
+                title={t("close")}
                 className="flex size-8 cursor-pointer items-center justify-center rounded-[9px] border border-border bg-white text-muted transition-colors hover:border-muted hover:text-ink"
                 onClick={onClose}
               >
@@ -364,7 +380,7 @@ function WishFreeDrawer({
           <ListSearchBox
             value={searchQuery}
             onChange={onSearchChange}
-            placeholder="Mitarbeiter oder Datum"
+            placeholder={t("searchPlaceholder")}
             className="mt-3"
           />
         </div>
@@ -378,16 +394,16 @@ function WishFreeDrawer({
                 onClick={onCreateRequest}
               >
                 <div className="text-[13px] font-semibold text-ink">
-                  Neue Wunschfrei Anfrage
+                  {t("newWishFreeRequest")}
                 </div>
                 <div className="mt-1 font-mono text-[10px] text-muted">
-                  Mitarbeiter und Datum auswählen
+                  {t("selectEmployeeAndDate")}
                 </div>
               </button>
             )}
             {filteredRequests.length === 0 ? (
               <div className="rounded-xl border border-border bg-white px-4 py-6 text-center text-[12.5px] text-muted">
-                {normalizedQuery ? "Keine Treffer für diese Suche." : "Keine Anfragen in diesem Filter."}
+                {normalizedQuery ? t("noSearchResults") : t("noRequestsInFilter")}
               </div>
             ) : (
               <div className="flex flex-col gap-2">
@@ -435,16 +451,16 @@ function WishFreeDrawer({
                 <div className="flex-1">
                   <div>
                     <div className="font-mono text-[11px] font-semibold text-muted">
-                      Neuer Antrag
+                      {t("newApplication")}
                     </div>
                     <h3 className="mt-1 font-display text-[22px] font-semibold text-ink">
-                      Wunschfrei anlegen
+                      {t("createWishFree")}
                     </h3>
                   </div>
 
                   <div className="field mt-6">
                     <label htmlFor="wishfree-employee" className="label">
-                      Mitarbeiter
+                      {t("employee")}
                     </label>
                     <select
                       id="wishfree-employee"
@@ -454,7 +470,7 @@ function WishFreeDrawer({
                       defaultValue=""
                     >
                       <option value="" disabled>
-                        Mitarbeiter auswählen
+                        {t("selectEmployee")}
                       </option>
                       {employees.map((employee) => (
                         <option key={employee.id} value={employee.id}>
@@ -465,19 +481,19 @@ function WishFreeDrawer({
                   </div>
 
                   <div className="field mt-4">
-                    <div className="label">Datum</div>
+                    <div className="label">{t("date")}</div>
                     <DatePickerField name="date" />
                   </div>
 
                   <div className="field mt-4">
                     <label htmlFor="wishfree-reason" className="label">
-                      Begründung
+                      {t("reason")}
                     </label>
                     <textarea
                       id="wishfree-reason"
                       name="reason"
                       className="input min-h-28 resize-none"
-                      placeholder="Optionaler Grund für den Wunschfrei Antrag"
+                      placeholder={t("reasonPlaceholder")}
                     />
                   </div>
                 </div>
@@ -488,10 +504,10 @@ function WishFreeDrawer({
                     className="btn btn-secondary"
                     onClick={() => onFilterChange(activeFilter)}
                   >
-                    Abbrechen
+                    {t("cancel")}
                   </button>
-                  <FormSubmitButton Icon={Send} pendingLabel="Wird erstellt...">
-                    Antrag erstellen
+                  <FormSubmitButton Icon={Send} pendingLabel={t("creating")}>
+                    {t("createRequest")}
                   </FormSubmitButton>
                 </div>
               </form>
@@ -525,13 +541,13 @@ function WishFreeDrawer({
 
                   <div className="mt-6 grid gap-3 sm:grid-cols-2">
                     <div className="rounded-xl border border-border bg-bg px-4 py-3">
-                      <div className="label">Datum</div>
+                      <div className="label">{t("date")}</div>
                       <div className="mt-1 font-mono text-[13px] font-semibold text-ink">
                         {selectedRequest.dateLabel}
                       </div>
                     </div>
                     <div className="rounded-xl border border-border bg-bg px-4 py-3">
-                      <div className="label">Status</div>
+                      <div className="label">{t("status")}</div>
                       <div className="mt-1 font-mono text-[13px] font-semibold text-ink">
                         {wishFreeStatusLabels[selectedRequest.status]}
                       </div>
@@ -539,7 +555,7 @@ function WishFreeDrawer({
                   </div>
 
                   <div className="mt-4 rounded-xl border border-border bg-white px-4 py-3">
-                    <div className="label">Begründung</div>
+                    <div className="label">{t("reason")}</div>
                     <p className="mt-2 text-[13px] leading-6 text-muted-2">
                       {selectedRequest.reason}
                     </p>
@@ -548,14 +564,14 @@ function WishFreeDrawer({
                   {canManage && (
                     <div className="field mt-4">
                       <label htmlFor="wishfree-reject-reason" className="label">
-                        Grund bei Ablehnung optional
+                        {t("rejectReasonOptional")}
                       </label>
                       <textarea
                         id="wishfree-reject-reason"
                         name="rejectReason"
                         className="input min-h-24 resize-none"
                         defaultValue={selectedRequest.rejectReason ?? ""}
-                        placeholder="Optionaler Hinweis für die Ablehnung"
+                        placeholder={t("rejectReasonPlaceholder")}
                       />
                     </div>
                   )}
@@ -568,26 +584,189 @@ function WishFreeDrawer({
                       formAction={rejectWishFreeRequestAction}
                       className="btn btn-secondary text-danger"
                     >
-                      Ablehnen
+                      {t("reject")}
                     </button>
                     <FormSubmitButton
                       formAction={approveWishFreeRequestAction}
                       className="btn btn-primary"
                     >
                       <Check size={15} />
-                      Annehmen
+                      {t("accept")}
                     </FormSubmitButton>
                   </div>
                 )}
               </form>
             ) : (
               <div className="flex h-full items-center justify-center text-[13px] text-muted">
-                Keine Anfrage ausgewählt.
+                {t("noRequestSelected")}
               </div>
             )}
           </div>
         </div>
       </aside>
+    </div>
+  );
+}
+
+/**
+ * Ersetzt ein natives `<select>` für die Standort-Auswahl: ein natives
+ * `<option>` kann keine farbige "Geschlossen"-Badge im Options-Text
+ * darstellen, nur reinen Text (vorher: "(geschlossen am Mo)").
+ */
+function LocationPickerField({
+  locations,
+  weekday,
+  defaultValue,
+  t,
+}: {
+  locations: ShiftLocationOption[];
+  weekday: OpeningHoursWeekday;
+  defaultValue: string;
+  t: T;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [selected, setSelected] = useState(defaultValue);
+  const [dropdownRect, setDropdownRect] = useState<{
+    top: number;
+    left: number;
+    width: number;
+  } | null>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  const options = useMemo(
+    () =>
+      locations.map((location) => ({
+        id: location.id,
+        label: `${location.name} - ${location.kind}`,
+        closed: openingHoursForWeekday(location.openingHours, weekday).mode === "closed",
+      })),
+    [locations, weekday],
+  );
+  const selectedOption = options.find((option) => option.id === selected);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    function updateDropdownRect() {
+      const rect = triggerRef.current?.getBoundingClientRect();
+
+      if (!rect) {
+        return;
+      }
+
+      setDropdownRect({ top: rect.bottom + 6, left: rect.left, width: rect.width });
+    }
+
+    updateDropdownRect();
+    window.addEventListener("resize", updateDropdownRect);
+    window.addEventListener("scroll", updateDropdownRect, true);
+
+    return () => {
+      window.removeEventListener("resize", updateDropdownRect);
+      window.removeEventListener("scroll", updateDropdownRect, true);
+    };
+  }, [isOpen]);
+
+  const dropdownId = "shift-location-dropdown";
+
+  function choose(id: string) {
+    setSelected(id);
+    setIsOpen(false);
+  }
+
+  return (
+    <div
+      ref={wrapperRef}
+      className="field"
+      onBlur={(event) => {
+        const nextTarget = event.relatedTarget as Node | null;
+
+        if (
+          !event.currentTarget.contains(nextTarget) &&
+          !document.getElementById(dropdownId)?.contains(nextTarget)
+        ) {
+          setIsOpen(false);
+        }
+      }}
+    >
+      <label className="label">{t("location")}</label>
+      <input type="hidden" name="locationId" value={selected} />
+      <button
+        ref={triggerRef}
+        type="button"
+        className="input flex cursor-pointer items-center justify-between gap-3 bg-bg text-left"
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+        onClick={() => setIsOpen((current) => !current)}
+      >
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="truncate">{selectedOption ? selectedOption.label : t("noLocation")}</span>
+          {selectedOption?.closed && (
+            <span className="shrink-0 rounded-[6px] bg-danger/10 px-1.5 py-0.5 font-mono text-[9.5px] font-semibold uppercase tracking-[0.04em] text-danger">
+              {t("closedBadge")}
+            </span>
+          )}
+        </span>
+        <ChevronDown
+          size={14}
+          className={`shrink-0 text-muted transition-transform ${isOpen ? "rotate-180" : ""}`}
+        />
+      </button>
+
+      {isOpen && dropdownRect && (
+        <div
+          id={dropdownId}
+          role="listbox"
+          className="fixed top-[var(--pos-top)] left-[var(--pos-left)] w-[var(--pos-width)] z-[1200] flex max-h-60 flex-col gap-1 overflow-y-auto rounded-[10px] border border-border bg-white p-1.5 shadow-[0_12px_32px_rgba(0,0,0,0.12)]"
+          style={
+            {
+              "--pos-top": `${dropdownRect.top}px`,
+              "--pos-left": `${dropdownRect.left}px`,
+              "--pos-width": `${dropdownRect.width}px`,
+            } as CSSProperties
+          }
+        >
+          <button
+            type="button"
+            role="option"
+            aria-selected={selected === ""}
+            className={`flex w-full cursor-pointer items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left transition-colors ${
+              selected === "" ? "bg-border-soft" : "hover:bg-bg"
+            }`}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => choose("")}
+          >
+            <span className="text-[13px] font-medium text-ink">{t("noLocation")}</span>
+            {selected === "" && <Check size={13} strokeWidth={3} className="shrink-0 text-ink" />}
+          </button>
+          {options.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              role="option"
+              aria-selected={selected === option.id}
+              className={`flex w-full cursor-pointer items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left transition-colors ${
+                selected === option.id ? "bg-border-soft" : "hover:bg-bg"
+              }`}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => choose(option.id)}
+            >
+              <span className="flex min-w-0 items-center gap-2">
+                <span className="truncate text-[13px] font-medium text-ink">{option.label}</span>
+                {option.closed && (
+                  <span className="shrink-0 rounded-[6px] bg-danger/10 px-1.5 py-0.5 font-mono text-[9.5px] font-semibold uppercase tracking-[0.04em] text-danger">
+                    {t("closedBadge")}
+                  </span>
+                )}
+              </span>
+              {selected === option.id && <Check size={13} strokeWidth={3} className="shrink-0 text-ink" />}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -604,6 +783,7 @@ function ShiftDrawer({
   onClose,
   canManage,
   canDelete,
+  t,
 }: {
   tenant: string;
   year: number;
@@ -616,6 +796,7 @@ function ShiftDrawer({
   onClose: () => void;
   canManage: boolean;
   canDelete: boolean;
+  t: T;
 }) {
   if (!drawer) {
     return null;
@@ -693,13 +874,13 @@ function ShiftDrawer({
               id="shift-drawer-title"
               className="mt-1 font-display text-[22px] font-semibold leading-tight text-ink"
             >
-              {shift ? "Schicht bearbeiten" : "Schicht hinzufügen"}
+              {shift ? t("editShift") : t("addShift")}
             </h2>
           </div>
           <button
             type="button"
-            aria-label="Drawer schliessen"
-            title="Schliessen"
+            aria-label={t("closeDrawer")}
+            title={t("close")}
             className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-[9px] border border-border bg-white text-muted transition-colors hover:border-muted hover:text-ink"
             onClick={onClose}
           >
@@ -717,7 +898,7 @@ function ShiftDrawer({
           <fieldset disabled={!canManage} className="flex flex-col gap-4 border-0 p-0">
           {presets.length > 0 && (
             <div className="field">
-              <span className="label">Standardschichten</span>
+              <span className="label">{t("presetsLabel")}</span>
               <div className="flex flex-wrap gap-2">
                 {presets.map((preset) => (
                   <button
@@ -739,7 +920,7 @@ function ShiftDrawer({
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="field">
               <label htmlFor="shift-start" className="label">
-                Start
+                {t("start")}
               </label>
               <input
                 id="shift-start"
@@ -753,7 +934,7 @@ function ShiftDrawer({
             </div>
             <div className="field">
               <label htmlFor="shift-end" className="label">
-                Ende
+                {t("end")}
               </label>
               <input
                 id="shift-end"
@@ -770,7 +951,7 @@ function ShiftDrawer({
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="field">
               <label htmlFor="shift-break" className="label">
-                Pause Minuten
+                {t("breakMinutes")}
               </label>
               <input
                 id="shift-break"
@@ -784,21 +965,21 @@ function ShiftDrawer({
             </div>
             <div className="field">
               <label htmlFor="shift-team" className="label">
-                Team
+                {t("team")}
               </label>
               <input
                 id="shift-team"
                 name="team"
                 className="input"
                 defaultValue={shift?.team ?? ""}
-                placeholder="Optional"
+                placeholder={t("optional")}
               />
             </div>
           </div>
 
           <div className="field">
             <label htmlFor="shift-employee" className="label">
-              Mitarbeiter
+              {t("employee")}
             </label>
             <select
               id="shift-employee"
@@ -806,7 +987,7 @@ function ShiftDrawer({
               className="input cursor-pointer bg-bg"
               defaultValue={shift?.employeeId ?? ""}
             >
-              <option value="">Offene Schicht</option>
+              <option value="">{t("openShiftOption")}</option>
               {employees.map((employee) => (
                 <option key={employee.id} value={employee.id}>
                   {employee.name} - {employee.location} - {employee.role}
@@ -815,68 +996,47 @@ function ShiftDrawer({
             </select>
           </div>
 
-          <div className="field">
-            <label htmlFor="shift-location" className="label">
-              Standort
-            </label>
-            <select
-              id="shift-location"
-              name="locationId"
-              className="input cursor-pointer bg-bg"
-              defaultValue={shift?.locationId ?? ""}
-            >
-              <option value="">Kein Standort</option>
-              {locations.map((location) => {
-                const isClosed =
-                  openingHoursForWeekday(
-                    location.openingHours,
-                    drawer.day.weekday as OpeningHoursWeekday,
-                  ).mode === "closed";
-
-                return (
-                  <option key={location.id} value={location.id}>
-                    {location.name} - {location.kind}
-                    {isClosed ? ` (geschlossen am ${drawer.day.weekday})` : ""}
-                  </option>
-                );
-              })}
-            </select>
-          </div>
+          <LocationPickerField
+            locations={locations}
+            weekday={drawer.day.weekday as OpeningHoursWeekday}
+            defaultValue={shift?.locationId ?? ""}
+            t={t}
+          />
 
           <div className="field">
             <label htmlFor="shift-note" className="label">
-              Notiz
+              {t("note")}
             </label>
             <textarea
               id="shift-note"
               name="note"
               className="input min-h-24 resize-none"
               defaultValue={shift?.note ?? ""}
-              placeholder="Übergabe, Besonderheiten oder Bedarf"
+              placeholder={t("notePlaceholder")}
             />
           </div>
           </fieldset>
 
           <div className="mt-1 flex justify-end gap-2.5 border-t border-border-soft pt-4">
             <button type="button" className="btn btn-secondary" onClick={onClose}>
-              {canManage ? "Abbrechen" : "Schließen"}
+              {canManage ? t("cancel") : t("closeShift")}
             </button>
             {canDelete && shift?.dbId && (
               <ConfirmSubmitButton
                 className="btn btn-secondary text-danger"
                 form="shift-drawer-form"
                 formAction={deleteShiftAction}
-                description="Diese Schicht wird dauerhaft aus dem Dienstplan entfernt."
+                description={t("deleteShiftConfirmDescription")}
               >
-                Löschen
+                {t("delete")}
               </ConfirmSubmitButton>
             )}
             {canManage && (
               <FormSubmitButton
                 Icon={Save}
-                pendingLabel="Wird gespeichert..."
+                pendingLabel={t("saving")}
               >
-                Speichern
+                {t("save")}
               </FormSubmitButton>
             )}
           </div>
@@ -893,17 +1053,19 @@ function TemplateEntryRow({
   entry,
   locations,
   onRemove,
+  t,
 }: {
   index: number;
   entry: ShiftTemplateEntry;
   locations: ShiftLocationOption[];
   onRemove: () => void;
+  t: T;
 }) {
   return (
     <div className="grid grid-cols-2 items-end gap-2 rounded-xl border border-border-soft bg-bg p-2.5 sm:grid-cols-3 lg:grid-cols-[minmax(0,90px)_repeat(2,minmax(0,90px))_minmax(0,80px)_minmax(0,1fr)_minmax(0,1fr)_auto]">
       <div className="field">
         <label className="label" htmlFor={`entry-weekday-${index}`}>
-          Tag
+          {t("day")}
         </label>
         <select
           id={`entry-weekday-${index}`}
@@ -920,7 +1082,7 @@ function TemplateEntryRow({
       </div>
       <div className="field">
         <label className="label" htmlFor={`entry-start-${index}`}>
-          Von
+          {t("from")}
         </label>
         <input
           id={`entry-start-${index}`}
@@ -933,7 +1095,7 @@ function TemplateEntryRow({
       </div>
       <div className="field">
         <label className="label" htmlFor={`entry-end-${index}`}>
-          Bis
+          {t("to")}
         </label>
         <input
           id={`entry-end-${index}`}
@@ -946,7 +1108,7 @@ function TemplateEntryRow({
       </div>
       <div className="field">
         <label className="label" htmlFor={`entry-break-${index}`}>
-          Pause
+          {t("breakLabel")}
         </label>
         <input
           id={`entry-break-${index}`}
@@ -959,7 +1121,7 @@ function TemplateEntryRow({
       </div>
       <div className="field">
         <label className="label" htmlFor={`entry-team-${index}`}>
-          Team
+          {t("team")}
         </label>
         <input
           id={`entry-team-${index}`}
@@ -967,12 +1129,12 @@ function TemplateEntryRow({
           name="entryTeam"
           className="input text-[12px]"
           defaultValue={entry.team}
-          placeholder="Optional"
+          placeholder={t("optional")}
         />
       </div>
       <div className="field">
         <label className="label" htmlFor={`entry-location-${index}`}>
-          Standort
+          {t("location")}
         </label>
         <select
           id={`entry-location-${index}`}
@@ -980,7 +1142,7 @@ function TemplateEntryRow({
           className="input cursor-pointer bg-white text-[12px]"
           defaultValue={entry.locationId}
         >
-          <option value="">Kein Standort</option>
+          <option value="">{t("noLocation")}</option>
           {locations.map((location) => (
             <option key={location.id} value={location.id}>
               {location.name}
@@ -990,8 +1152,8 @@ function TemplateEntryRow({
       </div>
       <button
         type="button"
-        aria-label="Eintrag entfernen"
-        title="Eintrag entfernen"
+        aria-label={t("removeEntryAria")}
+        title={t("removeEntryAria")}
         className="col-span-2 flex size-8 cursor-pointer items-center justify-center justify-self-end rounded-lg text-muted transition-colors hover:bg-danger/10 hover:text-danger sm:col-span-3 lg:col-span-1 lg:justify-self-auto"
         onClick={onRemove}
       >
@@ -1008,6 +1170,7 @@ function TemplateEditDrawer({
   template,
   locations,
   onClose,
+  t,
 }: {
   tenant: string;
   year: number;
@@ -1015,6 +1178,7 @@ function TemplateEditDrawer({
   template: ShiftTemplateSummary | null;
   locations: ShiftLocationOption[];
   onClose: () => void;
+  t: T;
 }) {
   const [rows, setRows] = useState<Array<ShiftTemplateEntry & { key: number }>>(
     () => (template?.entries ?? []).map((entry, index) => ({ ...entry, key: index })),
@@ -1066,11 +1230,11 @@ function TemplateEditDrawer({
             id="template-drawer-title"
             className="font-display text-[22px] font-semibold leading-tight text-ink"
           >
-            Vorlage bearbeiten
+            {t("editTemplate")}
           </h2>
           <button
             type="button"
-            aria-label="Schließen"
+            aria-label={t("closeShift")}
             className="flex size-8 cursor-pointer items-center justify-center rounded-lg text-muted hover:bg-bg"
             onClick={onClose}
           >
@@ -1090,7 +1254,7 @@ function TemplateEditDrawer({
 
           <div className="field">
             <label className="label" htmlFor="template-edit-name">
-              Name der Vorlage
+              {t("templateNameLabel")}
             </label>
             <input
               id="template-edit-name"
@@ -1110,11 +1274,12 @@ function TemplateEditDrawer({
                 entry={row}
                 locations={locations}
                 onRemove={() => removeRow(row.key)}
+                t={t}
               />
             ))}
             {rows.length === 0 && (
               <p className="text-[12.5px] text-muted">
-                Noch keine Schichten in dieser Vorlage.
+                {t("noEntriesInTemplate")}
               </p>
             )}
           </div>
@@ -1125,15 +1290,15 @@ function TemplateEditDrawer({
             onClick={addRow}
           >
             <Plus size={14} />
-            Schicht hinzufügen
+            {t("addShift")}
           </button>
 
           <div className="mt-2 flex justify-end gap-2.5 border-t border-border-soft pt-4">
             <button type="button" className="btn btn-secondary" onClick={onClose}>
-              Abbrechen
+              {t("cancel")}
             </button>
-            <FormSubmitButton Icon={Save} pendingLabel="Wird gespeichert...">
-              Speichern
+            <FormSubmitButton Icon={Save} pendingLabel={t("saving")}>
+              {t("save")}
             </FormSubmitButton>
           </div>
         </form>
@@ -1151,6 +1316,7 @@ export default function ShiftPlanningClient({
   conflictCount,
   status,
   publishedAt,
+  hasUnpublishedChanges = false,
   days,
   employees,
   locations,
@@ -1161,6 +1327,7 @@ export default function ShiftPlanningClient({
   canDelete = canManage,
   canManageSettings = true,
 }: ShiftPlanningClientProps) {
+  const t = useTranslations("ShiftPlanningClient");
   const router = useRouter();
   const [drawer, setDrawer] = useState<DrawerState | null>(null);
   const [editingTemplate, setEditingTemplate] = useState<ShiftTemplateSummary | null>(null);
@@ -1253,7 +1420,10 @@ export default function ShiftPlanningClient({
           {day.understaffed && (
             <div
               className="mt-1 flex items-center justify-center gap-1 font-mono text-[9px] font-semibold text-danger"
-              title={`Unterbesetzt: ${day.staffedCount ?? 0} von ${shiftSettings.minStaffing} geplant`}
+              title={t("understaffedTitle", {
+                staffed: day.staffedCount ?? 0,
+                min: shiftSettings.minStaffing,
+              })}
             >
               <AlertTriangle size={10} />
               {day.staffedCount ?? 0}/{shiftSettings.minStaffing}
@@ -1264,19 +1434,21 @@ export default function ShiftPlanningClient({
           <WishFreeBlock
             requests={approvedWishFreeByDate.get(day.id) ?? []}
             onRequestClick={openWishFreeRequest}
+            t={t}
           />
           {day.shifts.map((shift) => (
             <ShiftCard
               key={shift.dbId ?? shift.id}
               shift={shift}
               onClick={() => setDrawer({ day, shift })}
+              t={t}
             />
           ))}
           {canManage && (
             <button
               type="button"
-              aria-label={`Schicht am ${day.weekday} hinzufügen`}
-              title="Schicht hinzufügen"
+              aria-label={t("addShiftAria", { weekday: day.weekday })}
+              title={t("addShift")}
               className="flex w-full cursor-pointer items-center justify-center rounded-[9px] border-[1.5px] border-dashed border-[#DEDAD4] bg-transparent p-[7px] text-[#C0BFBA] transition-colors hover:border-muted hover:text-muted-2"
               onClick={() => setDrawer({ day })}
             >
@@ -1292,23 +1464,34 @@ export default function ShiftPlanningClient({
     <>
       <div className="relative left-1/2 w-[calc(100vw-236px)] -translate-x-1/2 px-[clamp(24px,4vw,60px)] max-md:w-screen max-md:px-4">
         <PageHeader
-          eyebrow="Dienstplan"
-          title="Schichtplanung"
+          eyebrow={t("eyebrow")}
+          title={t("pageTitle")}
           subtitle={<span className="font-mono">{weekLabel} {"\u00b7"} {weekRange}</span>}
           className="mb-7"
         >
-          {status === "published" ? (
+          {/* Veröffentlicht, aber seither bearbeitet: die Badge zeigt bewusst
+              wieder "Entwurf" — der aktuelle Stand ist für Mitarbeiter noch
+              nicht sichtbar (sie sehen den Schnappschuss der letzten
+              Veröffentlichung). */}
+          {status === "published" && !hasUnpublishedChanges ? (
             <div className="inline-flex items-center gap-2 rounded-[10px] border border-success/20 bg-success/10 px-3.5 py-2.5">
               <span className="size-[7px] shrink-0 rounded-full bg-success" />
               <span className="font-mono text-[12px] font-semibold text-success">
-                Veröffentlicht{publishedAt ? ` · ${formatPublishedAt(publishedAt)}` : ""}
+                {t("published")}{publishedAt ? ` · ${formatPublishedAt(publishedAt)}` : ""}
+              </span>
+            </div>
+          ) : status === "published" ? (
+            <div className="inline-flex items-center gap-2 rounded-[10px] border border-warning/25 bg-warning/10 px-3.5 py-2.5">
+              <span className="size-[7px] shrink-0 rounded-full bg-warning" />
+              <span className="font-mono text-[12px] font-semibold text-[#7A4E00]">
+                {t("draftUnpublishedChanges")}
               </span>
             </div>
           ) : (
             <div className="inline-flex items-center gap-2 rounded-[10px] border border-border bg-bg px-3.5 py-2.5">
               <span className="size-[7px] shrink-0 rounded-full bg-muted" />
               <span className="font-mono text-[12px] font-semibold text-muted-2">
-                Entwurf
+                {t("draft")}
               </span>
             </div>
           )}
@@ -1319,11 +1502,28 @@ export default function ShiftPlanningClient({
               <input type="hidden" name="week" value={week} />
               <FormSubmitButton
                 Icon={Send}
-                pendingLabel="Wird veröffentlicht..."
+                pendingLabel={t("publishing")}
                 className="btn btn-secondary"
               >
-                {status === "published" ? "Erneut veröffentlichen" : "Veröffentlichen"}
+                {status === "published" ? t("publishAgain") : t("publish")}
               </FormSubmitButton>
+            </form>
+          )}
+          {canManage && status === "published" && hasUnpublishedChanges && (
+            <form id="shift-week-reset-form" action={resetShiftWeekAction}>
+              <input type="hidden" name="tenant" value={tenant} />
+              <input type="hidden" name="year" value={year} />
+              <input type="hidden" name="week" value={week} />
+              <ConfirmSubmitButton
+                form="shift-week-reset-form"
+                className="btn btn-secondary"
+                title={t("discardChangesTitle")}
+                confirmLabel={t("resetLabel")}
+                description={t("resetConfirmDescription")}
+              >
+                <Undo2 size={15} />
+                {t("resetToPublished")}
+              </ConfirmSubmitButton>
             </form>
           )}
           {canManage && status === "published" && (
@@ -1333,17 +1533,17 @@ export default function ShiftPlanningClient({
               <input type="hidden" name="week" value={week} />
               <FormSubmitButton
                 Icon={RotateCcw}
-                pendingLabel="Wird zurückgesetzt..."
+                pendingLabel={t("unpublishing")}
                 className="btn btn-secondary"
               >
-                Zurück auf Entwurf
+                {t("backToDraft")}
               </FormSubmitButton>
             </form>
           )}
           <div className="inline-flex items-center gap-2 rounded-[10px] border border-danger/20 bg-danger/10 px-3.5 py-2.5">
             <span className="size-[7px] shrink-0 rounded-full bg-danger" />
             <span className="font-mono text-[12px] font-semibold text-danger">
-              {conflictCount} Konflikte offen
+              {t("conflictsOpenCount", { count: conflictCount })}
             </span>
           </div>
           <ShiftSettingsDrawerButton
@@ -1359,10 +1559,10 @@ export default function ShiftPlanningClient({
             onClick={openWishFreeDrawer}
           >
             <CalendarX size={15} />
-            Wunschfrei
+            {t("wishFree")}
             {openWishFreeCount > 0 && (
               <span
-                aria-label={`${openWishFreeCount} neue Wunschfrei Anfragen`}
+                aria-label={t("openWishFreeRequestsAria", { count: openWishFreeCount })}
                 className="absolute -right-1.5 -top-1.5 size-3 rounded-full border-2 border-white bg-warning"
               />
             )}
@@ -1372,18 +1572,18 @@ export default function ShiftPlanningClient({
               type="button"
               className="flex size-8 cursor-pointer items-center justify-center rounded-lg text-muted transition-colors hover:bg-bg hover:text-ink"
               onClick={() => navigateWeek(-1)}
-              aria-label="Vorherige Woche"
+              aria-label={t("previousWeek")}
             >
               <ChevronLeft size={15} />
             </button>
             <span className="min-w-[118px] rounded-lg px-3 py-2 text-center font-mono text-[12px] font-semibold text-ink">
-              KW {week} {"\u00b7"} {year}
+              {t("weekLabel", { week, year })}
             </span>
             <button
               type="button"
               className="flex size-8 cursor-pointer items-center justify-center rounded-lg text-muted transition-colors hover:bg-bg hover:text-ink"
               onClick={() => navigateWeek(1)}
-              aria-label="Nächste Woche"
+              aria-label={t("nextWeek")}
             >
               <ChevronRight size={15} />
             </button>
@@ -1392,15 +1592,15 @@ export default function ShiftPlanningClient({
 
         <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-white px-4 py-3">
           <CalendarDays size={15} className="text-muted" />
-          <span className="font-mono text-[11px] text-muted">Planung:</span>
+          <span className="font-mono text-[11px] text-muted">{t("planningLabel")}</span>
           <span className="text-[12.5px] text-muted-2">
-            {employees.length} Mitarbeiter {"\u00b7"} {locations.length} Standorte
+            {t("planningSummary", { employeeCount: employees.length, locationCount: locations.length })}
           </span>
         </div>
 
         {canManage && (
         <div className="mb-3 flex flex-wrap items-center gap-3 rounded-xl border border-border bg-white px-4 py-3">
-          <span className="font-mono text-[11px] text-muted">Wochenvorlagen:</span>
+          <span className="font-mono text-[11px] text-muted">{t("weekTemplatesLabel")}</span>
 
           {templates.length > 0 ? (
             <form action={applyShiftTemplateAction} className="flex items-center gap-2">
@@ -1414,7 +1614,7 @@ export default function ShiftPlanningClient({
                 required
               >
                 <option value="" disabled>
-                  Vorlage wählen
+                  {t("selectTemplate")}
                 </option>
                 {templates.map((template) => (
                   <option key={template.id} value={template.id}>
@@ -1422,12 +1622,12 @@ export default function ShiftPlanningClient({
                   </option>
                 ))}
               </select>
-              <FormSubmitButton className="btn btn-secondary btn-sm" pendingLabel="Wird angewendet...">
-                Auf diese Woche anwenden
+              <FormSubmitButton className="btn btn-secondary btn-sm" pendingLabel={t("applying")}>
+                {t("applyToThisWeek")}
               </FormSubmitButton>
             </form>
           ) : (
-            <span className="text-[12px] text-muted-2">Noch keine Vorlagen gespeichert.</span>
+            <span className="text-[12px] text-muted-2">{t("noTemplatesSaved")}</span>
           )}
 
           <form action={saveShiftTemplateAction} className="ml-auto flex items-center gap-2">
@@ -1437,16 +1637,16 @@ export default function ShiftPlanningClient({
             <input
               type="text"
               name="templateName"
-              placeholder="Name der Vorlage"
+              placeholder={t("templateNameLabel")}
               className="input text-[12px]"
               required
             />
             <FormSubmitButton
               Icon={Save}
               className="btn btn-secondary btn-sm"
-              pendingLabel="Wird gespeichert..."
+              pendingLabel={t("saving")}
             >
-              Diese Woche als Vorlage
+              {t("saveAsTemplate")}
             </FormSubmitButton>
           </form>
 
@@ -1462,8 +1662,8 @@ export default function ShiftPlanningClient({
                   </span>
                   <button
                     type="button"
-                    aria-label={`Vorlage ${template.name} bearbeiten`}
-                    title="Vorlage bearbeiten"
+                    aria-label={t("editTemplateAria", { name: template.name })}
+                    title={t("editTemplate")}
                     className="flex size-5 cursor-pointer items-center justify-center rounded-[5px] text-muted transition-colors hover:bg-bg hover:text-ink"
                     onClick={() => setEditingTemplate(template)}
                   >
@@ -1475,8 +1675,8 @@ export default function ShiftPlanningClient({
                       <input type="hidden" name="templateId" value={template.id} />
                       <button
                         type="submit"
-                        aria-label={`Vorlage ${template.name} l\u00f6schen`}
-                        title="Vorlage löschen"
+                        aria-label={t("deleteTemplateAria", { name: template.name })}
+                        title={t("deleteTemplateTitle")}
                         className="flex size-5 cursor-pointer items-center justify-center rounded-[5px] text-muted transition-colors hover:bg-danger/10 hover:text-danger"
                       >
                         <X size={11} />
@@ -1514,6 +1714,7 @@ export default function ShiftPlanningClient({
         onClose={() => setDrawer(null)}
         canManage={canManage}
         canDelete={canDelete}
+        t={t}
       />
 
       <TemplateEditDrawer
@@ -1524,6 +1725,7 @@ export default function ShiftPlanningClient({
         template={editingTemplate}
         locations={locations}
         onClose={() => setEditingTemplate(null)}
+        t={t}
       />
 
       {isWishFreeDrawerOpen && (
@@ -1550,6 +1752,7 @@ export default function ShiftPlanningClient({
           }}
           onCreateRequest={openCreateWishFreeRequest}
           onClose={() => setIsWishFreeDrawerOpen(false)}
+          t={t}
         />
       )}
     </>

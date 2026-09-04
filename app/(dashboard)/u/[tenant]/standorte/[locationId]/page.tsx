@@ -1,13 +1,10 @@
-import { FileReminderButton } from "@/components/ActionDrawers";
-import { OwnerFileActions } from "@/components/OwnerFileActions";
+import OwnerFilesTab from "@/components/OwnerFilesTab";
 import AddressFields from "@/components/AddressFields";
 import AddLocationEmployeesButton from "@/components/AddLocationEmployeesButton";
 import AuditLogPanel from "@/components/AuditLogPanel";
 import EmployeeSelector from "@/components/EmployeeSelector";
 import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
 import {
-  CreateFolderButton,
-  UploadFileButton,
 } from "@/components/FileActionButtons";
 import { UnsavedChangesGuard } from "@/components/EditSafety";
 import FloatingEditBar from "@/components/FloatingEditBar";
@@ -37,22 +34,20 @@ import { getWishFreeRequestsForTenant } from "@/lib/wish-free-service";
 import {
   type Location,
   type LocationActivity,
-  type LocationFile,
-  type LocationFileFolder,
   type LocationStatus,
 } from "@/lib/locations";
 import {
   ArrowLeft,
-  FileText,
-  Folder,
-  Lock,
   Pencil,
 } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 import { getFileUploadOptions } from "@/lib/files-server";
-import { type FileFolder, type FileUploadOptions } from "@/lib/files";
+import { type FileUploadOptions } from "@/lib/files";
+import { getTranslations } from "next-intl/server";
+
+type T = Awaited<ReturnType<typeof getTranslations>>;
 
 export async function generateMetadata({
   params,
@@ -65,18 +60,18 @@ export async function generateMetadata({
   };
 }
 
-function LocationStatusBadge({ status }: { status: LocationStatus }) {
+function LocationStatusBadge({ status, t }: { status: LocationStatus; t: T }) {
   if (status === "active") {
     return (
       <span className="inline-flex items-center rounded-[7px] bg-success/10 px-[9px] py-[3px] font-mono text-[11px] tracking-[0.3px] text-success">
-        Aktiv
+        {t("active")}
       </span>
     );
   }
 
   return (
     <span className="inline-flex items-center rounded-[7px] bg-[#B9B9B4]/20 px-[9px] py-[3px] font-mono text-[11px] tracking-[0.3px] text-muted-2">
-      Inaktiv
+      {t("inactive")}
     </span>
   );
 }
@@ -115,13 +110,15 @@ function DetailPanel({
   title,
   eyebrow,
   children,
+  className = "",
 }: {
   title: ReactNode;
   eyebrow?: ReactNode;
   children: ReactNode;
+  className?: string;
 }) {
   return (
-    <section className="rounded-card border border-border bg-white px-6 py-[22px]">
+    <section className={`rounded-card border border-border bg-white px-6 py-[22px] ${className}`}>
       <div className="mb-[18px] flex items-center justify-between gap-3">
         <h2 className="font-display text-[17px] font-semibold tracking-[-0.3px] text-ink">
           {title}
@@ -130,6 +127,59 @@ function DetailPanel({
       </div>
       {children}
     </section>
+  );
+}
+
+/**
+ * Mindestbesetzung je Tag für diesen Standort. Leeres Feld = Unternehmensvorgabe
+ * (TenantSettings.shiftMinStaffing) gilt weiter — bewusst unterschieden von
+ * einer eingetragenen 0 ("hier ist keine Mindestbesetzung nötig").
+ */
+function MinStaffingField({
+  isEditing,
+  shiftMinStaffing,
+  effectiveMinStaffing,
+  t,
+}: {
+  isEditing: boolean;
+  shiftMinStaffing: number | null;
+  effectiveMinStaffing: number;
+  t: T;
+}) {
+  if (!isEditing) {
+    return (
+      <div className="mb-4 flex items-center justify-between gap-3 rounded-[10px] border border-border-soft bg-bg px-3.5 py-2.5">
+        <span className="text-[12.5px] text-muted-2">{t("minStaffingPerDay")}</span>
+        <span className="font-mono text-[12.5px] text-ink">
+          {effectiveMinStaffing}
+          {shiftMinStaffing === null && (
+            <span className="ml-1.5 text-[11px] text-muted">{t("companyDefault")}</span>
+          )}
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="field mb-4 max-w-[280px]">
+      <label htmlFor="location-min-staffing" className="label">
+        {t("minStaffingPerDay")}
+      </label>
+      <input
+        id="location-min-staffing"
+        name="shiftMinStaffing"
+        type="number"
+        min={0}
+        max={99}
+        className="input"
+        defaultValue={shiftMinStaffing ?? ""}
+        placeholder={t("companyDefaultPlaceholder", { count: effectiveMinStaffing })}
+        form="location-edit-form"
+      />
+      <p className="m-0 text-[11px] text-muted">
+        {t("minStaffingHint")}
+      </p>
+    </div>
   );
 }
 
@@ -205,14 +255,14 @@ function EditableSelectField({
 
 const locationColorOptions = locationColorPalette;
 
-function EditableColorField({ value }: { value: string }) {
+function EditableColorField({ value, t }: { value: string; t: T }) {
   const options = locationColorOptions.some((color) => color.value === value)
     ? locationColorOptions
-    : [{ value, className: value, label: "Aktuell" }, ...locationColorOptions];
+    : [{ value, className: value, label: t("current") }, ...locationColorOptions];
 
   return (
     <div className="field">
-      <div className="label">Standortfarbe</div>
+      <div className="label">{t("locationColor")}</div>
       <div className="flex flex-wrap gap-2">
         {options.map((color) => (
           <label
@@ -295,221 +345,36 @@ function ActivityItem({
   );
 }
 
-function FileFolderCard({
-  folder,
-  tenant,
-  returnPath,
-  filterHref,
-  active,
-  canManageReminders,
-}: {
-  folder: LocationFileFolder;
-  tenant: string;
-  returnPath: string;
-  filterHref: string;
-  active: boolean;
-  canManageReminders: boolean;
-}) {
-  return (
-    <Link
-      href={filterHref}
-      className={`flex w-full cursor-pointer items-center gap-[13px] rounded-xl border p-[15px] text-left font-sans no-underline transition-colors hover:bg-bg ${
-        active ? "border-ink bg-bg" : "border-border bg-white"
-      }`}
-    >
-      <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-border-soft text-muted-2">
-        <Folder size={19} />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-[13.5px] font-semibold text-ink">
-          {folder.name}
-        </span>
-        <span className="mt-[3px] block font-mono text-[10.5px] text-muted">
-          {folder.fileCount} Dateien
-        </span>
-      </span>
-      {folder.locked && <Lock size={13} className="shrink-0 text-muted" />}
-      <span onClick={(event) => event.preventDefault()}>
-        <FileReminderButton
-          tenant={tenant}
-          returnPath={returnPath}
-          compact
-          name={folder.name}
-          context={`Standortordner \u00b7 ${folder.name}`}
-          canManage={canManageReminders}
-        />
-      </span>
-    </Link>
-  );
-}
-
-function FileRow({
-  file,
-  tenant,
-  returnPath,
-  canManageReminders,
-}: {
-  file: LocationFile;
-  tenant: string;
-  returnPath: string;
-  canManageReminders: boolean;
-}) {
-  return (
-    <div className="flex w-full cursor-pointer items-center gap-3.5 border-t border-border-soft py-3 text-left font-sans transition-colors hover:bg-bg">
-      <span className="flex size-[30px] shrink-0 items-center justify-center rounded-lg bg-border-soft text-muted-2">
-        <FileText size={14} />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-[13.5px] font-medium text-ink">
-          {file.name}
-        </span>
-        <span className="mt-0.5 block truncate font-mono text-[10.5px] text-muted">
-          {file.folder} {"\u00b7"} {file.updatedAt}
-        </span>
-      </span>
-      <span className="hidden font-mono text-[10.5px] text-muted md:block">
-        {file.size}
-      </span>
-      <span className="rounded-[7px] border border-border-light px-2 py-[3px] font-mono text-[10px] text-muted-2">
-        {file.type}
-      </span>
-      {file.locked && <Lock size={13} className="shrink-0 text-muted" />}
-      <OwnerFileActions tenant={tenant} storageFileId={file.storageFileId} name={file.name} />
-      <FileReminderButton
-        tenant={tenant}
-        returnPath={returnPath}
-        compact
-        name={file.name}
-        context={`${file.folder} \u00b7 Standortdatei`}
-        canManage={canManageReminders}
-      />
-    </div>
-  );
-}
-
-function folderOptionSlug(value: string) {
-  return value
-    .toLowerCase()
-    .trim()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
-
-function locationFolderOptions(location: Location): FileFolder[] {
-  return location.fileFolders.map((folder) => ({
-    slug: folder.path ?? folderOptionSlug(folder.name),
-    path: folder.path ?? folderOptionSlug(folder.name),
-    name: folder.name,
-    fileCount: folder.fileCount,
-    owner: "HR",
-    updatedAt: "",
-    locked: folder.locked,
-  }));
-}
-
 function FilesTab({
   location,
   tenant,
   locationHref,
   uploadOptions,
   canManageFiles,
-  canManageReminders,
   activeFolder,
+  t,
 }: {
   location: Location;
   tenant: string;
   locationHref: string;
   uploadOptions: FileUploadOptions;
   canManageFiles: boolean;
-  canManageReminders: boolean;
   activeFolder?: string;
+  t: T;
 }) {
-  const folderOptions = locationFolderOptions(location);
-  const visibleFiles = activeFolder
-    ? location.files.filter((file) => file.folder === activeFolder)
-    : location.files;
-
   return (
-    <DetailPanel
-      title={
-        <div className="flex min-w-0 items-center gap-3">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-border-soft text-muted-2">
-            <Folder size={18} />
-          </span>
-          <span className="min-w-0">
-            <span className="block truncate">Dateiablage</span>
-            <span className="mt-[3px] block font-mono text-[10.5px] font-normal tracking-normal text-muted">
-              Ordner und Dateien
-            </span>
-          </span>
-        </div>
-      }
-    >
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <span className="font-mono text-[10.5px] text-muted">
-          {location.fileFolders.length} Ordner {"\u00b7"} {location.files.length}{" "}
-          Dateien
-        </span>
-        {canManageFiles && (
-          <div className="flex flex-wrap gap-2">
-            <CreateFolderButton
-              tenant={tenant}
-              returnPath={`${locationHref}?tab=files`}
-              ownerType="location"
-              ownerId={location.dbId}
-            />
-            <UploadFileButton
-              tenant={tenant}
-              returnPath={`${locationHref}?tab=files`}
-              ownerType="location"
-              ownerId={location.dbId}
-              folderOptions={folderOptions}
-              uploadOptions={uploadOptions}
-            />
-          </div>
-        )}
-      </div>
-
-      <div className="grid gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(210px,1fr))]">
-        {location.fileFolders.map((folder) => (
-            <FileFolderCard
-              key={folder.name}
-              folder={folder}
-              tenant={tenant}
-              returnPath={`${locationHref}?tab=files`}
-              filterHref={
-                activeFolder === folder.name
-                  ? `${locationHref}?tab=files`
-                  : `${locationHref}?tab=files&folder=${encodeURIComponent(folder.name)}`
-              }
-              active={activeFolder === folder.name}
-              canManageReminders={canManageReminders}
-            />
-        ))}
-      </div>
-
-      <div className="mt-5">
-        <div className="mb-2 flex items-center justify-between gap-3 font-mono text-[9.5px] uppercase tracking-[0.6px] text-muted">
-          <span>{activeFolder ? `Dateien · ${activeFolder}` : "Dateien"}</span>
-          {activeFolder && (
-            <Link href={`${locationHref}?tab=files`} className="normal-case text-link">
-              Alle anzeigen
-            </Link>
-          )}
-        </div>
-        {visibleFiles.map((file) => (
-            <FileRow
-              key={`${file.folder}-${file.name}`}
-              file={file}
-              tenant={tenant}
-              returnPath={`${locationHref}?tab=files`}
-              canManageReminders={canManageReminders}
-            />
-        ))}
-      </div>
-    </DetailPanel>
+    <OwnerFilesTab
+      tenant={tenant}
+      ownerType="location"
+      ownerId={location.dbId ?? ""}
+      basePath={locationHref}
+      folders={location.fileFolders}
+      files={location.files}
+      uploadOptions={uploadOptions}
+      canManageFiles={canManageFiles}
+      initialFolderPath={activeFolder ?? ""}
+      emptyLabel={t("noFilesForLocation")}
+    />
   );
 }
 
@@ -521,6 +386,7 @@ export default async function LocationDetailPage({
   const query = await searchParams;
   const { tab, edit, folder } = query;
   const activeFolder = typeof folder === "string" ? folder : undefined;
+  const t = await getTranslations("LocationDetailPage");
   const currentWeek = getISOWeekFromDate(new Date());
   const year = searchParamNumber(query.year, currentWeek.year);
   const week = searchParamNumber(query.week, currentWeek.week);
@@ -556,7 +422,6 @@ export default async function LocationDetailPage({
   const canDeleteLocation = capabilities.locations.canDelete;
   const canManageShifts = hasPermissionLevel(capabilities.locations.shiftsLevel ?? "none", "write");
   const canManageFiles = capabilities.locations.canUploadFiles;
-  const canManageReminders = hasPermissionLevel(capabilities.reminders.level, "write");
   const canViewAudit = capabilities.locations.canViewAudit;
 
   const isFilesTab = tab === "files";
@@ -592,21 +457,24 @@ export default async function LocationDetailPage({
   const wishFreeRequests = (
     await getWishFreeRequestsForTenant({ tenantSlug: tenant })
   ).filter((request) => locationShiftEmployeeIds.has(request.employeeId));
-  const assignableEmployees = employees
+  // Bewusst ungefiltert: die Auswahl zeigt auch die bereits zugewiesenen
+  // Mitarbeiter, damit im Dialog der tatsächliche Stand des Standortteams
+  // sichtbar ist (sie kommen vorausgewählt an).
+  const assignableEmployees = employees.map((employee) => ({
+    id: employee.dbId ?? employee.id,
+    initials: employee.initials,
+    name: employee.name,
+    employeeNumber: employee.employeeNumber,
+    location: employee.location,
+    team: employee.team,
+    role: employee.role,
+  }));
+  const assignedEmployeeIds = assignableEmployees
     .filter(
       (employee) =>
-        !assignedEmployeeKeys.has(employee.dbId ?? employee.id) &&
-        !assignedEmployeeKeys.has(employee.name),
+        assignedEmployeeKeys.has(employee.id) || assignedEmployeeKeys.has(employee.name),
     )
-    .map((employee) => ({
-      id: employee.dbId ?? employee.id,
-      initials: employee.initials,
-      name: employee.name,
-      employeeNumber: employee.employeeNumber,
-      location: employee.location,
-      team: employee.team,
-      role: employee.role,
-    }));
+    .map((employee) => employee.id);
 
   return (
     <>
@@ -617,7 +485,7 @@ export default async function LocationDetailPage({
           className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.5px] text-muted transition-colors hover:text-ink"
         >
           <ArrowLeft size={13} />
-          Alle Standorte
+          {t("backToLocations")}
         </Link>
       </div>
 
@@ -638,31 +506,31 @@ export default async function LocationDetailPage({
               <div className="flex flex-col gap-4">
                 <EditableTextField
                   id="location-name"
-                  label="Standortname"
+                  label={t("locationName")}
                   name="name"
                   value={location.name}
                 />
                 <div className="grid gap-3 sm:grid-cols-2">
                   <EditableSelectField
                     id="location-kind"
-                    label="Typ"
+                    label={t("type")}
                     name="kind"
                     value={location.kind}
                     options={[...locationKinds]}
                   />
                   <EditableSelectField
                     id="location-status"
-                    label="Status"
+                    label={t("status")}
                     name="status"
                     value={location.status}
                     options={[
-                      { value: "active", label: "Aktiv" },
-                      { value: "inactive", label: "Inaktiv" },
+                      { value: "active", label: t("active") },
+                      { value: "inactive", label: t("inactive") },
                     ]}
                   />
                 </div>
                 <div>
-                  <div className="mb-2 label">Adresse</div>
+                  <div className="mb-2 label">{t("address")}</div>
                   <AddressFields
                     idPrefix="location-address"
                     defaults={location.addressFields}
@@ -670,7 +538,7 @@ export default async function LocationDetailPage({
                     formId="location-edit-form"
                   />
                 </div>
-                <EditableColorField value={location.accentClassName} />
+                <EditableColorField value={location.accentClassName} t={t} />
               </div>
             ) : (
               <>
@@ -678,7 +546,7 @@ export default async function LocationDetailPage({
                   <span className="font-mono text-[10.5px] uppercase tracking-[0.6px] text-muted">
                     {location.kind}
                   </span>
-                  <LocationStatusBadge status={location.status} />
+                  <LocationStatusBadge status={location.status} t={t} />
                 </div>
                 <h1 className="m-0 font-display text-[clamp(30px,3.6vw,44px)] font-semibold leading-[1.02] tracking-[-1.2px] text-ink">
                   {location.name}
@@ -696,23 +564,16 @@ export default async function LocationDetailPage({
                 form="location-edit-form"
                 formAction={deleteLocationAction}
                 className="btn btn-secondary btn-sm border-danger/25 text-danger hover:border-danger/40 hover:bg-danger/5"
-                description={`Der Standort "${location.name}" wird dauerhaft gelöscht.`}
+                description={t("deleteConfirmDescription", { name: location.name })}
               >
-                Löschen
+                {t("delete")}
               </ConfirmSubmitButton>
             )}
             {!isEditing && canEditLocation && (
-              <>
-                <Link href={locationEditHref} className="btn btn-secondary btn-sm">
-                  <Pencil size={14} />
-                  Bearbeiten
-                </Link>
-                <AddLocationEmployeesButton
-                  tenant={tenant}
-                  locationId={locationDbId}
-                  employees={assignableEmployees}
-                />
-              </>
+              <Link href={locationEditHref} className="btn btn-secondary btn-sm">
+                <Pencil size={14} />
+                {t("edit")}
+              </Link>
             )}
           </div>
         </div>
@@ -727,7 +588,7 @@ export default async function LocationDetailPage({
               : "border-transparent font-medium text-muted"
           }`}
         >
-          Home
+          {t("tabHome")}
         </Link>
         <Link
           href={`${locationHref}?tab=files`}
@@ -737,7 +598,7 @@ export default async function LocationDetailPage({
               : "border-transparent font-medium text-muted"
           }`}
         >
-          Dateien
+          {t("tabFiles")}
           <span className="font-mono text-[11px] text-muted">
             {location.files.length + location.fileFolders.length}
           </span>
@@ -750,7 +611,7 @@ export default async function LocationDetailPage({
               : "border-transparent font-medium text-muted"
           }`}
         >
-          Schichten
+          {t("tabShifts")}
         </Link>
       </div>
 
@@ -761,8 +622,8 @@ export default async function LocationDetailPage({
           locationHref={locationHref}
           uploadOptions={uploadOptions}
           canManageFiles={canManageFiles}
-          canManageReminders={canManageReminders}
           activeFolder={activeFolder}
+          t={t}
         />
       ) : isShiftsTab ? (
         <LocationShiftPlanner
@@ -787,23 +648,23 @@ export default async function LocationDetailPage({
           <section className="mb-4 grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(190px,1fr))]">
               <>
                 <DetailMetricCard
-                  label="Mitarbeiter"
+                  label={t("employeesMetric")}
                   value={location.employeeCount}
-                  caption={`${location.activeToday} aktiv heute`}
+                  caption={t("activeToday", { count: location.activeToday })}
                 />
                 <DetailMetricCard
-                  label="Schichten aktiv"
+                  label={t("shiftsActive")}
                   value={location.shiftCount}
-                  caption="diese Woche"
+                  caption={t("thisWeek")}
                 />
                 <DetailMetricCard
-                  label="Offene Stellen"
+                  label={t("openPositions")}
                   value={location.openPositions}
-                  caption={"Frühschicht Do."}
+                  caption={t("earlyShiftThu")}
                   tone="danger"
                 />
                 <DetailMetricCard
-                  label="Auslastung"
+                  label={t("utilization")}
                   value={location.utilization}
                   caption={location.utilizationCaption}
                   tone="success"
@@ -813,18 +674,18 @@ export default async function LocationDetailPage({
           )}
 
           <div className="grid items-start gap-4 [grid-template-columns:repeat(auto-fit,minmax(320px,1fr))]">
-            <DetailPanel title="Leitung & Team">
+            <DetailPanel title={t("leadershipAndTeam")}>
               {isEditing ? (
                 <div className="mb-5">
                   <EmployeeSelector
-                    label="Standortleitung"
+                    label={t("locationLead")}
                     name="lead"
                     options={leadEmployeeOptions}
                     defaultSelectedIds={currentLeadEmployeeId ? [currentLeadEmployeeId] : []}
                     form="location-edit-form"
                   />
                   <p className="mt-2 text-[11.5px] leading-[1.5] text-muted">
-                    Telefon und E-Mail werden automatisch aus dem Mitarbeiterprofil übernommen.
+                    {t("phoneEmailAutoNote")}
                   </p>
                 </div>
               ) : (
@@ -837,7 +698,7 @@ export default async function LocationDetailPage({
                       {location.lead.name}
                     </div>
                     <div className="mt-[3px] font-mono text-[10.5px] text-muted">
-                      Standortleitung
+                      {t("locationLead")}
                     </div>
                   </div>
                   <div className="hidden text-right md:block">
@@ -851,8 +712,19 @@ export default async function LocationDetailPage({
                 </div>
               )}
 
-              <div className="mb-2 font-mono text-[9.5px] uppercase tracking-[0.6px] text-muted">
-                Team
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <span className="font-mono text-[9.5px] uppercase tracking-[0.6px] text-muted">
+                  {t("team")}
+                </span>
+                {canEditLocation && (
+                  <AddLocationEmployeesButton
+                    tenant={tenant}
+                    locationId={locationDbId}
+                    employees={assignableEmployees}
+                    assignedIds={assignedEmployeeIds}
+                    variant="icon"
+                  />
+                )}
               </div>
               <div className="flex flex-wrap gap-2">
                 {location.team.map((member) => (
@@ -864,7 +736,15 @@ export default async function LocationDetailPage({
               </div>
             </DetailPanel>
 
-            <DetailPanel title="\u00d6ffnungszeiten">
+            {/* Eigene Zeile über die volle Breite: die Wochentage stehen darin
+                nebeneinander und brauchen mehr Platz als eine Spalte hergibt. */}
+            <DetailPanel title={t("openingHoursAndStaffing")} className="[grid-column:1/-1]">
+              <MinStaffingField
+                isEditing={isEditing}
+                shiftMinStaffing={location.shiftMinStaffing}
+                effectiveMinStaffing={location.effectiveMinStaffing}
+                t={t}
+              />
               {isEditing ? (
                 <OpeningHoursEditor
                   name="openingHours"
@@ -890,7 +770,7 @@ export default async function LocationDetailPage({
                   ))}
                   {location.usesDefaultOpeningHours && (
                     <p className="mt-2 text-[11.5px] text-muted">
-                      Standard-\u00d6ffnungszeiten des Unternehmens.
+                      {t("defaultOpeningHoursNote")}
                     </p>
                   )}
                 </div>
@@ -898,10 +778,10 @@ export default async function LocationDetailPage({
             </DetailPanel>
 
             <DetailPanel
-              title={"Aktivit\u00e4t"}
+              title={t("activity")}
               eyebrow={
                 <span className="rounded-[7px] bg-success/10 px-2 py-[3px] font-mono text-[9.5px] font-semibold tracking-[0.5px] text-success">
-                  LIVE
+                  {t("live")}
                 </span>
               }
             >

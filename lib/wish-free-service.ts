@@ -1,5 +1,10 @@
+import {
+  notifyManagersOfNewWishFreeRequest,
+  notifyWishFreeRequestDecided,
+} from "@/lib/notifications/events";
 import { prisma } from "@/lib/prisma";
 import { getTenantIdForShifts, requireShiftManager } from "@/lib/shift-service";
+import { requireTenantMembership } from "@/lib/tenant-access";
 import {
   type WishFreeRequest,
   type WishFreeRequestStatus,
@@ -176,20 +181,190 @@ export async function setTenantWishFreeRequestStatus(input: {
       id: input.requestId,
       tenantId: access.tenantId,
     },
-    select: { id: true },
+    select: { id: true, date: true, employeeId: true },
   });
 
   if (!request) {
     throw new Error("Wunschfrei Anfrage nicht gefunden.");
   }
 
+  const rejectReason = input.status === "rejected" ? input.rejectReason?.trim() || "" : "";
+
   await prisma.tenantWishFreeRequest.update({
     where: { id: input.requestId },
     data: {
       status: input.status,
-      rejectReason: input.status === "rejected" ? input.rejectReason?.trim() || "" : "",
+      rejectReason,
       decidedAt: new Date(),
       decidedBy: access.userId,
     },
   });
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: access.tenantId },
+    select: { name: true },
+  });
+
+  await notifyWishFreeRequestDecided({
+    tenantId: access.tenantId,
+    tenantName: tenant?.name ?? "",
+    employeeId: request.employeeId,
+    requestId: request.id,
+    date: request.date,
+    status: input.status,
+    rejectReason,
+  });
+}
+
+/**
+ * Wunschfrei-Anfragen des eingeloggten Mitarbeiters (Self-Service der App).
+ *
+ * Bewusst getrennt von getWishFreeRequestsForTenant: das ist die
+ * mandantenweite Planungssicht und verlangt Schichtplan-Rechte, während hier
+ * jedes Mitglied ohne Zusatzrecht seine *eigenen* Anfragen sieht — dieselbe
+ * Trennung wie bei Urlaub (/api/me/vacation-requests gegenüber
+ * /api/tenants/[tenant]/vacation-requests).
+ */
+export async function getMyWishFreeRequests(tenantSlug: string) {
+  const access = await requireTenantMembership(tenantSlug);
+  const employee = await prisma.tenantEmployee.findFirst({
+    where: { tenantId: access.tenantId, userId: access.userId },
+    select: { id: true },
+  });
+
+  if (!employee) {
+    throw new Error("Ihr Konto ist noch keiner Personalakte zugeordnet. Bitte an HR wenden.");
+  }
+
+  const records = await prisma.tenantWishFreeRequest.findMany({
+    where: { tenantId: access.tenantId, employeeId: employee.id },
+    orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+    include: {
+      employee: {
+        select: {
+          name: true,
+          location: true,
+          role: true,
+        },
+      },
+    },
+  });
+
+  return records.map(toWishFreeRequest);
+}
+
+/**
+ * Wunschfrei aus der App beantragen. Anders als createTenantWishFreeRequest
+ * (Planungspfad, trägt direkt "approved" ein) entsteht hier eine *offene*
+ * Anfrage, über die die Schichtplanung noch entscheidet.
+ */
+export async function createMyWishFreeRequest(input: {
+  tenantSlug: string;
+  date: string;
+  reason: string;
+}) {
+  const access = await requireTenantMembership(input.tenantSlug);
+  const employee = await prisma.tenantEmployee.findFirst({
+    where: { tenantId: access.tenantId, userId: access.userId },
+    select: { id: true, name: true },
+  });
+
+  if (!employee) {
+    throw new Error("Ihr Konto ist noch keiner Personalakte zugeordnet. Bitte an HR wenden.");
+  }
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date)) {
+    throw new Error("Bitte ein gültiges Datum angeben.");
+  }
+
+  const existing = await prisma.tenantWishFreeRequest.findFirst({
+    where: {
+      tenantId: access.tenantId,
+      employeeId: employee.id,
+      date: input.date,
+      status: { in: ["open", "approved"] },
+    },
+    select: { id: true },
+  });
+
+  if (existing) {
+    throw new Error("Für diesen Tag liegt bereits eine Wunschfrei-Anfrage vor.");
+  }
+
+  const key = await createUniqueWishFreeKey({
+    tenantId: access.tenantId,
+    employeeName: employee.name,
+    date: input.date,
+  });
+
+  const created = await prisma.tenantWishFreeRequest.create({
+    data: {
+      tenantId: access.tenantId,
+      employeeId: employee.id,
+      key,
+      date: input.date,
+      reason: input.reason.trim(),
+      status: "open",
+    },
+    include: {
+      employee: {
+        select: {
+          name: true,
+          location: true,
+          role: true,
+        },
+      },
+    },
+  });
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: access.tenantId },
+    select: { name: true },
+  });
+
+  await notifyManagersOfNewWishFreeRequest({
+    tenantId: access.tenantId,
+    tenantName: tenant?.name ?? "",
+    employeeName: employee.name,
+    requestId: created.id,
+    date: created.date,
+    reason: created.reason,
+  });
+
+  return toWishFreeRequest(created);
+}
+
+/** Eigene, noch offene Anfrage zurückziehen. Entschiedene bleiben stehen. */
+export async function deleteMyWishFreeRequest(input: {
+  tenantSlug: string;
+  requestId: string;
+}) {
+  const access = await requireTenantMembership(input.tenantSlug);
+  const employee = await prisma.tenantEmployee.findFirst({
+    where: { tenantId: access.tenantId, userId: access.userId },
+    select: { id: true },
+  });
+
+  if (!employee) {
+    throw new Error("Ihr Konto ist noch keiner Personalakte zugeordnet. Bitte an HR wenden.");
+  }
+
+  const request = await prisma.tenantWishFreeRequest.findFirst({
+    where: {
+      tenantId: access.tenantId,
+      employeeId: employee.id,
+      OR: [{ id: input.requestId }, { key: input.requestId }],
+    },
+    select: { id: true, status: true },
+  });
+
+  if (!request) {
+    throw new Error("Wunschfrei Anfrage nicht gefunden.");
+  }
+
+  if (request.status !== "open") {
+    throw new Error("Bereits entschiedene Anfragen lassen sich nicht mehr zurückziehen.");
+  }
+
+  await prisma.tenantWishFreeRequest.delete({ where: { id: request.id } });
 }

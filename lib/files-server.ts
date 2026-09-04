@@ -90,6 +90,7 @@ export async function getFileUploadOptions(
 function getReminderFileSource(record: {
   employeeId: string | null;
   locationId: string | null;
+  teamId: string | null;
 }): ReminderFileBrowserSource {
   if (record.employeeId) {
     return "employee";
@@ -99,14 +100,20 @@ function getReminderFileSource(record: {
     return "location";
   }
 
+  if (record.teamId) {
+    return "team";
+  }
+
   return "central";
 }
 
 function getReminderFileOwner(record: {
   employeeId: string | null;
   locationId: string | null;
+  teamId: string | null;
   employee?: { name: string } | null;
   location?: { name: string } | null;
+  team?: { name: string } | null;
 }) {
   if (record.employeeId) {
     return {
@@ -119,6 +126,13 @@ function getReminderFileOwner(record: {
     return {
       ownerId: record.locationId,
       ownerName: record.location?.name ?? "Standort",
+    };
+  }
+
+  if (record.teamId) {
+    return {
+      ownerId: record.teamId,
+      ownerName: record.team?.name ?? "Team",
     };
   }
 
@@ -140,6 +154,7 @@ export async function getReminderFileBrowserData(
       include: {
         employee: { select: { name: true } },
         location: { select: { name: true } },
+        team: { select: { name: true } },
         parent: { select: { accessRoleIdsJson: true, accessUserIdsJson: true } },
       },
     }),
@@ -149,6 +164,7 @@ export async function getReminderFileBrowserData(
       include: {
         employee: { select: { name: true } },
         location: { select: { name: true } },
+        team: { select: { name: true } },
       },
     }),
   ]);
@@ -208,6 +224,34 @@ export async function getReminderFileBrowserData(
  * bewusst ausgeklammert (employeeId/locationId/teamId alle null), analog zum
  * bestehenden Verhalten für Personalakte-/Standort-Dateien.
  */
+/**
+ * Kombiniert den Uploader-Scope mit den ausdrücklich geteilten Dateien.
+ *
+ * Ohne das versteckte "nur eigene"/"Team" auch jene Dateien, die jemandem
+ * gezielt freigegeben wurden (`accessUserIds`/`accessRoleIds` im Upload-
+ * Dialog): Ordner sind nicht scope-gefiltert, die Dateien darin schon — in
+ * der App waren die Ordner also da und blieben leer. Eine ausdrückliche
+ * Freigabe ist die stärkere Aussage und hebt den Uploader-Scope für genau
+ * diese Datei auf; die ACL-Prüfung (`canAccessFileAcl`) läuft danach
+ * unverändert weiter.
+ */
+function filesVisibilityWhere(
+  uploaderScopeWhere: Record<string, unknown>,
+  tenant: Awaited<ReturnType<typeof requireTenantAccess>>,
+) {
+  if (Object.keys(uploaderScopeWhere).length === 0) {
+    return {};
+  }
+
+  return {
+    OR: [
+      uploaderScopeWhere,
+      { accessUserIdsJson: { array_contains: [tenant.userId] } },
+      ...(tenant.roleId ? [{ accessRoleIdsJson: { array_contains: [tenant.roleId] } }] : []),
+    ],
+  };
+}
+
 async function filesUploaderScopeWhere(tenant: Awaited<ReturnType<typeof requireTenantAccess>>) {
   const scopeFilter = await resolveScopeFilter(tenant);
 
@@ -247,11 +291,28 @@ export type OwnerFileItem = {
   documentType: string;
   description?: string;
   folder: string;
+  /** Leerer String = kein Ordner ("Home"). Zum Gruppieren gegen `OwnerFolderItem.slug` matchen. */
+  folderSlug: string;
   sizeBytes: number;
   mimeType: string;
   /** ISO-8601 */
   updatedAt: string;
   version: number;
+  /** Nur bei `ownerType: "employee"` bedeutsam: vor dem Mitarbeiter selbst verborgen. */
+  hiddenFromEmployee: boolean;
+};
+
+export type OwnerFolderItem = {
+  id: string;
+  name: string;
+  /** Vollständiger Ordnerpfad (mehrstufig, `/`-getrennt) — Schlüssel der Navigation. */
+  slug: string;
+  locked: boolean;
+  fileCount: number;
+  /** ISO-8601 */
+  updatedAt: string;
+  /** Nur bei `ownerType: "employee"` bedeutsam: Ordner samt Inhalt vor dem Mitarbeiter selbst verborgen. */
+  hiddenFromEmployee: boolean;
 };
 
 /**
@@ -264,12 +325,20 @@ export type OwnerFileItem = {
  * Rechte wie beim Upload derselben Dateien (storage.service.ts): `files:read`
  * **und** Leserecht im Fachbereich des Eigentümers, dazu Datei-ACL und der
  * `files`-Scope auf den Uploader.
+ *
+ * Liefert zusätzlich die (flache, nicht verschachtelte) Ordnerliste dieses
+ * Eigentümers — Dateien werden weiterhin ungefiltert als eine flache Liste
+ * zurückgegeben (mit `folderSlug` zum clientseitigen Gruppieren), analog zu
+ * `getFilesPageData().files`, das ebenfalls unabhängig vom aktuell
+ * angezeigten Ordner immer die volle Liste liefert — der eigentliche
+ * PIN-Schutz greift beim Herunterladen (`signed-url`-Route), nicht bereits
+ * beim Auflisten.
  */
 export async function getOwnerFiles(input: {
   tenantSlug: string;
   ownerType: OwnerScopedFileOwnerType;
   ownerId: string;
-}): Promise<OwnerFileItem[]> {
+}): Promise<{ files: OwnerFileItem[]; folders: OwnerFolderItem[] }> {
   const tenant = await requireTenantAccess(input.tenantSlug, "files", "read");
   const area =
     input.ownerType === "employee"
@@ -280,23 +349,39 @@ export async function getOwnerFiles(input: {
 
   await requireTenantAccess(input.tenantSlug, area, "read");
 
-  const uploaderScopeWhere = await filesUploaderScopeWhere(tenant);
-  const records = await prisma.tenantFile.findMany({
-    where: {
-      tenantId: tenant.tenantId,
-      employeeId: input.ownerType === "employee" ? input.ownerId : undefined,
-      locationId: input.ownerType === "location" ? input.ownerId : undefined,
-      teamId: input.ownerType === "team" ? input.ownerId : undefined,
-      status: "active",
-      ...uploaderScopeWhere,
-    },
-    orderBy: { updatedAt: "desc" },
-    include: {
-      parent: { select: { accessRoleIdsJson: true, accessUserIdsJson: true } },
-    },
-  });
+  const ownerFilter = {
+    employeeId: input.ownerType === "employee" ? input.ownerId : undefined,
+    locationId: input.ownerType === "location" ? input.ownerId : undefined,
+    teamId: input.ownerType === "team" ? input.ownerId : undefined,
+  };
 
-  return records
+  const uploaderScopeWhere = await filesUploaderScopeWhere(tenant);
+  const [records, folderRecords] = await Promise.all([
+    prisma.tenantFile.findMany({
+      where: {
+        tenantId: tenant.tenantId,
+        ...ownerFilter,
+        status: "active",
+        ...filesVisibilityWhere(uploaderScopeWhere, tenant),
+      },
+      orderBy: { updatedAt: "desc" },
+      include: {
+        parent: { select: { accessRoleIdsJson: true, accessUserIdsJson: true } },
+      },
+    }),
+    // Alle Ebenen, nicht nur die oberste: die App navigiert über
+    // `slug` (= Ordnerpfad) auch in Unterordner.
+    prisma.tenantFileFolder.findMany({
+      where: {
+        tenantId: tenant.tenantId,
+        ...ownerFilter,
+        status: "active",
+      },
+      orderBy: { name: "asc" },
+    }),
+  ]);
+
+  const files = records
     .filter((file) => canAccessFileAcl(file.parent ?? file, tenant))
     .map((file) => ({
       id: file.id,
@@ -304,14 +389,48 @@ export async function getOwnerFiles(input: {
       documentType: file.documentType || "Sonstiges",
       description: file.description || undefined,
       folder: file.folderName,
+      folderSlug: file.folderSlug,
       sizeBytes: file.sizeBytes,
       mimeType: file.mimeType,
       updatedAt: (file.updatedAt ?? file.createdAt).toISOString(),
       version: file.version,
+      hiddenFromEmployee: file.hiddenFromEmployee,
     }));
+
+  const folders = folderRecords.map((folder) => ({
+    id: folder.id,
+    name: folder.name,
+    slug: folder.path,
+    locked: folder.locked,
+    fileCount: files.filter((file) => file.folderSlug === folder.path).length,
+    updatedAt: (folder.updatedAt ?? folder.createdAt).toISOString(),
+    hiddenFromEmployee: folder.hiddenFromEmployee,
+  }));
+
+  return { files, folders };
 }
 
-export async function getFilesPageData(tenantSlug: string, path: string[] = []) {
+/**
+ * `t` fehlt beim Aufruf aus `GET /api/tenants/[tenant]/files` (keine next-intl-
+ * Übersetzung dort) — Default liefert dieselben deutschen Texte wie vor der
+ * i18n-Umstellung, damit sich diese API-Antwort für die App nicht ändert.
+ */
+const defaultFileMetricLabels: Record<string, string> = {
+  metricFoldersLabel: "Ordner",
+  metricFoldersCaption: "strukturierte Ablage",
+  metricFilesLabel: "Dateien",
+  metricFilesCaption: "aktive Dateien",
+  metricProtectedLabel: "Geschützt",
+  metricProtectedCaption: "eingeschränkte Zugriffe",
+  metricUploadsLabel: "Uploads",
+  metricUploadsCaption: "aus Storage",
+};
+
+export async function getFilesPageData(
+  tenantSlug: string,
+  path: string[] = [],
+  t: (key: string) => string = (key) => defaultFileMetricLabels[key] ?? key,
+) {
   const tenant = await requireTenantAccess(tenantSlug, "files", "read");
   const uploaderScopeWhere = await filesUploaderScopeWhere(tenant);
   const tenantFileRecords = await prisma.tenantFile.findMany({
@@ -321,7 +440,7 @@ export async function getFilesPageData(tenantSlug: string, path: string[] = []) 
           locationId: null,
           teamId: null,
           status: "active",
-          ...uploaderScopeWhere,
+          ...filesVisibilityWhere(uploaderScopeWhere, tenant),
         },
         orderBy: { updatedAt: "desc" },
         include: {
@@ -418,24 +537,24 @@ export async function getFilesPageData(tenantSlug: string, path: string[] = []) 
       : undefined;
   const metrics = [
     {
-      label: "Ordner",
+      label: t("metricFoldersLabel"),
       value: folders.length.toString(),
-      caption: "strukturierte Ablage",
+      caption: t("metricFoldersCaption"),
     },
     {
-      label: "Dateien",
+      label: t("metricFilesLabel"),
       value: storedFiles.length.toString(),
-      caption: "aktive Dateien",
+      caption: t("metricFilesCaption"),
     },
     {
-      label: "Geschützt",
+      label: t("metricProtectedLabel"),
       value: storedFiles.filter((file) => file.locked || file.storageFileId).length.toString(),
-      caption: "eingeschränkte Zugriffe",
+      caption: t("metricProtectedCaption"),
     },
     {
-      label: "Uploads",
+      label: t("metricUploadsLabel"),
       value: storedFiles.length.toString(),
-      caption: "aus Storage",
+      caption: t("metricUploadsCaption"),
     },
   ];
 

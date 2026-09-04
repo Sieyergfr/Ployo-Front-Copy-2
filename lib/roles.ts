@@ -36,6 +36,8 @@ export type PermissionRole = {
   description: string;
   members: number;
   isSystem: boolean;
+  /** Tab "Alles" in der Mitarbeiter-App (siehe TenantRole.appOverviewEnabled). */
+  appOverviewEnabled: boolean;
   permissions: Record<string, PermissionLevel>;
   scopes: Record<string, PermissionScope>;
   canDelete: Record<string, boolean>;
@@ -103,7 +105,7 @@ export const permissionAreas: PermissionArea[] = [
  */
 export const defaultPermissionRoles: Omit<
   PermissionRole,
-  "id" | "members" | "canDelete" | "canUploadFiles" | "canEditFiles" | "canViewFiles" | "canViewAudit" | "shiftsLevel"
+  "id" | "members" | "appOverviewEnabled" | "canDelete" | "canUploadFiles" | "canEditFiles" | "canViewFiles" | "canViewAudit" | "shiftsLevel"
 >[] = [
   {
     key: "hr-lead",
@@ -184,7 +186,11 @@ export const defaultPermissionRoles: Omit<
       vacation: "write",
       sickness: "write",
       shifts: "read",
-      reminders: "read",
+      // Erinnerungen sind ein Verwaltungswerkzeug (Fristen, Wiedervorlagen,
+      // Eskalationen des Betriebs) und mandantenweit skopiert — ein einfaches
+      // Mitgliedskonto hatte damit Einblick in Vorgaenge, die es nichts
+      // angehen. Wer sie braucht, bekommt sie ueber eine eigene Rolle.
+      reminders: "none",
       audit: "none",
       roles: "none",
       settings: "none",
@@ -237,6 +243,10 @@ export const permissionRoles: PermissionRole[] = defaultPermissionRoles.map((rol
   ...role,
   id: role.key,
   members: 0,
+  // Standard: wer den Schichtplan schreiben darf, plant auch — für die ist
+  // der Gesamtüberblick der App gedacht. Reine Leserollen (u. a.
+  // "Mitarbeiter") bekommen ihn nicht.
+  appOverviewEnabled: hasPermissionLevel(role.permissions.shifts ?? "none", "write"),
   scopes: { ...fullPermissionScopeSet(), ...role.scopes },
   ...deriveCapabilitiesFromLevels(role.permissions),
   shiftsLevel: emptyShiftsLevelSet(),

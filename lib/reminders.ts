@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth";
+import { recordTenantAudit } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 import { headers } from "next/headers";
 import { requireTenantAccess, resolveScopeFilter, type TenantAccess } from "@/lib/tenant-access";
@@ -28,26 +29,9 @@ export type Reminder = {
   teamName: string | null;
 };
 
-export const reminderPriorityConfig = {
-  urgent: {
-    label: "Dringend",
-    daysClassName: "text-danger",
-    badgeClassName: "bg-danger/10 text-danger font-semibold",
-    rowClassName: "border-danger/25",
-  },
-  important: {
-    label: "Wichtig",
-    daysClassName: "text-[#7A4E00]",
-    badgeClassName: "bg-warning/10 text-[#7A4E00] font-semibold",
-    rowClassName: "border-border",
-  },
-  normal: {
-    label: "Normal",
-    daysClassName: "text-muted-2",
-    badgeClassName: "bg-border-soft text-muted",
-    rowClassName: "border-border",
-  },
-} satisfies Record<
+export function getReminderPriorityConfig(
+  t: (key: string) => string,
+): Record<
   ReminderPriority,
   {
     label: string;
@@ -55,7 +39,28 @@ export const reminderPriorityConfig = {
     badgeClassName: string;
     rowClassName: string;
   }
->;
+> {
+  return {
+    urgent: {
+      label: t("priorityUrgent"),
+      daysClassName: "text-danger",
+      badgeClassName: "bg-danger/10 text-danger font-semibold",
+      rowClassName: "border-danger/25",
+    },
+    important: {
+      label: t("priorityImportant"),
+      daysClassName: "text-[#7A4E00]",
+      badgeClassName: "bg-warning/10 text-[#7A4E00] font-semibold",
+      rowClassName: "border-border",
+    },
+    normal: {
+      label: t("priorityNormal"),
+      daysClassName: "text-muted-2",
+      badgeClassName: "bg-border-soft text-muted",
+      rowClassName: "border-border",
+    },
+  };
+}
 
 function normalizeLinkedFiles(value?: string[]) {
   return Array.from(
@@ -274,7 +279,10 @@ export async function getRemindersForTenant(tenantSlug: string) {
   return records.map(toReminder);
 }
 
-export function buildReminderMetrics(reminders: Reminder[]): ReminderMetric[] {
+export function buildReminderMetrics(
+  reminders: Reminder[],
+  t: (key: string) => string,
+): ReminderMetric[] {
   const urgent = reminders.filter((reminder) => reminder.daysLeft <= 7);
   const expired = reminders.filter((reminder) => reminder.daysLeft < 0);
   const done = reminders.filter((reminder) => reminder.status === "done");
@@ -283,40 +291,40 @@ export function buildReminderMetrics(reminders: Reminder[]): ReminderMetric[] {
 
   return [
     {
-      label: "Offen gesamt",
+      label: t("metricOpenTotalLabel"),
       value: reminders.length.toString(),
-      caption: "aktive Erinnerungen",
+      caption: t("metricOpenTotalCaption"),
     },
     {
-      label: "Dringend",
+      label: t("priorityUrgent"),
       value: urgent.length.toString(),
-      caption: "< 7 Tage fällig",
+      caption: t("metricUrgentCaption"),
       tone: urgent.length > 0 ? "danger" : undefined,
     },
     {
-      label: "Abgelaufen",
+      label: t("expiredBadge"),
       value: expired.length.toString(),
-      caption: "überfällige Fristen",
+      caption: t("metricExpiredCaption"),
       tone: expired.length > 0 ? "danger" : undefined,
     },
     {
-      label: "Erledigt",
+      label: t("metricDoneLabel"),
       value: done.length.toString(),
-      caption: "archiviert",
+      caption: t("metricDoneCaption"),
       tone: "success",
     },
     {
-      label: "N\u00e4chste Frist",
+      label: t("metricNextDeadlineLabel"),
       value: next ? String(nextIsExpired ? Math.abs(next.daysLeft) : next.daysLeft) : "-",
       caption: next
-        ? `${nextIsExpired ? "Tage \u00fcberf\u00e4llig" : "Tage"} \u00b7 ${next.title}`
-        : "keine offene Frist",
+        ? `${nextIsExpired ? t("metricNextDeadlineCaptionOverdue") : t("daysUnit")} · ${next.title}`
+        : t("metricNextDeadlineCaptionEmpty"),
       tone: next && next.daysLeft <= 7 ? "danger" : undefined,
     },
   ];
 }
 
-export function buildReminderFilters(reminders: Reminder[]) {
+export function buildReminderFilters(reminders: Reminder[], t: (key: string) => string) {
   const urgentCount = reminders.filter((reminder) => reminder.daysLeft <= 7).length;
   const expiredCount = reminders.filter((reminder) => reminder.daysLeft < 0).length;
   const categories = Array.from(
@@ -324,9 +332,9 @@ export function buildReminderFilters(reminders: Reminder[]) {
   );
 
   return [
-    `Alle (${reminders.length})`,
-    `Abgelaufen (${expiredCount})`,
-    `Dringend (${urgentCount})`,
+    `${t("filterAll")} (${reminders.length})`,
+    `${t("expiredBadge")} (${expiredCount})`,
+    `${t("priorityUrgent")} (${urgentCount})`,
     ...categories.map(
       (category) =>
         `${category} (${reminders.filter((reminder) => reminder.category === category).length})`,
@@ -410,6 +418,53 @@ export async function createTenantReminder(input: {
   });
 }
 
+/**
+ * Erinnerung, angelegt durch einen Hintergrundjob (cron/cleanup), nicht
+ * durch einen eingeloggten Nutzer — deshalb ohne
+ * `requireTenantAccess`/Berechtigungsprüfung, analog zu den übrigen
+ * direkten Prisma-Schreibzugriffen im Cron-Job. Idempotent über den exakten
+ * Titel: ein zweiter Lauf für dieselbe Fälligkeit legt keine zweite
+ * Erinnerung an.
+ */
+export async function createSystemTenantReminder(input: {
+  tenantId: string;
+  title: string;
+  dueDate: string;
+  priority?: string;
+  subject?: string;
+  category?: string;
+  notes?: string;
+}) {
+  const existing = await prisma.tenantReminder.findFirst({
+    where: { tenantId: input.tenantId, title: input.title },
+    select: { id: true },
+  });
+
+  if (existing) {
+    return { reminder: existing, created: false as const };
+  }
+
+  const key = await createUniqueReminderKey({ tenantId: input.tenantId, title: input.title });
+
+  const reminder = await prisma.tenantReminder.create({
+    data: {
+      tenantId: input.tenantId,
+      key,
+      title: input.title,
+      dueDate: input.dueDate,
+      priority: normalizePriority(input.priority),
+      subject: input.subject?.trim() ?? "",
+      category: input.category?.trim() || "Löschkonzept",
+      notes: input.notes?.trim() ?? "",
+      linkedFilesJson: [],
+      createdById: "system",
+      createdByName: "System (Löschkonzept)",
+    },
+  });
+
+  return { reminder, created: true as const };
+}
+
 export async function updateTenantReminder(input: {
   tenantSlug: string;
   reminderId: string;
@@ -479,11 +534,31 @@ export async function completeTenantReminder(input: {
     throw new Error("FORBIDDEN");
   }
 
-  return prisma.tenantReminder.updateMany({
+  const reminder = await prisma.tenantReminder.findFirst({
+    where: { id: input.reminderId, tenantId: access.tenantId },
+    select: { id: true, title: true },
+  });
+
+  const result = await prisma.tenantReminder.updateMany({
     where: { id: input.reminderId, tenantId: access.tenantId },
     data: {
       status: "done",
       completedAt: new Date(),
     },
   });
+
+  if (reminder) {
+    await recordTenantAudit({
+      tenantId: access.tenantId,
+      actorId: access.userId,
+      actorName: access.userName,
+      action: "Erinnerung erledigt",
+      source: "Erinnerungen",
+      entityType: "reminder",
+      entityId: reminder.id,
+      detail: reminder.title,
+    });
+  }
+
+  return result;
 }

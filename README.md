@@ -39,6 +39,7 @@ Ohne SMTP-Konfiguration werden E-Mails (Passwort-Reset, Einladungen) im Dev-Modu
 - **Health-Check:** `GET /api/health`
 - **Retention-/Aufräumjob:** `GET /api/cron/cleanup` mit Header `Authorization: Bearer $CRON_SECRET` — täglich per externem Scheduler aufrufen (löscht abgelaufene Sessions, alte Audit-Logs gemäß Mandanten-Einstellung, endgültig zu löschende Dateien inkl. S3-Objekt).
 - **Datenexport (eigenes Konto):** `GET /api/me/export`
+- **Virenscan:** Jeder Datei-Upload (HR-Dateien, Verträge, Gehaltsabrechnungen, Self-Service-Dokumente, Avatare) läuft vor dem Speichern durch `lib/storage/virus-scan.ts` (`assertNoVirus`) gegen einen lokalen `clamd` (`clamav-daemon`, Unix-Socket `/var/run/clamav/clamd.ctl`). Fail-closed: Ist `clamd` nicht erreichbar, wird der Upload abgelehnt statt ungescannt durchgereicht. Auf dem Host müssen `clamav-daemon` und `clamav-freshclam` installiert und aktiv sein (`apt install clamav-daemon clamav-freshclam`, beide Services per systemd enabled — `freshclam` hält die Signaturen automatisch aktuell).
 
 ## Architektur-Notizen
 

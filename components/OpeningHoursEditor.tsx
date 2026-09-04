@@ -121,18 +121,21 @@ export function OpeningHoursEditor({
       ) : (
         <>
           <input type="hidden" name={name} value={JSON.stringify(days)} form={formId} />
-          <div className="flex flex-col gap-2.5">
+          {/* Wochentage nebeneinander statt untereinander: gestapelt war die
+              Liste im Bearbeiten-Modus unnötig lang, obwohl die Zeile die volle
+              Breite hat. */}
+          <div className="grid gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(240px,1fr))]">
             {days.map((day) => (
               <div
                 key={day.weekday}
                 className="rounded-[10px] border border-border-light bg-bg p-2.5"
               >
-                <div className="flex items-center gap-2.5">
-                  <span className="w-[92px] shrink-0 text-[12.5px] font-medium text-ink">
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[12.5px] font-medium text-ink">
                     {WEEKDAY_LABELS[day.weekday]}
                   </span>
                   <select
-                    className="input w-auto cursor-pointer bg-white"
+                    className="input w-full cursor-pointer bg-white sm:w-auto"
                     value={day.mode}
                     onChange={(event) => {
                       const mode = event.target.value as OpeningHoursMode;

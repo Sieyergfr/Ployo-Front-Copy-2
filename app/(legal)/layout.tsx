@@ -17,21 +17,27 @@ export default function LegalLayout({
           Anmelden
         </Link>
       </header>
-      <main className="mx-auto w-full max-w-3xl flex-1 px-6 py-8">
+      <main className="mx-auto w-full max-w-3xl flex-1 min-h-0 overflow-y-auto px-6 py-8">
         {children}
       </main>
       <footer className="border-t border-border-soft">
         <div className="mx-auto flex w-full max-w-3xl flex-wrap items-center justify-between gap-2 px-6 py-5 text-[12.5px] text-muted">
           <span>© {new Date().getFullYear()} Ployo</span>
-          <nav className="flex gap-4">
+          <nav className="flex flex-wrap gap-4">
             <Link href="/datenschutz" className="hover:text-ink">
               Datenschutz
             </Link>
             <Link href="/impressum" className="hover:text-ink">
               Impressum
             </Link>
+            <Link href="/kontakt" className="hover:text-ink">
+              Kontakt
+            </Link>
             <Link href="/agb" className="hover:text-ink">
               AGB
+            </Link>
+            <Link href="/konto-loeschung" className="hover:text-ink">
+              Konto löschen
             </Link>
             <CookieSettingsLink className="cursor-pointer hover:text-ink" />
           </nav>

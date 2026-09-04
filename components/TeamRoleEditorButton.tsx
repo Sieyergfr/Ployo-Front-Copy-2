@@ -5,6 +5,7 @@ import FormSubmitButton from "@/components/FormSubmitButton";
 import { useUniversalPopup } from "@/components/UniversalPopup";
 import type { TeamMember } from "@/lib/teams";
 import { Crown, Pencil, Save } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 export default function TeamRoleEditorButton({
   tenant,
@@ -17,6 +18,7 @@ export default function TeamRoleEditorButton({
   teamHandle: string;
   member: TeamMember;
 }) {
+  const t = useTranslations("TeamRoleEditorButton");
   const { openPopup, closePopup } = useUniversalPopup();
   const memberId = member.id ?? "";
 
@@ -26,7 +28,7 @@ export default function TeamRoleEditorButton({
       className="btn btn-secondary btn-sm px-3"
       onClick={() =>
         openPopup({
-          title: "Teamrolle bearbeiten",
+          title: t("editTeamRole"),
           content: (
             <form className="flex flex-col gap-4" action={updateTeamMemberAction}>
               <input type="hidden" name="tenant" value={tenant} />
@@ -39,14 +41,14 @@ export default function TeamRoleEditorButton({
               </div>
               <div className="field">
                 <label htmlFor="team-role-text" className="label">
-                  Rolle im Team
+                  {t("roleInTeam")}
                 </label>
                 <input
                   id="team-role-text"
                   name="role"
                   className="input"
                   defaultValue={member.role}
-                  placeholder="z. B. Schichtleitung, Kassiererin"
+                  placeholder={t("roleInTeamPlaceholder")}
                   required
                 />
               </div>
@@ -61,19 +63,19 @@ export default function TeamRoleEditorButton({
                 <span className="checkbox-label">
                   <span className="inline-flex items-center gap-1.5">
                     <Crown size={13} />
-                    Als Teamleitung markieren
+                    {t("markAsTeamLead")}
                   </span>
                 </span>
               </label>
               <div className="mt-1 flex justify-end gap-2.5 border-t border-border-soft pt-4">
                 <button type="button" className="btn btn-secondary" onClick={closePopup}>
-                  Abbrechen
+                  {t("cancel")}
                 </button>
                 <FormSubmitButton
                   Icon={Save}
-                  pendingLabel="Wird gespeichert..."
+                  pendingLabel={t("saving")}
                 >
-                  Speichern
+                  {t("save")}
                 </FormSubmitButton>
               </div>
             </form>
@@ -82,7 +84,7 @@ export default function TeamRoleEditorButton({
       }
     >
       <Pencil size={13} />
-      Rolle
+      {t("role")}
     </button>
   );
 }

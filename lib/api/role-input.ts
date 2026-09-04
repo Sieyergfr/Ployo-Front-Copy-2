@@ -79,6 +79,8 @@ export function parseRolePermissions(body: Record<string, unknown>) {
   }
 
   return {
+    appOverviewEnabled:
+      typeof body.appOverviewEnabled === "boolean" ? body.appOverviewEnabled : undefined,
     permissions,
     scopes,
     canDelete,

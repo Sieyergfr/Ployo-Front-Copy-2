@@ -34,7 +34,10 @@ import {
   Upload,
   UploadCloud,
 } from "lucide-react";
-import { type ReactNode, useState, useTransition } from "react";
+import { useTranslations } from "next-intl";
+import { type ReactNode, useRef, useState, useTransition } from "react";
+
+type T = ReturnType<typeof useTranslations>;
 
 const previewableFileTypes = new Set(["PDF", "PNG", "JPG", "JPEG"]);
 const documentTypes = [
@@ -52,13 +55,13 @@ const documentTypes = [
   "Sonstiges",
 ];
 
-function validateUploadFileClientSide(file: File) {
+function validateUploadFileClientSide(file: File, t: T) {
   if (!isAllowedUploadFile(file)) {
-    return "Dieser Dateityp wird nicht unterstützt (erlaubt: PDF, Bilder, Office-Dokumente, TXT, CSV, ZIP).";
+    return t("unsupportedFileType");
   }
 
   if (file.size > MAX_UPLOAD_BYTES) {
-    return "Die Datei ist zu groß (maximal 15 MB).";
+    return t("fileTooLarge");
   }
 
   return null;
@@ -78,6 +81,7 @@ function CreateFolderForm({
   ownerId,
   parentPath,
   onDone,
+  t,
 }: {
   tenant: string;
   returnPath: string;
@@ -85,6 +89,7 @@ function CreateFolderForm({
   ownerId?: string;
   parentPath?: string;
   onDone: () => void;
+  t: T;
 }) {
   const [isLocked, setIsLocked] = useState(false);
 
@@ -98,26 +103,26 @@ function CreateFolderForm({
 
       <div className="field">
         <label htmlFor="folder-name" className="label">
-          Ordnername
+          {t("folderNameLabel")}
         </label>
         <input
           id="folder-name"
           name="name"
           className="input"
-          placeholder="z. B. Verträge 2026"
+          placeholder={t("folderNamePlaceholder")}
           required
         />
       </div>
 
       <div className="field">
         <label htmlFor="folder-owner" className="label">
-          Verantwortlich
+          {t("responsibleLabel")}
         </label>
         <input
           id="folder-owner"
           name="ownerName"
           className="input"
-          placeholder="HR-Team"
+          placeholder={t("responsiblePlaceholder")}
         />
       </div>
 
@@ -130,13 +135,13 @@ function CreateFolderForm({
           onChange={(event) => setIsLocked(event.target.checked)}
         />
         <span className="checkbox" />
-        <span className="checkbox-label">Ordner schützen</span>
+        <span className="checkbox-label">{t("protectFolderLabel")}</span>
       </label>
 
       {isLocked && (
         <div className="field">
           <label htmlFor="folder-pin" className="label">
-            PIN (6 Ziffern)
+            {t("pinLabel")}
           </label>
           <input
             id="folder-pin"
@@ -145,22 +150,22 @@ function CreateFolderForm({
             inputMode="numeric"
             pattern="\d{6}"
             maxLength={6}
-            placeholder="z. B. 482913"
+            placeholder={t("pinPlaceholder")}
             required={isLocked}
           />
           <p className="m-0 text-[11px] text-muted">
-            Diese PIN wird zum Öffnen des Ordners benötigt.
+            {t("pinHint")}
           </p>
         </div>
       )}
 
       <div className="mt-1 flex justify-end gap-2.5 border-t border-border-soft pt-4">
         <button type="button" className="btn btn-secondary" onClick={onDone}>
-          Abbrechen
+          {t("cancel")}
         </button>
         <button type="submit" className="btn btn-primary" disabled={!tenant}>
           <FolderPlus size={15} />
-          Ordner erstellen
+          {t("createFolder")}
         </button>
       </div>
     </form>
@@ -217,11 +222,13 @@ function AccessMultiSelect({
   name,
   options,
   placeholder,
+  t,
 }: {
   id: string;
   name: string;
   options: FileUploadOption[];
   placeholder: string;
+  t: T;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -233,7 +240,7 @@ function AccessMultiSelect({
       ? placeholder
       : selectedOptions.length === 1
         ? selectedOptions[0].name
-        : `${selectedOptions.length} ausgewählt`;
+        : t("selectedCount", { count: selectedOptions.length });
 
   function toggleOption(optionId: string) {
     setSelectedIds((current) =>
@@ -308,7 +315,7 @@ function AccessMultiSelect({
               })
             ) : (
               <div className="px-2.5 py-2 text-[12.5px] text-muted">
-                Keine Optionen verfügbar
+                {t("optionsUnavailable")}
               </div>
             )}
           </div>
@@ -346,6 +353,7 @@ function UploadFileForm({
   folderOptions = [],
   uploadOptions = emptyUploadOptions,
   onDone,
+  t,
 }: {
   tenant: string;
   returnPath: string;
@@ -356,13 +364,33 @@ function UploadFileForm({
   folderOptions?: FileFolder[];
   uploadOptions?: FileUploadOptions;
   onDone: () => void;
+  t: T;
 }) {
   const [selectedFileName, setSelectedFileName] = useState("");
   const [selectedFolderName, setSelectedFolderName] = useState("");
   const [hasExpiry, setHasExpiry] = useState(false);
   const [hasReminder, setHasReminder] = useState(false);
   const [fileError, setFileError] = useState("");
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const needsFolderSelection = !folderSlug;
+
+  /** Gemeinsam für Dateiauswahl und Drop — dieselbe Prüfung, dieselbe Anzeige. */
+  const acceptFile = (file: File | undefined) => {
+    const validationError = file ? validateUploadFileClientSide(file, t) : null;
+
+    if (!file || validationError) {
+      setFileError(validationError ?? "");
+      setSelectedFileName("");
+
+      return false;
+    }
+
+    setFileError("");
+    setSelectedFileName(file.name);
+
+    return true;
+  };
 
   return (
     <form className="flex flex-col gap-4" action={uploadHrFileAction}>
@@ -379,20 +407,44 @@ function UploadFileForm({
 
       <label
         htmlFor="file-upload"
-        className="flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-border bg-bg px-4 py-8 text-center transition-colors hover:border-muted"
+        className={`flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed px-4 py-8 text-center transition-colors ${
+          isDragging ? "border-ink bg-white" : "border-border bg-bg hover:border-muted"
+        }`}
+        onDragOver={(event) => {
+          if (!event.dataTransfer.types.includes("Files")) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "copy";
+          setIsDragging(true);
+        }}
+        onDragLeave={() => setIsDragging(false)}
+        onDrop={(event) => {
+          if (!event.dataTransfer.files?.length) return;
+          event.preventDefault();
+          setIsDragging(false);
+
+          // Die Datei muss im echten <input type="file"> landen, sonst geht
+          // sie beim Absenden des Formulars nicht mit.
+          if (acceptFile(event.dataTransfer.files[0]) && fileInputRef.current) {
+            const transfer = new DataTransfer();
+
+            transfer.items.add(event.dataTransfer.files[0]);
+            fileInputRef.current.files = transfer.files;
+          }
+        }}
       >
         <FileUp size={24} className="mb-3 text-muted-2" />
         <span className="text-[13.5px] font-semibold text-ink">
-          Datei auswählen
+          {isDragging ? t("dropHere") : t("chooseOrDropFile")}
         </span>
         <span className="mt-1 max-w-full truncate text-[12px] text-muted">
-          {selectedFileName || "PDF, DOCX, PNG oder JPG"}
+          {selectedFileName || t("allowedTypesHint")}
         </span>
       </label>
       {fileError && (
         <p className="-mt-2 text-[12px] text-danger">{fileError}</p>
       )}
       <input
+        ref={fileInputRef}
         id="file-upload"
         name="file"
         type="file"
@@ -400,18 +452,9 @@ function UploadFileForm({
         accept={uploadAcceptAttribute}
         required
         onChange={(event) => {
-          const file = event.currentTarget.files?.[0];
-          const validationError = file ? validateUploadFileClientSide(file) : null;
-
-          if (validationError) {
-            setFileError(validationError);
-            setSelectedFileName("");
+          if (!acceptFile(event.currentTarget.files?.[0])) {
             event.currentTarget.value = "";
-            return;
           }
-
-          setFileError("");
-          setSelectedFileName(file?.name ?? "");
         }}
       />
 
@@ -420,7 +463,7 @@ function UploadFileForm({
           <div className="field">
             <input type="hidden" name="folderName" value={selectedFolderName} />
             <label htmlFor="file-folder-slug" className="label">
-              Zielordner
+              {t("targetFolderLabel")}
             </label>
             <select
               id="file-folder-slug"
@@ -437,7 +480,7 @@ function UploadFileForm({
               }}
             >
               <option value="">
-                Home
+                {t("homeOption")}
               </option>
               {folderOptions.map((folder) => (
                 <option key={folder.slug} value={folder.path ?? folder.slug}>
@@ -450,13 +493,13 @@ function UploadFileForm({
 
         <div className="field">
           <label htmlFor="file-owner" className="label">
-            Verantwortlich
+            {t("responsibleLabel")}
           </label>
           <input
             id="file-owner"
             name="ownerName"
             className="input"
-            placeholder="HR-Team"
+            placeholder={t("responsiblePlaceholder")}
           />
         </div>
       </div>
@@ -464,16 +507,16 @@ function UploadFileForm({
       <div className="pt-1">
         <div className="mb-3 flex items-center gap-3">
           <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-muted">
-            Einstellungen
+            {t("settingsLabel")}
           </span>
           <span className="h-px flex-1 bg-border-soft" />
         </div>
 
-        <UploadSettingsGroup title="Dokument & Gültigkeit">
+        <UploadSettingsGroup title={t("groupDocumentValidity")}>
           <div className="grid gap-3 px-4 py-3 sm:grid-cols-2">
           <div className="field">
             <label htmlFor="file-document-type" className="label">
-              Dokumententyp
+              {t("documentTypeLabel")}
             </label>
             <select
               id="file-document-type"
@@ -491,22 +534,22 @@ function UploadFileForm({
 
           <div className="field">
             <label htmlFor="file-valid-from" className="label">
-              Gültig ab
+              {t("validFromLabel")}
             </label>
             <DatePickerField
               id="file-valid-from"
               name="validFrom"
-              placeholder="Optional"
+              placeholder={t("optionalPlaceholder")}
             />
           </div>
           </div>
         </UploadSettingsGroup>
 
-        <UploadSettingsGroup title="Zuweisung" className="mt-2">
+        <UploadSettingsGroup title={t("groupAssignment")} className="mt-2">
           <div className="grid gap-3 px-4 py-3 sm:grid-cols-2">
           <div className="field">
             <label htmlFor="file-assigned-employee" className="label">
-              Mitarbeiter zuweisen
+              {t("assignEmployeeLabel")}
             </label>
             <select
               id="file-assigned-employee"
@@ -514,7 +557,7 @@ function UploadFileForm({
               className="input cursor-pointer"
               defaultValue=""
             >
-              <option value="">Nicht zuweisen</option>
+              <option value="">{t("doNotAssign")}</option>
               {uploadOptions.employees.map((employee) => (
                 <option key={employee.id} value={employee.id}>
                   {employee.name}
@@ -525,7 +568,7 @@ function UploadFileForm({
 
           <div className="field">
             <label htmlFor="file-assigned-location" className="label">
-              Standort zuweisen
+              {t("assignLocationLabel")}
             </label>
             <select
               id="file-assigned-location"
@@ -533,7 +576,7 @@ function UploadFileForm({
               className="input cursor-pointer"
               defaultValue=""
             >
-              <option value="">Nicht zuweisen</option>
+              <option value="">{t("doNotAssign")}</option>
               {uploadOptions.locations.map((location) => (
                 <option key={location.id} value={location.id}>
                   {location.name}
@@ -544,7 +587,7 @@ function UploadFileForm({
           </div>
         </UploadSettingsGroup>
 
-        <UploadSettingsGroup title="Fristen & Erinnerung" className="mt-2">
+        <UploadSettingsGroup title={t("groupDeadlinesReminder")} className="mt-2">
           <div className="grid gap-3 px-4 py-3 sm:grid-cols-2">
           <label className="checkbox-row">
             <input
@@ -554,7 +597,7 @@ function UploadFileForm({
               onChange={(event) => setHasExpiry(event.currentTarget.checked)}
             />
             <span className="checkbox" />
-            <span className="checkbox-label">Ablaufdatum setzen</span>
+            <span className="checkbox-label">{t("setExpiryLabel")}</span>
           </label>
 
           <label className="checkbox-row">
@@ -566,7 +609,7 @@ function UploadFileForm({
               onChange={(event) => setHasReminder(event.currentTarget.checked)}
             />
             <span className="checkbox" />
-            <span className="checkbox-label">Erinnerung setzen</span>
+            <span className="checkbox-label">{t("setReminderLabel")}</span>
           </label>
           </div>
 
@@ -581,12 +624,12 @@ function UploadFileForm({
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="field">
               <label htmlFor="file-expires-at" className="label">
-                Ablaufdatum
+                {t("expiryDateLabel")}
               </label>
               <DatePickerField
                 id="file-expires-at"
                 name="expiresAt"
-                placeholder="Datum auswählen"
+                placeholder={t("pickDatePlaceholder")}
               />
             </div>
 
@@ -596,73 +639,75 @@ function UploadFileForm({
               }`}
             >
               <label htmlFor="file-reminder-at" className="label">
-                Erinnerung
+                {t("reminderLabel")}
               </label>
               {hasReminder ? (
                 <DatePickerField
                   id="file-reminder-at"
                   name="reminderAt"
-                  placeholder="Datum auswählen"
+                  placeholder={t("pickDatePlaceholder")}
                 />
               ) : (
-                <input className="input" value="" readOnly placeholder="Optional" />
+                <input className="input" value="" readOnly placeholder={t("optionalPlaceholder")} />
               )}
             </div>
           </div>
         </div>
         </UploadSettingsGroup>
 
-        <UploadSettingsGroup title="Beschreibung & Tags" className="mt-2">
+        <UploadSettingsGroup title={t("groupDescriptionTags")} className="mt-2">
           <div className="grid gap-3 px-4 py-3 sm:grid-cols-2">
           <div className="field sm:col-span-2">
             <label htmlFor="file-description" className="label">
-              Beschreibung
+              {t("descriptionLabel")}
             </label>
             <textarea
               id="file-description"
               name="description"
               className="input min-h-20 resize-y py-3"
-              placeholder="Notiz zur Datei"
+              placeholder={t("descriptionPlaceholder")}
             />
           </div>
 
           <div className="field sm:col-span-2">
             <label htmlFor="file-tags" className="label">
-              Tags
+              {t("tagsLabel")}
             </label>
             <input
               id="file-tags"
               name="tags"
               className="input"
-              placeholder="vertrag, onboarding, 2026"
+              placeholder={t("tagsPlaceholder")}
             />
           </div>
           </div>
         </UploadSettingsGroup>
 
-        <UploadSettingsGroup title="Zugriffskontrolle" className="mt-2">
+        <UploadSettingsGroup title={t("groupAccessControl")} className="mt-2">
           <div className="grid gap-3 px-4 py-3 sm:grid-cols-2">
           <div className="field">
             <label htmlFor="file-access-roles" className="label">
-              Rollen Zugriff
+              {t("accessRolesLabel")}
             </label>
             <AccessMultiSelect
               id="file-access-roles"
               name="accessRoleIds"
               options={uploadOptions.roles}
-              placeholder="Rollen auswählen"
+              placeholder={t("selectRolesPlaceholder")}
+              t={t}
             />
           </div>
 
           <div className="field">
             <label htmlFor="file-access-users" className="label">
-              Einzelne User
+              {t("accessUsersLabel")}
             </label>
             <AccessMultiSelect
               id="file-access-users"
               name="accessUserIds"
               options={uploadOptions.users}
-              placeholder="User auswählen"
+              placeholder={t("selectUsersPlaceholder")}
+              t={t}
             />
           </div>
           </div>
@@ -671,11 +716,11 @@ function UploadFileForm({
 
       <div className="mt-1 flex justify-end gap-2.5 border-t border-border-soft pt-4">
         <button type="button" className="btn btn-secondary" onClick={onDone}>
-          Abbrechen
+          {t("cancel")}
         </button>
         <button type="submit" className="btn btn-primary" disabled={!tenant}>
           <Upload size={15} />
-          Hochladen
+          {t("upload")}
         </button>
       </div>
     </form>
@@ -687,11 +732,13 @@ function UploadVersionForm({
   tenant,
   returnPath,
   onDone,
+  t,
 }: {
   file: FileItem;
   tenant: string;
   returnPath: string;
   onDone: () => void;
+  t: T;
 }) {
   const [fileError, setFileError] = useState("");
 
@@ -702,8 +749,7 @@ function UploadVersionForm({
       <input type="hidden" name="fileId" value={file.storageFileId ?? ""} />
 
       <p className="max-w-[420px] text-[13px] leading-5 text-muted">
-        Lade eine neue Datei für {file.name} hoch. Die aktuelle Version bleibt
-        in der Historie verfügbar.
+        {t("uploadNewFileFor", { name: file.name })}
       </p>
 
       <label
@@ -712,10 +758,10 @@ function UploadVersionForm({
       >
         <UploadCloud size={25} className="mb-3 text-muted-2" />
         <span className="text-[13.5px] font-semibold text-ink">
-          Versionsdatei auswählen
+          {t("selectVersionFile")}
         </span>
         <span className="mt-1 text-[12px] text-muted">
-          Ersetzt die aktuelle Datei als v{file.version + 1}
+          {t("replacesCurrentAs", { version: file.version + 1 })}
         </span>
       </label>
       {fileError && (
@@ -731,7 +777,7 @@ function UploadVersionForm({
         onChange={(event) => {
           const selected = event.currentTarget.files?.[0];
           const validationError = selected
-            ? validateUploadFileClientSide(selected)
+            ? validateUploadFileClientSide(selected, t)
             : null;
 
           if (validationError) {
@@ -746,32 +792,32 @@ function UploadVersionForm({
 
       <div className="field">
         <label htmlFor={`version-title-${file.slug}`} className="label">
-          Titel
+          {t("titleLabel")}
         </label>
         <input
           id={`version-title-${file.slug}`}
           name="title"
           className="input"
-          defaultValue={`Neue Version von ${file.name}`}
+          defaultValue={t("newVersionOfDefault", { name: file.name })}
           required
         />
       </div>
 
       <div className="field">
         <label htmlFor={`version-description-${file.slug}`} className="label">
-          Beschreibung
+          {t("descriptionLabel")}
         </label>
         <textarea
           id={`version-description-${file.slug}`}
           name="description"
           className="input min-h-24 resize-y py-3"
-          placeholder="Was wurde geändert?"
+          placeholder={t("changeDescriptionPlaceholder")}
         />
       </div>
 
       <div className="mt-1 flex justify-end gap-2.5 border-t border-border-soft pt-4">
         <button type="button" className="btn btn-secondary" onClick={onDone}>
-          Abbrechen
+          {t("cancel")}
         </button>
         <button
           type="submit"
@@ -779,7 +825,7 @@ function UploadVersionForm({
           disabled={!tenant || !file.storageFileId}
         >
           <Upload size={15} />
-          Version hochladen
+          {t("uploadVersion")}
         </button>
       </div>
     </form>
@@ -789,9 +835,11 @@ function UploadVersionForm({
 function FilePreviewContent({
   file,
   versionNumber,
+  t,
 }: {
   file: FileItem;
   versionNumber: number;
+  t: T;
 }) {
   const isPreviewable = previewableFileTypes.has(file.type.toUpperCase());
 
@@ -800,11 +848,10 @@ function FilePreviewContent({
       <div className="flex min-h-[280px] flex-col items-center justify-center rounded-xl border border-dashed border-border bg-bg px-6 py-10 text-center">
         <FileUp size={28} className="mb-3 text-muted-2" />
         <div className="font-display text-[18px] font-semibold text-ink">
-          Vorschau nicht verfügbar
+          {t("previewUnavailableTitle")}
         </div>
         <p className="mt-2 max-w-[420px] text-[13px] leading-5 text-muted">
-          {file.type}-Dateien können aktuell nicht direkt im Browser angezeigt
-          werden. Lade die Version herunter, um sie lokal zu öffnen.
+          {t("previewUnavailableBody", { type: file.type })}
         </p>
       </div>
     );
@@ -819,7 +866,7 @@ function FilePreviewContent({
               {file.name}
             </div>
             <div className="mt-1 font-mono text-[10.5px] text-muted">
-              {file.folder} · Version {versionNumber}
+              {file.folder} · {t("versionLabel", { version: versionNumber })}
             </div>
           </div>
           <span className="rounded-[7px] border border-border-light px-2 py-1 font-mono text-[10px] text-muted-2">
@@ -846,7 +893,7 @@ export function FileViewButton({
   file,
   tenant,
   version,
-  label = "Ansehen",
+  label,
   compact = false,
 }: {
   file: FileItem;
@@ -855,6 +902,7 @@ export function FileViewButton({
   label?: string;
   compact?: boolean;
 }) {
+  const t = useTranslations("FileActionButtons");
   const { openPopup } = useUniversalPopup();
   const [isPending, startTransition] = useTransition();
   const versionNumber = version?.version ?? file.version;
@@ -875,7 +923,7 @@ export function FileViewButton({
     openPopup({
       title: `${file.name} · v${versionNumber}`,
       className: "max-w-[900px]",
-      content: <FilePreviewContent file={file} versionNumber={versionNumber} />,
+      content: <FilePreviewContent file={file} versionNumber={versionNumber} t={t} />,
     });
   };
 
@@ -884,8 +932,8 @@ export function FileViewButton({
       <button
         type="button"
         className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-[8px] border border-border bg-white text-muted transition-colors hover:border-muted hover:text-ink disabled:cursor-wait disabled:opacity-60"
-        title={`Version ${versionNumber} ansehen`}
-        aria-label={`${file.name} Version ${versionNumber} ansehen`}
+        title={t("viewVersionTitle", { version: versionNumber })}
+        aria-label={t("viewFileVersionAria", { name: file.name, version: versionNumber })}
         disabled={isPending}
         onClick={openPreview}
       >
@@ -902,7 +950,7 @@ export function FileViewButton({
       onClick={openPreview}
     >
       <Eye size={14} />
-      {isPending ? "Öffne..." : label}
+      {isPending ? t("opening") : (label ?? t("view"))}
     </button>
   );
 }
@@ -911,7 +959,7 @@ export function FileDownloadButton({
   file,
   tenant,
   version,
-  label = "Download",
+  label,
   compact = false,
 }: {
   file: FileItem;
@@ -920,6 +968,7 @@ export function FileDownloadButton({
   label?: string;
   compact?: boolean;
 }) {
+  const t = useTranslations("FileActionButtons");
   const [isPending, startTransition] = useTransition();
   const versionNumber = version?.version ?? file.version;
   const downloadName = version?.downloadName ?? getFileDownloadName(file);
@@ -942,8 +991,8 @@ export function FileDownloadButton({
         <button
           type="button"
           className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-[8px] border border-border bg-white text-muted transition-colors hover:border-muted hover:text-ink disabled:cursor-wait disabled:opacity-60"
-          title={`Version ${versionNumber} herunterladen`}
-          aria-label={`${file.name} Version ${versionNumber} herunterladen`}
+          title={t("downloadVersionTitle", { version: versionNumber })}
+          aria-label={t("downloadFileVersionAria", { name: file.name, version: versionNumber })}
           disabled={isPending}
           onClick={openSignedUrl}
         >
@@ -960,7 +1009,7 @@ export function FileDownloadButton({
         onClick={openSignedUrl}
       >
         <Download size={14} />
-        {isPending ? "Signiere..." : label}
+        {isPending ? t("signing") : (label ?? t("download"))}
       </button>
     );
   }
@@ -971,8 +1020,8 @@ export function FileDownloadButton({
         href={downloadHref}
         download={downloadName}
         className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-[8px] border border-border bg-white text-muted transition-colors hover:border-muted hover:text-ink"
-        title={`Version ${versionNumber} herunterladen`}
-        aria-label={`${file.name} Version ${versionNumber} herunterladen`}
+        title={t("downloadVersionTitle", { version: versionNumber })}
+        aria-label={t("downloadFileVersionAria", { name: file.name, version: versionNumber })}
       >
         <Download size={14} />
       </a>
@@ -982,7 +1031,7 @@ export function FileDownloadButton({
   return (
     <a href={downloadHref} download={downloadName} className="btn btn-secondary btn-sm">
       <Download size={14} />
-      {label}
+      {label ?? t("download")}
     </a>
   );
 }
@@ -998,18 +1047,20 @@ export function VersionUploadButton({
   returnPath?: string;
   compact?: boolean;
 }) {
+  const t = useTranslations("FileActionButtons");
   const { openPopup, closePopup } = useUniversalPopup();
   const canVersion = Boolean(tenant && returnPath && file.storageFileId);
 
   const openVersionPopup = () =>
     openPopup({
-      title: "Neue Version hochladen",
+      title: t("uploadNewVersionTitle"),
       content: (
         <UploadVersionForm
           file={file}
           tenant={tenant ?? ""}
           returnPath={returnPath ?? ""}
           onDone={closePopup}
+          t={t}
         />
       ),
     });
@@ -1022,13 +1073,13 @@ export function VersionUploadButton({
           ? "flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-[8px] border border-border bg-white text-muted transition-colors hover:border-muted hover:text-ink disabled:cursor-not-allowed disabled:opacity-45"
           : "btn btn-primary btn-sm"
       }
-      title="Neue Version hochladen"
-      aria-label={`Neue Version für ${file.name} hochladen`}
+      title={t("uploadNewVersionTitle")}
+      aria-label={t("uploadNewVersionAria", { name: file.name })}
       disabled={!canVersion}
       onClick={openVersionPopup}
     >
       <Upload size={14} />
-      {!compact && "Neue Version hochladen"}
+      {!compact && t("uploadNewVersionTitle")}
     </button>
   );
 }
@@ -1038,11 +1089,13 @@ function DeleteFileConfirmForm({
   tenant,
   returnPath,
   onCancel,
+  t,
 }: {
   file: FileItem;
   tenant: string;
   returnPath: string;
   onCancel: () => void;
+  t: T;
 }) {
   return (
     <form className="flex flex-col gap-4" action={softDeleteHrFileAction}>
@@ -1055,18 +1108,17 @@ function DeleteFileConfirmForm({
           {file.name}
         </div>
         <p className="mt-1 text-[12.5px] leading-5 text-muted">
-          Die Datei wird aus der Ansicht entfernt, aber nicht aus dem Storage
-          gelöscht.
+          {t("removeFileFromViewHint")}
         </p>
       </div>
 
       <div className="mt-1 flex justify-end gap-2.5 border-t border-border-soft pt-4">
         <button type="button" className="btn btn-secondary" onClick={onCancel}>
-          Abbrechen
+          {t("cancel")}
         </button>
         <button type="submit" className="btn btn-secondary border-danger/25 text-danger hover:bg-danger/5">
           <Trash2 size={15} />
-          Entfernen
+          {t("remove")}
         </button>
       </div>
     </form>
@@ -1084,6 +1136,7 @@ export function FileSoftDeleteButton({
   returnPath?: string;
   compact?: boolean;
 }) {
+  const t = useTranslations("FileActionButtons");
   const { openPopup, closePopup } = useUniversalPopup();
 
   if (!tenant || !returnPath || !file.storageFileId) {
@@ -1098,24 +1151,25 @@ export function FileSoftDeleteButton({
           ? "flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-[8px] border border-danger/25 bg-white text-danger transition-colors hover:bg-danger/5"
           : "btn btn-secondary btn-sm border-danger/25 text-danger hover:bg-danger/5"
       }
-      title="Datei ausblenden"
-      aria-label={`${file.name} ausblenden`}
+      title={t("hideFileTitle")}
+      aria-label={t("hideFileAria", { name: file.name })}
       onClick={() =>
         openPopup({
-          title: "Datei entfernen?",
+          title: t("removeFileDialogTitle"),
           content: (
             <DeleteFileConfirmForm
               file={file}
               tenant={tenant}
               returnPath={returnPath}
               onCancel={closePopup}
+              t={t}
             />
           ),
         })
       }
     >
       <Trash2 size={14} />
-      {!compact && "Entfernen"}
+      {!compact && t("remove")}
     </button>
   );
 }
@@ -1126,13 +1180,17 @@ export function CreateFolderButton({
   ownerType = "tenant",
   ownerId,
   parentPath,
+  label,
 }: {
   tenant?: string;
   returnPath?: string;
   ownerType?: "tenant" | "employee" | "location" | "team";
   ownerId?: string;
   parentPath?: string;
+  /** In einem geöffneten Ordner heißt der Button "Unterordner" — der Dialog bleibt derselbe. */
+  label?: string;
 }) {
+  const t = useTranslations("FileActionButtons");
   const { openPopup, closePopup } = useUniversalPopup();
 
   return (
@@ -1142,7 +1200,7 @@ export function CreateFolderButton({
       disabled={!tenant || !returnPath}
       onClick={() =>
         openPopup({
-          title: "Ordner erstellen",
+          title: parentPath ? t("createSubfolderTitle") : t("createFolder"),
           content: (
             <CreateFolderForm
               tenant={tenant ?? ""}
@@ -1151,13 +1209,14 @@ export function CreateFolderButton({
               ownerId={ownerId}
               parentPath={parentPath}
               onDone={closePopup}
+              t={t}
             />
           ),
         })
       }
     >
       <FolderPlus size={14} />
-      Ordner erstellen
+      {label ?? t("createFolder")}
     </button>
   );
 }
@@ -1181,6 +1240,7 @@ export function UploadFileButton({
   folderOptions?: FileFolder[];
   uploadOptions?: FileUploadOptions;
 }) {
+  const t = useTranslations("FileActionButtons");
   const { openPopup, closePopup } = useUniversalPopup();
 
   return (
@@ -1190,7 +1250,7 @@ export function UploadFileButton({
       disabled={!tenant || !returnPath}
       onClick={() =>
         openPopup({
-          title: "Datei hochladen",
+          title: t("uploadFile"),
           content: (
             <UploadFileForm
               tenant={tenant ?? ""}
@@ -1202,13 +1262,14 @@ export function UploadFileButton({
               folderOptions={folderOptions}
               uploadOptions={uploadOptions}
               onDone={closePopup}
+              t={t}
             />
           ),
         })
       }
     >
       <Upload size={14} />
-      Datei hochladen
+      {t("uploadFile")}
     </button>
   );
 }

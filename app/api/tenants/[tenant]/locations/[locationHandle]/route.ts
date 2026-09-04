@@ -103,6 +103,8 @@ export async function PATCH(
     accentClassName?: string;
     /** Leer = Standard des Unternehmens verwenden. `undefined` (Feld fehlt) = unverändert lassen. */
     openingHours?: unknown[];
+    /** `null` = Unternehmensvorgabe gilt. `undefined` (Feld fehlt) = unverändert lassen. */
+    shiftMinStaffing?: number | null;
   } | null;
 
   if (!body) {
@@ -154,6 +156,12 @@ export async function PATCH(
       // festschreiben.
       ...(body.openingHours !== undefined
         ? { openingHours: parseOpeningHoursDays(body.openingHours) }
+        : {}),
+      // Gleiche Ausnahme wie bei den Öffnungszeiten: `current.effectiveMinStaffing`
+      // ist bereits der aufgelöste Wert und würde die Unternehmensvorgabe beim
+      // Speichern als eigenen Wert des Standorts festschreiben.
+      ...(body.shiftMinStaffing !== undefined
+        ? { shiftMinStaffing: body.shiftMinStaffing }
         : {}),
     });
     // Ein geänderter Name berechnet einen neuen Key — mit der ursprünglichen

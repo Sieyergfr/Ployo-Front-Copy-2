@@ -2,15 +2,23 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { dispatchNotification } from "@/lib/notifications/dispatch";
 
+/**
+ * Kein Text wird hier mehr formuliert — die Ereignisse liefern nur noch
+ * Schlüssel + Daten (`NotificationMessage`), gerendert wird pro Empfänger in
+ * dessen Sprache (`lib/notifications/messages.ts`, aufgelöst in
+ * `dispatchNotification`).
+ */
+
 async function getTenantNotificationFlags(tenantId: string) {
   const settings = await prisma.tenantSettings.findUnique({
     where: { tenantId },
-    select: { mailNotifications: true, absenceAlerts: true },
+    select: { mailNotifications: true, absenceAlerts: true, shiftAlerts: true },
   });
 
   return {
     mailNotifications: settings?.mailNotifications ?? true,
     absenceAlerts: settings?.absenceAlerts ?? true,
+    shiftAlerts: settings?.shiftAlerts ?? true,
   };
 }
 
@@ -23,10 +31,23 @@ async function getTenantManagers(tenantId: string) {
   return memberships;
 }
 
-function formatDate(value: string) {
-  const [year, month, day] = value.split("-");
+/** Konto + E-Mail hinter einer Personalakte — `null`, wenn (noch) keins verknüpft ist. */
+async function getEmployeeAccount(employeeId: string) {
+  const employee = await prisma.tenantEmployee.findUnique({
+    where: { id: employeeId },
+    select: { userId: true },
+  });
 
-  return year && month && day ? `${day}.${month}.${year}` : value;
+  if (!employee?.userId) {
+    return null;
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: employee.userId },
+    select: { email: true },
+  });
+
+  return { userId: employee.userId, email: user?.email ?? null };
 }
 
 /** Benachrichtigt einen Mitarbeiter, sobald über seinen Urlaubsantrag entschieden wurde. */
@@ -34,6 +55,8 @@ export async function notifyVacationRequestDecided(input: {
   tenantId: string;
   tenantName: string;
   employeeId: string;
+  /** Für den Deep-Link in die App — ohne ihn bleibt die Meldung eine Sackgasse. */
+  requestId: string;
   status: "approved" | "rejected";
   startDate: string;
   endDate: string;
@@ -44,31 +67,26 @@ export async function notifyVacationRequestDecided(input: {
     return;
   }
 
-  const employee = await prisma.tenantEmployee.findUnique({
-    where: { id: input.employeeId },
-    select: { userId: true },
-  });
+  const account = await getEmployeeAccount(input.employeeId);
 
-  if (!employee?.userId) {
+  if (!account) {
     return;
   }
 
-  const user = await prisma.user.findUnique({
-    where: { id: employee.userId },
-    select: { email: true },
-  });
-
-  const range = `${formatDate(input.startDate)} – ${formatDate(input.endDate)}`;
-  const decision = input.status === "approved" ? "genehmigt" : "abgelehnt";
-
   await dispatchNotification({
-    userId: employee.userId,
-    email: user?.email ?? null,
-    subject: `Urlaubsantrag ${decision}`,
-    text: `Ihr Urlaubsantrag für ${range} bei ${input.tenantName} wurde ${decision}.`,
-    html: `<p style="font-size:14px;">Ihr Urlaubsantrag für <strong>${range}</strong> bei ${input.tenantName} wurde <strong>${decision}</strong>.</p>`,
+    userId: account.userId,
+    email: account.email,
+    message: {
+      key: "vacationDecided",
+      tenantName: input.tenantName,
+      startDate: input.startDate,
+      endDate: input.endDate,
+      status: input.status,
+    },
     tenantId: input.tenantId,
     category: "vacation",
+    entityType: "vacation-request",
+    entityId: input.requestId,
   });
 }
 
@@ -83,51 +101,93 @@ export async function notifyEmployeeOfShiftPlanPublished(input: {
   tenantId: string;
   tenantName: string;
   employeeId: string;
-  weekLabel: string;
+  /** ISO-Jahr der Woche — zusammen mit `week` der Deep-Link-Ziel-Schlüssel. */
+  year: number;
+  /** Kalenderwoche als Zahl — die Beschriftung entsteht in der Sprache des Empfängers. */
+  week: number;
   weekRange: string;
   shifts: Array<{ date: string; startTime: string; endTime: string }>;
 }) {
   const flags = await getTenantNotificationFlags(input.tenantId);
 
-  if (!flags.mailNotifications) {
+  if (!flags.mailNotifications || !flags.shiftAlerts) {
     return;
   }
 
-  const employee = await prisma.tenantEmployee.findUnique({
-    where: { id: input.employeeId },
-    select: { userId: true },
-  });
+  const account = await getEmployeeAccount(input.employeeId);
 
-  if (!employee?.userId) {
+  if (!account) {
     return;
   }
-
-  const user = await prisma.user.findUnique({
-    where: { id: employee.userId },
-    select: { email: true },
-  });
-
-  const sorted = [...input.shifts].sort((a, b) =>
-    a.date === b.date ? a.startTime.localeCompare(b.startTime) : a.date.localeCompare(b.date),
-  );
-  const lines = sorted.map(
-    (shift) => `${formatDate(shift.date)}, ${shift.startTime}–${shift.endTime}`,
-  );
-  const subject = `Schichtplan ${input.weekLabel} veröffentlicht`;
-  const text = `Ihr Schichtplan für ${input.weekLabel} (${input.weekRange}) bei ${input.tenantName} wurde veröffentlicht:\n\n${lines.join("\n")}`;
-  const html = `<p style="font-size:14px;">Ihr Schichtplan für <strong>${input.weekLabel}</strong> (${input.weekRange}) bei ${input.tenantName} wurde veröffentlicht:</p><ul style="font-size:14px;padding-left:18px;">${sorted
-    .map((shift) => `<li>${formatDate(shift.date)}, ${shift.startTime}–${shift.endTime}</li>`)
-    .join("")}</ul>`;
 
   await dispatchNotification({
-    userId: employee.userId,
-    email: user?.email ?? null,
-    subject,
-    text,
-    html,
+    userId: account.userId,
+    email: account.email,
+    message: {
+      key: "shiftPlanPublished",
+      tenantName: input.tenantName,
+      week: input.week,
+      weekRange: input.weekRange,
+      shifts: input.shifts.map((shift) => ({
+        date: shift.date,
+        startTime: shift.startTime,
+        endTime: shift.endTime,
+      })),
+    },
     tenantId: input.tenantId,
     category: "shift",
+    // Die Mitarbeiter-App öffnet damit genau diese Woche im Schichtplan,
+    // statt die Einzeltage in der Benachrichtigung aufzulisten.
+    entityType: "shift-week",
+    entityId: `${input.year}-W${String(input.week).padStart(2, "0")}`,
   });
+}
+
+/**
+ * Benachrichtigt alle mit Schichtplan-Admin-Recht: ein Mitarbeiter mit
+ * bereits veröffentlichten Schichten wurde nachträglich für denselben
+ * Zeitraum als abwesend markiert (Urlaub genehmigt / Krankmeldung erfasst).
+ * Ausgelöst von `notifyIfAbsenceConflictsWithPublishedShifts` in shift-service.ts,
+ * das vorab prüft, ob überhaupt ein echter Überschneidungs-Konflikt vorliegt.
+ */
+export async function notifyShiftPlanManagersOfAbsenceConflict(input: {
+  tenantId: string;
+  tenantName: string;
+  employeeName: string;
+  reason: "vacation" | "sickness";
+  startDate: string;
+  endDate: string | null;
+  managers: Array<{ userId: string; email: string | null }>;
+}) {
+  const flags = await getTenantNotificationFlags(input.tenantId);
+
+  if (!flags.mailNotifications || !flags.shiftAlerts) {
+    return;
+  }
+
+  await Promise.all(
+    input.managers.map((manager) =>
+      dispatchNotification({
+        userId: manager.userId,
+        email: manager.email,
+        message: {
+          key: "absenceConflict",
+          tenantName: input.tenantName,
+          employeeName: input.employeeName,
+          reason: input.reason,
+          startDate: input.startDate,
+          endDate: input.endDate,
+        },
+        tenantId: input.tenantId,
+        category: "system",
+        // Der Konflikt hängt an keiner eigenen Entität — gemeint ist der
+        // Schichtplan im betroffenen Zeitraum. Das Startdatum reicht als
+        // Ziel: die App öffnet damit dessen Woche im Gesamtplan.
+        entityType: "shift-conflict",
+        entityId: input.startDate,
+      }),
+    ),
+  );
 }
 
 /** Benachrichtigt die Mandanten-Manager (OWNER/ADMIN/HR) über einen neuen Self-Service-Urlaubsantrag. */
@@ -135,6 +195,7 @@ export async function notifyManagersOfNewVacationRequest(input: {
   tenantId: string;
   tenantName: string;
   employeeName: string;
+  requestId: string;
   startDate: string;
   endDate: string;
 }) {
@@ -145,20 +206,25 @@ export async function notifyManagersOfNewVacationRequest(input: {
   }
 
   const managers = await getTenantManagers(input.tenantId);
-  const range = `${formatDate(input.startDate)} – ${formatDate(input.endDate)}`;
 
   await Promise.all(
     managers.map((manager) =>
       dispatchNotification({
         userId: manager.userId,
         email: manager.user.email,
-        subject: `Neuer Urlaubsantrag von ${input.employeeName}`,
-        text: `${input.employeeName} hat Urlaub für ${range} bei ${input.tenantName} beantragt.`,
-        html: `<p style="font-size:14px;">${input.employeeName} hat Urlaub für <strong>${range}</strong> bei ${input.tenantName} beantragt.</p>`,
+        message: {
+          key: "newVacationRequest",
+          tenantName: input.tenantName,
+          employeeName: input.employeeName,
+          startDate: input.startDate,
+          endDate: input.endDate,
+        },
         tenantId: input.tenantId,
         // "system": Handlungsaufforderung an Manager, keine persönliche
         // Statusmeldung — nicht über notifyVacationEvents abbestellbar.
         category: "system",
+        entityType: "vacation-request",
+        entityId: input.requestId,
       }),
     ),
   );
@@ -169,6 +235,7 @@ export async function notifyManagersOfNewSicknessReport(input: {
   tenantId: string;
   tenantName: string;
   employeeName: string;
+  reportId: string;
   startDate: string;
 }) {
   const flags = await getTenantNotificationFlags(input.tenantId);
@@ -178,18 +245,22 @@ export async function notifyManagersOfNewSicknessReport(input: {
   }
 
   const managers = await getTenantManagers(input.tenantId);
-  const since = formatDate(input.startDate);
 
   await Promise.all(
     managers.map((manager) =>
       dispatchNotification({
         userId: manager.userId,
         email: manager.user.email,
-        subject: `Krankmeldung von ${input.employeeName}`,
-        text: `${input.employeeName} hat sich seit ${since} bei ${input.tenantName} krankgemeldet.`,
-        html: `<p style="font-size:14px;">${input.employeeName} hat sich seit <strong>${since}</strong> bei ${input.tenantName} krankgemeldet.</p>`,
+        message: {
+          key: "newSicknessReport",
+          tenantName: input.tenantName,
+          employeeName: input.employeeName,
+          startDate: input.startDate,
+        },
         tenantId: input.tenantId,
         category: "system",
+        entityType: "sickness-report",
+        entityId: input.reportId,
       }),
     ),
   );
@@ -215,40 +286,105 @@ export async function notifyEmployeeOfInfoRequest(input: {
     return;
   }
 
-  const employee = await prisma.tenantEmployee.findUnique({
-    where: { id: input.employeeId },
-    select: { userId: true },
-  });
+  const account = await getEmployeeAccount(input.employeeId);
 
-  if (!employee?.userId) {
+  if (!account) {
     return;
   }
 
-  const user = await prisma.user.findUnique({
-    where: { id: employee.userId },
-    select: { email: true },
-  });
-
-  const dueLine = input.dueAt
-    ? ` Bitte bis ${new Intl.DateTimeFormat("de-DE", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-        timeZone: "Europe/Berlin",
-      }).format(input.dueAt)} Uhr antworten.`
-    : "";
-
   await dispatchNotification({
-    userId: employee.userId,
-    email: user?.email ?? null,
-    subject: `Neue Info-Anfrage: ${input.title}`,
-    text: `${input.tenantName} bittet Sie um Informationen: "${input.title}".${dueLine}`,
-    html: `<p style="font-size:14px;">${input.tenantName} bittet Sie um Informationen: <strong>${input.title}</strong>.${dueLine}</p>`,
+    userId: account.userId,
+    email: account.email,
+    message: {
+      key: "infoRequest",
+      tenantName: input.tenantName,
+      title: input.title,
+      dueAt: input.dueAt,
+    },
     tenantId: input.tenantId,
     category: "system",
     entityType: "info-request",
+    entityId: input.requestId,
+  });
+}
+
+/**
+ * Benachrichtigt die Mandanten-Manager über eine neue Wunschfrei-Anfrage aus
+ * der App. Wunschfrei aus der Planung heraus (`createTenantWishFreeRequest`)
+ * wird direkt genehmigt eingetragen und löst deshalb nichts aus.
+ */
+export async function notifyManagersOfNewWishFreeRequest(input: {
+  tenantId: string;
+  tenantName: string;
+  employeeName: string;
+  requestId: string;
+  date: string;
+  reason: string;
+}) {
+  const flags = await getTenantNotificationFlags(input.tenantId);
+
+  if (!flags.mailNotifications || !flags.shiftAlerts) {
+    return;
+  }
+
+  const managers = await getTenantManagers(input.tenantId);
+
+  await Promise.all(
+    managers.map((manager) =>
+      dispatchNotification({
+        userId: manager.userId,
+        email: manager.user.email,
+        message: {
+          key: "newWishFreeRequest",
+          tenantName: input.tenantName,
+          employeeName: input.employeeName,
+          date: input.date,
+          reason: input.reason,
+        },
+        tenantId: input.tenantId,
+        category: "system",
+        entityType: "wish-free-request",
+        entityId: input.requestId,
+      }),
+    ),
+  );
+}
+
+/** Benachrichtigt einen Mitarbeiter über die Entscheidung zu seiner Wunschfrei-Anfrage. */
+export async function notifyWishFreeRequestDecided(input: {
+  tenantId: string;
+  tenantName: string;
+  employeeId: string;
+  requestId: string;
+  date: string;
+  status: "approved" | "rejected";
+  rejectReason: string;
+}) {
+  const flags = await getTenantNotificationFlags(input.tenantId);
+
+  if (!flags.mailNotifications || !flags.shiftAlerts) {
+    return;
+  }
+
+  const account = await getEmployeeAccount(input.employeeId);
+
+  if (!account) {
+    return;
+  }
+
+  await dispatchNotification({
+    userId: account.userId,
+    email: account.email,
+    message: {
+      key: "wishFreeDecided",
+      tenantName: input.tenantName,
+      date: input.date,
+      status: input.status,
+      rejectReason: input.rejectReason,
+    },
+    tenantId: input.tenantId,
+    category: "shift",
+    entityType: "wish-free-request",
     entityId: input.requestId,
   });
 }

@@ -2,6 +2,7 @@
 
 import {
   createTenantFileFolder,
+  folderScope,
   getTenantFileSignedUrl,
   softDeleteTenantFile,
   uploadTenantFile,
@@ -139,6 +140,105 @@ export async function createHrFolderAction(formData: FormData) {
   }
   revalidatePath(returnPath);
   redirect(returnPath);
+}
+
+/**
+ * PIN-Prüfung für das Popup in den Eigentümer-Ablagen (Mitarbeiter/Standort/
+ * Team) — anders als `verifyFolderPinAction` ohne `redirect`, damit der
+ * Dialog offen bleiben und den Fehler anzeigen kann; bei Erfolg lädt der
+ * Client selbst neu. Der Scope trennt gleichnamige Ordnerpfade
+ * unterschiedlicher Eigentümer (siehe lib/folder-pin.ts).
+ */
+export async function unlockOwnerFolderAction(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const tenant = formString(formData, "tenant");
+  const folderPath = formString(formData, "folderPath");
+  const pin = formString(formData, "pin");
+  const ownerType = formString(formData, "ownerType", "tenant") as FileOwnerType;
+  const ownerId = formString(formData, "ownerId") || undefined;
+
+  if (!tenant || !folderPath || !/^\d{6}$/.test(pin)) {
+    return { error: "Bitte die 6-stellige PIN eingeben." };
+  }
+
+  const session = await auth.api.getSession({ headers: await headers() });
+
+  if (!session?.user?.id) {
+    return { error: "Nicht angemeldet." };
+  }
+
+  const limit = await checkRateLimit({
+    key: `folder-pin:${session.user.id}:${tenant}:${folderPath}`,
+    limit: 10,
+    windowSeconds: 600,
+  });
+
+  if (!limit.allowed) {
+    return { error: "Zu viele Versuche. Bitte später erneut probieren." };
+  }
+
+  const scope = folderScope(ownerType, ownerId);
+  const isValid = await verifyTenantFileFolderPin({
+    tenantSlug: tenant,
+    folderPath,
+    pin,
+    scope,
+  });
+
+  if (!isValid) {
+    return { error: "Falsche PIN." };
+  }
+
+  await markFolderUnlocked(tenant, folderPath, scope);
+
+  return { success: true };
+}
+
+/**
+ * Upload per Drag & Drop. Bewusst ohne `redirect` und ohne das große
+ * Upload-Formular: hier zählt nur "Datei landet im aktuell offenen Ordner",
+ * alle weiteren Metadaten lassen sich danach am Datei-Eintrag pflegen.
+ * Mehrere Dateien auf einmal sind erlaubt, weil ein Drop das ohnehin liefert.
+ */
+export async function dropUploadFilesAction(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const tenant = formString(formData, "tenant");
+  const ownerType = formString(formData, "ownerType", "tenant") as FileOwnerType;
+  const ownerId = formString(formData, "ownerId") || undefined;
+  const returnPath = formString(formData, "returnPath");
+  const files = formData
+    .getAll("files")
+    .filter((value): value is File => value instanceof File && value.size > 0);
+
+  if (!tenant || files.length === 0) {
+    return { error: "Keine Datei erhalten." };
+  }
+
+  try {
+    for (const file of files) {
+      await uploadTenantFile({
+        tenantSlug: tenant,
+        file,
+        ownerType,
+        ownerId,
+        folderSlug: formString(formData, "folderSlug"),
+        folderName: formString(formData, "folderName"),
+        documentType: formString(formData, "documentType", "Sonstiges"),
+      });
+    }
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "Upload fehlgeschlagen.",
+    };
+  }
+
+  revalidateFileAreas({ tenant, ownerType, ownerId, returnPath });
+
+  return { success: true };
 }
 
 export async function verifyFolderPinAction(

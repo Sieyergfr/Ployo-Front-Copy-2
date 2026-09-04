@@ -8,12 +8,11 @@ import {
   MySicknessReportForm,
   MyVacationRequestForm,
 } from "@/components/SelfServiceForms";
-import { auth } from "@/lib/auth";
 import { getUnlinkedEmployeesForTenant } from "@/lib/employee-service";
 import { getMySelfServiceOverview } from "@/lib/self-service";
 import { getMyShiftsForCurrentWeek } from "@/lib/shift-service";
 import { withAccessRedirect } from "@/lib/tenant-access";
-import { vacationStatusConfig } from "@/lib/vacations";
+import { getVacationStatusConfig } from "@/lib/vacations";
 import {
   CalendarDays,
   FileText,
@@ -21,7 +20,7 @@ import {
   ThermometerSnowflake,
 } from "lucide-react";
 import Link from "next/link";
-import { headers } from "next/headers";
+import { getTranslations } from "next-intl/server";
 
 export const metadata = {
   title: "Mein Bereich",
@@ -36,41 +35,27 @@ function formatDate(value: string) {
 export default async function SelfServicePage({
   params,
 }: PageProps<"/u/[tenant]/mein-bereich">) {
+  const t = await getTranslations("SelfServicePage");
+  const tStatus = await getTranslations("VacationStatus");
+  const tForms = await getTranslations("SelfServiceForms");
   const { tenant } = await params;
-  const overview = await withAccessRedirect(tenant, () => getMySelfServiceOverview(tenant));
+  const overview = await withAccessRedirect(tenant, () => getMySelfServiceOverview(tenant, tForms));
 
   if (!overview.employee) {
-    const [unlinkedEmployees, session] = await Promise.all([
-      getUnlinkedEmployeesForTenant(tenant).catch(() => []),
-      auth.api.getSession({ headers: await headers() }),
-    ]);
-    const [defaultFirstName, ...defaultLastNameParts] = (
-      session?.user?.name ?? ""
-    )
-      .trim()
-      .split(/\s+/)
-      .filter(Boolean);
+    const unlinkedEmployees = await getUnlinkedEmployeesForTenant(tenant).catch(() => []);
 
     return (
       <>
-        <PageHeader eyebrow="Mein Bereich" title="Mein Bereich" />
+        <PageHeader eyebrow={t("eyebrow")} title={t("title")} />
         <section className="rounded-card border border-border bg-white px-6 py-10 text-center">
           <Mail className="mx-auto mb-3 text-muted" size={28} />
           <p className="text-[15px] font-semibold text-ink">
-            Ihr Konto ist noch keiner Personalakte zugeordnet.
+            {t("notLinkedMessage")}
           </p>
           <p className="mx-auto mt-2 max-w-md text-[13px] text-muted">
-            Verknüpfen Sie eine bestehende Personalakte mit Ihrem Konto oder
-            legen Sie eine neue an. Danach finden Sie hier Ihre
-            Urlaubsanträge, Krankmeldungen und Dokumente.
+            {t("notLinkedHint")}
           </p>
-          <SelfServiceEmployeeLink
-            tenant={tenant}
-            unlinkedEmployees={unlinkedEmployees}
-            defaultFirstName={defaultFirstName ?? ""}
-            defaultLastName={defaultLastNameParts.join(" ")}
-            defaultEmail={session?.user?.email ?? ""}
-          />
+          <SelfServiceEmployeeLink tenant={tenant} unlinkedEmployees={unlinkedEmployees} />
         </section>
       </>
     );
@@ -79,13 +64,14 @@ export default async function SelfServicePage({
   const { employee, vacationRequests, sicknessReports, documents, profileFields, profileCompleteness } =
     overview;
   const myShifts = await getMyShiftsForCurrentWeek(tenant).catch(() => null);
+  const vacationStatusConfig = getVacationStatusConfig(tStatus);
 
   return (
     <>
       <PageHeader
-        eyebrow="Mein Bereich"
+        eyebrow={t("eyebrow")}
         title={employee.name}
-        subtitle={`${employee.role} · ${employee.location || "Kein Standort"}`}
+        subtitle={t("subtitle", { role: employee.role, location: employee.location || t("noLocation") })}
       >
         <UnlinkOwnEmployeeButton tenant={tenant} employeeName={employee.name} />
       </PageHeader>
@@ -103,23 +89,23 @@ export default async function SelfServicePage({
       <section className="mb-7 grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]">
         <div className="rounded-card border border-border bg-white px-5 py-4">
           <div className="font-mono text-[10px] uppercase tracking-[0.6px] text-muted">
-            Urlaub verbleibend
+            {t("vacationRemainingLabel")}
           </div>
           <div className="mt-1.5 text-[22px] font-semibold text-ink">
-            {employee.vacationRemaining} Tage
+            {t("daysCount", { count: employee.vacationRemaining })}
           </div>
         </div>
         <div className="rounded-card border border-border bg-white px-5 py-4">
           <div className="font-mono text-[10px] uppercase tracking-[0.6px] text-muted">
-            Urlaub genommen
+            {t("vacationTakenLabel")}
           </div>
           <div className="mt-1.5 text-[22px] font-semibold text-ink">
-            {employee.vacationTaken} Tage
+            {t("daysCount", { count: employee.vacationTaken })}
           </div>
         </div>
         <div className="rounded-card border border-border bg-white px-5 py-4">
           <div className="font-mono text-[10px] uppercase tracking-[0.6px] text-muted">
-            Team
+            {t("teamLabel")}
           </div>
           <div className="mt-1.5 text-[22px] font-semibold text-ink">
             {employee.team || "—"}
@@ -137,7 +123,7 @@ export default async function SelfServicePage({
         <section className="rounded-card border border-border bg-white px-6 py-[22px]">
           <h2 className="mb-3.5 flex items-center gap-2 font-display text-[16px] font-semibold tracking-[-0.3px] text-ink">
             <CalendarDays size={17} />
-            Urlaub beantragen
+            {t("requestVacationTitle")}
           </h2>
           <MyVacationRequestForm tenant={tenant} />
         </section>
@@ -145,7 +131,7 @@ export default async function SelfServicePage({
         <section className="rounded-card border border-border bg-white px-6 py-[22px]">
           <h2 className="mb-3.5 flex items-center gap-2 font-display text-[16px] font-semibold tracking-[-0.3px] text-ink">
             <ThermometerSnowflake size={17} />
-            Krankmeldung
+            {t("sicknessTitle")}
           </h2>
           <MySicknessReportForm tenant={tenant} />
         </section>
@@ -154,10 +140,10 @@ export default async function SelfServicePage({
       <div className="mb-7 grid gap-5 lg:grid-cols-2">
         <section className="rounded-card border border-border bg-white px-6 py-[22px]">
           <h2 className="mb-3.5 font-display text-[16px] font-semibold tracking-[-0.3px] text-ink">
-            Meine Urlaubsanträge
+            {t("myVacationRequestsTitle")}
           </h2>
           {vacationRequests.length === 0 && (
-            <p className="text-[12.5px] text-muted">Noch keine Anträge gestellt.</p>
+            <p className="text-[12.5px] text-muted">{t("noVacationRequestsYet")}</p>
           )}
           <div className="grid gap-2">
             {vacationRequests.map((request) => {
@@ -171,7 +157,7 @@ export default async function SelfServicePage({
                   <div className="text-[13px] text-ink">
                     {formatDate(request.startDate)} – {formatDate(request.endDate)}
                     <span className="ml-2 font-mono text-[11px] text-muted">
-                      {request.days} Tage
+                      {t("daysCount", { count: request.days })}
                     </span>
                   </div>
                   <span
@@ -187,10 +173,10 @@ export default async function SelfServicePage({
 
         <section className="rounded-card border border-border bg-white px-6 py-[22px]">
           <h2 className="mb-3.5 font-display text-[16px] font-semibold tracking-[-0.3px] text-ink">
-            Meine Krankmeldungen
+            {t("mySicknessReportsTitle")}
           </h2>
           {sicknessReports.length === 0 && (
-            <p className="text-[12.5px] text-muted">Noch keine Krankmeldungen erfasst.</p>
+            <p className="text-[12.5px] text-muted">{t("noSicknessReportsYet")}</p>
           )}
           <div className="grid gap-2">
             {sicknessReports.map((report) => (
@@ -200,10 +186,10 @@ export default async function SelfServicePage({
               >
                 <div className="text-[13px] text-ink">
                   {formatDate(report.startDate)}
-                  {report.endDate ? ` – ${formatDate(report.endDate)}` : " – offen"}
+                  {report.endDate ? ` – ${formatDate(report.endDate)}` : t("openSuffix")}
                 </div>
                 <span className="rounded-[7px] bg-border-soft px-2 py-[3px] font-mono text-[10px] text-muted-2">
-                  {report.status === "closed" ? "Beendet" : "Aktiv"}
+                  {report.status === "closed" ? t("closedStatus") : t("activeStatus")}
                 </span>
               </div>
             ))}
@@ -214,11 +200,11 @@ export default async function SelfServicePage({
       <section className="rounded-card border border-border bg-white px-6 py-[22px]">
         <h2 className="mb-3.5 flex items-center gap-2 font-display text-[16px] font-semibold tracking-[-0.3px] text-ink">
           <FileText size={17} />
-          Meine Dokumente
+          {t("myDocumentsTitle")}
         </h2>
         {documents.length === 0 && (
           <p className="text-[12.5px] text-muted">
-            Für Sie sind noch keine Dokumente hinterlegt.
+            {t("noDocumentsYet")}
           </p>
         )}
         <div className="grid gap-2">
@@ -239,11 +225,13 @@ export default async function SelfServicePage({
           ))}
         </div>
         <p className="mt-3 text-[11.5px] text-muted-2">
-          Für den Zugriff auf einzelne Dateien wenden Sie sich an{" "}
-          <Link href={`/u/${tenant}/dateien`} className="underline underline-offset-2">
-            Ihre HR-Abteilung
-          </Link>
-          .
+          {t.rich("accessDocsHint", {
+            link: (chunks) => (
+              <Link href={`/u/${tenant}/dateien`} className="underline underline-offset-2">
+                {chunks}
+              </Link>
+            ),
+          })}
         </p>
       </section>
     </>

@@ -4,47 +4,10 @@ import createNextIntlPlugin from "next-intl/plugin";
 
 const isDev = process.env.NODE_ENV === "development";
 
-/**
- * Für Downloads werden signierte URLs des konfigurierten S3-Endpoints
- * geladen. Nur dieser Host wird in der CSP freigegeben; ohne Konfiguration
- * bleibt es bei 'self'.
- */
-function storageOrigin() {
-  const endpoint = process.env.STORAGE_S3_ENDPOINT;
-
-  if (!endpoint) {
-    return "";
-  }
-
-  try {
-    return new URL(
-      endpoint.startsWith("http") ? endpoint : `https://${endpoint}`,
-    ).origin;
-  } catch {
-    return "";
-  }
-}
-
-const storageHost = storageOrigin();
-const storageSource = storageHost ? ` ${storageHost}` : "";
-
-const contentSecurityPolicy = [
-  "default-src 'self'",
-  // Next.js benötigt Inline-Skripte für die Hydration; in Dev zusätzlich eval.
-  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
-  "style-src 'self' 'unsafe-inline'",
-  `img-src 'self' blob: data:${storageSource}`,
-  "font-src 'self'",
-  // ws: für Dev-HMR.
-  `connect-src 'self'${storageSource}${isDev ? " ws:" : ""}`,
-  "frame-ancestors 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-  "object-src 'none'",
-].join("; ");
-
+// Content-Security-Policy wird nicht mehr hier gesetzt, sondern dynamisch pro
+// Request in proxy.ts (Nonce-basiert statt 'unsafe-inline' in script-src) —
+// ein statischer Header kann keinen Nonce tragen.
 const securityHeaders = [
-  { key: "Content-Security-Policy", value: contentSecurityPolicy },
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "X-Frame-Options", value: "DENY" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
@@ -63,6 +26,13 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  /**
+   * Standardmäßig `.next`. Über `NEXT_BUILD_DIR` lässt sich ein Probe-Build in
+   * ein anderes Verzeichnis lenken — nötig, um Änderungen zu verifizieren,
+   * ohne den Build-Cache des laufenden `next start` anzufassen (der hält
+   * Dateien in `.next/build` offen).
+   */
+  distDir: process.env.NEXT_BUILD_DIR || ".next",
   poweredByHeader: false,
   allowedDevOrigins:
     process.env.DEV_LAN_HOSTS?.split(",")

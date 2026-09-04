@@ -58,7 +58,12 @@ const configuredTrustedOrigins =
     .map((origin) => origin.trim())
     .filter(Boolean) ?? [];
 
-async function generateAppleClientSecret({
+/**
+ * Auch außerhalb dieser Datei gebraucht (lib/oauth-revocation.ts), um beim
+ * Löschen eines Konto-Zugangs ein frisches Apple-Client-Secret für den
+ * Token-Widerruf (POST /auth/revoke) zu erzeugen.
+ */
+export async function generateAppleClientSecret({
   clientId,
   teamId,
   keyId,
@@ -82,12 +87,25 @@ async function generateAppleClientSecret({
     .sign(key);
 }
 
+/**
+ * Social-Login legt von sich aus **kein** Konto mehr an: `disableImplicitSignUp`
+ * lässt einen OAuth-Rücksprung nur dann registrieren, wenn der Client den Flow
+ * ausdrücklich mit `requestSignUp: true` gestartet hat. Für ein bereits
+ * vorhandenes Konto ändert sich nichts — Anmeldung und Verknüpfung des
+ * Providers laufen unverändert (siehe handleOAuthUserInfo in better-auth).
+ *
+ * Die Mobile-App sendet das Flag bewusst nie: dort entstehen Zugänge
+ * ausschließlich über die Einladung des Betriebs, nicht über "Mit Google
+ * anmelden". Die Web-Anmeldemaske (components/auth/LoginForm.tsx) sendet es
+ * weiterhin, damit sich die Registrierung über den Browser nicht mit ändert.
+ */
 const googleProvider =
   process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
     ? {
         google: {
           clientId: process.env.GOOGLE_CLIENT_ID,
           clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+          disableImplicitSignUp: true,
         },
       }
     : {};
@@ -107,6 +125,7 @@ const appleProvider =
             privateKey: process.env.APPLE_PRIVATE_KEY!,
           }),
           appBundleIdentifier: process.env.APPLE_APP_BUNDLE_IDENTIFIER,
+          disableImplicitSignUp: true,
         }),
       }
     : {};
@@ -146,6 +165,11 @@ export const auth = betterAuth({
       "/sign-in/email": { window: 60, max: 10 },
       "/sign-up/email": { window: 60, max: 5 },
       "/request-password-reset": { window: 300, max: 5 },
+      // Token-Einlösung: fiel bisher auf das generische 60-Requests/60s-Limit
+      // zurück (Sicherheitsaudit Teil 2.5) — Token-Entropie macht das
+      // unkritisch, aber ein eigenes, engeres Limit passt zum Muster der
+      // übrigen Token-verbrauchenden Endpunkte hier.
+      "/reset-password": { window: 300, max: 5 },
       "/send-verification-email": { window: 300, max: 5 },
       // TOTP/Backup-Code-Verifizierung: 6-stelliger Code bzw. Backup-Code
       // ist brute-forcebar unter dem generischen 60-Requests/60s-Limit.
@@ -251,10 +275,38 @@ export const auth = betterAuth({
           });
         }
       }
-      if (ctx.path === "/sign-up/email" && ctx.body?.terms !== true) {
-        throw new APIError("BAD_REQUEST", {
-          message: "Den Nutzungsbedingungen muss zugestimmt werden.",
-        });
+      if (ctx.path === "/sign-up/email") {
+        if (ctx.body?.terms !== true) {
+          throw new APIError("BAD_REQUEST", {
+            message: "Den Nutzungsbedingungen muss zugestimmt werden.",
+          });
+        }
+
+        // Bewusste Abkehr vom better-auth-Standard: dort antwortet
+        // /sign-up/email bei einer bereits vergebenen Adresse mit Erfolg
+        // (Schutz gegen User-Enumeration), legt aber weder ein Konto an noch
+        // verschickt eine Verifizierungsmail — Registrierende landeten damit
+        // auf /confirm und warteten vergeblich. Produktentscheidung: die
+        // verstaendliche Fehlermeldung wiegt hier schwerer als der
+        // Enumerations-Schutz. Geprueft wird case-insensitiv, weil
+        // `User.email` zwar @unique ist, Postgres aber Gross- und
+        // Kleinschreibung unterscheidet.
+        const email =
+          typeof ctx.body?.email === "string" ? ctx.body.email.trim() : "";
+
+        if (email) {
+          const existing = await prisma.user.findFirst({
+            where: { email: { equals: email, mode: "insensitive" } },
+            select: { id: true },
+          });
+
+          if (existing) {
+            throw new APIError("UNPROCESSABLE_ENTITY", {
+              message: "Es besteht bereits ein Konto mit dieser E-Mail-Adresse.",
+              code: "USER_ALREADY_EXISTS",
+            });
+          }
+        }
       }
     }),
   },
@@ -263,6 +315,13 @@ export const auth = betterAuth({
   plugins: [
     twoFactor({
       issuer: "Ployo",
+      // Konten, die ausschliesslich ueber Apple/Google angelegt wurden, haben
+      // nie ein Passwort gesetzt (kein "credential"-Account). Ohne dieses Flag
+      // verlangt enable/disable immer ein Passwort und blockiert 2FA fuer sie
+      // vollstaendig (App-Store-Review-Checkliste.md). better-auth prueft
+      // shouldRequirePassword() intern: nur wer tatsaechlich ein Passwort hat,
+      // muss es weiterhin bestaetigen.
+      allowPasswordless: true,
     }),
     // Erlaubt der Mobile-App (kein Browser, keine "trusted origin" im
     // klassischen Sinn), sich über das App-Schema zu authentifizieren:

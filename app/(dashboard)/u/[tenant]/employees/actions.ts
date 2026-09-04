@@ -15,14 +15,23 @@ import {
   updateTenantEmployee,
 } from "@/lib/employee-service";
 import { createTenantInvitation } from "@/lib/settings-service";
+import { createEmployeeFolderTemplate } from "@/lib/employee-folder-templates";
 import {
   contractStatuses,
   createEmployeeContract,
+  updateEmployeeContractDetails,
   updateEmployeeContractStatus,
   type ContractStatus,
 } from "@/lib/contract-service";
 import { uploadPayrollStatement } from "@/lib/payroll-service";
-import { softDeleteTenantFile, uploadTenantFile } from "@/lib/storage/storage.service";
+import { deleteEmployeeDataByCategory } from "@/lib/retention-service";
+import type { RetentionCategory } from "@/lib/data-retention";
+import {
+  setTenantFileEmployeeVisibility,
+  setTenantFileFolderEmployeeVisibility,
+  softDeleteTenantFile,
+  uploadTenantFile,
+} from "@/lib/storage/storage.service";
 import { type ActionState, parseAction } from "@/lib/action-state";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -402,6 +411,20 @@ export async function setPrimaryEmergencyContactAction(formData: FormData) {
   redirect(path);
 }
 
+export async function createEmployeeFolderTemplateAction(formData: FormData) {
+  const tenant = formString(formData, "tenant");
+  const name = formString(formData, "name");
+
+  if (!tenant || !name) {
+    throw new Error("Ordnername ist erforderlich.");
+  }
+
+  await createEmployeeFolderTemplate({ tenantSlug: tenant, name });
+
+  revalidatePath(employeesPath(tenant));
+  redirect(employeesPath(tenant));
+}
+
 export async function deleteEmployeeAction(formData: FormData) {
   const tenant = formString(formData, "tenant");
   const employeeId = formString(formData, "employeeId");
@@ -414,6 +437,40 @@ export async function deleteEmployeeAction(formData: FormData) {
 
   revalidatePath(employeesPath(tenant));
   redirect(employeesPath(tenant));
+}
+
+const RETENTION_CATEGORIES: RetentionCategory[] = [
+  "personaldaten",
+  "lohn_sozialversicherung",
+  "gesundheit_freitext",
+];
+
+/**
+ * Gezielter Einzelfall-Löschantrag (Löschkonzept, Teil 4.3): löscht/anonymisiert
+ * ausschließlich die vom Bedienenden ausgewählten Kategorien, und nur, soweit
+ * `getDeletionEligibilityForEmployee` sie als tatsächlich löschfähig ausweist
+ * — nie mehr, unabhängig von der Auswahl. Ersatz für das
+ * Alles-oder-nichts von `deleteEmployeeAction` bei laufender
+ * Aufbewahrungspflicht.
+ */
+export async function deleteEmployeeDataByCategoryAction(formData: FormData) {
+  const tenant = formString(formData, "tenant");
+  const employeeId = formString(formData, "employeeId");
+  const employeeHandle = formString(formData, "employeeHandle");
+  const categories = formData
+    .getAll("categories")
+    .filter((value): value is RetentionCategory =>
+      typeof value === "string" && RETENTION_CATEGORIES.includes(value as RetentionCategory),
+    );
+
+  if (!tenant || !employeeId || !employeeHandle || categories.length === 0) {
+    throw new Error("Bitte mindestens eine Kategorie auswählen.");
+  }
+
+  await deleteEmployeeDataByCategory(tenant, employeeId, categories);
+
+  revalidatePath(employeePath(tenant, employeeHandle));
+  redirect(employeePath(tenant, employeeHandle));
 }
 
 export async function offboardEmployeeAction(formData: FormData) {
@@ -476,7 +533,11 @@ export async function createEmployeeContractAction(formData: FormData) {
     noticePeriod: formString(formData, "noticePeriod"),
     position: formString(formData, "position"),
     department: formString(formData, "department"),
-    workLocation: formString(formData, "workLocation"),
+    // Arbeitsort ist im Formular ein Multi-Select (LocationMultiSelectDropdown,
+    // mehrere gleichnamige Hidden-Inputs) — analog zu `TenantTeam.locations`
+    // als kommagetrennter String gespeichert, da `workLocation` auf
+    // `TenantEmployeeContract` ein einzelnes String-Feld ist, keine Relation.
+    workLocation: formStrings(formData, "workLocation").join(", "),
     weeklyHours: formString(formData, "weeklyHours"),
     compensation: formString(formData, "compensation"),
     vacationDays: Math.max(0, Number(formString(formData, "vacationDays", "0")) || 0),
@@ -516,6 +577,42 @@ export async function updateEmployeeContractStatusAction(formData: FormData) {
     status,
     terminationDate,
     terminationReason,
+  });
+
+  const path = `${employeePath(tenant, employeeHandle)}?tab=contract`;
+  revalidatePath(path);
+  redirect(path);
+}
+
+export async function updateEmployeeContractDetailsAction(formData: FormData) {
+  const tenant = formString(formData, "tenant");
+  const employeeId = formString(formData, "employeeId");
+  const employeeHandle = formString(formData, "employeeHandle");
+  const contractId = formString(formData, "contractId");
+  const title = formString(formData, "title");
+  const startDate = formString(formData, "startDate");
+
+  if (!tenant || !employeeId || !employeeHandle || !contractId || !title || !startDate) {
+    throw new Error("Titel und Vertragsbeginn sind erforderlich.");
+  }
+
+  await updateEmployeeContractDetails({
+    tenantSlug: tenant,
+    employeeId,
+    contractId,
+    title,
+    contractType: formString(formData, "contractType", "Arbeitsvertrag"),
+    startDate,
+    endDate: formString(formData, "endDate"),
+    probationEndDate: formString(formData, "probationEndDate"),
+    noticePeriod: formString(formData, "noticePeriod"),
+    position: formString(formData, "position"),
+    department: formString(formData, "department"),
+    workLocation: formStrings(formData, "workLocation").join(", "),
+    weeklyHours: formString(formData, "weeklyHours"),
+    compensation: formString(formData, "compensation"),
+    vacationDays: Math.max(0, Number(formString(formData, "vacationDays", "0")) || 0),
+    notes: formString(formData, "notes"),
   });
 
   const path = `${employeePath(tenant, employeeHandle)}?tab=contract`;
@@ -611,6 +708,48 @@ export async function uploadEmployeeDocumentSlotAction(formData: FormData) {
   const path = `${employeePath(tenant, employeeHandle)}?tab=files`;
   revalidatePath(path);
   redirect(path);
+}
+
+/**
+ * Einzelne Datei der Personalakte vor dem Mitarbeiter verbergen bzw. wieder
+ * freigeben. Bewusst ohne `redirect`: der Aufrufer ist ein Umschalter mitten
+ * in der Dateiliste, der danach nur neu laden soll — nicht die Seite wechseln.
+ */
+export async function setEmployeeFileVisibilityAction(formData: FormData) {
+  const tenant = formString(formData, "tenant");
+  const employeeHandle = formString(formData, "employeeHandle");
+  const fileId = formString(formData, "fileId");
+  const hidden = formString(formData, "hidden") === "true";
+
+  if (!tenant || !employeeHandle || !fileId) {
+    throw new Error("Sichtbarkeit konnte nicht geändert werden.");
+  }
+
+  await setTenantFileEmployeeVisibility({ tenantSlug: tenant, fileId, hidden });
+
+  revalidatePath(`${employeePath(tenant, employeeHandle)}?tab=files`);
+}
+
+/** Wie oben, aber für einen ganzen Ordner (inkl. Inhalt und Unterordnern). */
+export async function setEmployeeFolderVisibilityAction(formData: FormData) {
+  const tenant = formString(formData, "tenant");
+  const employeeHandle = formString(formData, "employeeHandle");
+  const employeeId = formString(formData, "employeeId");
+  const path = formString(formData, "path");
+  const hidden = formString(formData, "hidden") === "true";
+
+  if (!tenant || !employeeHandle || !employeeId || !path) {
+    throw new Error("Sichtbarkeit konnte nicht geändert werden.");
+  }
+
+  await setTenantFileFolderEmployeeVisibility({
+    tenantSlug: tenant,
+    employeeId,
+    path,
+    hidden,
+  });
+
+  revalidatePath(`${employeePath(tenant, employeeHandle)}?tab=files`);
 }
 
 export async function deleteEmployeeDocumentSlotFileAction(formData: FormData) {

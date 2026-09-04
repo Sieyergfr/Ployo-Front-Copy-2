@@ -5,8 +5,10 @@ import { ArrowRight, ShieldCheck } from "lucide-react";
 import DataTable from "@/components/DataTable";
 import { ListSearchBox } from "@/components/ListSearchBox";
 import { type PermissionRole } from "@/lib/roles";
+import { useTranslations } from "next-intl";
 
 export function RolesListClient({ roles, tenant }: { roles: PermissionRole[]; tenant: string }) {
+  const t = useTranslations("RolesListClient");
   const [query, setQuery] = useState("");
 
   const filtered = useMemo(() => {
@@ -26,7 +28,7 @@ export function RolesListClient({ roles, tenant }: { roles: PermissionRole[]; te
       <ListSearchBox
         value={query}
         onChange={setQuery}
-        placeholder="Name oder Beschreibung"
+        placeholder={t("searchPlaceholder")}
         className="mb-4 max-w-[360px]"
       />
 
@@ -39,7 +41,7 @@ export function RolesListClient({ roles, tenant }: { roles: PermissionRole[]; te
           columns={[
             {
               key: "role",
-              header: "Rolle",
+              header: t("columnRole"),
               width: "2fr",
               render: (role) => (
                 <div className="flex min-w-0 items-center gap-3">
@@ -52,7 +54,7 @@ export function RolesListClient({ roles, tenant }: { roles: PermissionRole[]; te
             },
             {
               key: "members",
-              header: "Mitarbeiter",
+              header: t("columnMembers"),
               width: "160px",
               render: (role) => (
                 <div className="font-display text-[24px] font-semibold text-ink">{role.members}</div>
@@ -60,7 +62,7 @@ export function RolesListClient({ roles, tenant }: { roles: PermissionRole[]; te
             },
             {
               key: "description",
-              header: "Beschreibung",
+              header: t("columnDescription"),
               width: "1.5fr",
               render: (role) => (
                 <div className="truncate text-[12.5px] text-muted-2">{role.description}</div>
@@ -77,9 +79,9 @@ export function RolesListClient({ roles, tenant }: { roles: PermissionRole[]; te
         />
       ) : (
         <section className="rounded-card border border-border bg-white px-6 py-10 text-center">
-          <div className="font-display text-[20px] font-semibold text-ink">Keine Treffer</div>
+          <div className="font-display text-[20px] font-semibold text-ink">{t("noResultsTitle")}</div>
           <div className="mt-2 text-[13px] text-muted-2">
-            Für diese Suche wurde keine Rolle gefunden.
+            {t("noResultsDescription")}
           </div>
         </section>
       )}

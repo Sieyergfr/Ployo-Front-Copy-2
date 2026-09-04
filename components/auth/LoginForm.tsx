@@ -110,6 +110,11 @@ export default function LoginForm({ next }: { next?: string }) {
       provider,
       callbackURL: target,
       errorCallbackURL: "/login",
+      // Die Provider laufen mit `disableImplicitSignUp` (lib/auth.ts) — ohne
+      // dieses Flag würde der Rücksprung für eine unbekannte Adresse kein
+      // Konto mehr anlegen. Im Browser soll die Erstanmeldung wie bisher
+      // funktionieren; die Mobile-App sendet es bewusst nicht.
+      requestSignUp: true,
     });
 
     setSocialProvider(null);

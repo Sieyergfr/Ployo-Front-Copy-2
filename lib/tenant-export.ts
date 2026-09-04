@@ -1,4 +1,9 @@
 import "server-only";
+import { headers } from "next/headers";
+import { auth } from "@/lib/auth";
+import { recordTenantAudit } from "@/lib/audit";
+import { decryptAddress } from "@/lib/employee-address";
+import { decryptField } from "@/lib/encryption";
 import { prisma } from "@/lib/prisma";
 import { requireSettingsManager } from "@/lib/settings-service";
 
@@ -92,23 +97,79 @@ export async function buildTenantExport(tenantSlug: string) {
     prisma.tenantPayrollStatement.findMany({ where: { tenantId } }),
   ]);
 
+  const session = await auth.api.getSession({ headers: await headers() });
+
+  await recordTenantAudit({
+    tenantId,
+    actorId: access.userId,
+    actorName: session?.user?.name || session?.user?.email || "System",
+    action: "Vollständiger Mandanten-Export heruntergeladen",
+    source: "Einstellungen",
+    entityType: "tenant-export",
+    entityId: tenantId,
+    detail: `${employees.length} Mitarbeiter, ${files.length} Dateien, ${payrollStatements.length} Abrechnungen`,
+  });
+
+  // App-seitig verschlüsselte Felder (lib/encryption.ts) kämen hier sonst als
+  // "enc:v1:..."-Chiffretext statt als tatsächliche Daten an — für einen
+  // Datenherausgabe-Export (AGB §6) muss das entschlüsselt sein.
+  const decryptedEmployees = employees.map((employee) => {
+    const decryptedEmergencyContacts = decryptField(employee.emergencyContactsJson);
+    let emergencyContacts: unknown = [];
+
+    try {
+      emergencyContacts = decryptedEmergencyContacts ? JSON.parse(decryptedEmergencyContacts) : [];
+    } catch {
+      emergencyContacts = [];
+    }
+
+    return {
+      ...employee,
+      taxId: decryptField(employee.taxId),
+      socialSecurityNumber: decryptField(employee.socialSecurityNumber),
+      healthInsurance: decryptField(employee.healthInsurance),
+      iban: decryptField(employee.iban),
+      birthDate: decryptField(employee.birthDate),
+      birthPlace: decryptField(employee.birthPlace),
+      nationality: decryptField(employee.nationality),
+      maritalStatus: decryptField(employee.maritalStatus),
+      emergencyContactsJson: emergencyContacts,
+      privateAddress: decryptAddress(employee.privateAddress),
+      workAddress: decryptAddress(employee.workAddress),
+    };
+  });
+  const decryptedContractDetails = contractDetails.map((detail) => ({
+    ...detail,
+    compensation: decryptField(detail.compensation),
+    compensationGross: decryptField(detail.compensationGross),
+  }));
+  const decryptedSicknessReports = sicknessReports.map((report) => ({
+    ...report,
+    note: decryptField(report.note),
+  }));
+  const decryptedPayrollStatements = payrollStatements.map((statement) => ({
+    ...statement,
+    gross: decryptField(statement.gross),
+    net: decryptField(statement.net),
+  }));
+
   return {
     exportedAt: new Date().toISOString(),
     tenant,
-    employees,
+    employees: decryptedEmployees,
     contracts,
-    contractDetails,
+    contractDetails: decryptedContractDetails,
     teams,
     locations,
     vacationRequests,
     wishFreeRequests,
-    sicknessReports,
+    sicknessReports: decryptedSicknessReports,
     shifts,
     shiftTemplates,
     reminders,
     roles,
     files,
-    payrollStatements,
+    payrollStatements: decryptedPayrollStatements,
     hinweis:
       "Dateiinhalte (Dokumente) sind nicht eingebettet — die Originale stehen einzeln im Dateien-Bereich zum Download bereit. Audit-Protokolle unterliegen der in den Einstellungen konfigurierten Aufbewahrungsfrist und sind nicht Teil dieses Exports.",
   };

@@ -1,5 +1,10 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
+import {
+  renderNotification,
+  toNotificationLocale,
+  type NotificationMessage,
+} from "@/lib/notifications/messages";
 import { requireTenantMembership } from "@/lib/tenant-access";
 
 export type MyNotification = {
@@ -20,26 +25,59 @@ export async function getMyNotifications(
 ): Promise<MyNotification[]> {
   const access = await requireTenantMembership(tenantSlug);
 
-  const rows = await prisma.tenantEmployeeNotification.findMany({
-    where: {
-      tenantId: access.tenantId,
-      userId: access.userId,
-      ...(options?.unreadOnly ? { read: false } : {}),
-    },
-    orderBy: { createdAt: "desc" },
-    take: Math.min(options?.limit ?? 50, 100),
-  });
+  const [rows, preference] = await Promise.all([
+    prisma.tenantEmployeeNotification.findMany({
+      where: {
+        tenantId: access.tenantId,
+        userId: access.userId,
+        ...(options?.unreadOnly ? { read: false } : {}),
+      },
+      orderBy: { createdAt: "desc" },
+      take: Math.min(options?.limit ?? 50, 100),
+    }),
+    prisma.userPreference.findUnique({
+      where: { userId: access.userId },
+      select: { language: true },
+    }),
+  ]);
 
-  return rows.map((row) => ({
-    id: row.id,
-    category: row.category,
-    title: row.title,
-    detail: row.detail,
-    read: row.read,
-    createdAt: row.createdAt.toISOString(),
-    entityType: row.entityType,
-    entityId: row.entityId,
-  }));
+  // Beim Lesen rendern, nicht beim Versand: title/detail in der Zeile stehen
+  // in der Sprache, die zum Zeitpunkt des Versands eingestellt war. Wer
+  // später umstellt, soll auch den bestehenden Posteingang in der neuen
+  // Sprache sehen. Zeilen ohne Payload (von vor dieser Änderung) behalten
+  // ihren gespeicherten Text.
+  const locale = toNotificationLocale(preference?.language);
+
+  return rows.map((row) => {
+    const rendered = renderStoredMessage(row.messagePayload, locale);
+
+    return {
+      id: row.id,
+      category: row.category,
+      title: rendered?.subject ?? row.title,
+      detail: rendered?.text ?? row.detail,
+      read: row.read,
+      createdAt: row.createdAt.toISOString(),
+      entityType: row.entityType,
+      entityId: row.entityId,
+    };
+  });
+}
+
+/**
+ * Ein fehlerhaftes Payload darf keine Zeile aus dem Posteingang kippen —
+ * im Zweifel bleibt der gespeicherte Text stehen.
+ */
+function renderStoredMessage(payload: unknown, locale: ReturnType<typeof toNotificationLocale>) {
+  if (!payload || typeof payload !== "object" || !("key" in payload)) {
+    return null;
+  }
+
+  try {
+    return renderNotification(payload as NotificationMessage, locale, { compact: true });
+  } catch {
+    return null;
+  }
 }
 
 export async function markMyNotificationRead(tenantSlug: string, notificationId: string) {

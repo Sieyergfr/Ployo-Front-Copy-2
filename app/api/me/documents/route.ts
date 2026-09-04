@@ -29,14 +29,19 @@ export async function POST(request: Request) {
   const file = form?.get("file");
   const documentType = form?.get("documentType");
   const description = form?.get("description");
+  const slotValue = form?.get("slot");
+  // Feld unter "Ausweisdokumente & Zertifikate". Ordner und Dokumenttyp
+  // stammen dann aus der festen Slot-Liste im Service, nicht vom Client.
+  const slot = typeof slotValue === "string" ? slotValue.trim() : "";
 
   if (typeof tenant !== "string" || !tenant.trim() || !(file instanceof File)) {
     return Response.json({ error: "'tenant' und 'file' sind erforderlich." }, { status: 400 });
   }
 
   if (
-    typeof documentType !== "string" ||
-    !selfServiceDocumentTypes.includes(documentType as SelfServiceDocumentType)
+    !slot &&
+    (typeof documentType !== "string" ||
+      !selfServiceDocumentTypes.includes(documentType as SelfServiceDocumentType))
   ) {
     return Response.json(
       { error: `'documentType' muss einer von ${selfServiceDocumentTypes.join(", ")} sein.` },
@@ -48,7 +53,8 @@ export async function POST(request: Request) {
     const document = await uploadMyDocument({
       tenantSlug: tenant,
       file,
-      documentType: documentType as SelfServiceDocumentType,
+      documentType: (slot ? "Sonstiges" : documentType) as SelfServiceDocumentType,
+      slot: slot || undefined,
       description: typeof description === "string" ? description : undefined,
     });
 

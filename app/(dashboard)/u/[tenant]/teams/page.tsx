@@ -7,6 +7,7 @@ import { getTeamMetrics, getTeamsForTenant } from "@/lib/team-service";
 import { hasPermissionLevel } from "@/lib/roles";
 import { getTenantPermissions, withAccessRedirect } from "@/lib/tenant-access";
 import { notFound } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 
 export const metadata = {
   title: "Teams",
@@ -53,14 +54,16 @@ export default async function TeamsPage({
   // Nur für den Mitglieder-Picker und die Standort-Filter im
   // "Team anlegen"-Dialog — fehlende Berechtigung dafür soll die Teamliste
   // selbst nicht sperren.
-  const [employees, locations, permissions] = await Promise.all([
+  const [employees, locations, permissions, t, tMetrics] = await Promise.all([
     getEmployeesForTenant(tenant).catch(() => null).then((v) => v ?? []),
     getLocationsForTenant(tenant).catch(() => null).then((v) => v ?? []),
     getTenantPermissions(tenant),
+    getTranslations("TeamsPage"),
+    getTranslations("TeamMetrics"),
   ]);
   const canCreateTeam = hasPermissionLevel(permissions.teams, "write");
 
-  const teamMetrics = getTeamMetrics(teams);
+  const teamMetrics = getTeamMetrics(teams, tMetrics);
   const employeeOptions = employees
     .filter((employee) => employee.dbId)
     .map((employee) => ({
@@ -71,7 +74,7 @@ export default async function TeamsPage({
 
   return (
     <>
-      <PageHeader eyebrow="Organisationsstruktur" title="Teams">
+      <PageHeader eyebrow={t("eyebrow")} title={t("title")}>
         {canCreateTeam && (
           <CreateTeamButton
             tenant={tenant}

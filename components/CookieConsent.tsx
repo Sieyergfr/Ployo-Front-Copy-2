@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSyncExternalStore } from "react";
-import { CONSENT_COOKIE, CONSENT_MAX_AGE_DAYS } from "@/lib/consent";
+import { CONSENT_BANNER_VERSION, CONSENT_COOKIE, CONSENT_MAX_AGE_DAYS } from "@/lib/consent";
 
 const REOPEN_EVENT = "ployo:open-cookie-settings";
 
@@ -47,10 +47,25 @@ function getServerSnapshot() {
   return false;
 }
 
+function recordConsent(value: "granted" | "denied") {
+  // keepalive: die Anfrage muss den unmittelbar folgenden reload() bei
+  // "granted" überleben, statt vom Navigations-Abbruch gekillt zu werden.
+  fetch("/api/consent", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ value, bannerVersion: CONSENT_BANNER_VERSION }),
+    keepalive: true,
+  }).catch(() => {
+    // Nachweis-Protokollierung ist best-effort; ein Netzwerkfehler soll die
+    // eigentliche Consent-Entscheidung des Nutzers nicht blockieren.
+  });
+}
+
 function decide(value: "granted" | "denied") {
   forcedOpen = false;
   const maxAge = CONSENT_MAX_AGE_DAYS * 24 * 60 * 60;
   document.cookie = `${CONSENT_COOKIE}=${value}; path=/; max-age=${maxAge}; SameSite=Lax`;
+  recordConsent(value);
 
   if (value === "granted") {
     window.location.reload();

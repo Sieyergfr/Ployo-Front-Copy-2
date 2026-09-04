@@ -47,7 +47,7 @@ export type FileUploadOptions = {
   users: FileUploadOption[];
 };
 
-export type ReminderFileBrowserSource = "central" | "employee" | "location";
+export type ReminderFileBrowserSource = "central" | "employee" | "location" | "team";
 
 export type ReminderFileBrowserFile = {
   id: string;

@@ -62,6 +62,7 @@ export default async function ShiftPlanningPage({
       conflictCount={plan.conflictCount}
       status={plan.status}
       publishedAt={plan.publishedAt}
+      hasUnpublishedChanges={plan.hasUnpublishedChanges}
       days={plan.days}
       employees={options.employees}
       locations={options.locations}

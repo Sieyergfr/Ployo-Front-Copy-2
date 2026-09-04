@@ -6,6 +6,7 @@ import { uploadAvatarAction } from "@/app/(dashboard)/konto/actions";
 import { FieldErrors, FormErrorBanner } from "@/components/FormFeedback";
 import type { ActionState } from "@/lib/action-state";
 import { Camera } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 const initialState: ActionState = {};
 
@@ -16,6 +17,7 @@ export default function AvatarUploadForm({
   image: string | null;
   initials: string;
 }) {
+  const t = useTranslations("AvatarUploadForm");
   const [state, formAction] = useActionState(uploadAvatarAction, initialState);
 
   return (
@@ -37,7 +39,7 @@ export default function AvatarUploadForm({
       <div className="flex flex-col gap-1.5">
         <label className="btn btn-secondary btn-sm w-fit cursor-pointer">
           <Camera size={13} />
-          Foto ändern
+          {t("changePhoto")}
           <input
             type="file"
             name="avatar"
@@ -48,7 +50,7 @@ export default function AvatarUploadForm({
         </label>
         <FieldErrors errors={state.fieldErrors?.avatar} />
         <FormErrorBanner message={state.error} />
-        <p className="text-[11px] text-muted-2">JPEG, PNG oder WebP, max. 2 MB.</p>
+        <p className="text-[11px] text-muted-2">{t("fileHint")}</p>
       </div>
     </form>
   );

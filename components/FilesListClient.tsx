@@ -5,6 +5,7 @@ import FilesBrowser from "@/components/FilesBrowser";
 import { ListSearchBox } from "@/components/ListSearchBox";
 import PaginationControls from "@/components/PaginationControls";
 import type { FileFolder, FileItem, FileUploadOptions } from "@/lib/files";
+import { useTranslations } from "next-intl";
 
 export function FilesListClient({
   folders,
@@ -36,6 +37,7 @@ export function FilesListClient({
   canManageFiles?: boolean;
   canManageReminders?: boolean;
 }) {
+  const t = useTranslations("FilesListClient");
   const [query, setQuery] = useState("");
   const normalizedQuery = query.trim().toLowerCase();
   const isFiltering = normalizedQuery !== "";
@@ -69,7 +71,7 @@ export function FilesListClient({
       <ListSearchBox
         value={query}
         onChange={setQuery}
-        placeholder={activeFolder ? "Dateiname, Typ oder Zuweisung" : "Ordner- oder Dateiname, Typ, Zuweisung"}
+        placeholder={activeFolder ? t("searchPlaceholderInFolder") : t("searchPlaceholderRoot")}
         className="mb-4 max-w-[360px]"
       />
 
@@ -84,7 +86,7 @@ export function FilesListClient({
         uploadOptions={uploadOptions}
         canManageFiles={canManageFiles}
         canManageReminders={canManageReminders}
-        emptyFilesLabel={isFiltering ? "Keine Treffer für diese Suche." : undefined}
+        emptyFilesLabel={isFiltering ? t("noSearchResults") : undefined}
       />
 
       {!isFiltering && (

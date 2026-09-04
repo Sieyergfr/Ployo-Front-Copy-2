@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState } from "react";
+import { useActionState, useEffect, useRef, useState, type CSSProperties } from "react";
 import {
   reportMySicknessAction,
   requestMyVacationAction,
@@ -23,6 +23,7 @@ import {
   ThermometerSnowflake,
   UserRoundCheck,
 } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 const initialState: ActionState = {};
 
@@ -69,6 +70,7 @@ const healthInsuranceOptions = [
 ].map((label) => ({ value: label, label }));
 
 export function MyVacationRequestForm({ tenant }: { tenant: string }) {
+  const t = useTranslations("SelfServiceForms");
   const [state, formAction] = useActionState(requestMyVacationAction, initialState);
   const today = todayInputValue();
 
@@ -78,14 +80,14 @@ export function MyVacationRequestForm({ tenant }: { tenant: string }) {
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="field">
           <label htmlFor="my-vacation-start" className="label">
-            Von
+            {t("fromLabel")}
           </label>
           <DatePickerField id="my-vacation-start" name="startDate" min={today} />
           <FieldErrors errors={state.fieldErrors?.startDate} />
         </div>
         <div className="field">
           <label htmlFor="my-vacation-end" className="label">
-            Bis
+            {t("toLabel")}
           </label>
           <DatePickerField id="my-vacation-end" name="endDate" min={today} />
           <FieldErrors errors={state.fieldErrors?.endDate} />
@@ -93,24 +95,25 @@ export function MyVacationRequestForm({ tenant }: { tenant: string }) {
       </div>
       <div className="field">
         <label htmlFor="my-vacation-note" className="label">
-          Notiz (optional)
+          {t("noteOptionalLabel")}
         </label>
         <input
           id="my-vacation-note"
           name="note"
           className="input"
-          placeholder="z. B. Vertretung durch..."
+          placeholder={t("vacationNotePlaceholder")}
         />
       </div>
       <FormErrorBanner message={state.error} />
-      <FormSubmitButton Icon={CalendarPlus} pendingLabel="Wird gestellt..." className="btn btn-primary w-fit">
-        Urlaub beantragen
+      <FormSubmitButton Icon={CalendarPlus} pendingLabel={t("submittingVacation")} className="btn btn-primary w-fit">
+        {t("requestVacation")}
       </FormSubmitButton>
     </form>
   );
 }
 
 export function MySicknessReportForm({ tenant }: { tenant: string }) {
+  const t = useTranslations("SelfServiceForms");
   const [state, formAction] = useActionState(reportMySicknessAction, initialState);
 
   return (
@@ -119,31 +122,31 @@ export function MySicknessReportForm({ tenant }: { tenant: string }) {
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="field">
           <label htmlFor="my-sickness-start" className="label">
-            Krank seit
+            {t("sickSinceLabel")}
           </label>
           <DatePickerField id="my-sickness-start" name="startDate" />
           <FieldErrors errors={state.fieldErrors?.startDate} />
         </div>
         <div className="field">
           <label htmlFor="my-sickness-end" className="label">
-            Voraussichtlich bis (optional)
+            {t("expectedUntilOptionalLabel")}
           </label>
           <DatePickerField id="my-sickness-end" name="endDate" />
         </div>
       </div>
       <div className="field">
         <label htmlFor="my-sickness-note" className="label">
-          Notiz (optional)
+          {t("noteOptionalLabel")}
         </label>
-        <input id="my-sickness-note" name="note" className="input" placeholder="Optional" />
+        <input id="my-sickness-note" name="note" className="input" placeholder={t("optionalPlaceholder")} />
       </div>
       <FormErrorBanner message={state.error} />
       <FormSubmitButton
         Icon={ThermometerSnowflake}
-        pendingLabel="Wird gemeldet..."
+        pendingLabel={t("submittingSickness")}
         className="btn btn-primary w-fit"
       >
-        Krankmeldung abschicken
+        {t("submitSicknessReport")}
       </FormSubmitButton>
     </form>
   );
@@ -158,6 +161,7 @@ export function MyProfileCompletionCard({
   profileFields: MyProfileFields;
   completeness: ProfileCompleteness;
 }) {
+  const t = useTranslations("SelfServiceForms");
   const [isExpanded, setIsExpanded] = useState(false);
   const [state, formAction, isPending] = useActionState(updateMyProfileAction, initialState);
   const isComplete = completeness.percent >= 100;
@@ -207,7 +211,7 @@ export function MyProfileCompletionCard({
           </span>
           <div className="min-w-0">
             <h2 className="font-display text-[16px] font-semibold tracking-[-0.3px] text-ink">
-              Profil vervollständigen
+              {t("completeProfileTitle")}
             </h2>
             <div
               className={`mt-0.5 flex items-center gap-1.5 text-[12.5px] ${
@@ -217,12 +221,12 @@ export function MyProfileCompletionCard({
               {justSaved ? (
                 <>
                   <Check size={13} strokeWidth={2.5} />
-                  Gespeichert
+                  {t("saved")}
                 </>
               ) : isComplete ? (
-                "Alle Angaben vollständig"
+                t("allComplete")
               ) : (
-                `${completeness.filledCount} von ${completeness.totalCount} Angaben vollständig`
+                t("filledOfTotal", { filled: completeness.filledCount, total: completeness.totalCount })
               )}
             </div>
           </div>
@@ -236,8 +240,8 @@ export function MyProfileCompletionCard({
 
       <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-border-soft">
         <div
-          className={`h-full rounded-full ${isComplete ? "bg-success" : "bg-warning"}`}
-          style={{ width: `${completeness.percent}%` }}
+          className={`h-full w-[var(--pct)] rounded-full ${isComplete ? "bg-success" : "bg-warning"}`}
+          style={{ "--pct": `${completeness.percent}%` } as CSSProperties}
         />
       </div>
 
@@ -261,7 +265,7 @@ export function MyProfileCompletionCard({
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="field">
               <label htmlFor="my-profile-birth-date" className="label">
-                Geburtsdatum
+                {t("birthDateLabel")}
               </label>
               <DatePickerField
                 id="my-profile-birth-date"
@@ -271,7 +275,7 @@ export function MyProfileCompletionCard({
             </div>
             <div className="field">
               <label htmlFor="my-profile-birth-place" className="label">
-                Geburtsort
+                {t("birthPlaceLabel")}
               </label>
               <input
                 id="my-profile-birth-place"
@@ -282,7 +286,7 @@ export function MyProfileCompletionCard({
             </div>
             <div className="field">
               <label htmlFor="my-profile-nationality" className="label">
-                Staatsangehörigkeit
+                {t("nationalityLabel")}
               </label>
               <SelectOrOtherField
                 id="my-profile-nationality"
@@ -293,7 +297,7 @@ export function MyProfileCompletionCard({
             </div>
             <div className="field">
               <label htmlFor="my-profile-marital-status" className="label">
-                Familienstand
+                {t("maritalStatusLabel")}
               </label>
               <SelectOrOtherField
                 id="my-profile-marital-status"
@@ -304,7 +308,7 @@ export function MyProfileCompletionCard({
             </div>
             <div className="field">
               <label htmlFor="my-profile-phone" className="label">
-                Telefonnummer
+                {t("phoneLabel")}
               </label>
               <input
                 id="my-profile-phone"
@@ -317,7 +321,7 @@ export function MyProfileCompletionCard({
           </div>
 
           <div>
-            <div className="mb-2 label">Privatadresse</div>
+            <div className="mb-2 label">{t("privateAddressLabel")}</div>
             <AddressFields
               idPrefix="my-profile-address"
               namePrefix="privateAddress"
@@ -328,7 +332,7 @@ export function MyProfileCompletionCard({
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="field">
               <label htmlFor="my-profile-tax-id" className="label">
-                Steuer-ID
+                {t("taxIdLabel")}
               </label>
               <input
                 id="my-profile-tax-id"
@@ -339,7 +343,7 @@ export function MyProfileCompletionCard({
             </div>
             <div className="field">
               <label htmlFor="my-profile-ssn" className="label">
-                Sozialversicherungsnummer
+                {t("ssnLabel")}
               </label>
               <input
                 id="my-profile-ssn"
@@ -350,32 +354,32 @@ export function MyProfileCompletionCard({
             </div>
             <div className="field sm:col-span-2">
               <label htmlFor="my-profile-health-insurance" className="label">
-                Krankenversicherung
+                {t("healthInsuranceLabel")}
               </label>
               <SelectOrOtherField
                 id="my-profile-health-insurance"
                 name="healthInsurance"
                 options={healthInsuranceOptions}
                 defaultValue={profileFields.healthInsurance}
-                otherPlaceholder="Name der Krankenkasse"
+                otherPlaceholder={t("healthInsuranceOtherPlaceholder")}
               />
             </div>
             <div className="field sm:col-span-2">
               <label htmlFor="my-profile-iban" className="label">
-                IBAN
+                {t("ibanLabel")}
               </label>
               <input
                 id="my-profile-iban"
                 name="iban"
                 className="input input-mono"
                 defaultValue={profileFields.iban}
-                placeholder="Für Gehaltsabrechnung"
+                placeholder={t("ibanPlaceholder")}
               />
             </div>
           </div>
 
           <div>
-            <div className="mb-2 label">Notfallkontakte</div>
+            <div className="mb-2 label">{t("emergencyContactsLabel")}</div>
             <EmergencyContactsEditor contacts={profileFields.emergencyContacts} />
           </div>
 
@@ -387,10 +391,10 @@ export function MyProfileCompletionCard({
               className="btn btn-secondary"
               onClick={() => setIsExpanded(false)}
             >
-              Abbrechen
+              {t("cancel")}
             </button>
-            <FormSubmitButton Icon={Save} pendingLabel="Wird gespeichert...">
-              Speichern
+            <FormSubmitButton Icon={Save} pendingLabel={t("saving")}>
+              {t("save")}
             </FormSubmitButton>
           </div>
         </form>
@@ -403,7 +407,7 @@ export function MyProfileCompletionCard({
           onClick={() => setIsExpanded(true)}
         >
           {isComplete ? <Check size={14} /> : <UserRoundCheck size={14} />}
-          {isComplete ? "Angaben bearbeiten" : "Jetzt ergänzen"}
+          {isComplete ? t("editDetails") : t("completeNow")}
         </button>
       )}
     </section>

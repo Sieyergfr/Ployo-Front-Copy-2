@@ -30,6 +30,22 @@ function formOpeningHours(formData: FormData, key: string) {
   }
 }
 
+/**
+ * Mindestbesetzung des Standorts. Leeres Feld = kein eigener Wert, die
+ * Unternehmensvorgabe gilt weiter (null), deshalb nicht auf 0 normalisiert.
+ */
+function formMinStaffing(formData: FormData, key: string) {
+  const raw = formData.get(key);
+
+  if (typeof raw !== "string" || raw.trim() === "") {
+    return null;
+  }
+
+  const parsed = Number.parseInt(raw.trim(), 10);
+
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
 function locationsPath(tenant: string) {
   return `/u/${tenant}/standorte`;
 }
@@ -63,6 +79,7 @@ export async function createLocationAction(formData: FormData) {
     email: formString(formData, "email"),
     accentClassName: formString(formData, "color", "bg-ink"),
     openingHours: formOpeningHours(formData, "openingHours"),
+    shiftMinStaffing: formMinStaffing(formData, "shiftMinStaffing"),
   });
 
   revalidatePath(locationsPath(tenant));
@@ -95,6 +112,7 @@ export async function updateLocationAction(formData: FormData) {
     leadEmployeeId: formString(formData, "lead"),
     accentClassName: formString(formData, "color", "bg-ink"),
     openingHours: formOpeningHours(formData, "openingHours"),
+    shiftMinStaffing: formMinStaffing(formData, "shiftMinStaffing"),
   });
 
   revalidatePath(locationsPath(tenant));

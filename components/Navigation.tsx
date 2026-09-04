@@ -10,6 +10,7 @@ import AddressFields from "@/components/AddressFields";
 import type { AddressInput } from "@/lib/address";
 import type { BillingInvoice } from "@/lib/billing-service";
 import FormSubmitButton from "@/components/FormSubmitButton";
+import { useToast } from "@/components/Toasts";
 import Checkbox from "@/components/inputs/checkbox";
 import { useSlugAvailability } from "@/lib/hooks/useSlugAvailability";
 import { permissionLevels, type PermissionLevel } from "@/lib/roles";
@@ -1032,13 +1033,15 @@ function SettingsPopupForm({
   // Speichern → Bestätigung anzeigen, Fenster dabei nicht schließen").
   const [justSaved, setJustSaved] = useState(false);
   const wasPending = useRef(false);
+  const { toast } = useToast();
 
   useEffect(() => {
     if (wasPending.current && !isPending && !state.error) {
       setJustSaved(true);
+      toast({ tone: "success", title: "Gespeichert" });
     }
     wasPending.current = isPending;
-  }, [isPending, state]);
+  }, [isPending, state, toast]);
 
   useEffect(() => {
     if (!justSaved) return;

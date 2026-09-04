@@ -30,4 +30,14 @@ describe("encryptField / decryptField", () => {
       "DE89370400440532013000",
     );
   });
+
+  it("wirft für eine referenzierte Key-Version ohne konfigurierten Schlüssel (statt still zu leeren)", () => {
+    expect(() => decryptField("enc:v99:AAAA")).toThrow(
+      /Kein Schlüssel für Verschlüsselungs-Version 99/,
+    );
+  });
+
+  it("gibt bei beschädigter Nutzlast unter einer gültigen Version weiterhin leer zurück", () => {
+    expect(decryptField("enc:v1:nicht-valides-base64-oder-zu-kurz")).toBe("");
+  });
 });

@@ -12,8 +12,14 @@ import { decryptField, encryptField } from "@/lib/encryption";
 const UNLOCK_COOKIE = "ployo-folder-unlock";
 const UNLOCK_MAX_AGE_SECONDS = 60 * 60 * 8;
 
-function folderUnlockKey(tenantSlug: string, folderPath: string) {
-  return `${tenantSlug}:${folderPath}`;
+/**
+ * `scope` unterscheidet Ordner mit identischem `path` in unterschiedlichen
+ * Eigentümer-Ablagen (z. B. der "vertraege"-Ordner zweier verschiedener
+ * Mitarbeiter) — ohne das würde das Freischalten eines Ordners versehentlich
+ * jeden anderen Ordner mit demselben Pfadnamen mit freischalten.
+ */
+function folderUnlockKey(tenantSlug: string, scope: string, folderPath: string) {
+  return `${tenantSlug}:${scope}:${folderPath}`;
 }
 
 /** Liest die per Cookie freigeschalteten Ordner (AES-GCM-verschlüsselt — manipulierte Werte fallen auf "keine Freischaltung" zurück). */
@@ -34,16 +40,16 @@ async function getUnlockedFolderKeys(): Promise<string[]> {
   }
 }
 
-export async function isFolderUnlocked(tenantSlug: string, folderPath: string) {
+export async function isFolderUnlocked(tenantSlug: string, folderPath: string, scope = "tenant") {
   const keys = await getUnlockedFolderKeys();
 
-  return keys.includes(folderUnlockKey(tenantSlug, folderPath));
+  return keys.includes(folderUnlockKey(tenantSlug, scope, folderPath));
 }
 
 /** Merkt sich per Session-Cookie, dass die PIN für diesen Ordner bereits korrekt eingegeben wurde. */
-export async function markFolderUnlocked(tenantSlug: string, folderPath: string) {
+export async function markFolderUnlocked(tenantSlug: string, folderPath: string, scope = "tenant") {
   const keys = await getUnlockedFolderKeys();
-  const key = folderUnlockKey(tenantSlug, folderPath);
+  const key = folderUnlockKey(tenantSlug, scope, folderPath);
   const nextKeys = keys.includes(key) ? keys : [...keys, key];
 
   (await cookies()).set(UNLOCK_COOKIE, encryptField(JSON.stringify(nextKeys)), {

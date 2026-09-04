@@ -17,6 +17,7 @@ import { getTenantCapabilities, withAccessRedirect } from "@/lib/tenant-access";
 import { ArrowLeft, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 
 export async function generateMetadata({
   params,
@@ -42,6 +43,7 @@ export default async function RoleDetailPage({
 }: PageProps<"/u/[tenant]/rollen/[roleId]">) {
   const { tenant, roleId } = await params;
   const { edit } = await searchParams;
+  const t = await getTranslations("RoleDetailPage");
   const role = await withAccessRedirect(tenant, () => getRoleForTenant(tenant, roleId));
 
   if (!role) {
@@ -59,14 +61,14 @@ export default async function RoleDetailPage({
       <div className="mb-[18px]">
         <Link href={`/u/${tenant}/rollen`} className="btn btn-secondary btn-sm">
           <ArrowLeft size={14} />
-          Rollen
+          {t("backToRoles")}
         </Link>
       </div>
 
       <PageHeader
-        eyebrow="Rollendetail"
+        eyebrow={t("eyebrow")}
         title={role.name}
-        subtitle={`${role.members} zugewiesene Mitarbeiter · ${role.description}`}
+        subtitle={t("subtitle", { count: role.members, description: role.description })}
       >
         {!isEditing && (
           <>
@@ -77,15 +79,15 @@ export default async function RoleDetailPage({
                 <ConfirmSubmitButton
                   form="role-delete-form"
                   className="btn btn-secondary border-danger/25 text-danger hover:border-danger/40 hover:bg-danger/5"
-                  description={`Die Rolle "${role.name}" wird dauerhaft gelöscht.`}
+                  description={t("deleteConfirmDescription", { name: role.name })}
                 >
-                  Löschen
+                  {t("delete")}
                 </ConfirmSubmitButton>
               </form>
             )}
             <Link href={`${roleHref}?edit=1`} className="btn btn-secondary">
               <ShieldCheck size={15} />
-              Rechte bearbeiten
+              {t("editPermissions")}
             </Link>
           </>
         )}
@@ -99,7 +101,7 @@ export default async function RoleDetailPage({
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="field">
                 <label htmlFor="role-name" className="label">
-                  Rollenname
+                  {t("roleName")}
                 </label>
                 <input
                   id="role-name"
@@ -111,7 +113,7 @@ export default async function RoleDetailPage({
               </div>
               <div className="field">
                 <label htmlFor="role-description" className="label">
-                  Beschreibung
+                  {t("description")}
                 </label>
                 <input
                   id="role-description"
@@ -121,6 +123,23 @@ export default async function RoleDetailPage({
                 />
               </div>
             </div>
+
+            <label className="mt-4 flex items-start gap-2.5 rounded-[12px] border border-border bg-bg p-3">
+              <input
+                type="checkbox"
+                name="appOverviewEnabled"
+                defaultChecked={role.appOverviewEnabled}
+                className="mt-0.5"
+              />
+              <span className="min-w-0">
+                <span className="block text-[13.5px] font-semibold text-ink">
+                  {t("appOverviewTitle")}
+                </span>
+                <span className="mt-0.5 block text-[12px] leading-[1.35] text-muted">
+                  {t("appOverviewDescription")}
+                </span>
+              </span>
+            </label>
           </section>
           {permissionAreas.map((area) => {
             const level = role.permissions[area.id] ?? "none";
@@ -144,7 +163,7 @@ export default async function RoleDetailPage({
                   <span
                     className={`inline-flex w-fit rounded-[9px] border px-2.5 py-1.5 font-mono text-[10.5px] font-semibold ${levelTone[level]}`}
                   >
-                    Aktuell: {permissionLevelLabels[level]}
+                    {t("currentLevel", { level: permissionLevelLabels[level] })}
                   </span>
                 </div>
 
@@ -158,20 +177,20 @@ export default async function RoleDetailPage({
                   <div className="mt-4 grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                     <div className="min-w-0 rounded-xl border border-border-soft bg-bg p-3">
                       <div className="mb-3 font-mono text-[9.5px] uppercase tracking-[0.6px] text-muted">
-                        Zusätzliche Rechte
+                        {t("additionalPermissions")}
                       </div>
                       <div className="grid gap-2">
                         <Checkbox
                           id={`can-delete-${area.id}`}
                           defaultChecked={role.canDelete[area.id] ?? false}
                         >
-                          Löschen erlaubt
+                          {t("deleteAllowed")}
                         </Checkbox>
                         <Checkbox
                           id={`can-view-audit-${area.id}`}
                           defaultChecked={role.canViewAudit[area.id] ?? false}
                         >
-                          Audit-Log sichtbar
+                          {t("auditLogVisible")}
                         </Checkbox>
                       </div>
                     </div>
@@ -179,26 +198,26 @@ export default async function RoleDetailPage({
                     {area.fileRelevant && (
                       <div className="min-w-0 rounded-xl border border-border-soft bg-bg p-3">
                         <div className="mb-3 font-mono text-[9.5px] uppercase tracking-[0.6px] text-muted">
-                          Dateien
+                          {t("files")}
                         </div>
                         <div className="grid gap-2">
                           <Checkbox
                             id={`can-upload-files-${area.id}`}
                             defaultChecked={role.canUploadFiles[area.id] ?? false}
                           >
-                            Hochladen
+                            {t("upload")}
                           </Checkbox>
                           <Checkbox
                             id={`can-edit-files-${area.id}`}
                             defaultChecked={role.canEditFiles[area.id] ?? false}
                           >
-                            Bearbeiten
+                            {t("edit")}
                           </Checkbox>
                           <Checkbox
                             id={`can-view-files-${area.id}`}
                             defaultChecked={role.canViewFiles[area.id] ?? false}
                           >
-                            Sehen
+                            {t("view")}
                           </Checkbox>
                         </div>
                       </div>
@@ -207,7 +226,7 @@ export default async function RoleDetailPage({
                     {area.supportsAssignedScope && (
                       <div className="min-w-0 rounded-xl border border-border-soft bg-bg p-3">
                         <div className="mb-3 font-mono text-[9.5px] uppercase tracking-[0.6px] text-muted">
-                          Schichten
+                          {t("shifts")}
                         </div>
                         <div className="grid grid-cols-2 gap-2">
                           {permissionLevels.map((shiftLevel) => (
@@ -242,10 +261,10 @@ export default async function RoleDetailPage({
           <div className="overflow-x-auto">
             <div className="min-w-[760px]">
               <div className="grid grid-cols-[220px_minmax(200px,1fr)_130px_130px] border-b border-border px-6 py-4 font-mono text-[9.5px] uppercase tracking-[0.6px] text-muted">
-                <div>Bereich</div>
-                <div>Beschreibung</div>
-                <div>Recht</div>
-                <div>Sichtbarkeit</div>
+                <div>{t("columnArea")}</div>
+                <div>{t("columnDescription")}</div>
+                <div>{t("columnPermission")}</div>
+                <div>{t("columnVisibility")}</div>
               </div>
               {permissionAreas.map((area) => {
                 const level = role.permissions[area.id] ?? "none";

@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth";
+import { recordTenantAudit } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 import { type Shift, type ShiftDay } from "@/lib/shifts";
 import { headers } from "next/headers";
@@ -7,6 +8,7 @@ import {
   requireTenantMembership,
   resolveScopeFilter,
 } from "@/lib/tenant-access";
+import { hasPermissionLevel } from "@/lib/roles";
 import {
   parseOpeningHoursDays,
   resolveEffectiveOpeningHours,
@@ -18,7 +20,11 @@ import {
   type ShiftTemplateEntry,
 } from "@/lib/shift-templates";
 import { isUniqueConstraintError } from "@/lib/prisma-errors";
-import { notifyEmployeeOfShiftPlanPublished } from "@/lib/notifications/events";
+import { exceedsMaxShiftHours, findRestPeriodViolation } from "@/lib/arbzg-rules";
+import {
+  notifyEmployeeOfShiftPlanPublished,
+  notifyShiftPlanManagersOfAbsenceConflict,
+} from "@/lib/notifications/events";
 
 export type ShiftEmployeeOption = {
   id: string;
@@ -181,6 +187,64 @@ function hasConflict(input: {
   });
 }
 
+/**
+ * Liefert eine Prüffunktion `(employeeId, date) => boolean`, die erkennt, ob
+ * der Mitarbeiter an diesem Tag genehmigten Urlaub oder eine offene
+ * Krankmeldung hat — genutzt, um Schichten als Konflikt zu markieren, wenn
+ * eine Abwesenheit NACH der Schichteinteilung hinzukam (siehe `getShiftPlanForTenant`).
+ */
+async function buildAbsenceCheck(
+  tenantId: string,
+  employeeIds: string[],
+  rangeStart: string,
+  rangeEnd: string,
+) {
+  const rangeEndDate = new Date(`${rangeEnd}T23:59:59.999Z`);
+  const rangeStartDate = new Date(`${rangeStart}T00:00:00.000Z`);
+
+  const [vacations, sicknesses] = await Promise.all([
+    prisma.tenantVacationRequest.findMany({
+      where: {
+        tenantId,
+        employeeId: { in: employeeIds },
+        status: "approved",
+        startDate: { lte: rangeEnd },
+        endDate: { gte: rangeStart },
+      },
+      select: { employeeId: true, startDate: true, endDate: true },
+    }),
+    prisma.tenantSicknessReport.findMany({
+      where: {
+        tenantId,
+        employeeId: { in: employeeIds },
+        status: "open",
+        startDate: { lte: rangeEndDate },
+        OR: [{ endDate: null }, { endDate: { gte: rangeStartDate } }],
+      },
+      select: { employeeId: true, startDate: true, endDate: true },
+    }),
+  ]);
+
+  return (employeeId: string, date: string) => {
+    const inVacation = vacations.some(
+      (v) => v.employeeId === employeeId && v.startDate <= date && v.endDate >= date,
+    );
+
+    if (inVacation) {
+      return true;
+    }
+
+    const dateValue = new Date(`${date}T00:00:00.000Z`);
+
+    return sicknesses.some(
+      (s) =>
+        s.employeeId === employeeId &&
+        s.startDate <= dateValue &&
+        (!s.endDate || s.endDate >= dateValue),
+    );
+  };
+}
+
 async function getSessionUserId() {
   const session = await auth.api.getSession({
     headers: await headers(),
@@ -231,48 +295,228 @@ async function getShiftWeekRecord(tenantId: string, year: number, week: number) 
   });
 }
 
-async function getShiftWeekForDate(tenantId: string, date: string) {
-  const { year, week } = getISOWeekFromDate(new Date(`${date}T00:00:00Z`));
-  const record = await getShiftWeekRecord(tenantId, year, week);
+/**
+ * Vergleichsschlüssel einer Schicht — alles, was eine Änderung ausmacht.
+ * Grundlage für "seit dem Veröffentlichen bearbeitet" (Entwurfs-Badge) und
+ * damit bewusst unabhängig von `updatedAt`: eine Änderung und ihre Rücknahme
+ * ergeben denselben Schlüssel und gelten dann zu Recht nicht als Abweichung.
+ */
+function shiftComparisonKey(entry: {
+  date: string;
+  startTime: string;
+  endTime: string;
+  breakMinutes: number;
+  employeeId?: string | null;
+  locationId?: string | null;
+  team?: string | null;
+  note?: string | null;
+}) {
+  return [
+    entry.date,
+    entry.startTime,
+    entry.endTime,
+    String(entry.breakMinutes),
+    entry.employeeId ?? "",
+    entry.locationId ?? "",
+    entry.team ?? "",
+    entry.note ?? "",
+  ].join("|");
+}
 
-  return { year, week, published: record?.status === "published" };
+/** Schlüssel der Mitarbeiter-sichtbaren Felder — Rückfallebene für Alt-Schnappschüsse. */
+function visibleShiftComparisonKey(entry: {
+  date: string;
+  startTime: string;
+  endTime: string;
+  breakMinutes: number;
+  employeeId?: string | null;
+  note?: string | null;
+}) {
+  return [
+    entry.date,
+    entry.startTime,
+    entry.endTime,
+    String(entry.breakMinutes),
+    entry.employeeId ?? "",
+    entry.note ?? "",
+  ].join("|");
+}
+
+function keysDiffer(live: string[], published: string[]) {
+  if (live.length !== published.length) {
+    return true;
+  }
+
+  const sortedLive = [...live].sort();
+  const sortedPublished = [...published].sort();
+
+  return sortedLive.some((key, index) => key !== sortedPublished[index]);
 }
 
 /**
- * Sammel-Mail mit allen aktuellen Schichten eines Mitarbeiters in einer
- * Woche — dieselbe Mail wie beim Veröffentlichen (`publishShiftWeek`), nur
- * für einen einzelnen Mitarbeiter. Wird für jede Änderung an einer bereits
- * veröffentlichten Woche verwendet (Anlegen/Ändern/Löschen einer Schicht),
- * damit Betroffene immer den vollständigen, aktuellen Stand sehen statt nur
- * der isolierten Einzeländerung.
+ * Weicht der aktuelle Planungsstand einer Woche vom zuletzt veröffentlichten
+ * Schnappschuss ab? Nur dann zeigt die UI trotz Status "veröffentlicht" die
+ * Entwurfs-Badge und bietet "auf veröffentlichte Version zurücksetzen" an.
+ *
+ * Schnappschüsse aus der Zeit vor `key`/`locationId`/`team` (siehe
+ * `PublishedShiftSnapshotEntry`) enthalten nur die besetzten Schichten und
+ * deren sichtbare Felder — dagegen wird entsprechend eingeschränkt
+ * verglichen, sonst gälte jede alte Woche sofort als abweichend.
  */
-async function notifyEmployeeWeekOverview(input: {
-  tenantId: string;
-  employeeId: string;
-  year: number;
-  week: number;
-}) {
-  const days = buildWeekDays(input.year, input.week);
-  const dayIds = days.map((day) => day.id);
+function hasWeekDivergedFromSnapshot(
+  liveShifts: Array<{
+    date: string;
+    startTime: string;
+    endTime: string;
+    breakMinutes: number;
+    employeeId: string | null;
+    locationId: string | null;
+    team: string;
+    note: string;
+  }>,
+  snapshot: PublishedShiftSnapshotEntry[],
+) {
+  const isLegacySnapshot =
+    snapshot.length > 0 && snapshot.every((entry) => entry.key === undefined);
 
-  const [tenant, shifts] = await Promise.all([
-    prisma.tenant.findUnique({
-      where: { id: input.tenantId },
-      select: { name: true },
-    }),
-    prisma.tenantShift.findMany({
-      where: { tenantId: input.tenantId, employeeId: input.employeeId, date: { in: dayIds } },
-      select: { date: true, startTime: true, endTime: true },
-    }),
-  ]);
+  if (isLegacySnapshot) {
+    return keysDiffer(
+      liveShifts.filter((shift) => shift.employeeId).map(visibleShiftComparisonKey),
+      snapshot.map(visibleShiftComparisonKey),
+    );
+  }
 
-  await notifyEmployeeOfShiftPlanPublished({
-    tenantId: input.tenantId,
-    tenantName: tenant?.name ?? "",
-    employeeId: input.employeeId,
-    weekLabel: `KW ${input.week}`,
-    weekRange: formatWeekRange(getISOWeekStart(input.year, input.week)),
-    shifts,
+  return keysDiffer(liveShifts.map(shiftComparisonKey), snapshot.map(shiftComparisonKey));
+}
+
+/**
+ * Mindestbesetzung je Standort: eigener Wert des Standorts, sonst die
+ * Unternehmensvorgabe (`TenantSettings.shiftMinStaffing`).
+ */
+async function getLocationMinStaffing(tenantId: string, tenantMinStaffing: number) {
+  const locations = await prisma.tenantLocation.findMany({
+    where: { tenantId },
+    select: { id: true, shiftMinStaffing: true },
+  });
+
+  return Object.fromEntries(
+    locations.map((location) => [location.id, location.shiftMinStaffing ?? tenantMinStaffing]),
+  ) as Record<string, number>;
+}
+
+/**
+ * Unterbesetzt wird pro Standort gezählt, nicht mehr pro Tag über alle
+ * Standorte hinweg: ein Tag ist unterbesetzt, sobald irgendein Standort an
+ * diesem Tag unter seiner eigenen Mindestbesetzung liegt. Schichten ohne
+ * Standort laufen weiter gegen die Unternehmensvorgabe.
+ */
+function isDayUnderstaffed(
+  shifts: Shift[],
+  tenantMinStaffing: number,
+  locationMinStaffing: Record<string, number>,
+) {
+  const staffedByLocation = new Map<string, number>();
+
+  for (const shift of shifts) {
+    if (!shift.employeeId) {
+      continue;
+    }
+
+    const key = shift.locationId ?? "";
+
+    staffedByLocation.set(key, (staffedByLocation.get(key) ?? 0) + 1);
+  }
+
+  if (staffedByLocation.size === 0) {
+    return tenantMinStaffing > 0;
+  }
+
+  return Array.from(staffedByLocation.entries()).some(([locationId, staffed]) => {
+    const required = locationId
+      ? locationMinStaffing[locationId] ?? tenantMinStaffing
+      : tenantMinStaffing;
+
+    return required > 0 && staffed < required;
+  });
+}
+
+/**
+ * Der veröffentlichte Stand einer Woche in derselben Form, in der
+ * getShiftPlanForTenant sonst die Live-Zeilen aus TenantShift verarbeitet —
+ * Grundlage der Nur-Lese-Ansicht (siehe dort). Ist die Woche nicht
+ * veröffentlicht, gibt es entsprechend nichts zu sehen.
+ *
+ * Der konfigurierte Scope (own/team) wird hier erneut angewendet: der
+ * Schnappschuss enthält die ganze Woche, das where der Live-Abfrage greift
+ * für ihn also nicht.
+ */
+async function publishedShiftRecords(
+  tenantId: string,
+  access: Awaited<ReturnType<typeof requireTenantAccess>>,
+  weekRecord: Awaited<ReturnType<typeof getShiftWeekRecord>>,
+) {
+  const entries =
+    weekRecord?.status === "published"
+      ? ((weekRecord.publishedShiftsJson ?? []) as PublishedShiftSnapshotEntry[])
+      : [];
+
+  if (!entries.length) {
+    return [];
+  }
+
+  const scopeFilter = await resolveScopeFilter(access);
+  let visible = entries;
+
+  if (scopeFilter.type === "own") {
+    visible = entries.filter((entry) => entry.employeeId === scopeFilter.employeeId);
+  } else if (scopeFilter.type === "team") {
+    const teammates = await prisma.tenantEmployee.findMany({
+      where: { tenantId, team: scopeFilter.team },
+      select: { id: true },
+    });
+    const teammateIds = new Set(teammates.map((employee) => employee.id));
+
+    visible = entries.filter((entry) => entry.employeeId && teammateIds.has(entry.employeeId));
+  } else if (scopeFilter.type !== "all") {
+    // "assigned" kennt der Schichtbereich nicht — nichts zeigen statt alles.
+    visible = [];
+  }
+
+  const employeeIds = Array.from(
+    new Set(visible.map((entry) => entry.employeeId).filter((id): id is string => Boolean(id))),
+  );
+  const employees = employeeIds.length
+    ? await prisma.tenantEmployee.findMany({
+        where: { tenantId, id: { in: employeeIds } },
+        select: { id: true, name: true, team: true },
+      })
+    : [];
+  const employeeById = new Map(employees.map((employee) => [employee.id, employee]));
+
+  return visible.map((entry) => {
+    const employee = entry.employeeId ? employeeById.get(entry.employeeId) : undefined;
+
+    return {
+      id: entry.id,
+      key: entry.key ?? entry.id,
+      date: entry.date,
+      startTime: entry.startTime,
+      endTime: entry.endTime,
+      breakMinutes: entry.breakMinutes,
+      employeeId: entry.employeeId,
+      locationId: entry.locationId ?? null,
+      team: entry.team ?? "",
+      note: entry.note,
+      conflict: false,
+      employee: employee ? { id: employee.id, name: employee.name, team: employee.team } : null,
+      location: entry.location
+        ? {
+            id: entry.locationId ?? "",
+            name: entry.location,
+            accentClassName: entry.locationAccentClassName ?? "",
+          }
+        : null,
+    };
   });
 }
 
@@ -290,7 +534,7 @@ export async function getShiftPlanForTenant(input: {
 
   const days = buildWeekDays(input.year, input.week);
   const dayIds = days.map((day) => day.id);
-  const [records, settings, weekRecord] = await Promise.all([
+  const [liveRecords, settings, weekRecord] = await Promise.all([
     prisma.tenantShift.findMany({
       where: {
         ...scopeWhere,
@@ -320,8 +564,26 @@ export async function getShiftPlanForTenant(input: {
     }),
     getShiftWeekRecord(tenantId, input.year, input.week),
   ]);
+  // Ohne Schreibrecht ist der Schichtplan eine reine Ansicht — und dann darf
+  // sie nur zeigen, was tatsächlich veröffentlicht ist. Sonst sah ein
+  // Mitarbeiter mit "shifts: read" unter "Alle Schichten" den laufenden
+  // Entwurf der Planung, während "Meine Schichten"
+  // (getMyShiftsForCurrentWeek) längst korrekt nur den veröffentlichten
+  // Schnappschuss zeigte.
+  const planAccess = await requireTenantAccess(input.tenantSlug, "shifts", "read");
+  const canSeeDrafts = hasPermissionLevel(planAccess.permissionLevel, "write");
+  const records = canSeeDrafts
+    ? liveRecords
+    : await publishedShiftRecords(tenantId, planAccess, weekRecord);
   const minStaffing = settings?.shiftMinStaffing ?? 0;
+  const locationMinStaffing = await getLocationMinStaffing(tenantId, minStaffing);
   const conflictIds = new Set<string>();
+  const employeeIds = Array.from(
+    new Set(records.map((record) => record.employeeId).filter((id): id is string => Boolean(id))),
+  );
+  const isAbsent = employeeIds.length
+    ? await buildAbsenceCheck(tenantId, employeeIds, dayIds[0], dayIds[dayIds.length - 1])
+    : () => false;
 
   for (const record of records) {
     if (
@@ -331,7 +593,8 @@ export async function getShiftPlanForTenant(input: {
         startTime: record.startTime,
         endTime: record.endTime,
         existing: records.filter((item) => item.id !== record.id),
-      })
+      }) ||
+      (record.employeeId && isAbsent(record.employeeId, record.date))
     ) {
       conflictIds.add(record.id);
     }
@@ -363,13 +626,38 @@ export async function getShiftPlanForTenant(input: {
     shiftsByDate.set(record.date, dateShifts);
   }
 
+  const publishedSnapshot = (weekRecord?.publishedShiftsJson ??
+    []) as PublishedShiftSnapshotEntry[];
+  const hasUnpublishedChanges =
+    weekRecord?.status === "published" &&
+    hasWeekDivergedFromSnapshot(
+      records.map((record) => ({
+        date: record.date,
+        startTime: record.startTime,
+        endTime: record.endTime,
+        breakMinutes: record.breakMinutes,
+        employeeId: record.employeeId,
+        locationId: record.locationId,
+        team: record.team,
+        note: record.note,
+      })),
+      publishedSnapshot,
+    );
+
   return {
     label: `KW ${input.week}`,
     range: formatWeekRange(getISOWeekStart(input.year, input.week)),
     conflictCount: conflictIds.size + records.filter((record) => record.conflict).length,
     minStaffing,
+    locationMinStaffing,
     status: weekRecord?.status ?? "draft",
     publishedAt: weekRecord?.publishedAt?.toISOString() ?? null,
+    /**
+     * Woche ist veröffentlicht, wurde danach aber bearbeitet — die UI zeigt
+     * dann trotz Status "veröffentlicht" die Entwurfs-Badge, damit sichtbar
+     * ist, dass Mitarbeiter diesen Stand noch nicht sehen.
+     */
+    hasUnpublishedChanges,
     days: days.map((day) => {
       const dayShifts = shiftsByDate.get(day.id) ?? [];
       const staffedCount = dayShifts.filter((shift) => shift.employeeId).length;
@@ -378,7 +666,7 @@ export async function getShiftPlanForTenant(input: {
         ...day,
         shifts: dayShifts,
         staffedCount,
-        understaffed: minStaffing > 0 && staffedCount < minStaffing,
+        understaffed: isDayUnderstaffed(dayShifts, minStaffing, locationMinStaffing),
       };
     }) satisfies ShiftDay[],
   };
@@ -404,12 +692,39 @@ export type MyWeekDay = {
 };
 
 /**
+ * Ein einzelner Eintrag im Schnappschuss `TenantShiftWeek.publishedShiftsJson`.
+ *
+ * Enthält bewusst auch nicht besetzte Schichten (`employeeId: null`) und die
+ * Planungsfelder (`key`, `locationId`, `team`) — nur so lässt sich die Woche
+ * mit `resetShiftWeekToPublished` wieder exakt auf den veröffentlichten Stand
+ * zurücksetzen. `getMyShiftsForCurrentWeek` filtert ohnehin auf die eigene
+ * `employeeId` und ignoriert die unbesetzten Einträge dadurch von selbst.
+ * Ältere Schnappschüsse (vor dieser Erweiterung) haben die Zusatzfelder
+ * nicht; alle Leser behandeln sie deshalb als optional.
+ */
+type PublishedShiftSnapshotEntry = MyShift & {
+  date: string;
+  employeeId: string | null;
+  key?: string;
+  weekday?: string;
+  locationId?: string | null;
+  team?: string;
+};
+
+/**
  * Read-only Variante von `getShiftPlanForTenant` für "Mein Bereich" —
  * bewusst ohne `shifts:read`-Berechtigung (nur `requireTenantMembership`),
  * damit jedes Mitglied seine eigenen Schichten der laufenden Woche sehen
  * kann, unabhängig vom konfigurierten "shifts"-Scope der eigenen Rolle.
  * Liefert nur die eigenen Schichten, kein Bearbeiten — dafür gibt es die
  * reguläre Schichtplanung mit den passenden Berechtigungen.
+ *
+ * Zeigt bewusst NICHT die live bearbeiteten `TenantShift`-Zeilen, sondern den
+ * Schnappschuss der letzten Veröffentlichung (`TenantShiftWeek.publishedShiftsJson`,
+ * befüllt in `publishShiftWeek`): Änderungen an einer bereits veröffentlichten
+ * Woche werden für Mitarbeiter erst mit dem nächsten Veröffentlichen sichtbar,
+ * nicht sofort beim Speichern in der Planung. Wurde die Woche noch nie
+ * veröffentlicht, gibt es entsprechend noch keine sichtbaren Schichten.
  */
 export async function getMyShiftsForCurrentWeek(
   tenantSlug: string,
@@ -431,38 +746,36 @@ export async function getMyShiftsForCurrentWeek(
 
   const { year, week } = weekOverride ?? getISOWeekFromDate(new Date());
   const days = buildWeekDays(year, week);
-  const dayIds = days.map((day) => day.id);
 
-  const records = await prisma.tenantShift.findMany({
-    where: { tenantId: access.tenantId, employeeId: employee.id, date: { in: dayIds } },
-    orderBy: [{ date: "asc" }, { startTime: "asc" }],
-    select: {
-      id: true,
-      date: true,
-      startTime: true,
-      endTime: true,
-      note: true,
-      breakMinutes: true,
-      location: { select: { name: true, accentClassName: true } },
-    },
+  const weekRecord = await prisma.tenantShiftWeek.findUnique({
+    where: { tenantId_year_week: { tenantId: access.tenantId, year, week } },
+    select: { status: true, publishedShiftsJson: true },
   });
+
+  const snapshot =
+    weekRecord?.status === "published"
+      ? ((weekRecord.publishedShiftsJson ?? []) as PublishedShiftSnapshotEntry[])
+      : [];
   const shiftsByDate = new Map<string, MyShift[]>();
 
-  for (const record of records) {
-    const shift: MyShift = {
-      id: record.id,
-      startTime: record.startTime,
-      endTime: record.endTime,
-      time: toTimeRange(record.startTime, record.endTime),
-      location: record.location?.name ?? "",
-      locationAccentClassName: record.location?.accentClassName ?? null,
-      note: record.note,
-      breakMinutes: record.breakMinutes,
-    };
-    const dateShifts = shiftsByDate.get(record.date) ?? [];
+  for (const entry of snapshot) {
+    if (entry.employeeId !== employee.id) {
+      continue;
+    }
 
-    dateShifts.push(shift);
-    shiftsByDate.set(record.date, dateShifts);
+    const dateShifts = shiftsByDate.get(entry.date) ?? [];
+
+    dateShifts.push({
+      id: entry.id,
+      startTime: entry.startTime,
+      endTime: entry.endTime,
+      time: entry.time,
+      location: entry.location,
+      locationAccentClassName: entry.locationAccentClassName,
+      note: entry.note,
+      breakMinutes: entry.breakMinutes,
+    });
+    shiftsByDate.set(entry.date, dateShifts);
   }
 
   return {
@@ -621,6 +934,188 @@ export async function requireShiftManager(tenantSlug: string) {
   throw new Error("Keine Berechtigung zum Bearbeiten von Schichten.");
 }
 
+/** `requireShiftManager` liefert keinen Namen — hier für Audit-Einträge separat nachgeladen. */
+async function getActorName() {
+  const session = await auth.api.getSession({ headers: await headers() });
+
+  return session?.user?.name || session?.user?.email || "System";
+}
+
+/** Alle Mitglieder mit Schichtplan-Admin-Recht (gleiche Regel wie `requireShiftManager`) — für Konflikt-Benachrichtigungen. */
+async function getShiftPlanManagers(tenantId: string) {
+  const memberships = await prisma.tenantMembership.findMany({
+    where: { tenantId },
+    select: {
+      userId: true,
+      role: true,
+      user: { select: { email: true } },
+      roleRef: {
+        select: {
+          permissions: {
+            where: { area: "shifts" },
+            select: { level: true },
+          },
+        },
+      },
+    },
+  });
+
+  return memberships
+    .filter((membership) => {
+      const permission = membership.roleRef?.permissions[0]?.level ?? "none";
+
+      return (
+        membership.role === "OWNER" ||
+        membership.role === "ADMIN" ||
+        membership.role === "HR" ||
+        permission === "write" ||
+        permission === "admin"
+      );
+    })
+    .map((membership) => ({ userId: membership.userId, email: membership.user.email }));
+}
+
+/** Alle (Jahr/Woche)-Paare, die der Zeitraum [startDate, endDate] berührt. */
+function isoWeeksInRange(startDate: string, endDate: string) {
+  const weeks = new Map<string, { year: number; week: number }>();
+  const cursor = new Date(`${startDate}T00:00:00Z`);
+  const end = new Date(`${endDate}T00:00:00Z`);
+
+  while (cursor <= end) {
+    const { year, week } = getISOWeekFromDate(cursor);
+
+    weeks.set(`${year}-${week}`, { year, week });
+    cursor.setUTCDate(cursor.getUTCDate() + 7);
+  }
+
+  const { year: endYear, week: endWeek } = getISOWeekFromDate(end);
+
+  weeks.set(`${endYear}-${endWeek}`, { year: endYear, week: endWeek });
+
+  return Array.from(weeks.values());
+}
+
+/**
+ * Prüft, ob ein Mitarbeiter im angegebenen Zeitraum bereits veröffentlichte
+ * Schichten hat, und benachrichtigt ggf. alle mit Schichtplan-Admin-Recht.
+ * Aufgerufen, wenn nachträglich — also NACH einer Veröffentlichung — Urlaub
+ * genehmigt wird (`setTenantVacationRequestStatus`) oder eine Krankmeldung
+ * erfasst wird (`createTenantSicknessReport`/`createMySicknessReport`).
+ * `endDate: null` steht für eine noch offene Krankmeldung ohne Enddatum —
+ * dann zählt jede veröffentlichte Schicht ab `startDate` als Konflikt.
+ */
+export async function notifyIfAbsenceConflictsWithPublishedShifts(input: {
+  tenantId: string;
+  tenantName: string;
+  employeeId: string;
+  employeeName: string;
+  startDate: string;
+  endDate: string | null;
+  reason: "vacation" | "sickness";
+}) {
+  const weeks = isoWeeksInRange(input.startDate, input.endDate ?? input.startDate);
+
+  if (weeks.length === 0) {
+    return;
+  }
+
+  const weekRecords = await prisma.tenantShiftWeek.findMany({
+    where: {
+      tenantId: input.tenantId,
+      status: "published",
+      OR: weeks.map(({ year, week }) => ({ year, week })),
+    },
+    select: { publishedShiftsJson: true },
+  });
+
+  const conflicting = weekRecords.some((record) => {
+    const entries = (record.publishedShiftsJson ?? []) as Array<{
+      employeeId: string;
+      date: string;
+    }>;
+
+    return entries.some(
+      (entry) =>
+        entry.employeeId === input.employeeId &&
+        entry.date >= input.startDate &&
+        (!input.endDate || entry.date <= input.endDate),
+    );
+  });
+
+  if (!conflicting) {
+    return;
+  }
+
+  const managers = await getShiftPlanManagers(input.tenantId);
+
+  await notifyShiftPlanManagersOfAbsenceConflict({
+    tenantId: input.tenantId,
+    tenantName: input.tenantName,
+    employeeName: input.employeeName,
+    reason: input.reason,
+    startDate: input.startDate,
+    endDate: input.endDate,
+    managers,
+  });
+}
+
+function shiftDateBy(date: string, days: number): string {
+  const shifted = new Date(`${date}T00:00:00Z`);
+  shifted.setUTCDate(shifted.getUTCDate() + days);
+  return shifted.toISOString().slice(0, 10);
+}
+
+/**
+ * Ruhezeit (§5 ArbZG) und Höchstarbeitszeit je Schicht (§3 ArbZG) gegen die
+ * Mandanten-Einstellungen (`TenantSettings.minRestHours`/`maxShiftHours`,
+ * Default 11h/10h) prüfen. Wirft bei Verstoß, passend zum bestehenden
+ * Fehlerverhalten von createTenantShift/updateTenantShift (Server Actions
+ * lassen den Fehler bis zum Error Boundary durchreichen).
+ */
+async function assertArbzgCompliant(input: {
+  tenantId: string;
+  employeeId: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  excludeShiftId?: string;
+}) {
+  const settings = await prisma.tenantSettings.findUnique({
+    where: { tenantId: input.tenantId },
+    select: { minRestHours: true, maxShiftHours: true },
+  });
+  const minRestHours = settings?.minRestHours ?? 11;
+  const maxShiftHours = settings?.maxShiftHours ?? 10;
+  const candidate = { date: input.date, startTime: input.startTime, endTime: input.endTime };
+
+  if (exceedsMaxShiftHours(candidate, maxShiftHours)) {
+    throw new Error(
+      `Schicht überschreitet die Höchstarbeitszeit von ${maxShiftHours}h (§3 ArbZG).`,
+    );
+  }
+
+  // ±2 Kalendertage reichen: eine Ruhezeit-Unterschreitung kann nur
+  // zwischen unmittelbar angrenzenden Schichten auftreten.
+  const neighborShifts = await prisma.tenantShift.findMany({
+    where: {
+      tenantId: input.tenantId,
+      employeeId: input.employeeId,
+      date: { gte: shiftDateBy(input.date, -2), lte: shiftDateBy(input.date, 2) },
+      id: input.excludeShiftId ? { not: input.excludeShiftId } : undefined,
+    },
+    select: { date: true, startTime: true, endTime: true },
+  });
+
+  const violation = findRestPeriodViolation(neighborShifts, candidate, minRestHours);
+
+  if (violation) {
+    throw new Error(
+      `Ruhezeit unterschritten: nur ${violation.restHours.toFixed(1)}h Abstand zur Schicht am ${violation.neighborDate} ` +
+        `(§5 ArbZG verlangt mind. ${minRestHours}h).`,
+    );
+  }
+}
+
 export async function createTenantShift(input: {
   tenantSlug: string;
   date: string;
@@ -657,6 +1152,16 @@ export async function createTenantShift(input: {
     }
   }
 
+  if (employee) {
+    await assertArbzgCompliant({
+      tenantId: access.tenantId,
+      employeeId: employee.id,
+      date: input.date,
+      startTime: input.startTime,
+      endTime: input.endTime,
+    });
+  }
+
   const created = await prisma.tenantShift.create({
     data: {
       tenantId: access.tenantId,
@@ -674,24 +1179,24 @@ export async function createTenantShift(input: {
     },
   });
 
-  // Solange die Woche noch Entwurf ist, würde jede einzelne Schicht beim
-  // Anlegen eine eigene Mail auslösen — stattdessen sammelt sich alles bis
-  // zur einmaligen Veröffentlichung (`publishShiftWeek`). Ist die Woche
-  // bereits veröffentlicht, ist eine neue Schicht eine echte nachträgliche
-  // Änderung — der Mitarbeiter bekommt dieselbe Wochenübersicht-Mail wie
-  // beim Veröffentlichen, mit dem aktuellen Gesamtstand seiner Schichten.
-  if (employee) {
-    const shiftWeek = await getShiftWeekForDate(access.tenantId, input.date);
-
-    if (shiftWeek.published) {
-      await notifyEmployeeWeekOverview({
-        tenantId: access.tenantId,
-        employeeId: employee.id,
-        year: shiftWeek.year,
-        week: shiftWeek.week,
-      });
-    }
-  }
+  // Löst bewusst nie selbst eine Benachrichtigung aus — weder im Entwurf
+  // (sammelt sich bis zur Veröffentlichung) noch an einer bereits
+  // veröffentlichten Woche. Für Letztere verschickt erst ein erneutes
+  // `publishShiftWeek` wieder eine Mail, und auch dann nur an Mitarbeiter,
+  // für die sich seit der letzten Veröffentlichung tatsächlich etwas
+  // geändert hat (siehe dort). Die Schicht selbst ist im Self-Service
+  // (`getMyShiftsForCurrentWeek`) unabhängig davon sofort sichtbar — nur der
+  // Mail-Versand wartet auf die (erneute) Veröffentlichung.
+  await recordTenantAudit({
+    tenantId: access.tenantId,
+    actorId: access.userId,
+    actorName: await getActorName(),
+    action: "Schicht angelegt",
+    source: "Schichtplanung",
+    entityType: "shift",
+    entityId: created.id,
+    detail: `${employee?.name ?? "Unbesetzt"} · ${input.date} ${input.startTime}–${input.endTime}`,
+  });
 
   return created;
 }
@@ -732,6 +1237,18 @@ export async function updateTenantShift(input: {
     excludeShiftId: input.shiftId,
   });
 
+  if (employee) {
+    await assertArbzgCompliant({
+      tenantId: access.tenantId,
+      employeeId: employee.id,
+      date: input.date,
+      startTime: input.startTime,
+      endTime: input.endTime,
+      excludeShiftId: input.shiftId,
+    });
+  }
+
+  // Löst bewusst nie selbst eine Benachrichtigung aus, siehe createTenantShift.
   await prisma.tenantShift.update({
     where: { id: input.shiftId },
     data: {
@@ -746,19 +1263,6 @@ export async function updateTenantShift(input: {
       note: input.note?.trim() || "",
     },
   });
-
-  if (employee) {
-    const shiftWeek = await getShiftWeekForDate(access.tenantId, input.date);
-
-    if (shiftWeek.published) {
-      await notifyEmployeeWeekOverview({
-        tenantId: access.tenantId,
-        employeeId: employee.id,
-        year: shiftWeek.year,
-        week: shiftWeek.week,
-      });
-    }
-  }
 }
 
 export async function deleteTenantShift(input: {
@@ -773,37 +1277,50 @@ export async function deleteTenantShift(input: {
 
   const current = await prisma.tenantShift.findFirst({
     where: { id: input.shiftId, tenantId: access.tenantId },
-    select: { id: true, employeeId: true, date: true, startTime: true, endTime: true },
+    select: {
+      id: true,
+      date: true,
+      startTime: true,
+      endTime: true,
+      employee: { select: { name: true } },
+    },
   });
 
   if (!current) {
     throw new Error("Schicht nicht gefunden.");
   }
 
+  // Löst bewusst nie selbst eine Benachrichtigung aus, siehe createTenantShift.
   await prisma.tenantShift.delete({
     where: { id: input.shiftId },
   });
 
-  if (current.employeeId) {
-    const shiftWeek = await getShiftWeekForDate(access.tenantId, current.date);
-
-    if (shiftWeek.published) {
-      await notifyEmployeeWeekOverview({
-        tenantId: access.tenantId,
-        employeeId: current.employeeId,
-        year: shiftWeek.year,
-        week: shiftWeek.week,
-      });
-    }
-  }
+  await recordTenantAudit({
+    tenantId: access.tenantId,
+    actorId: access.userId,
+    actorName: access.userName,
+    action: "Schicht gelöscht",
+    source: "Schichtplanung",
+    entityType: "shift",
+    entityId: current.id,
+    detail: `${current.employee?.name ?? "Unbesetzt"} · ${current.date} ${current.startTime}–${current.endTime}`,
+  });
 }
 
 /**
  * Veröffentlicht die Schichtplanung einer Woche: markiert sie als
  * "published" (Bearbeitung davor gilt immer als Entwurf, siehe
  * `isShiftWeekPublished`) und verschickt pro betroffenem Mitarbeiter genau
- * eine Sammel-Mail mit allen seinen Schichten der Woche — statt einer
- * Einzel-Mail pro Schicht, wie es beim reinen Anlegen/Ändern der Fall wäre.
+ * eine Sammel-Mail mit allen seinen aktuellen Schichten der Woche — statt
+ * einer Einzel-Mail pro Schicht, wie es beim reinen Anlegen/Ändern der Fall
+ * wäre (die selbst nie benachrichtigen, siehe `createTenantShift`).
+ *
+ * Beim allerersten Veröffentlichen bekommt jeder eingeteilte Mitarbeiter
+ * diese Mail. Bei jedem weiteren ("erneuten") Veröffentlichen nur die
+ * Mitarbeiter, für die sich seit der letzten Veröffentlichung tatsächlich
+ * etwas geändert hat (erkannt über `employeeShiftCountsJson`) — sonst bekäme
+ * jeder bei jedem erneuten Klick auf "Veröffentlichen" wieder eine Mail,
+ * auch wenn nur eine einzige andere Schicht betroffen war.
  */
 export async function publishShiftWeek(input: {
   tenantSlug: string;
@@ -814,20 +1331,86 @@ export async function publishShiftWeek(input: {
   const days = buildWeekDays(input.year, input.week);
   const dayIds = days.map((day) => day.id);
 
-  const [tenant, records] = await Promise.all([
+  const [tenant, existingWeek, records] = await Promise.all([
     prisma.tenant.findUnique({
       where: { id: access.tenantId },
       select: { name: true },
     }),
+    prisma.tenantShiftWeek.findUnique({
+      where: {
+        tenantId_year_week: { tenantId: access.tenantId, year: input.year, week: input.week },
+      },
+      select: { status: true, publishedAt: true, employeeShiftCountsJson: true },
+    }),
+    // Auch unbesetzte Schichten: der Schnappschuss ist zugleich die Vorlage
+    // fuer "Auf veroeffentlichte Version zuruecksetzen".
     prisma.tenantShift.findMany({
       where: {
         tenantId: access.tenantId,
         date: { in: dayIds },
-        employeeId: { not: null },
       },
-      select: { employeeId: true, date: true, startTime: true, endTime: true },
+      select: {
+        id: true,
+        key: true,
+        employeeId: true,
+        locationId: true,
+        team: true,
+        weekday: true,
+        date: true,
+        startTime: true,
+        endTime: true,
+        breakMinutes: true,
+        note: true,
+        updatedAt: true,
+        location: { select: { name: true, accentClassName: true } },
+      },
     }),
   ]);
+
+  const wasPublished = existingWeek?.status === "published";
+  const previousPublishedAt = existingWeek?.publishedAt ?? null;
+  const previousCounts = (existingWeek?.employeeShiftCountsJson ?? {}) as Record<string, number>;
+
+  const shiftsByEmployee = new Map<
+    string,
+    Array<{ date: string; startTime: string; endTime: string; updatedAt: Date }>
+  >();
+  const publishedSnapshot: PublishedShiftSnapshotEntry[] = [];
+
+  for (const record of records) {
+    if (record.employeeId) {
+      const list = shiftsByEmployee.get(record.employeeId) ?? [];
+
+      list.push({
+        date: record.date,
+        startTime: record.startTime,
+        endTime: record.endTime,
+        updatedAt: record.updatedAt,
+      });
+      shiftsByEmployee.set(record.employeeId, list);
+    }
+
+    publishedSnapshot.push({
+      id: record.id,
+      key: record.key,
+      employeeId: record.employeeId,
+      locationId: record.locationId,
+      team: record.team,
+      weekday: record.weekday,
+      date: record.date,
+      startTime: record.startTime,
+      endTime: record.endTime,
+      time: toTimeRange(record.startTime, record.endTime),
+      location: record.location?.name ?? "",
+      locationAccentClassName: record.location?.accentClassName ?? null,
+      note: record.note,
+      breakMinutes: record.breakMinutes,
+    });
+  }
+
+  const currentCounts = Object.fromEntries(
+    Array.from(shiftsByEmployee.entries()).map(([employeeId, shifts]) => [employeeId, shifts.length]),
+  );
 
   const weekRecord = await prisma.tenantShiftWeek.upsert({
     where: {
@@ -840,57 +1423,95 @@ export async function publishShiftWeek(input: {
       status: "published",
       publishedAt: new Date(),
       publishedBy: access.userId,
+      employeeShiftCountsJson: currentCounts,
+      publishedShiftsJson: publishedSnapshot,
     },
     update: {
       status: "published",
       publishedAt: new Date(),
       publishedBy: access.userId,
+      employeeShiftCountsJson: currentCounts,
+      publishedShiftsJson: publishedSnapshot,
     },
   });
 
-  const shiftsByEmployee = new Map<string, Array<{ date: string; startTime: string; endTime: string }>>();
-
-  for (const record of records) {
-    if (!record.employeeId) {
-      continue;
-    }
-
-    const list = shiftsByEmployee.get(record.employeeId) ?? [];
-
-    list.push({ date: record.date, startTime: record.startTime, endTime: record.endTime });
-    shiftsByEmployee.set(record.employeeId, list);
-  }
-
-  const weekLabel = `KW ${input.week}`;
   const weekRange = formatWeekRange(getISOWeekStart(input.year, input.week));
 
+  // Beim allerersten Veröffentlichen einer Woche bekommt jeder eingeteilte
+  // Mitarbeiter die Sammel-Mail. Bei einem erneuten Veröffentlichen (Woche
+  // war schon veröffentlicht) nur die Mitarbeiter, für die sich seit der
+  // letzten Veröffentlichung tatsächlich etwas geändert hat — erkannt daran,
+  // dass sich ihre Schichtanzahl unterscheidet (Schicht hinzugekommen/
+  // entfernt) oder mindestens eine ihrer Schichten seither bearbeitet wurde.
+  // Einzelne Schicht-Anlagen/-Änderungen an einer bereits veröffentlichten
+  // Woche verschicken selbst keine Mail mehr (siehe createTenantShift/
+  // updateTenantShift/deleteTenantShift) — sonst bekäme der Mitarbeiter erst
+  // bei jeder Einzeländerung und dann hier nochmal eine Mail.
+  const employeeIdsToNotify = wasPublished
+    ? new Set(
+        Array.from(new Set([...Object.keys(previousCounts), ...Object.keys(currentCounts)])).filter(
+          (employeeId) => {
+            const previousCount = previousCounts[employeeId] ?? 0;
+            const nextCount = currentCounts[employeeId] ?? 0;
+
+            if (previousCount !== nextCount) {
+              return true;
+            }
+
+            if (nextCount === 0) {
+              return false;
+            }
+
+            const shifts = shiftsByEmployee.get(employeeId) ?? [];
+
+            return previousPublishedAt
+              ? shifts.some((shift) => shift.updatedAt > previousPublishedAt)
+              : true;
+          },
+        ),
+      )
+    : new Set(shiftsByEmployee.keys());
+
   await Promise.all(
-    Array.from(shiftsByEmployee.entries()).map(([employeeId, shifts]) =>
+    Array.from(employeeIdsToNotify).map((employeeId) =>
       notifyEmployeeOfShiftPlanPublished({
         tenantId: access.tenantId,
         tenantName: tenant?.name ?? "",
         employeeId,
-        weekLabel,
+        year: input.year,
+        week: input.week,
         weekRange,
-        shifts,
+        shifts: shiftsByEmployee.get(employeeId) ?? [],
       }),
     ),
   );
 
+  await recordTenantAudit({
+    tenantId: access.tenantId,
+    actorId: access.userId,
+    actorName: await getActorName(),
+    action: "Schichtplan veröffentlicht",
+    source: "Schichtplanung",
+    entityType: "shift-week",
+    entityId: weekRecord.id,
+    detail: `KW ${input.week}/${input.year} · ${weekRange} · ${employeeIdsToNotify.size} benachrichtigt`,
+  });
+
   return {
     status: weekRecord.status,
     publishedAt: weekRecord.publishedAt?.toISOString() ?? null,
-    notified: shiftsByEmployee.size,
+    notified: employeeIdsToNotify.size,
   };
 }
 
 /**
  * Setzt eine veröffentlichte Woche zurück auf Entwurf — z. B. um größere
- * Nachbesserungen vorzunehmen, ohne dass jede einzelne Änderung sofort eine
- * Wochenübersicht-Mail auslöst (siehe `notifyEmployeeWeekOverview`). Verschickt
- * bewusst keine Mail: "zurück auf Entwurf" ist eine interne Planungsaktion,
- * kein für Mitarbeiter sichtbares Ereignis — die nächste Veröffentlichung
- * verschickt wie gewohnt wieder die vollständige Übersicht.
+ * Nachbesserungen vorzunehmen. Verschickt bewusst keine Mail: "zurück auf
+ * Entwurf" ist eine interne Planungsaktion, kein für Mitarbeiter sichtbares
+ * Ereignis. `employeeShiftCountsJson` bleibt unverändert stehen (der Stand
+ * der letzten echten Veröffentlichung) — die nächste Veröffentlichung
+ * vergleicht dagegen und benachrichtigt nur, für wen sich seitdem wirklich
+ * etwas geändert hat (siehe `publishShiftWeek`).
  */
 export async function unpublishShiftWeek(input: {
   tenantSlug: string;
@@ -918,6 +1539,111 @@ export async function unpublishShiftWeek(input: {
     status: weekRecord.status,
     publishedAt: weekRecord.publishedAt?.toISOString() ?? null,
   };
+}
+
+/**
+ * Verwirft alle Änderungen seit dem letzten Veröffentlichen und stellt die
+ * Woche exakt so wieder her, wie Mitarbeiter sie aktuell sehen
+ * (`TenantShiftWeek.publishedShiftsJson`).
+ *
+ * Bewusst destruktiv und nur über eine Bestätigung in der UI erreichbar: die
+ * Live-Zeilen der Woche werden gelöscht und aus dem Schnappschuss neu
+ * angelegt. Verschickt keine Benachrichtigung — für Mitarbeiter ändert sich
+ * nichts, sie sahen ohnehin nur den Schnappschuss.
+ *
+ * Alt-Schnappschüsse ohne `key` (siehe `PublishedShiftSnapshotEntry`)
+ * enthalten nur besetzte Schichten; ein Zurücksetzen darauf würde unbesetzte
+ * Schichten stillschweigend verlieren — deshalb wird es dort abgelehnt statt
+ * geraten.
+ */
+export async function resetShiftWeekToPublished(input: {
+  tenantSlug: string;
+  year: number;
+  week: number;
+}) {
+  const access = await requireShiftManager(input.tenantSlug);
+  const days = buildWeekDays(input.year, input.week);
+  const dayIds = days.map((day) => day.id);
+  const weekdayByDate = new Map(days.map((day, index) => [day.id, weekdays[index]]));
+
+  const weekRecord = await prisma.tenantShiftWeek.findUnique({
+    where: {
+      tenantId_year_week: { tenantId: access.tenantId, year: input.year, week: input.week },
+    },
+    select: { status: true, publishedShiftsJson: true },
+  });
+
+  if (weekRecord?.status !== "published") {
+    throw new Error("Diese Woche wurde noch nicht veröffentlicht.");
+  }
+
+  const snapshot = (weekRecord.publishedShiftsJson ?? []) as PublishedShiftSnapshotEntry[];
+
+  if (snapshot.length > 0 && snapshot.every((entry) => entry.key === undefined)) {
+    throw new Error(
+      "Der veröffentlichte Stand dieser Woche stammt aus einer älteren Version und lässt sich nicht vollständig wiederherstellen. Bitte einmal neu veröffentlichen.",
+    );
+  }
+
+  const locationIds = Array.from(
+    new Set(snapshot.map((entry) => entry.locationId).filter((id): id is string => Boolean(id))),
+  );
+  const employeeIds = Array.from(
+    new Set(snapshot.map((entry) => entry.employeeId).filter((id): id is string => Boolean(id))),
+  );
+  const [existingLocations, existingEmployees] = await Promise.all([
+    locationIds.length
+      ? prisma.tenantLocation.findMany({
+          where: { tenantId: access.tenantId, id: { in: locationIds } },
+          select: { id: true },
+        })
+      : Promise.resolve([]),
+    employeeIds.length
+      ? prisma.tenantEmployee.findMany({
+          where: { tenantId: access.tenantId, id: { in: employeeIds } },
+          select: { id: true },
+        })
+      : Promise.resolve([]),
+  ]);
+  // Zwischenzeitlich gelöschte Standorte/Mitarbeiter würden den Insert mit
+  // einem Fremdschlüsselfehler abbrechen — die Schicht kommt dann ohne die
+  // verlorene Zuordnung zurück, statt das ganze Zurücksetzen scheitern zu
+  // lassen.
+  const knownLocationIds = new Set(existingLocations.map((location) => location.id));
+  const knownEmployeeIds = new Set(existingEmployees.map((employee) => employee.id));
+
+  await prisma.$transaction([
+    prisma.tenantShift.deleteMany({
+      where: { tenantId: access.tenantId, date: { in: dayIds } },
+    }),
+    ...snapshot.map((entry, index) =>
+      prisma.tenantShift.create({
+        data: {
+          tenantId: access.tenantId,
+          key: entry.key ?? `${entry.date}-${index}`,
+          date: entry.date,
+          weekday:
+            weekdayByDate.get(entry.date) ??
+            weekdays[(new Date(`${entry.date}T00:00:00Z`).getUTCDay() || 7) - 1],
+          startTime: entry.startTime,
+          endTime: entry.endTime,
+          breakMinutes: entry.breakMinutes,
+          team: entry.team ?? "",
+          note: entry.note,
+          employeeId:
+            entry.employeeId && knownEmployeeIds.has(entry.employeeId)
+              ? entry.employeeId
+              : null,
+          locationId:
+            entry.locationId && knownLocationIds.has(entry.locationId)
+              ? entry.locationId
+              : null,
+        },
+      }),
+    ),
+  ]);
+
+  return { restored: snapshot.length };
 }
 
 export async function getShiftTemplatesForTenant(tenantSlug: string) {
@@ -1129,7 +1855,7 @@ export async function deleteShiftTemplate(input: {
 
   const template = await prisma.tenantShiftTemplate.findFirst({
     where: { id: input.templateId, tenantId: access.tenantId },
-    select: { id: true },
+    select: { id: true, name: true },
   });
 
   if (!template) {
@@ -1137,4 +1863,15 @@ export async function deleteShiftTemplate(input: {
   }
 
   await prisma.tenantShiftTemplate.delete({ where: { id: input.templateId } });
+
+  await recordTenantAudit({
+    tenantId: access.tenantId,
+    actorId: access.userId,
+    actorName: access.userName,
+    action: "Schichtvorlage gelöscht",
+    source: "Schichtplanung",
+    entityType: "shift-template",
+    entityId: template.id,
+    detail: template.name,
+  });
 }

@@ -1,6 +1,7 @@
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { getStorageBucket, type StorageBucketId } from "@/lib/storage/buckets";
 import { getStorageClient } from "@/lib/storage/client";
+import { assertNoVirus } from "@/lib/storage/virus-scan";
 
 export type StorageUploadInput = {
   bucketId?: StorageBucketId;
@@ -10,7 +11,14 @@ export type StorageUploadInput = {
   metadata?: Record<string, string>;
 };
 
+/**
+ * Einziger Schreibpfad in den Objekt-Storage — jeder Upload (HR-Dateien,
+ * Verträge, Gehaltsabrechnungen, Self-Service-Dokumente, Avatare) läuft
+ * hier durch, daher genügt ein Virenscan an dieser Stelle für alle.
+ */
 export async function uploadObject(input: StorageUploadInput) {
+  await assertNoVirus(input.body, { fileName: input.metadata?.originalName });
+
   const bucket = getStorageBucket(input.bucketId);
 
   await getStorageClient().send(

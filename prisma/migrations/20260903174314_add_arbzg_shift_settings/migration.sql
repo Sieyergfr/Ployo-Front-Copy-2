@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "TenantSettings" ADD COLUMN     "maxShiftHours" INTEGER NOT NULL DEFAULT 10,
+ADD COLUMN     "minRestHours" INTEGER NOT NULL DEFAULT 11;

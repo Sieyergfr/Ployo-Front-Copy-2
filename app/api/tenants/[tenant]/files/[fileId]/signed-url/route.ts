@@ -40,7 +40,7 @@ export async function GET(
     // ohne diese Pruefung liefert getTenantFileSignedUrl eine gueltige
     // Download-URL fuer eine Datei in einem gesperrten Ordner, ohne je die
     // PIN zu verlangen.
-    const folderPath = await resolveTenantFileFolderPath({ tenantSlug: tenant, fileId });
+    const { folderPath, scope } = await resolveTenantFileFolderPath({ tenantSlug: tenant, fileId });
 
     if (folderPath) {
       const pin = request.headers.get("x-folder-pin")?.trim() || undefined;
@@ -57,7 +57,7 @@ export async function GET(
         }
       }
 
-      await assertFolderPinAccess({ tenantSlug: tenant, folderPath, pin });
+      await assertFolderPinAccess({ tenantSlug: tenant, folderPath, pin, scope });
     }
 
     const url = await getTenantFileSignedUrl({

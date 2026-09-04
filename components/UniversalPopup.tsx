@@ -16,6 +16,12 @@ import type { ActionState } from "@/lib/action-state";
 type PopupOptions = {
   title?: ReactNode;
   content: ReactNode;
+  /**
+   * Breite des Dialogs. "narrow" für Dialoge mit einem einzigen kurzen Feld
+   * (PIN-Abfrage) — auf voller Breite wirkt so ein Dialog wie ein leeres
+   * Blatt mit einer Zeile darin.
+   */
+  size?: "default" | "narrow";
   className?: string;
   contentClassName?: string;
   hideCloseButton?: boolean;
@@ -81,7 +87,12 @@ export function UniversalPopupProvider({ children }: { children: ReactNode }) {
             aria-modal="true"
             aria-labelledby={popup.title ? "universal-popup-title" : undefined}
             className={[
-              "relative max-h-[calc(100svh-48px)] w-full max-w-[520px] overflow-y-auto rounded-card border border-border bg-white p-6 shadow-[0_24px_80px_rgba(0,0,0,0.22)]",
+              "relative max-h-[calc(100svh-48px)] w-full overflow-y-auto rounded-card border border-border bg-white p-6 shadow-[0_24px_80px_rgba(0,0,0,0.22)]",
+              // Als eigener Eintrag statt im Basis-String: eine zweite
+              // max-w-Klasse aus `className` würde sich sonst mit dieser
+              // überlagern, und welche gewinnt, entscheidet die Reihenfolge im
+              // erzeugten Stylesheet — nicht die im Attribut.
+              popup.size === "narrow" ? "max-w-[320px]" : "max-w-[520px]",
               popup.className,
             ]
               .filter(Boolean)

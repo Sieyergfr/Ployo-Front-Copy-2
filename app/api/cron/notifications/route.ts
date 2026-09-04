@@ -75,23 +75,24 @@ async function handleNotifications(request: Request, requestId: string) {
 
     if (urgent.length === 0 || tenant.memberships.length === 0) continue;
 
-    const textLines = urgent
-      .map((reminder) => `- ${reminder.title} (fällig ${reminder.dueDate})`)
-      .join("\n");
-    const htmlLines = urgent
-      .map((reminder) => `<li>${reminder.title} — fällig ${reminder.dueDate}</li>`)
-      .join("");
-
     await Promise.all(
       tenant.memberships.map((manager) =>
         dispatchNotification({
           userId: manager.userId,
           email: manager.user.email,
-          subject: `${urgent.length} fällige Erinnerung(en) bei ${tenant.name}`,
-          text: `Diese Woche fällige Erinnerungen bei ${tenant.name}:\n\n${textLines}`,
-          html: `<p style="font-size:14px;">Diese Woche fällige Erinnerungen bei ${tenant.name}:</p><ul style="font-size:14px;">${htmlLines}</ul>`,
+          message: {
+            key: "reminderDigest",
+            tenantName: tenant.name,
+            reminders: urgent.map((reminder) => ({
+              title: reminder.title,
+              dueDate: reminder.dueDate,
+            })),
+          },
           tenantId: tenant.id,
           category: "system",
+          // Sammelmeldung über mehrere Erinnerungen — Ziel ist die Liste,
+          // nicht eine einzelne Zeile, deshalb ohne `entityId`.
+          entityType: "reminders",
         }),
       ),
     );

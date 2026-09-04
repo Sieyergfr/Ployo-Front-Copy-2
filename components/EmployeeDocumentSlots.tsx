@@ -4,17 +4,32 @@ import {
   deleteEmployeeDocumentSlotFileAction,
   uploadEmployeeDocumentSlotAction,
 } from "@/app/(dashboard)/u/[tenant]/employees/actions";
-import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
+import EmployeeVisibilityToggle from "@/components/EmployeeVisibilityToggle";
+import { FormErrorBanner } from "@/components/FormFeedback";
 import { OwnerFileActions } from "@/components/OwnerFileActions";
-import { EMPLOYEE_DOCUMENT_SLOTS, type EmployeeFile } from "@/lib/employees";
-import { IdCard, Plus, Trash2 } from "lucide-react";
-import { useRef } from "react";
+import { useUniversalPopup } from "@/components/UniversalPopup";
+import {
+  EMPLOYEE_DOCUMENT_SLOTS,
+  employeeDocumentSlotFolders,
+  type EmployeeFile,
+} from "@/lib/employees";
+import { uploadAcceptAttribute } from "@/lib/upload-constraints";
+import { IdCard, Plus, Trash2, UploadCloud } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useRef, useState, useTransition } from "react";
 
 /**
  * Strukturierte "Felder" für Ausweisdokumente/Zertifikate (siehe
  * `EMPLOYEE_DOCUMENT_SLOTS`) — im Unterschied zur freien Ordner-/Dateiliste
  * hält jedes Feld hier ausschließlich die Datei(en) der einen Kategorie, für
  * die es gedacht ist.
+ *
+ * Wichtig: Hier stehen bewusst KEINE `<form>`-Elemente mehr. Die
+ * Mitarbeiter-Detailseite umschließt ihren gesamten Inhalt (inkl. dieses
+ * Abschnitts) mit dem Bearbeiten-Formular; ein `<form>` in einem `<form>` wird
+ * vom HTML-Parser beim Server-Rendering verworfen, wodurch der Upload hier
+ * ohne sichtbaren Fehler wirkungslos blieb. Stattdessen werden die Server
+ * Actions direkt mit einer selbst gebauten `FormData` aufgerufen.
  */
 export default function EmployeeDocumentSlots({
   tenant,
@@ -33,8 +48,13 @@ export default function EmployeeDocumentSlots({
     <section className="mb-3.5 overflow-hidden rounded-card border border-border bg-white">
       <div className="border-b border-border px-6 pt-5 pb-3.5">
         <h2 className="m-0 font-display text-[16px] font-semibold tracking-[-0.3px] text-ink">
-          Ausweisdokumente & Zertifikate
+          Ausweisdokumente &amp; Zertifikate
         </h2>
+        {canManage && (
+          <p className="mt-1 mb-0 text-[11.5px] text-muted">
+            Dateien lassen sich auch per Drag &amp; Drop auf das jeweilige Feld ziehen.
+          </p>
+        )}
       </div>
       <div className="grid gap-3 px-6 py-5 sm:grid-cols-2 lg:grid-cols-3">
         {EMPLOYEE_DOCUMENT_SLOTS.map((slot) => (
@@ -44,7 +64,9 @@ export default function EmployeeDocumentSlots({
             employeeId={employeeId}
             employeeHandle={employeeHandle}
             slot={slot}
-            files={files.filter((file) => file.folder === slot.label)}
+            files={files.filter((file) =>
+              employeeDocumentSlotFolders(slot).includes(file.folder),
+            )}
             canManage={canManage}
           />
         ))}
@@ -68,14 +90,135 @@ function DocumentSlotCard({
   files: EmployeeFile[];
   canManage: boolean;
 }) {
-  const formRef = useRef<HTMLFormElement>(null);
+  const router = useRouter();
+  const { openPopup, closePopup } = useUniversalPopup();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const dragDepth = useRef(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const [error, setError] = useState<string | undefined>();
+  const [isPending, startTransition] = useTransition();
+
   const canAddMore = slot.multiple || files.length === 0;
   const replaceFileIds = slot.multiple
     ? []
     : files.map((file) => file.storageFileId).filter((id): id is string => Boolean(id));
 
+  const upload = (selected: FileList | null) => {
+    const file = selected?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    const formData = new FormData();
+
+    formData.set("tenant", tenant);
+    formData.set("employeeId", employeeId);
+    formData.set("employeeHandle", employeeHandle);
+    formData.set("folderSlug", slot.key);
+    formData.set("folderName", slot.label);
+    formData.set("documentType", slot.label);
+    formData.set("file", file);
+    replaceFileIds.forEach((id) => formData.append("replaceFileIds", id));
+
+    setError(undefined);
+    startTransition(async () => {
+      try {
+        await uploadEmployeeDocumentSlotAction(formData);
+        router.refresh();
+      } catch (uploadError) {
+        // Server Actions, die per `redirect` enden, werfen einen internen
+        // Navigationsfehler — der ist hier der Erfolgsfall, kein Problem.
+        if (isRedirectError(uploadError)) {
+          router.refresh();
+          return;
+        }
+
+        setError(
+          uploadError instanceof Error
+            ? uploadError.message
+            : "Datei konnte nicht hochgeladen werden.",
+        );
+      }
+    });
+  };
+
+  const remove = (fileId: string, name: string) => {
+    openPopup({
+      title: "Datei entfernen",
+      content: (
+        <div>
+          <p className="m-0 text-[13px] leading-[1.55] text-muted-2">
+            {`"${name}" wird entfernt.`}
+          </p>
+          <div className="mt-5 flex justify-end gap-2.5 border-t border-border-soft pt-4">
+            <button type="button" className="btn btn-secondary" onClick={closePopup}>
+              Abbrechen
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary border-danger/25 text-danger hover:border-danger/40 hover:bg-danger/5"
+              onClick={() => {
+                closePopup();
+                const formData = new FormData();
+
+                formData.set("tenant", tenant);
+                formData.set("employeeHandle", employeeHandle);
+                formData.set("fileId", fileId);
+
+                startTransition(async () => {
+                  try {
+                    await deleteEmployeeDocumentSlotFileAction(formData);
+                  } catch (deleteError) {
+                    if (!isRedirectError(deleteError)) {
+                      setError(
+                        deleteError instanceof Error
+                          ? deleteError.message
+                          : "Datei konnte nicht entfernt werden.",
+                      );
+                      return;
+                    }
+                  }
+                  router.refresh();
+                });
+              }}
+            >
+              <Trash2 size={15} />
+              Entfernen
+            </button>
+          </div>
+        </div>
+      ),
+    });
+  };
+
   return (
-    <div className="rounded-xl border border-border-soft bg-bg p-4">
+    <div
+      className={`relative rounded-xl border p-4 transition-colors ${
+        isDragging ? "border-ink bg-white" : "border-border-soft bg-bg"
+      }`}
+      onDragEnter={(event) => {
+        if (!canManage || !canAddMore || !event.dataTransfer.types.includes("Files")) return;
+        dragDepth.current += 1;
+        setIsDragging(true);
+      }}
+      onDragOver={(event) => {
+        if (!canManage || !canAddMore || !event.dataTransfer.types.includes("Files")) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "copy";
+      }}
+      onDragLeave={() => {
+        dragDepth.current = Math.max(0, dragDepth.current - 1);
+        if (dragDepth.current === 0) setIsDragging(false);
+      }}
+      onDrop={(event) => {
+        if (!canManage || !canAddMore || !event.dataTransfer.files?.length) return;
+        event.preventDefault();
+        dragDepth.current = 0;
+        setIsDragging(false);
+        upload(event.dataTransfer.files);
+      }}
+    >
       <div className="mb-2.5 flex items-center gap-2">
         <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-border-soft text-muted-2">
           <IdCard size={14} />
@@ -94,26 +237,37 @@ function DocumentSlotCard({
             >
               <div className="min-w-0 flex-1">
                 <div className="truncate text-[12px] font-medium text-ink">{file.name}</div>
-                <div className="font-mono text-[10px] text-muted">{file.updatedAt}</div>
+                <div className="font-mono text-[10px] text-muted">
+                  {file.updatedAt}
+                  {file.hiddenFromEmployee && (
+                    <span className="text-danger"> {"·"} verborgen</span>
+                  )}
+                </div>
               </div>
-              <OwnerFileActions tenant={tenant} storageFileId={file.storageFileId} name={file.name} />
+              <OwnerFileActions
+                tenant={tenant}
+                storageFileId={file.storageFileId}
+                name={file.name}
+              />
               {canManage && file.storageFileId && (
-                <>
-                  <form id={`delete-doc-${file.storageFileId}`} action={deleteEmployeeDocumentSlotFileAction}>
-                    <input type="hidden" name="tenant" value={tenant} />
-                    <input type="hidden" name="employeeHandle" value={employeeHandle} />
-                    <input type="hidden" name="fileId" value={file.storageFileId} />
-                  </form>
-                  <ConfirmSubmitButton
-                    form={`delete-doc-${file.storageFileId}`}
-                    className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[7px] border border-border bg-white text-muted transition-colors hover:border-danger hover:text-danger"
-                    title="Entfernen"
-                    confirmLabel="Entfernen"
-                    description={`"${file.name}" wird entfernt.`}
-                  >
-                    <Trash2 size={13} />
-                  </ConfirmSubmitButton>
-                </>
+                <EmployeeVisibilityToggle
+                  tenant={tenant}
+                  employeeHandle={employeeHandle}
+                  target={{ kind: "file", fileId: file.storageFileId }}
+                  hidden={Boolean(file.hiddenFromEmployee)}
+                  name={file.name}
+                />
+              )}
+              {canManage && file.storageFileId && (
+                <button
+                  type="button"
+                  className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[7px] border border-border bg-white text-muted transition-colors hover:border-danger hover:text-danger"
+                  title="Entfernen"
+                  aria-label={`${file.name} entfernen`}
+                  onClick={() => remove(file.storageFileId!, file.name)}
+                >
+                  <Trash2 size={13} />
+                </button>
               )}
             </div>
           ))}
@@ -121,32 +275,62 @@ function DocumentSlotCard({
       )}
 
       {canManage && canAddMore && (
-        <form ref={formRef} action={uploadEmployeeDocumentSlotAction} className="mt-2.5">
-          <input type="hidden" name="tenant" value={tenant} />
-          <input type="hidden" name="employeeId" value={employeeId} />
-          <input type="hidden" name="employeeHandle" value={employeeHandle} />
-          <input type="hidden" name="folderSlug" value={slot.key} />
-          <input type="hidden" name="folderName" value={slot.label} />
-          <input type="hidden" name="documentType" value={slot.label} />
-          {replaceFileIds.map((id) => (
-            <input key={id} type="hidden" name="replaceFileIds" value={id} />
-          ))}
-          <label className="flex cursor-pointer items-center gap-1.5 text-[11.5px] font-medium text-ink hover:text-muted">
-            <input
-              type="file"
-              name="file"
-              className="hidden"
-              onChange={() => formRef.current?.requestSubmit()}
-            />
+        <div className="mt-2.5">
+          <input
+            ref={inputRef}
+            type="file"
+            className="hidden"
+            accept={uploadAcceptAttribute}
+            onChange={(event) => {
+              upload(event.target.files);
+              event.target.value = "";
+            }}
+          />
+          <button
+            type="button"
+            className="flex cursor-pointer items-center gap-1.5 text-[11.5px] font-medium text-ink hover:text-muted disabled:cursor-wait disabled:opacity-60"
+            disabled={isPending}
+            onClick={() => inputRef.current?.click()}
+          >
             <Plus size={12} />
-            {files.length > 0
-              ? slot.multiple
-                ? "Weitere Datei hinzufügen"
-                : "Datei ersetzen"
-              : "Datei hochladen"}
-          </label>
-        </form>
+            {isPending
+              ? "Wird hochgeladen..."
+              : files.length > 0
+                ? slot.multiple
+                  ? "Weitere Datei hinzufügen"
+                  : "Datei ersetzen"
+                : "Datei hochladen"}
+          </button>
+        </div>
+      )}
+
+      {error && (
+        <div className="mt-2">
+          <FormErrorBanner message={error} />
+        </div>
+      )}
+
+      {isDragging && (
+        <div className="pointer-events-none absolute inset-1 z-10 flex flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed border-ink/40 bg-white/90 text-[12px] font-medium text-ink">
+          <UploadCloud size={18} />
+          Hier ablegen
+        </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Server Actions, die mit `redirect()` enden, werfen eine spezielle
+ * Next-Fehlerform. Direkt aufgerufen (statt über `<form action>`) landet die
+ * beim Aufrufer — sie bedeutet Erfolg, nicht Fehlschlag.
+ */
+function isRedirectError(error: unknown) {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "digest" in error &&
+    typeof (error as { digest?: unknown }).digest === "string" &&
+    (error as { digest: string }).digest.startsWith("NEXT_REDIRECT")
   );
 }

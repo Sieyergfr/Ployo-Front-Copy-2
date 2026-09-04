@@ -4,10 +4,12 @@ import { checkRateLimit, tooManyRequests } from "@/lib/rate-limit";
 import { headers } from "next/headers";
 
 /**
- * Registrierung eines Geräte-Tokens für Push (Profil-Screen /
- * App-Start). Persistiert nur — der Push-Kanal selbst ist bewusst ein
- * No-Op, bis ein Provider (FCM/APNs) angebunden ist (s.
- * lib/notifications/dispatch.ts).
+ * Registrierung eines Geräte-Tokens für Push. Die App meldet sich nach dem
+ * Login selbst an (src/lib/push.ts) und beim Logout wieder ab. Versendet
+ * wird über den Expo Push Service, s. lib/notifications/dispatch.ts.
+ *
+ * Tote Tokens räumt der Versand selbst weg ("DeviceNotRegistered"); Geräte,
+ * die sich gar nicht mehr melden, fallen im Cleanup-Job raus.
  */
 export async function POST(request: Request) {
   const session = await auth.api.getSession({ headers: await headers() });

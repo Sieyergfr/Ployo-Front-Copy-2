@@ -255,3 +255,72 @@ export async function updateEmployeeContractStatus(input: {
 
   return updated;
 }
+
+/**
+ * Feld-Bearbeitung eines bestehenden Vertrags — Gegenstück zu
+ * `createEmployeeContract`, ohne die Datei (die bleibt unveränderlich) und
+ * ohne den Status (dafür weiterhin `updateEmployeeContractStatus`
+ * verwenden). Für den "Bearbeiten"-Button je Vertragsbox unter "Alle
+ * Verträge" (`components/EmployeeContracts.tsx`) — die Seiten-weite
+ * "Bearbeiten"-Umschaltung wirkt bewusst nicht mehr auf den Vertrags-Tab.
+ */
+export async function updateEmployeeContractDetails(input: {
+  tenantSlug: string;
+  employeeId: string;
+  contractId: string;
+  title: string;
+  contractType: string;
+  startDate: string;
+  endDate: string;
+  probationEndDate: string;
+  noticePeriod: string;
+  position: string;
+  department: string;
+  workLocation: string;
+  weeklyHours: string;
+  compensation: string;
+  vacationDays: number;
+  notes: string;
+}) {
+  const tenantId = await requireContractAccess(input.tenantSlug);
+  const contract = await prisma.tenantEmployeeContract.findFirst({
+    where: {
+      id: input.contractId,
+      tenantId,
+      employee: { OR: [{ id: input.employeeId }, { key: input.employeeId }] },
+    },
+    select: { id: true },
+  });
+
+  if (!contract) {
+    throw new Error("Vertrag wurde nicht gefunden.");
+  }
+
+  const updated = await prisma.tenantEmployeeContract.update({
+    where: { id: contract.id },
+    data: {
+      title: input.title,
+      contractType: normalizeContractType(input.contractType),
+      startDate: input.startDate,
+      endDate: input.endDate,
+      probationEndDate: input.probationEndDate,
+      noticePeriod: input.noticePeriod,
+      position: input.position,
+      department: input.department,
+      workLocation: input.workLocation,
+      weeklyHours: input.weeklyHours,
+      compensation: input.compensation,
+      vacationDays: input.vacationDays,
+      notes: input.notes,
+    },
+  });
+
+  await recordContractAudit({
+    tenantSlug: input.tenantSlug,
+    action: "Vertragsdetails geändert",
+    contractId: updated.id,
+    detail: updated.title,
+  });
+
+  return updated;
+}

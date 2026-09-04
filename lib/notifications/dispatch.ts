@@ -1,15 +1,39 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
+import { logger } from "@/lib/logger";
 import { isEmailConfigured, sendEmail } from "@/lib/email";
+import {
+  isExpoPushToken,
+  sendExpoPushMessages,
+  toPushBody,
+} from "@/lib/notifications/expo-push";
+import {
+  renderNotification,
+  toNotificationLocale,
+  type NotificationLocale,
+  type NotificationMessage,
+} from "@/lib/notifications/messages";
 
 export type NotificationCategory = "vacation" | "shift" | "system";
+
+/**
+ * Was tatsächlich verschickt wird: der Aufrufer liefert einen
+ * sprachneutralen `NotificationMessage`, gerendert wird pro Empfänger in
+ * dessen Sprache (`UserPreference.language`) — siehe
+ * lib/notifications/messages.ts.
+ */
+type ResolvedNotificationEvent = NotificationEvent & {
+  subject: string;
+  text: string;
+  html?: string;
+  /** Sprache des Empfängers — der In-App-Kanal rendert damit seine kompakte Variante. */
+  locale: NotificationLocale;
+};
 
 export type NotificationEvent = {
   userId: string;
   email: string | null;
-  subject: string;
-  text: string;
-  html?: string;
+  message: NotificationMessage;
   /**
    * Mandant + Kategorie sind Pflicht für den In-App-Kanal (Zeile in
    * `TenantEmployeeNotification`) und steuern zusätzlich die persönliche
@@ -27,22 +51,25 @@ export type NotificationEvent = {
  * Zentrale Zustellung für Benachrichtigungen, kanalunabhängig.
  *
  * Aktiv: E-Mail (über lib/email.ts), In-App (TenantEmployeeNotification —
- * von der Mitarbeiter-App gelesen). Vorbereitet: Push — die Tabelle
- * `PushSubscription` sammelt bereits Geräte-Tokens, sobald eine mobile App
- * existiert und sich registriert. Der Push-Kanal ist bewusst ein No-Op, bis
- * ein echter Provider (FCM/APNs) angebunden ist; neue Aufrufer müssen dafür
- * nichts ändern — `dispatchNotification` bleibt der einzige Call-Point.
+ * von der Mitarbeiter-App gelesen) und Push über den Expo Push Service
+ * (lib/notifications/expo-push.ts) an die Geräte-Tokens aus
+ * `PushSubscription`. `dispatchNotification` bleibt der einzige Call-Point;
+ * neue Aufrufer müssen sich um die Kanäle nicht kümmern.
  */
 type UserNotificationPreference = {
   notifyVacationEvents: boolean;
   notifyShiftEvents: boolean;
   pushEnabled: boolean;
+  language: string;
 } | null;
 
 interface NotificationChannel {
   name: string;
-  isEnabledFor(event: NotificationEvent, preference: UserNotificationPreference): Promise<boolean>;
-  send(event: NotificationEvent): Promise<void>;
+  isEnabledFor(
+    event: ResolvedNotificationEvent,
+    preference: UserNotificationPreference,
+  ): Promise<boolean>;
+  send(event: ResolvedNotificationEvent): Promise<void>;
 }
 
 const emailChannel: NotificationChannel = {
@@ -76,9 +103,50 @@ const pushChannel: NotificationChannel = {
 
     return Boolean(subscription);
   },
-  async send() {
-    // Kein Provider angebunden — sobald FCM/APNs verdrahtet ist, hier den
-    // Push an alle PushSubscription-Tokens des Nutzers verschicken.
+  async send(event) {
+    const subscriptions = await prisma.pushSubscription.findMany({
+      where: { userId: event.userId },
+      select: { token: true },
+    });
+
+    const tokens = subscriptions.map((subscription) => subscription.token).filter(isExpoPushToken);
+
+    if (tokens.length === 0) return;
+
+    // Deep-Link-Referenz mitschicken: die App öffnet damit denselben Screen,
+    // den auch die Zeile im In-App-Posteingang ansteuert (src/lib/push.ts).
+    const data: Record<string, string> = {
+      tenantId: event.tenantId,
+      category: event.category,
+    };
+
+    if (event.entityType) data.entityType = event.entityType;
+    if (event.entityId) data.entityId = event.entityId;
+
+    const results = await sendExpoPushMessages(
+      tokens.map((token) => ({
+        to: token,
+        title: event.subject,
+        body: toPushBody(event.text),
+        sound: "default" as const,
+        // Muss zum Kanal passen, den die App beim Start anlegt.
+        channelId: "default",
+        data,
+      })),
+    );
+
+    // Deinstalliert oder abgemeldet: Expo meldet den Token als tot. Sofort
+    // austragen, sonst sammelt die Tabelle Tokens, die nie wieder etwas
+    // empfangen, und jeder Versand schleppt sie mit.
+    const staleTokens = results
+      .filter((result) => result.error === "DeviceNotRegistered")
+      .map((result) => result.token);
+
+    if (staleTokens.length > 0) {
+      await prisma.pushSubscription.deleteMany({
+        where: { userId: event.userId, token: { in: staleTokens } },
+      });
+    }
   },
 };
 
@@ -88,15 +156,23 @@ const inAppChannel: NotificationChannel = {
     return true;
   },
   async send(event) {
+    // `messagePayload` ist die eigentliche Quelle: title/detail sind in der
+    // Sprache gerendert, die der Empfänger beim Versand eingestellt hatte —
+    // wechselt er sie später, soll der Posteingang mitziehen. Sie bleiben
+    // trotzdem stehen, damit ältere Clients (und Zeilen ohne Payload) etwas
+    // anzuzeigen haben.
+    const rendered = renderNotification(event.message, event.locale, { compact: true });
+
     await prisma.tenantEmployeeNotification.create({
       data: {
         tenantId: event.tenantId,
         userId: event.userId,
         category: event.category,
-        title: event.subject,
-        detail: event.text,
+        title: rendered.subject,
+        detail: rendered.text,
         entityType: event.entityType ?? "",
         entityId: event.entityId ?? "",
+        messagePayload: event.message,
       },
     });
   },
@@ -120,16 +196,40 @@ function isCategoryEnabledForUser(category: NotificationCategory, preference: Us
 export async function dispatchNotification(event: NotificationEvent) {
   const preference = await prisma.userPreference.findUnique({
     where: { userId: event.userId },
-    select: { notifyVacationEvents: true, notifyShiftEvents: true, pushEnabled: true },
+    select: {
+      notifyVacationEvents: true,
+      notifyShiftEvents: true,
+      pushEnabled: true,
+      language: true,
+    },
   });
 
   if (!isCategoryEnabledForUser(event.category, preference)) {
     return;
   }
 
+  // Sprache des EMPFAENGERS, nicht die des Requests: derselbe Vorgang kann
+  // Empfaenger mit unterschiedlichen Spracheinstellungen haben.
+  const locale = toNotificationLocale(preference?.language);
+  const rendered = renderNotification(event.message, locale);
+  const resolved: ResolvedNotificationEvent = { ...event, ...rendered, locale };
+
   for (const channel of channels) {
-    if (await channel.isEnabledFor(event, preference)) {
-      await channel.send(event);
+    try {
+      if (await channel.isEnabledFor(resolved, preference)) {
+        await channel.send(resolved);
+      }
+    } catch (error) {
+      // Ein Kanal (typischerweise E-Mail, abhängig vom externen SMTP-Server)
+      // darf weder die übrigen Kanäle noch den aufrufenden Request-Handler
+      // zum Scheitern bringen — die eigentliche Aktion (z. B. das Anlegen
+      // der Wunschfrei-Anfrage) ist zu diesem Zeitpunkt bereits committed.
+      logger.error(`Benachrichtigung über Kanal "${channel.name}" fehlgeschlagen`, {
+        channel: channel.name,
+        userId: event.userId,
+        category: event.category,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 }

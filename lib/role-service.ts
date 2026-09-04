@@ -23,6 +23,7 @@ type RoleRecord = {
   name: string;
   description: string;
   isSystem: boolean;
+  appOverviewEnabled: boolean;
   permissions: Array<{
     area: string;
     level: string;
@@ -108,6 +109,7 @@ function toPermissionRole(role: RoleRecord, extraMembers = 0): PermissionRole {
     description: role.description,
     members: role._count.memberships + extraMembers,
     isSystem: role.isSystem,
+    appOverviewEnabled: role.appOverviewEnabled,
     permissions: toPermissionMap(role.permissions),
     scopes: toPermissionScopeMap(role.permissions),
     canDelete: toBooleanCapabilityMap(role.permissions, "canDelete"),
@@ -149,6 +151,7 @@ export async function ensureTenantDefaultRoles(tenantSlug: string) {
             name: role.name,
             description: role.description,
             isSystem: role.isSystem,
+            appOverviewEnabled: role.appOverviewEnabled,
             permissions: {
               create: permissionAreas.map((area) => ({
                 area: area.id,
@@ -333,6 +336,11 @@ export function canViewAuditFromFormData(formData: FormData) {
 }
 
 /** Nur für Bereiche mit `supportsAssignedScope` (locations/teams) aus dem Formular gesetzt — sonst null. */
+/** Checkbox im Rollen-Editor — nicht angehakt heißt "nicht mitgeschickt". */
+export function appOverviewFromFormData(formData: FormData) {
+  return formData.get("appOverviewEnabled") === "on";
+}
+
 export function shiftsLevelFromFormData(formData: FormData) {
   return Object.fromEntries(
     permissionAreas.map((area) => {
@@ -413,6 +421,7 @@ export async function createTenantRole(
     tenantSlug: string;
     name: string;
     description: string;
+    appOverviewEnabled?: boolean;
     permissions: Record<string, PermissionLevel>;
     scopes?: Record<string, PermissionScope>;
   } & RoleCapabilitiesInput,
@@ -443,6 +452,7 @@ export async function createTenantRole(
       key,
       name: input.name.trim(),
       description: input.description.trim(),
+      appOverviewEnabled: input.appOverviewEnabled ?? false,
       permissions: {
         create: permissionRowsFromInput(input),
       },
@@ -460,6 +470,7 @@ export async function updateTenantRole(
     roleId: string;
     name: string;
     description: string;
+    appOverviewEnabled?: boolean;
     permissions: Record<string, PermissionLevel>;
     scopes?: Record<string, PermissionScope>;
   } & RoleCapabilitiesInput,
@@ -487,6 +498,7 @@ export async function updateTenantRole(
       data: {
         name: input.name.trim(),
         description: input.description.trim(),
+        appOverviewEnabled: input.appOverviewEnabled ?? false,
       },
     }),
     prisma.tenantRolePermission.deleteMany({

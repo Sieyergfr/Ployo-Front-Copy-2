@@ -24,21 +24,31 @@ const navLinks = [
   { label: "Unternehmen", href: "#" },
 ];
 
+/**
+ * Feste, im Quelltext buchstäblich vorhandene Tailwind-Arbitrary-Klassen
+ * statt roher CSS-Werte über style={{...}} — CSP style-src erlaubt das
+ * style=""-Attribut nicht (siehe proxy.ts). `fg` bleibt eine reine CSS-Var-
+ * Zeichenkette, weil sie nur an die Lucide-`color`-Prop geht (SVG-
+ * Attribut, kein style, davon nicht betroffen).
+ */
 const featureColors = {
   ac: {
     fg: "var(--lp-ac)",
-    bg: "var(--lp-ac-dim)",
-    border: "rgba(77,255,166,.14)",
+    bgClass: "bg-[color:var(--lp-ac-dim)]",
+    borderClass: "border-[rgba(77,255,166,.14)]",
+    dotClass: "bg-[color:var(--lp-ac)]",
   },
   blue: {
     fg: "var(--lp-blue)",
-    bg: "rgba(77,159,255,.08)",
-    border: "rgba(77,159,255,.14)",
+    bgClass: "bg-[rgba(77,159,255,.08)]",
+    borderClass: "border-[rgba(77,159,255,.14)]",
+    dotClass: "bg-[color:var(--lp-blue)]",
   },
   red: {
     fg: "var(--lp-red)",
-    bg: "rgba(255,77,106,.08)",
-    border: "rgba(255,77,106,.14)",
+    bgClass: "bg-[rgba(255,77,106,.08)]",
+    borderClass: "border-[rgba(255,77,106,.14)]",
+    dotClass: "bg-[color:var(--lp-red)]",
   },
 } as const;
 
@@ -105,29 +115,43 @@ const steps = [
   },
 ] as const;
 
+// pct als feste Breiten-Klasse statt Laufzeitwert über style={{width}} —
+// die drei Einträge sind ohnehin fest verdrahtete Demo-Werte, keine echten
+// Laufzeitdaten.
 const shiftLoads = [
-  { label: "Frühschicht", value: "28/30", pct: 93, color: "var(--lp-ac)" },
-  { label: "Spätschicht", value: "22/30", pct: 73, color: "var(--lp-blue)" },
-  { label: "Nachtschicht", value: "8/12", pct: 67, color: "var(--lp-red)" },
-];
+  {
+    label: "Frühschicht",
+    value: "28/30",
+    widthClass: "w-[93%]",
+    colorClass: "text-[color:var(--lp-ac)]",
+    barClass: "bg-[color:var(--lp-ac)]",
+  },
+  {
+    label: "Spätschicht",
+    value: "22/30",
+    widthClass: "w-[73%]",
+    colorClass: "text-[color:var(--lp-blue)]",
+    barClass: "bg-[color:var(--lp-blue)]",
+  },
+  {
+    label: "Nachtschicht",
+    value: "8/12",
+    widthClass: "w-[67%]",
+    colorClass: "text-[color:var(--lp-red)]",
+    barClass: "bg-[color:var(--lp-red)]",
+  },
+] as const;
 
-function LogoMark({ size, radius }: { size: number; radius: number }) {
+function LogoMark({ variant }: { variant: "nav" | "footer" }) {
+  // Math.round(size * 0.57): nav (size 30) -> 17, footer (size 26) -> 15.
+  const sizeClass = variant === "nav" ? "size-[30px] rounded-[9px]" : "size-[26px] rounded-[8px]";
+  const imgSize = variant === "nav" ? 17 : 15;
+
   return (
     <div
-      className="flex flex-none items-center justify-center"
-      style={{
-        width: size,
-        height: size,
-        borderRadius: radius,
-        background: "var(--lp-tx)",
-      }}
+      className={`flex flex-none items-center justify-center bg-[color:var(--lp-tx)] ${sizeClass}`}
     >
-      <Image
-        src="/logo_square_brand.svg"
-        alt=""
-        width={Math.round(size * 0.57)}
-        height={Math.round(size * 0.57)}
-      />
+      <Image src="/logo_square_brand.svg" alt="" width={imgSize} height={imgSize} />
     </div>
   );
 }
@@ -136,29 +160,19 @@ export default function Home() {
   return (
     <div className="landing min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
       {/* ─── NAV ─────────────────────────────── */}
-      <header
-        className="fixed top-0 right-0 left-0 z-[100] h-16 backdrop-blur-[22px]"
-        style={{
-          borderBottom: "1px solid var(--lp-bd)",
-          background: "rgba(7,7,12,.82)",
-        }}
-      >
+      <header className="fixed top-0 right-0 left-0 z-[100] h-16 border-b border-[color:var(--lp-bd)] bg-[rgba(7,7,12,.82)] backdrop-blur-[22px]">
         <div className="mx-auto flex h-full max-w-[1200px] items-center px-5 sm:px-6 lg:px-10">
           <Link
             href="/"
-            className="lp-fi flex flex-none items-center gap-2.5"
-            style={{ animationDelay: ".06s" }}
+            className="lp-fi lp-delay-06 flex flex-none items-center gap-2.5"
           >
-            <LogoMark size={30} radius={9} />
+            <LogoMark variant="nav" />
             <span className="font-display text-[18px] font-semibold tracking-[-0.3px] text-[var(--lp-tx)]">
               Ployo
             </span>
           </Link>
 
-          <nav
-            className="lp-fi hidden flex-1 items-center justify-center gap-9 md:flex"
-            style={{ animationDelay: ".16s" }}
-          >
+          <nav className="lp-fi lp-delay-16 hidden flex-1 items-center justify-center gap-9 md:flex">
             {navLinks.map((link) => (
               <a key={link.label} href={link.href} className="lp-nav-link text-[13.5px]">
                 {link.label}
@@ -166,17 +180,13 @@ export default function Home() {
             ))}
           </nav>
 
-          <div
-            className="lp-fi ml-auto flex flex-none items-center gap-3 sm:gap-4 md:ml-0"
-            style={{ animationDelay: ".26s" }}
-          >
+          <div className="lp-fi lp-delay-26 ml-auto flex flex-none items-center gap-3 sm:gap-4 md:ml-0">
             <Link href="/login" className="lp-nav-link text-[13.5px]">
               Anmelden
             </Link>
             <Link
               href="/register"
-              className="lp-btn-primary rounded-[9px] px-3 py-[9px] text-[13px] font-semibold text-black sm:px-[18px]"
-              style={{ background: "var(--lp-ac)" }}
+              className="lp-btn-primary rounded-[9px] bg-[color:var(--lp-ac)] px-3 py-[9px] text-[13px] font-semibold text-black sm:px-[18px]"
             >
               <span className="sm:hidden">Start</span>
               <span className="hidden sm:inline">Kostenlos starten</span>
@@ -187,87 +197,45 @@ export default function Home() {
 
       {/* ─── HERO ─────────────────────────────── */}
       <section className="relative flex min-h-screen items-center overflow-hidden pt-16">
-        <div
-          className="pointer-events-none absolute top-[46%] left-[58%] h-[560px] w-[760px] -translate-x-1/2 -translate-y-1/2 rounded-full"
-          style={{
-            background:
-              "radial-gradient(ellipse, var(--lp-ac-glow) 0%, transparent 68%)",
-            animation: "lp-glow-pulse 7s ease-in-out infinite",
-          }}
-        />
-        <div
-          className="pointer-events-none absolute top-[28%] right-[6%] h-[320px] w-[320px] rounded-full"
-          style={{
-            background:
-              "radial-gradient(ellipse, rgba(77,159,255,.06) 0%, transparent 70%)",
-            animation: "lp-glow-pulse 9s ease-in-out infinite 2.5s",
-          }}
-        />
+        <div className="lp-glow-hero-a pointer-events-none absolute top-[46%] left-[58%] h-[560px] w-[760px] -translate-x-1/2 -translate-y-1/2 rounded-full" />
+        <div className="lp-glow-hero-b pointer-events-none absolute top-[28%] right-[6%] h-[320px] w-[320px] rounded-full" />
 
         <div className="mx-auto grid w-full max-w-[1200px] grid-cols-1 items-center gap-x-[72px] gap-y-16 px-5 sm:px-6 lg:grid-cols-2 lg:px-10">
           {/* Text */}
           <div>
-            <div
-              className="lp-fu mb-[30px] inline-flex items-center gap-2 rounded-full py-1.5 pr-[14px] pl-2.5"
-              style={{
-                border: "1px solid var(--lp-bd-hi)",
-                background: "var(--lp-surf)",
-                animationDelay: ".06s",
-              }}
-            >
-              <span
-                className="h-1.5 w-1.5 flex-none rounded-full"
-                style={{
-                  background: "var(--lp-ac)",
-                  animation: "lp-blink 2s ease infinite",
-                }}
-              />
+            <div className="lp-fu lp-delay-06 mb-[30px] inline-flex items-center gap-2 rounded-full border border-[color:var(--lp-bd-hi)] bg-[color:var(--lp-surf)] py-1.5 pr-[14px] pl-2.5">
+              <span className="lp-anim-blink h-1.5 w-1.5 flex-none rounded-full bg-[color:var(--lp-ac)]" />
               <span className="font-mono text-[11px] tracking-[0.4px] text-[var(--lp-tx2)]">
                 NEU — Digitale Schichtplanung
               </span>
             </div>
 
             <h1 className="font-display text-[clamp(40px,9vw,82px)] leading-[1.0] font-bold tracking-[-2.8px] text-[var(--lp-tx)]">
-              <span className="lp-fu mb-1 block" style={{ animationDelay: ".16s" }}>
+              <span className="lp-fu lp-delay-16 mb-1 block">
                 Smarter HR.
               </span>
-              <span
-                className="lp-fu mb-7 block bg-clip-text text-transparent"
-                style={{
-                  backgroundImage:
-                    "linear-gradient(95deg, var(--lp-ac) 20%, var(--lp-blue) 100%)",
-                  animationDelay: ".26s",
-                }}
-              >
+              <span className="lp-fu lp-delay-26 lp-text-gradient mb-7 block bg-clip-text text-transparent">
                 Starke Teams.
               </span>
             </h1>
 
-            <p
-              className="lp-fu mb-10 max-w-[450px] text-[17px] leading-[1.68] text-[var(--lp-tx2)]"
-              style={{ animationDelay: ".38s" }}
-            >
+            <p className="lp-fu lp-delay-38 mb-10 max-w-[450px] text-[17px] leading-[1.68] text-[var(--lp-tx2)]">
               Ployo vereint Schichtplanung, Personalverwaltung und
               standortübergreifende Analyse — in einer schlanken, modernen
               Plattform.
             </p>
 
-            <div
-              className="lp-fu flex flex-wrap items-center gap-3"
-              style={{ animationDelay: ".52s" }}
-            >
+            <div className="lp-fu lp-delay-52 flex flex-wrap items-center gap-3">
               <Link
                 href="/register"
-                className="lp-btn-primary inline-flex items-center gap-2 rounded-[11px] px-6 py-3.5 text-[14.5px] font-semibold text-black"
-                style={{ background: "var(--lp-ac)" }}
+                className="lp-btn-primary inline-flex items-center gap-2 rounded-[11px] bg-[color:var(--lp-ac)] px-6 py-3.5 text-[14.5px] font-semibold text-black"
               >
                 Kostenlos testen
                 <ArrowRight size={14} strokeWidth={2.2} />
               </Link>
               <a
                 href="#features"
-                className="lp-btn-secondary inline-flex items-center gap-2 rounded-[11px] px-6 py-3.5 text-[14.5px] font-medium text-[var(--lp-tx2)]"
-                style={{ border: "1px solid var(--lp-bd-hi)" }}
+                className="lp-btn-secondary inline-flex items-center gap-2 rounded-[11px] border border-[color:var(--lp-bd-hi)] px-6 py-3.5 text-[14.5px] font-medium text-[var(--lp-tx2)]"
               >
                 <PlayCircle size={14} strokeWidth={2} />
                 Demo ansehen
@@ -277,53 +245,23 @@ export default function Home() {
           </div>
 
           {/* Dashboard card */}
-          <div
-            className="lp-fi relative flex items-center justify-center py-8"
-            style={{ animationDelay: ".38s" }}
-          >
-            <div
-              className="relative w-full max-w-[400px] overflow-hidden rounded-[20px]"
-              style={{
-                background: "var(--lp-surf)",
-                border: "1px solid var(--lp-bd-hi)",
-                boxShadow: "0 40px 80px rgba(0,0,0,.5), 0 0 0 1px var(--lp-bd)",
-                animation: "lp-float 7s ease-in-out infinite",
-              }}
-            >
-              <div
-                className="pointer-events-none absolute right-0 left-0 h-px opacity-50"
-                style={{
-                  background:
-                    "linear-gradient(90deg, transparent, var(--lp-ac), transparent)",
-                  animation: "lp-scan 5s linear infinite",
-                }}
-              />
+          <div className="lp-fi lp-delay-38 relative flex items-center justify-center py-8">
+            <div className="lp-anim-float relative w-full max-w-[400px] overflow-hidden rounded-[20px] border border-[color:var(--lp-bd-hi)] bg-[color:var(--lp-surf)] shadow-[0_40px_80px_rgba(0,0,0,.5),0_0_0_1px_var(--lp-bd)]">
+              <div className="lp-scan-line pointer-events-none absolute right-0 left-0 h-px opacity-50" />
 
-              <div
-                className="flex items-center justify-between px-5 py-4"
-                style={{ borderBottom: "1px solid var(--lp-bd)" }}
-              >
+              <div className="flex items-center justify-between border-b border-[color:var(--lp-bd)] px-5 py-4">
                 <div className="flex items-center gap-2">
-                  <span
-                    className="h-[7px] w-[7px] rounded-full"
-                    style={{
-                      background: "var(--lp-ac)",
-                      animation: "lp-blink 2s ease infinite",
-                    }}
-                  />
+                  <span className="lp-anim-blink h-[7px] w-[7px] rounded-full bg-[color:var(--lp-ac)]" />
                   <span className="font-mono text-[11px] tracking-[0.5px] text-[var(--lp-tx2)]">
                     PLOYO LIVE
                   </span>
                 </div>
-                <span className="font-mono text-[10px]" style={{ color: "var(--lp-mu)" }}>
+                <span className="font-mono text-[10px] text-[color:var(--lp-mu)]">
                   KW 26 · 2025
                 </span>
               </div>
 
-              <div
-                className="grid grid-cols-3"
-                style={{ borderBottom: "1px solid var(--lp-bd)" }}
-              >
+              <div className="grid grid-cols-3 border-b border-[color:var(--lp-bd)]">
                 {[
                   { label: "Mitarbeiter", value: "84" },
                   { label: "Standorte", value: "4" },
@@ -331,22 +269,17 @@ export default function Home() {
                 ].map((cell, index) => (
                   <div
                     key={cell.label}
-                    className="px-3 py-4 sm:px-[18px]"
-                    style={
-                      index < 2
-                        ? { borderRight: "1px solid var(--lp-bd)" }
-                        : undefined
-                    }
+                    className={`px-3 py-4 sm:px-[18px] ${
+                      index < 2 ? "border-r border-[color:var(--lp-bd)]" : ""
+                    }`}
                   >
-                    <div
-                      className="mb-2 font-mono text-[9px] tracking-[0.5px] uppercase"
-                      style={{ color: "var(--lp-mu)" }}
-                    >
+                    <div className="mb-2 font-mono text-[9px] tracking-[0.5px] text-[color:var(--lp-mu)] uppercase">
                       {cell.label}
                     </div>
                     <div
-                      className="font-display text-2xl font-bold tracking-[-1.2px] sm:text-[30px]"
-                      style={{ color: cell.accent ? "var(--lp-ac)" : "var(--lp-tx)" }}
+                      className={`font-display text-2xl font-bold tracking-[-1.2px] sm:text-[30px] ${
+                        cell.accent ? "text-[color:var(--lp-ac)]" : "text-[color:var(--lp-tx)]"
+                      }`}
                     >
                       {cell.value}
                     </div>
@@ -354,85 +287,46 @@ export default function Home() {
                 ))}
               </div>
 
-              <div
-                className="flex flex-col gap-[13px] px-5 pt-[18px] pb-3.5"
-                style={{ borderBottom: "1px solid var(--lp-bd)" }}
-              >
+              <div className="flex flex-col gap-[13px] border-b border-[color:var(--lp-bd)] px-5 pt-[18px] pb-3.5">
                 {shiftLoads.map((shift) => (
                   <div key={shift.label}>
                     <div className="mb-[7px] flex justify-between">
                       <span className="text-[12.5px] text-[var(--lp-tx2)]">
                         {shift.label}
                       </span>
-                      <span
-                        className="font-mono text-[11px]"
-                        style={{ color: shift.color }}
-                      >
+                      <span className={`font-mono text-[11px] ${shift.colorClass}`}>
                         {shift.value}
                       </span>
                     </div>
-                    <div
-                      className="h-[3px] overflow-hidden rounded-[3px]"
-                      style={{ background: "var(--lp-surf2)" }}
-                    >
-                      <div
-                        className="h-full rounded-[3px]"
-                        style={{ width: `${shift.pct}%`, background: shift.color }}
-                      />
+                    <div className="h-[3px] overflow-hidden rounded-[3px] bg-[color:var(--lp-surf2)]">
+                      <div className={`h-full rounded-[3px] ${shift.widthClass} ${shift.barClass}`} />
                     </div>
                   </div>
                 ))}
               </div>
 
               <div className="flex items-center gap-2.5 px-5 py-3.5">
-                <div
-                  className="flex h-[30px] w-[30px] flex-none items-center justify-center rounded-[9px] text-[9px] font-bold"
-                  style={{
-                    background: "rgba(77,255,166,.08)",
-                    border: "1px solid rgba(77,255,166,.15)",
-                    color: "var(--lp-ac)",
-                  }}
-                >
+                <div className="flex h-[30px] w-[30px] flex-none items-center justify-center rounded-[9px] border border-[rgba(77,255,166,.15)] bg-[rgba(77,255,166,.08)] text-[9px] font-bold text-[color:var(--lp-ac)]">
                   TB
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="text-[12.5px] font-medium text-[var(--lp-tx)]">
                     Thomas Berger
                   </div>
-                  <div
-                    className="mt-0.5 font-mono text-[10px]"
-                    style={{ color: "var(--lp-mu)" }}
-                  >
+                  <div className="mt-0.5 font-mono text-[10px] text-[color:var(--lp-mu)]">
                     Schichtplan KW 27 freigegeben
                   </div>
                 </div>
-                <span
-                  className="h-1.5 w-1.5 flex-none rounded-full"
-                  style={{ background: "var(--lp-ac)" }}
-                />
+                <span className="h-1.5 w-1.5 flex-none rounded-full bg-[color:var(--lp-ac)]" />
               </div>
             </div>
 
             {/* Floating badge */}
-            <div
-              className="absolute right-[-10px] bottom-0 rounded-[14px] px-[18px] py-3.5"
-              style={{
-                background: "var(--lp-surf)",
-                border: "1px solid var(--lp-bd-hi)",
-                boxShadow: "0 20px 50px rgba(0,0,0,.5)",
-                animation: "lp-float-b 5s ease-in-out infinite 1.8s",
-              }}
-            >
-              <div
-                className="mb-2 font-mono text-[9px] tracking-[0.5px] uppercase"
-                style={{ color: "var(--lp-mu)" }}
-              >
+            <div className="lp-anim-float-badge absolute right-[-10px] bottom-0 rounded-[14px] border border-[color:var(--lp-bd-hi)] bg-[color:var(--lp-surf)] px-[18px] py-3.5 shadow-[0_20px_50px_rgba(0,0,0,.5)]">
+              <div className="mb-2 font-mono text-[9px] tracking-[0.5px] text-[color:var(--lp-mu)] uppercase">
                 Offene Schichten
               </div>
-              <div
-                className="font-display text-[34px] leading-none font-bold tracking-[-1.5px]"
-                style={{ color: "var(--lp-red)" }}
-              >
+              <div className="font-display text-[34px] leading-none font-bold tracking-[-1.5px] text-[color:var(--lp-red)]">
                 7
               </div>
               <div className="mt-[5px] text-[11.5px] text-[var(--lp-tx2)]">
@@ -446,15 +340,11 @@ export default function Home() {
       {/* ─── FEATURES ─────────────────────────── */}
       <section
         id="features"
-        className="scroll-mt-16 px-5 py-20 sm:px-6 lg:px-10 lg:py-[120px]"
-        style={{ borderBottom: "1px solid var(--lp-bd)" }}
+        className="scroll-mt-16 border-b border-[color:var(--lp-bd)] px-5 py-20 sm:px-6 lg:px-10 lg:py-[120px]"
       >
         <div className="mx-auto max-w-[1200px]">
           <div className="mb-[72px]">
-            <div
-              className="mb-4 font-mono text-[10px] tracking-[1px] uppercase"
-              style={{ color: "var(--lp-ac)" }}
-            >
+            <div className="mb-4 font-mono text-[10px] tracking-[1px] text-[color:var(--lp-ac)] uppercase">
               Funktionen
             </div>
             <h2 className="font-display max-w-[540px] text-[clamp(30px,5vw,54px)] leading-[1.05] font-bold tracking-[-1.8px] text-[var(--lp-tx)]">
@@ -469,12 +359,10 @@ export default function Home() {
               return (
                 <div
                   key={feature.title}
-                  className="lp-feature-card rounded-[18px] p-6 sm:p-8"
-                  style={{ background: "var(--lp-surf)", border: "1px solid var(--lp-bd)" }}
+                  className="lp-feature-card rounded-[18px] border border-[color:var(--lp-bd)] bg-[color:var(--lp-surf)] p-6 sm:p-8"
                 >
                   <div
-                    className="mb-6 flex h-11 w-11 items-center justify-center rounded-xl"
-                    style={{ background: colors.bg, border: `1px solid ${colors.border}` }}
+                    className={`mb-6 flex h-11 w-11 items-center justify-center rounded-xl border ${colors.bgClass} ${colors.borderClass}`}
                   >
                     <Icon size={20} strokeWidth={1.8} color={colors.fg} />
                   </div>
@@ -487,10 +375,7 @@ export default function Home() {
                   <div className="flex flex-col gap-2.5">
                     {feature.points.map((point) => (
                       <div key={point} className="flex items-center gap-2.5">
-                        <span
-                          className="h-[5px] w-[5px] flex-none rounded-full"
-                          style={{ background: colors.fg }}
-                        />
+                        <span className={`h-[5px] w-[5px] flex-none rounded-full ${colors.dotClass}`} />
                         <span className="text-[13px] text-[var(--lp-tx2)]">{point}</span>
                       </div>
                     ))}
@@ -505,15 +390,11 @@ export default function Home() {
       {/* ─── HOW IT WORKS ─────────────────────── */}
       <section
         id="how"
-        className="scroll-mt-16 px-5 py-20 sm:px-6 lg:px-10 lg:py-[120px]"
-        style={{ borderBottom: "1px solid var(--lp-bd)" }}
+        className="scroll-mt-16 border-b border-[color:var(--lp-bd)] px-5 py-20 sm:px-6 lg:px-10 lg:py-[120px]"
       >
         <div className="mx-auto max-w-[1200px]">
           <div className="mb-12 sm:mb-20">
-            <div
-              className="mb-4 font-mono text-[10px] tracking-[1px] uppercase"
-              style={{ color: "var(--lp-ac)" }}
-            >
+            <div className="mb-4 font-mono text-[10px] tracking-[1px] text-[color:var(--lp-ac)] uppercase">
               So funktioniert&apos;s
             </div>
             <h2 className="font-display text-[clamp(30px,5vw,54px)] leading-[1.05] font-bold tracking-[-1.8px] text-[var(--lp-tx)]">
@@ -525,20 +406,13 @@ export default function Home() {
             {steps.map((step) => (
               <div key={step.number} className="lp-step">
                 <div
-                  className="mb-7 flex h-14 w-14 items-center justify-center rounded-2xl"
-                  style={
+                  className={`mb-7 flex h-14 w-14 items-center justify-center rounded-2xl border ${
                     step.highlight
-                      ? {
-                          border: "1px solid rgba(77,255,166,.28)",
-                          background: "rgba(77,255,166,.05)",
-                        }
-                      : { border: "1px solid var(--lp-bd-hi)", background: "var(--lp-surf)" }
-                  }
+                      ? "border-[rgba(77,255,166,.28)] bg-[rgba(77,255,166,.05)]"
+                      : "border-[color:var(--lp-bd-hi)] bg-[color:var(--lp-surf)]"
+                  }`}
                 >
-                  <span
-                    className="font-mono text-[22px] font-bold"
-                    style={{ color: "var(--lp-ac)" }}
-                  >
+                  <span className="font-mono text-[22px] font-bold text-[color:var(--lp-ac)]">
                     {step.number}
                   </span>
                 </div>
@@ -555,12 +429,9 @@ export default function Home() {
       </section>
 
       {/* ─── TESTIMONIAL ─────────────────────── */}
-      <section
-        className="px-5 py-16 sm:px-6 lg:px-10 lg:py-[100px]"
-        style={{ borderBottom: "1px solid var(--lp-bd)" }}
-      >
+      <section className="border-b border-[color:var(--lp-bd)] px-5 py-16 sm:px-6 lg:px-10 lg:py-[100px]">
         <div className="mx-auto max-w-[720px] text-center">
-          <div aria-hidden className="mb-6 text-[40px] leading-none" style={{ color: "var(--lp-mu)" }}>
+          <div aria-hidden className="mb-6 text-[40px] leading-none text-[color:var(--lp-mu)]">
             &ldquo;
           </div>
           <blockquote className="font-display mb-9 text-[clamp(20px,4vw,30px)] leading-[1.35] font-medium tracking-[-0.6px] text-[var(--lp-tx)]">
@@ -571,14 +442,13 @@ export default function Home() {
           <div className="flex items-center justify-center gap-3.5">
             <div
               aria-hidden
-              className="flex h-10 w-10 items-center justify-center rounded-full text-[12px] font-bold text-[var(--lp-tx2)]"
-              style={{ background: "var(--lp-surf)", border: "1px solid var(--lp-bd-hi)" }}
+              className="flex h-10 w-10 items-center justify-center rounded-full border border-[color:var(--lp-bd-hi)] bg-[color:var(--lp-surf)] text-[12px] font-bold text-[var(--lp-tx2)]"
             >
               MK
             </div>
             <div className="text-left">
               <div className="text-sm font-semibold text-[var(--lp-tx)]">Maria Koch</div>
-              <div className="mt-[3px] font-mono text-[11px]" style={{ color: "var(--lp-mu)" }}>
+              <div className="mt-[3px] font-mono text-[11px] text-[color:var(--lp-mu)]">
                 HR-Leitung · Hamburg Altona
               </div>
             </div>
@@ -589,23 +459,10 @@ export default function Home() {
       {/* ─── CTA ───────────────────────────────── */}
       <section className="px-5 py-16 sm:px-6 lg:px-10 lg:py-[120px]">
         <div className="mx-auto max-w-[1200px]">
-          <div
-            className="relative overflow-hidden rounded-3xl px-6 py-14 text-center sm:px-10 sm:py-16 md:px-20 lg:py-[90px]"
-            style={{ background: "var(--lp-surf)", border: "1px solid var(--lp-bd-hi)" }}
-          >
-            <div
-              className="pointer-events-none absolute top-1/2 left-1/2 h-[350px] w-[600px] -translate-x-1/2 -translate-y-1/2 rounded-full"
-              style={{
-                background:
-                  "radial-gradient(ellipse, var(--lp-ac-glow) 0%, transparent 68%)",
-                animation: "lp-glow-pulse 6s ease-in-out infinite",
-              }}
-            />
+          <div className="relative overflow-hidden rounded-3xl border border-[color:var(--lp-bd-hi)] bg-[color:var(--lp-surf)] px-6 py-14 text-center sm:px-10 sm:py-16 md:px-20 lg:py-[90px]">
+            <div className="lp-glow-cta pointer-events-none absolute top-1/2 left-1/2 h-[350px] w-[600px] -translate-x-1/2 -translate-y-1/2 rounded-full" />
             <div className="relative z-[1]">
-              <div
-                className="mb-5 font-mono text-[10px] tracking-[1px] uppercase"
-                style={{ color: "var(--lp-ac)" }}
-              >
+              <div className="mb-5 font-mono text-[10px] tracking-[1px] text-[color:var(--lp-ac)] uppercase">
                 Jetzt starten — kostenlos
               </div>
               <h2 className="font-display mb-5 text-[clamp(32px,7vw,68px)] leading-[1.0] font-bold tracking-[-2.2px] text-[var(--lp-tx)]">
@@ -620,16 +477,14 @@ export default function Home() {
               <div className="flex flex-wrap items-center justify-center gap-3.5">
                 <Link
                   href="/register"
-                  className="lp-btn-primary inline-flex items-center gap-2 rounded-xl px-[30px] py-[15px] text-[15px] font-bold text-black"
-                  style={{ background: "var(--lp-ac)" }}
+                  className="lp-btn-primary inline-flex items-center gap-2 rounded-xl bg-[color:var(--lp-ac)] px-[30px] py-[15px] text-[15px] font-bold text-black"
                 >
                   Kostenlos testen
                   <ArrowRight size={14} strokeWidth={2.2} />
                 </Link>
                 <a
                   href="#"
-                  className="lp-btn-secondary rounded-xl px-[30px] py-[15px] text-[15px] font-medium text-[var(--lp-tx2)]"
-                  style={{ border: "1px solid var(--lp-bd-hi)" }}
+                  className="lp-btn-secondary rounded-xl border border-[color:var(--lp-bd-hi)] px-[30px] py-[15px] text-[15px] font-medium text-[var(--lp-tx2)]"
                 >
                   Demo buchen
                 </a>
@@ -640,37 +495,34 @@ export default function Home() {
       </section>
 
       {/* ─── FOOTER ────────────────────────────── */}
-      <footer
-        className="px-5 py-9 sm:px-6 lg:px-10"
-        style={{ borderTop: "1px solid var(--lp-bd)" }}
-      >
+      <footer className="border-t border-[color:var(--lp-bd)] px-5 py-9 sm:px-6 lg:px-10">
         <div className="mx-auto flex max-w-[1200px] flex-col flex-wrap items-center justify-between gap-5 text-center sm:flex-row sm:text-left">
           <div className="flex items-center gap-2.5">
-            <LogoMark size={26} radius={8} />
+            <LogoMark variant="footer" />
             <span className="font-display text-base font-semibold tracking-[-0.3px]">
               Ployo
             </span>
           </div>
           <div className="flex flex-wrap items-center justify-center gap-5 sm:gap-7">
-            <Link href="/datenschutz" className="lp-footer-link text-[13px]" style={{ color: "var(--lp-mu)" }}>
+            <Link href="/datenschutz" className="lp-footer-link text-[13px] text-[color:var(--lp-mu)]">
               Datenschutz
             </Link>
-            <Link href="/impressum" className="lp-footer-link text-[13px]" style={{ color: "var(--lp-mu)" }}>
+            <Link href="/impressum" className="lp-footer-link text-[13px] text-[color:var(--lp-mu)]">
               Impressum
             </Link>
-            <Link href="/agb" className="lp-footer-link text-[13px]" style={{ color: "var(--lp-mu)" }}>
+            <Link href="/agb" className="lp-footer-link text-[13px] text-[color:var(--lp-mu)]">
               AGB
             </Link>
-            <a href="#" className="lp-footer-link text-[13px]" style={{ color: "var(--lp-mu)" }}>
+            <Link href="/konto-loeschung" className="lp-footer-link text-[13px] text-[color:var(--lp-mu)]">
+              Konto löschen
+            </Link>
+            <Link href="/kontakt" className="lp-footer-link text-[13px] text-[color:var(--lp-mu)]">
               Kontakt
-            </a>
-            <CookieSettingsLink
-              className="lp-footer-link text-[13px] cursor-pointer"
-              style={{ color: "var(--lp-mu)" }}
-            />
+            </Link>
+            <CookieSettingsLink className="lp-footer-link text-[13px] text-[color:var(--lp-mu)] cursor-pointer" />
             <LocaleSwitcher />
           </div>
-          <span className="font-mono text-[11px]" style={{ color: "var(--lp-mu)" }}>
+          <span className="font-mono text-[11px] text-[color:var(--lp-mu)]">
             © {new Date().getFullYear()} Ployo · Made in Germany
           </span>
         </div>

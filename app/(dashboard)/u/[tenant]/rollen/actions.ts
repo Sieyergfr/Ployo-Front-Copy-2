@@ -1,6 +1,7 @@
 "use server";
 
 import {
+  appOverviewFromFormData,
   canDeleteFromFormData,
   canEditFilesFromFormData,
   canUploadFilesFromFormData,
@@ -39,6 +40,7 @@ export async function createRoleAction(formData: FormData) {
     tenantSlug: tenant,
     name,
     description,
+    appOverviewEnabled: appOverviewFromFormData(formData),
     permissions: permissionsFromFormData(formData),
     scopes: scopesFromFormData(formData),
     canDelete: canDeleteFromFormData(formData),
@@ -68,6 +70,7 @@ export async function updateRoleAction(formData: FormData) {
     roleId,
     name,
     description,
+    appOverviewEnabled: appOverviewFromFormData(formData),
     permissions: permissionsFromFormData(formData),
     scopes: scopesFromFormData(formData),
     canDelete: canDeleteFromFormData(formData),

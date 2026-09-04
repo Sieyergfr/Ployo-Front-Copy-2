@@ -58,23 +58,24 @@ export function computeVacationAccount(input: {
   };
 }
 
-export const vacationStatusConfig = {
-  pending: {
-    label: "Ausstehend",
-    badge: "· Ausstehend",
-    className: "bg-warning/10 text-[#7A4E00]",
-  },
-  approved: {
-    label: "Genehmigt",
-    badge: "✓ Genehmigt",
-    className: "bg-success/10 text-success",
-  },
-  rejected: {
-    label: "Abgelehnt",
-    badge: "× Abgelehnt",
-    className: "bg-danger/10 text-danger",
-  },
-} satisfies Record<
-  VacationRequestStatus,
-  { label: string; badge: string; className: string }
->;
+export function getVacationStatusConfig(
+  t: (key: string) => string,
+): Record<VacationRequestStatus, { label: string; badge: string; className: string }> {
+  return {
+    pending: {
+      label: t("pendingLabel"),
+      badge: t("pendingBadge"),
+      className: "bg-warning/10 text-[#7A4E00]",
+    },
+    approved: {
+      label: t("approvedLabel"),
+      badge: t("approvedBadge"),
+      className: "bg-success/10 text-success",
+    },
+    rejected: {
+      label: t("rejectedLabel"),
+      badge: t("rejectedBadge"),
+      className: "bg-danger/10 text-danger",
+    },
+  };
+}

@@ -32,6 +32,8 @@ export type LocationFileFolder = {
 export type LocationFile = {
   name: string;
   folder: string;
+  /** Ordnerpfad (TenantFile.folderSlug); leer = Home-Ebene des Standorts. */
+  folderSlug: string;
   updatedAt: string;
   size: string;
   type: string;
@@ -62,6 +64,10 @@ export type Location = {
   openingHours: OpeningHoursDay[];
   /** true = Standort hat keine eigene Öffnungszeiten hinterlegt, übernimmt den Mandanten-Standard. */
   usesDefaultOpeningHours: boolean;
+  /** Eigene Mindestbesetzung dieses Standorts; null = Unternehmensvorgabe gilt. */
+  shiftMinStaffing: number | null;
+  /** Tatsächlich angewandte Mindestbesetzung (eigener Wert, sonst Unternehmensvorgabe). */
+  effectiveMinStaffing: number;
   utilization: string;
   utilizationCaption: string;
   status: LocationStatus;

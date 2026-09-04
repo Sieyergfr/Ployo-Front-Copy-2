@@ -18,8 +18,11 @@ import { getTenantPermissions, withAccessRedirect } from "@/lib/tenant-access";
 import { ArrowLeft, FileText, Lock } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 
 const PAGE_SIZE = 30;
+
+type T = Awaited<ReturnType<typeof getTranslations>>;
 
 function FileMetricCard({
   label,
@@ -48,11 +51,13 @@ function FileInfoCard({
   tenant,
   returnPath,
   canManageFiles,
+  t,
 }: {
   file: FileItem;
   tenant: string;
   returnPath: string;
   canManageFiles: boolean;
+  t: T;
 }) {
   const versions = getFileVersions(file);
 
@@ -74,7 +79,7 @@ function FileInfoCard({
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
           <FileViewButton file={file} tenant={tenant} />
-          <FileDownloadButton file={file} tenant={tenant} label="Aktuelle Version" />
+          <FileDownloadButton file={file} tenant={tenant} label={t("currentVersionLabel")} />
           {canManageFiles && (
             <>
               <VersionUploadButton file={file} tenant={tenant} returnPath={returnPath} />
@@ -86,13 +91,13 @@ function FileInfoCard({
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {[
-          ["Hochgeladen von", file.uploadedByName],
-          ["Hochgeladen am", file.uploadedAt],
-          ["Dokumententyp", file.documentType],
-          ["Verantwortlich", file.owner],
-          ["Aktualisiert", file.updatedAt],
-          ["Ablaufdatum", file.expiresAt ?? "Kein Ablaufdatum"],
-          ["Erinnerung", file.reminder ?? "Keine Erinnerung"],
+          [t("uploadedByLabel"), file.uploadedByName],
+          [t("uploadedAtLabel"), file.uploadedAt],
+          [t("documentTypeLabel"), file.documentType],
+          [t("responsibleLabel"), file.owner],
+          [t("updatedLabel"), file.updatedAt],
+          [t("expiresAtLabel"), file.expiresAt ?? t("noExpiry")],
+          [t("reminderLabel"), file.reminder ?? t("noReminder")],
         ].map(([label, value]) => (
           <div key={label} className="rounded-xl border border-border-soft bg-bg p-3">
             <div className="font-mono text-[9.5px] uppercase tracking-[0.6px] text-muted">
@@ -106,25 +111,25 @@ function FileInfoCard({
       <div className="mt-5 grid gap-4 lg:grid-cols-2">
         <div className="rounded-xl border border-border bg-bg p-4">
           <div className="mb-3 font-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-muted">
-            Zuweisung
+            {t("assignmentTitle")}
           </div>
           <div className="space-y-2 text-[12.5px] text-muted">
             <div>
-              Mitarbeiter:{" "}
+              {t("employeeLabel")}{" "}
               <span className="font-semibold text-ink">
-                {file.assignedEmployee ?? "Nicht zugewiesen"}
+                {file.assignedEmployee ?? t("notAssigned")}
               </span>
             </div>
             <div>
-              Standort:{" "}
+              {t("locationLabel")}{" "}
               <span className="font-semibold text-ink">
-                {file.assignedLocation ?? "Nicht zugewiesen"}
+                {file.assignedLocation ?? t("notAssigned")}
               </span>
             </div>
             <div>
-              Gültig ab:{" "}
+              {t("validFromLabel")}{" "}
               <span className="font-semibold text-ink">
-                {file.validFrom ?? "Nicht gesetzt"}
+                {file.validFrom ?? t("notSet")}
               </span>
             </div>
           </div>
@@ -133,7 +138,7 @@ function FileInfoCard({
         <div className="rounded-xl border border-border bg-bg p-4">
           <div className="mb-3 flex items-center gap-2 font-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-muted">
             <Lock size={14} />
-            Zugriffsberechtigung
+            {t("accessRolesTitle")}
           </div>
           {file.accessRoles.length > 0 ? (
             <div className="flex flex-wrap gap-2">
@@ -144,13 +149,13 @@ function FileInfoCard({
               ))}
             </div>
           ) : (
-            <div className="text-[12.5px] text-muted">Keine Rollen eingeschränkt.</div>
+            <div className="text-[12.5px] text-muted">{t("noRestrictedRoles")}</div>
           )}
         </div>
 
         <div className="rounded-xl border border-border bg-bg p-4">
           <div className="mb-3 font-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-muted">
-            Einzelzugriff
+            {t("individualAccessTitle")}
           </div>
           {file.accessUsers.length > 0 ? (
             <div className="flex flex-wrap gap-2">
@@ -161,7 +166,7 @@ function FileInfoCard({
               ))}
             </div>
           ) : (
-            <div className="text-[12.5px] text-muted">Keine einzelnen User eingeschränkt.</div>
+            <div className="text-[12.5px] text-muted">{t("noRestrictedUsers")}</div>
           )}
         </div>
       </div>
@@ -169,7 +174,7 @@ function FileInfoCard({
       {(file.description || file.tags.length > 0) && (
         <div className="mt-5 rounded-xl border border-border bg-bg p-4">
           <div className="mb-3 font-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-muted">
-            Beschreibung & Tags
+            {t("descriptionTagsTitle")}
           </div>
           {file.description && (
             <p className="text-[13px] leading-5 text-ink">{file.description}</p>
@@ -188,7 +193,7 @@ function FileInfoCard({
 
       <div className="mt-5">
         <div className="mb-2 font-mono text-[9.5px] uppercase tracking-[0.6px] text-muted">
-          Versionen
+          {t("versionsTitle")}
         </div>
         {versions.map((version) => (
           <div key={version.version} className="grid items-center gap-3 border-t border-border-soft py-3 sm:grid-cols-[80px_1fr_160px_auto]">
@@ -219,6 +224,7 @@ export default async function FilesPageContent({
   path?: string[];
   page?: string | string[];
 }) {
+  const t = await getTranslations("FilesPageContent");
   const {
     activeFile,
     activeFolder,
@@ -230,7 +236,7 @@ export default async function FilesPageContent({
     metrics,
     uploadOptions,
     visibleFiles,
-  } = await withAccessRedirect(tenant, () => getFilesPageData(tenant, path));
+  } = await withAccessRedirect(tenant, () => getFilesPageData(tenant, path, t));
 
   if (path.length > 0 && !activeFile && !activeFolder) {
     notFound();
@@ -257,7 +263,7 @@ export default async function FilesPageContent({
           <div className="mb-[18px]">
             <Link href={baseHref} className="btn btn-secondary btn-sm">
               <ArrowLeft size={14} />
-              Zurück zur Ablage
+              {t("backToStorage")}
             </Link>
           </div>
           <FolderPinGate
@@ -282,7 +288,7 @@ export default async function FilesPageContent({
         <div className="mb-[18px]">
           <Link href={returnPath} className="btn btn-secondary btn-sm">
             <ArrowLeft size={14} />
-            {activeFile.folderSlug ? "Zurück zum Ordner" : "Zurück zur Ablage"}
+            {activeFile.folderSlug ? t("backToFolder") : t("backToStorage")}
           </Link>
         </div>
         <FileInfoCard
@@ -290,9 +296,10 @@ export default async function FilesPageContent({
           tenant={tenant}
           returnPath={returnPath}
           canManageFiles={canManageFiles}
+          t={t}
         />
         <div className="mt-4">
-          <AuditLogPanel entries={auditEntries} title="Datei Audit Log" />
+          <AuditLogPanel entries={auditEntries} title={t("fileAuditLogTitle")} />
         </div>
       </>
     );
@@ -304,7 +311,7 @@ export default async function FilesPageContent({
         <div className="mb-[18px]">
           <Link href={baseHref} className="btn btn-secondary btn-sm">
             <ArrowLeft size={14} />
-            Alle Ordner
+            {t("allFolders")}
           </Link>
         </div>
         <FolderPinGate
@@ -320,9 +327,9 @@ export default async function FilesPageContent({
   return (
     <>
       <PageHeader
-        eyebrow="Dokumentenablage"
-        title="Dateien"
-        subtitle={`${folders.length} Ordner \u00b7 ${files.length} Dateien`}
+        eyebrow={t("eyebrow")}
+        title={t("title")}
+        subtitle={t("subtitle", { folders: folders.length, files: files.length })}
       />
 
       <section className="mb-7 grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(190px,1fr))]">

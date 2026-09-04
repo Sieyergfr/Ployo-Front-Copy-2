@@ -4,24 +4,25 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { ListSearchBox } from "@/components/ListSearchBox";
 import { type Location, type LocationStatus } from "@/lib/locations";
+import { useTranslations } from "next-intl";
 
-function LocationStatusBadge({ status }: { status: LocationStatus }) {
+function LocationStatusBadge({ status, t }: { status: LocationStatus; t: ReturnType<typeof useTranslations> }) {
   if (status === "active") {
     return (
       <span className="inline-flex items-center rounded-[7px] bg-success/10 px-[9px] py-[3px] font-mono text-[11px] tracking-[0.3px] text-success">
-        Aktiv
+        {t("active")}
       </span>
     );
   }
 
   return (
     <span className="inline-flex items-center rounded-[7px] bg-[#B9B9B4]/20 px-[9px] py-[3px] font-mono text-[11px] tracking-[0.3px] text-muted-2">
-      Inaktiv
+      {t("inactive")}
     </span>
   );
 }
 
-function LocationCard({ location, tenant }: { location: Location; tenant: string }) {
+function LocationCard({ location, tenant, t }: { location: Location; tenant: string; t: ReturnType<typeof useTranslations> }) {
   return (
     <Link
       href={`/u/${tenant}/standorte/${location.id}`}
@@ -38,7 +39,7 @@ function LocationCard({ location, tenant }: { location: Location; tenant: string
               {location.name}
             </div>
           </div>
-          <LocationStatusBadge status={location.status} />
+          <LocationStatusBadge status={location.status} t={t} />
         </div>
 
         <div className="mt-[5px] mb-4 text-[12.5px] text-muted-2">{location.address}</div>
@@ -49,7 +50,7 @@ function LocationCard({ location, tenant }: { location: Location; tenant: string
               {location.employeeCount}
             </span>
             <span className="font-mono text-[9px] uppercase tracking-[0.4px] text-muted">
-              Mitarbeiter
+              {t("employees")}
             </span>
           </div>
 
@@ -58,7 +59,7 @@ function LocationCard({ location, tenant }: { location: Location; tenant: string
               {location.shiftCount}
             </span>
             <span className="font-mono text-[9px] uppercase tracking-[0.4px] text-muted">
-              Schichten
+              {t("shifts")}
             </span>
           </div>
 
@@ -70,7 +71,7 @@ function LocationCard({ location, tenant }: { location: Location; tenant: string
               <div className="truncate text-[12px] font-semibold text-ink">
                 {location.lead.name}
               </div>
-              <div className="font-mono text-[9px] text-muted">Leitung</div>
+              <div className="font-mono text-[9px] text-muted">{t("lead")}</div>
             </div>
           </div>
         </div>
@@ -86,6 +87,7 @@ export function LocationsListClient({
   locations: Location[];
   tenant: string;
 }) {
+  const t = useTranslations("LocationsListClient");
   const [query, setQuery] = useState("");
 
   const filtered = useMemo(() => {
@@ -109,25 +111,25 @@ export function LocationsListClient({
       <ListSearchBox
         value={query}
         onChange={setQuery}
-        placeholder="Name, Typ, Adresse oder Leitung"
+        placeholder={t("searchPlaceholder")}
         className="mb-4 max-w-[360px]"
       />
 
       {filtered.length > 0 ? (
         <section className="grid gap-3.5 [grid-template-columns:repeat(auto-fill,minmax(310px,1fr))]">
           {filtered.map((location) => (
-            <LocationCard key={location.dbId ?? location.id} location={location} tenant={tenant} />
+            <LocationCard key={location.dbId ?? location.id} location={location} tenant={tenant} t={t} />
           ))}
         </section>
       ) : (
         <section className="rounded-card border border-border bg-white px-6 py-10 text-center">
           <div className="font-display text-[20px] font-semibold text-ink">
-            {locations.length === 0 ? "Noch keine Standorte" : "Keine Treffer"}
+            {locations.length === 0 ? t("noLocationsYet") : t("noResults")}
           </div>
           <div className="mt-2 text-[13px] text-muted-2">
             {locations.length === 0
-              ? "Lege den ersten Standort an, um Teams, Schichten und Dateien zu verknuepfen."
-              : "Für diese Suche wurde kein Standort gefunden."}
+              ? t("noLocationsYetDescription")
+              : t("noResultsDescription")}
           </div>
         </section>
       )}

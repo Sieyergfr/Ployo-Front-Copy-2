@@ -4,7 +4,12 @@ import {
   getOwnerFiles,
   type OwnerScopedFileOwnerType,
 } from "@/lib/files-server";
-import { assertFolderPinAccess, uploadTenantFile, type FileOwnerType } from "@/lib/storage/storage.service";
+import {
+  assertFolderPinAccess,
+  folderScope,
+  uploadTenantFile,
+  type FileOwnerType,
+} from "@/lib/storage/storage.service";
 import { checkRateLimit, tooManyRequests } from "@/lib/rate-limit";
 import { mapSelfServiceError } from "@/lib/api/self-service-errors";
 import { headers } from "next/headers";
@@ -74,9 +79,48 @@ export async function GET(
     }
 
     try {
-      const files = await getOwnerFiles({ tenantSlug: tenant, ownerType, ownerId });
+      const { files, folders } = await getOwnerFiles({ tenantSlug: tenant, ownerType, ownerId });
 
-      return Response.json({ files });
+      // Wird gezielt in einen bestimmten (Top-Level-)Ordner navigiert und ist
+      // der gesperrt, dieselbe PIN-Pruefung wie beim zentralen Modul
+      // verlangen, bevor die Antwort ausgeliefert wird -- sonst koennte man
+      // einen gesperrten Mitarbeiter-/Standort-/Team-Ordner einfach durch
+      // Navigieren "aufmachen", ohne je nach der PIN gefragt zu werden.
+      // Ein gesperrter Ordner sperrt auch alles darunter — sonst käme man
+      // über einen Unterordner am Gate vorbei.
+      const folderSlug = path.join("/");
+      const targetFolder = folderSlug
+        ? folders.find(
+            (folder) =>
+              folder.locked &&
+              (folder.slug === folderSlug || folderSlug.startsWith(`${folder.slug}/`)),
+          ) ?? folders.find((folder) => folder.slug === folderSlug)
+        : null;
+
+      if (targetFolder?.locked) {
+        const pin = request.headers.get("x-folder-pin")?.trim() || undefined;
+
+        if (pin) {
+          const pinLimit = await checkRateLimit({
+            key: `folder-pin-attempt:${session.user.id}:${tenant}:${ownerType}:${ownerId}:${folderSlug}`,
+            limit: 8,
+            windowSeconds: 900,
+          });
+
+          if (!pinLimit.allowed) {
+            return tooManyRequests(pinLimit);
+          }
+        }
+
+        await assertFolderPinAccess({
+          tenantSlug: tenant,
+          folderPath: targetFolder.slug,
+          pin,
+          scope: folderScope(ownerType, ownerId),
+        });
+      }
+
+      return Response.json({ files, folders });
     } catch (error) {
       return mapSelfServiceError(error);
     }

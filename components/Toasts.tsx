@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import {
   createContext,
+  type CSSProperties,
   type ReactNode,
   useCallback,
   useContext,
@@ -94,8 +95,9 @@ function ToastCard({
         "toast-card flex w-full items-start gap-2.5 rounded-[12px] border bg-white px-3 py-2.5 shadow-[0_14px_42px_rgba(0,0,0,0.12)]",
         item.isExiting && "toast-card-exit",
         config.borderClassName,
+        dragX !== 0 && "translate-x-[var(--drag-x)]",
       )}
-      style={dragX !== 0 ? { transform: `translateX(${dragX}px)` } : undefined}
+      style={dragX !== 0 ? ({ "--drag-x": `${dragX}px` } as CSSProperties) : undefined}
       onPointerDown={(event) => {
         if (event.pointerType === "touch") {
           touchStartX.current = event.clientX;

@@ -37,7 +37,11 @@ export default function DataTable<T>({
   const gridTemplateColumns = columns
     .map((column) => column.width ?? "1fr")
     .join(" ");
-  const gridStyle: CSSProperties = { gridTemplateColumns };
+  // CSS-Custom-Property statt direktem `gridTemplateColumns` im style-Objekt:
+  // style-src im CSP erlaubt so nur noch Custom-Property-Zuweisungen, keine
+  // beliebigen CSS-Eigenschaften mehr (siehe proxy.ts).
+  const gridStyle = { "--cols": gridTemplateColumns } as CSSProperties;
+  const minWidthStyle = { "--min-w": `${minWidth}px` } as CSSProperties;
 
   const nonActionColumns = columns.filter((column) => !column.isRowAction);
   const actionColumns = columns.filter((column) => column.isRowAction);
@@ -50,9 +54,9 @@ export default function DataTable<T>({
       )}
     >
       <div className="hidden overflow-x-auto md:block">
-        <div style={{ minWidth }}>
+        <div className="min-w-[var(--min-w)]" style={minWidthStyle}>
           <div
-            className="grid gap-3.5 border-b border-border px-6 py-4 font-mono text-[9.5px] uppercase tracking-[0.6px] text-muted"
+            className="grid grid-cols-[var(--cols)] gap-3.5 border-b border-border px-6 py-4 font-mono text-[9.5px] uppercase tracking-[0.6px] text-muted"
             style={gridStyle}
           >
             {columns.map((column) => (
@@ -76,7 +80,7 @@ export default function DataTable<T>({
               ));
 
               const rowClassName =
-                "grid w-full items-center gap-3.5 border-t border-border-soft px-6 py-[13px] text-left font-sans transition-colors hover:bg-bg";
+                "grid grid-cols-[var(--cols)] w-full items-center gap-3.5 border-t border-border-soft px-6 py-[13px] text-left font-sans transition-colors hover:bg-bg";
 
               if (href) {
                 return (

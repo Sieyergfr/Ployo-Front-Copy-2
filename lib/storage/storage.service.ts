@@ -10,7 +10,7 @@ import { uploadObject } from "@/lib/storage/upload";
 import { prisma } from "@/lib/prisma";
 import { headers } from "next/headers";
 import { requireTenantAccess } from "@/lib/tenant-access";
-import { requireFileAcl } from "@/lib/file-access";
+import { requireFileAcl, requireTenantFileAreaAccess } from "@/lib/file-access";
 
 export type FileOwnerType = "tenant" | "employee" | "location" | "team";
 
@@ -54,7 +54,7 @@ function normalizeFolderPath(value: string) {
     .join("/");
 }
 
-function folderScope(ownerType: FileOwnerType, ownerId?: string) {
+export function folderScope(ownerType: FileOwnerType, ownerId?: string) {
   return ownerType === "tenant" ? "tenant" : `${ownerType}:${ownerId ?? "unknown"}`;
 }
 
@@ -382,6 +382,95 @@ export async function uploadTenantFile(input: UploadTenantFileInput) {
   return created;
 }
 
+/**
+ * Trägt Ordner, die bisher nur über die `folderSlug` ihrer Dateien existieren,
+ * als echten Datensatz nach — und liefert den Datensatz der untersten Ebene.
+ *
+ * Die Mitarbeiter-, Standort- und Team-Ansichten leiten ihre Ordnerliste auch
+ * aus den Dateien ab (`mergeEmployeeFileFolders` & Co.): die strukturierten
+ * Ausweis-/Zertifikatsfelder etwa legen beim Hochladen nur eine Datei mit
+ * `folderSlug` an, nie einen Ordner. Solche Ordner sind sichtbar und
+ * navigierbar, hatten aber keinen Datensatz, an den sich ein Unterordner
+ * hängen ließe — das Anlegen scheiterte mit "Übergeordneter Ordner nicht
+ * gefunden".
+ *
+ * `null`, wenn der Pfad auch durch keine Datei belegt ist: dann existiert der
+ * Ordner wirklich nicht und der Aufrufer soll den Fehler werfen.
+ */
+async function materializeFileBackedFolder(input: {
+  tenantId: string;
+  scope: string;
+  ownerType: FileOwnerType;
+  ownerId?: string;
+  path: string;
+  ownerName: string;
+}) {
+  const ownerFilter = {
+    employeeId: input.ownerType === "employee" ? input.ownerId : null,
+    locationId: input.ownerType === "location" ? input.ownerId : null,
+    teamId: input.ownerType === "team" ? input.ownerId : null,
+  };
+
+  // Eine Datei genau in diesem Ordner (oder darunter) belegt, dass es ihn gibt.
+  const backingFiles = await prisma.tenantFile.findMany({
+    where: {
+      tenantId: input.tenantId,
+      ...ownerFilter,
+      status: "active",
+      OR: [{ folderSlug: input.path }, { folderSlug: { startsWith: `${input.path}/` } }],
+    },
+    select: { folderSlug: true, folderName: true },
+  });
+
+  if (backingFiles.length === 0) {
+    return null;
+  }
+
+  const segments = input.path.split("/").filter(Boolean);
+  let parentId: string | undefined;
+  let current: { id: string; path: string } | null = null;
+
+  for (let index = 0; index < segments.length; index += 1) {
+    const path = segments.slice(0, index + 1).join("/");
+    const existing = await prisma.tenantFileFolder.findFirst({
+      where: { tenantId: input.tenantId, scope: input.scope, path, status: "active" },
+      select: { id: true, path: true },
+    });
+
+    if (existing) {
+      parentId = existing.id;
+      current = existing;
+      continue;
+    }
+
+    // Anzeigename aus der Datei übernehmen, die in genau diesem Ordner liegt —
+    // sonst bliebe nur der Slug ("erste-hilfe-nachweis" statt "Erste-Hilfe-Nachweis").
+    const named = backingFiles.find((entry) => entry.folderSlug === path)?.folderName;
+    const created = await prisma.tenantFileFolder.upsert({
+      where: { tenantId_scope_path: { tenantId: input.tenantId, scope: input.scope, path } },
+      create: {
+        tenantId: input.tenantId,
+        employeeId: ownerFilter.employeeId ?? undefined,
+        locationId: ownerFilter.locationId ?? undefined,
+        teamId: ownerFilter.teamId ?? undefined,
+        parentId,
+        scope: input.scope,
+        name: named?.trim() || segments[index],
+        slug: segments[index],
+        path,
+        ownerName: input.ownerName,
+      },
+      update: { status: "active" },
+      select: { id: true, path: true },
+    });
+
+    parentId = created.id;
+    current = created;
+  }
+
+  return current;
+}
+
 export async function createTenantFileFolder(input: {
   tenantSlug: string;
   name: string;
@@ -430,13 +519,27 @@ export async function createTenantFileFolder(input: {
   const staticParent = parentPath
     ? fileFolders.some((folder) => folder.slug === parentPath)
     : false;
+  // Nur über Dateien existierende Ordner vorher nachtragen, statt das Anlegen
+  // eines Unterordners daran scheitern zu lassen (s. materializeFileBackedFolder).
+  const resolvedParent =
+    parent ??
+    (parentPath && !staticParent
+      ? await materializeFileBackedFolder({
+          tenantId: access.tenantId,
+          scope,
+          ownerType,
+          ownerId: owner.ownerId,
+          path: parentPath,
+          ownerName: input.ownerName?.trim() || access.userName || "HR",
+        })
+      : null);
 
-  if (parentPath && !parent && !staticParent) {
+  if (parentPath && !resolvedParent && !staticParent) {
     throw new Error("Übergeordneter Ordner nicht gefunden.");
   }
 
-  const path = parent
-    ? `${parent.path}/${slug}`
+  const path = resolvedParent
+    ? `${resolvedParent.path}/${slug}`
     : parentPath
       ? `${parentPath}/${slug}`
       : slug;
@@ -454,7 +557,7 @@ export async function createTenantFileFolder(input: {
       employeeId: ownerType === "employee" ? owner.ownerId : undefined,
       locationId: ownerType === "location" ? owner.ownerId : undefined,
       teamId: ownerType === "team" ? owner.ownerId : undefined,
-      parentId: parent?.id,
+      parentId: resolvedParent?.id,
       scope,
       name,
       slug,
@@ -473,17 +576,73 @@ export async function createTenantFileFolder(input: {
   });
 }
 
-/** Prüft die PIN eines geschützten Ordners in der allgemeinen (mandantenweiten) Dateiablage. */
+/**
+ * Legt einen (unversperrten, Top-Level-) Mitarbeiter-Ordner direkt aus einer
+ * Ordnervorlage an (`TenantEmployeeFolderTemplate`, s.
+ * lib/employee-folder-templates.ts) — anders als `createTenantFileFolder`
+ * ohne eigene Session-/Berechtigungsprüfung, weil der Aufrufer (Anlegen einer
+ * Vorlage bzw. eines neuen Mitarbeiters) die Berechtigung dafür bereits an
+ * anderer Stelle geprüft hat und hier nur intern für ggf. sehr viele
+ * Mitarbeiter auf einmal aufgerufen wird. Idempotent (Upsert über den
+ * eindeutigen Ordnerpfad), wie `createTenantFileFolder`.
+ */
+export async function ensureEmployeeTemplateFolder(input: {
+  tenantId: string;
+  employeeId: string;
+  name: string;
+  ownerName?: string;
+}) {
+  const name = input.name.trim();
+
+  if (!name) {
+    return;
+  }
+
+  const slug = slugify(name);
+  const scope = folderScope("employee", input.employeeId);
+
+  await prisma.tenantFileFolder.upsert({
+    where: {
+      tenantId_scope_path: {
+        tenantId: input.tenantId,
+        scope,
+        path: slug,
+      },
+    },
+    create: {
+      tenantId: input.tenantId,
+      employeeId: input.employeeId,
+      scope,
+      name,
+      slug,
+      path: slug,
+      ownerName: input.ownerName?.trim() || "HR",
+    },
+    update: {
+      status: "active",
+    },
+  });
+}
+
+/**
+ * Prüft die PIN eines geschützten Ordners. `scope` unterscheidet die
+ * mandantenweite zentrale Ablage (`"tenant"`, Default) von
+ * eigentümer-skopierten Ordnern (`"employee:<id>"`/`"location:<id>"`/
+ * `"team:<id>"`, s. `folderScope()`) — ein Mitarbeiter-/Standort-/Team-Ordner
+ * mit demselben `path` wie ein zentraler Ordner darf nicht dieselbe PIN
+ * teilen bzw. fälschlich ungeprüft durchgehen.
+ */
 export async function verifyTenantFileFolderPin(input: {
   tenantSlug: string;
   folderPath: string;
   pin: string;
+  scope?: string;
 }) {
   const access = await requireTenantAccess(input.tenantSlug, "files", "read");
   const folder = await prisma.tenantFileFolder.findFirst({
     where: {
       tenantId: access.tenantId,
-      scope: "tenant",
+      scope: input.scope ?? "tenant",
       path: input.folderPath,
       status: "active",
     },
@@ -498,51 +657,65 @@ export async function verifyTenantFileFolderPin(input: {
 }
 
 /**
- * Ordnerpfad einer Datei der zentralen Ablage — für Routen, die vor der
- * Auslieferung prüfen müssen, ob der Ordner PIN-geschützt ist
- * (`GET .../signed-url` kennt sonst nur die `fileId`, nicht den Ordner).
- * Leerer String, wenn die Datei nicht in einem Ordner liegt oder nicht
- * gefunden wurde (dann greift ohnehin die übliche 404-Behandlung beim
- * eigentlichen Abruf).
+ * Ordnerpfad (+ Scope) einer Datei — für Routen, die vor der Auslieferung
+ * prüfen müssen, ob der Ordner PIN-geschützt ist (`GET .../signed-url` kennt
+ * sonst nur die `fileId`, nicht den Ordner). `folderPath` ist ein leerer
+ * String, wenn die Datei nicht in einem Ordner liegt oder nicht gefunden
+ * wurde (dann greift ohnehin die übliche 404-Behandlung beim eigentlichen
+ * Abruf).
  */
 export async function resolveTenantFileFolderPath(input: {
   tenantSlug: string;
   fileId: string;
-}): Promise<string> {
+}): Promise<{ folderPath: string; scope: string }> {
   const access = await requireTenantAccess(input.tenantSlug, "files", "read");
   const file = await prisma.tenantFile.findFirst({
     where: { tenantId: access.tenantId, id: input.fileId, status: { not: "deleted" } },
-    select: { folderSlug: true },
+    select: { folderSlug: true, employeeId: true, locationId: true, teamId: true },
   });
 
-  return file?.folderSlug ?? "";
+  if (!file) {
+    return { folderPath: "", scope: "tenant" };
+  }
+
+  const scope = file.employeeId
+    ? folderScope("employee", file.employeeId)
+    : file.locationId
+      ? folderScope("location", file.locationId)
+      : file.teamId
+        ? folderScope("team", file.teamId)
+        : "tenant";
+
+  return { folderPath: file.folderSlug ?? "", scope };
 }
 
 /**
- * Durchsetzt die PIN-Sperre eines Ordners der zentralen Ablage — bislang
- * lieferten `GET /files` und `GET /files/[fileId]/signed-url` den Inhalt
- * eines gesperrten Ordners ungeprüft aus. Nur die Web-Seite
- * (`FilesPageContent.tsx`) blendete ihn clientseitig hinter
- * `FolderPinGate` aus, ohne dass die API selbst je eine PIN verlangt hätte
- * — ein direkter Aufruf der Route mit gültigem Session-Cookie kam ohne PIN
- * an die Daten. Wirft `FOLDER_LOCKED` (von `mapSelfServiceError` auf 403
- * gemappt), wenn weder das Freischalt-Cookie (Web) noch eine passende, im
- * `pin`-Feld übergebene PIN vorliegt — für API-Clients ohne Cookie-Jar
- * (z. B. die Mobile-App, deren Fetch-Schicht nur den Auth-Cookie manuell
- * mitschickt, s. `src/lib/api.ts` im App-Repo) ist das der einzige Weg, den
- * Gate zu passieren — die PIN wird dort pro Anfrage im Header mitgeschickt,
- * nicht per Set-Cookie gemerkt.
+ * Durchsetzt die PIN-Sperre eines Ordners — bislang lieferten `GET /files`
+ * und `GET /files/[fileId]/signed-url` den Inhalt eines gesperrten Ordners
+ * ungeprüft aus. Nur die Web-Seite (`FilesPageContent.tsx`) blendete ihn
+ * clientseitig hinter `FolderPinGate` aus, ohne dass die API selbst je eine
+ * PIN verlangt hätte — ein direkter Aufruf der Route mit gültigem
+ * Session-Cookie kam ohne PIN an die Daten. Wirft `FOLDER_LOCKED` (von
+ * `mapSelfServiceError` auf 403 gemappt), wenn weder das Freischalt-Cookie
+ * (Web) noch eine passende, im `pin`-Feld übergebene PIN vorliegt — für
+ * API-Clients ohne Cookie-Jar (z. B. die Mobile-App, deren Fetch-Schicht nur
+ * den Auth-Cookie manuell mitschickt, s. `src/lib/api.ts` im App-Repo) ist
+ * das der einzige Weg, den Gate zu passieren — die PIN wird dort pro Anfrage
+ * im Header mitgeschickt, nicht per Set-Cookie gemerkt.
  */
 export async function assertFolderPinAccess(input: {
   tenantSlug: string;
   folderPath: string;
   pin?: string | null;
+  scope?: string;
 }): Promise<void> {
   if (!input.folderPath) {
     return;
   }
 
-  if (await isFolderUnlocked(input.tenantSlug, input.folderPath)) {
+  const scope = input.scope ?? "tenant";
+
+  if (await isFolderUnlocked(input.tenantSlug, input.folderPath, scope)) {
     return;
   }
 
@@ -550,6 +723,7 @@ export async function assertFolderPinAccess(input: {
     tenantSlug: input.tenantSlug,
     folderPath: input.folderPath,
     pin: input.pin ?? "",
+    scope,
   });
 
   if (!pinOk) {
@@ -557,7 +731,7 @@ export async function assertFolderPinAccess(input: {
   }
 
   if (input.pin) {
-    await markFolderUnlocked(input.tenantSlug, input.folderPath);
+    await markFolderUnlocked(input.tenantSlug, input.folderPath, scope);
   }
 }
 
@@ -612,7 +786,7 @@ export async function uploadTenantFileVersion(input: {
   return prisma.$transaction(async (tx) => {
     await tx.tenantFile.update({
       where: { id: current.id },
-      data: { status: "replaced" },
+      data: { status: "replaced", replacedAt: new Date() },
     });
 
     return tx.tenantFile.create({
@@ -644,7 +818,11 @@ export async function softDeleteTenantFile(input: {
   tenantSlug: string;
   fileId: string;
 }) {
-  const access = await requireTenantFileAccess(input.tenantSlug);
+  const access = await requireTenantAccess(input.tenantSlug, "files", "read");
+
+  if (!access.canDelete) {
+    throw new Error("FORBIDDEN");
+  }
 
   const deleted = await markObjectDeleted({
     tenantId: access.tenantId,
@@ -663,6 +841,135 @@ export async function softDeleteTenantFile(input: {
   });
 
   return deleted;
+}
+
+/**
+ * Datei vor dem Mitarbeiter selbst verbergen (oder wieder freigeben).
+ *
+ * Kein Löschen und keine ACL: HR/Admin sehen die Datei unverändert, nur die
+ * eigene Personalakte des Mitarbeiters ("Meine Personalakte" in der App,
+ * "Mein Bereich" im Web) lässt sie aus. Gedacht für Unterlagen, die in der
+ * Akte liegen müssen, den Mitarbeiter aber (noch) nicht erreichen sollen.
+ *
+ * Ältere Versionen derselben Datei werden mitgeschaltet — sonst bliebe der
+ * Verlauf am selben Mitarbeiter weiter sichtbar.
+ */
+export async function setTenantFileEmployeeVisibility(input: {
+  tenantSlug: string;
+  fileId: string;
+  hidden: boolean;
+}) {
+  const access = await requireTenantFileAccess(input.tenantSlug, "employee");
+  const file = await prisma.tenantFile.findFirst({
+    where: {
+      id: input.fileId,
+      tenantId: access.tenantId,
+      status: { not: "deleted" },
+    },
+    select: { id: true, parentId: true, displayName: true, employeeId: true },
+  });
+
+  // Nur Dateien, die wirklich an einer Personalakte hängen — bei einer
+  // Standort-/Team-/zentralen Datei gäbe es keinen Mitarbeiter, vor dem sich
+  // etwas verbergen ließe.
+  if (!file || !file.employeeId) {
+    throw new Error("Datei nicht gefunden.");
+  }
+
+  const rootId = file.parentId ?? file.id;
+
+  await prisma.tenantFile.updateMany({
+    where: {
+      tenantId: access.tenantId,
+      OR: [{ id: rootId }, { parentId: rootId }],
+    },
+    data: { hiddenFromEmployee: input.hidden },
+  });
+
+  await recordTenantAudit({
+    tenantId: access.tenantId,
+    actorId: access.userId,
+    actorName: access.userName,
+    action: input.hidden
+      ? "Datei vor Mitarbeiter verborgen"
+      : "Datei für Mitarbeiter freigegeben",
+    source: "Dateien",
+    entityType: "file",
+    entityId: rootId,
+    detail: file.displayName,
+  });
+
+  return { id: rootId, hiddenFromEmployee: input.hidden };
+}
+
+/**
+ * Ganzen Ordner einer Personalakte vor dem Mitarbeiter verbergen — samt
+ * Inhalt und Unterordnern. Gesetzt wird nur dieser eine Datensatz; die
+ * Selbstauskunft filtert Dateien und Unterordner über den Pfad-Präfix.
+ *
+ * Ordner, die bisher nur über den Ordnerpfad ihrer Dateien existieren (die
+ * Ausweis-/Zertifikatsfelder legen keinen Ordnerdatensatz an), werden dabei
+ * nachgetragen — sonst ließe sich genau an ihnen nichts umschalten.
+ */
+export async function setTenantFileFolderEmployeeVisibility(input: {
+  tenantSlug: string;
+  employeeId: string;
+  path: string;
+  hidden: boolean;
+  ownerName?: string;
+}) {
+  const access = await requireTenantFileAccess(input.tenantSlug, "employee");
+  const owner = await validateOwner({
+    tenantId: access.tenantId,
+    ownerType: "employee",
+    ownerId: input.employeeId,
+  });
+  const scope = folderScope("employee", owner.ownerId);
+  const path = normalizeFolderPath(input.path);
+
+  if (!path) {
+    throw new Error("Ordner nicht gefunden.");
+  }
+
+  const existing = await prisma.tenantFileFolder.findFirst({
+    where: { tenantId: access.tenantId, scope, path, status: "active" },
+    select: { id: true },
+  });
+  const folder =
+    existing ??
+    (await materializeFileBackedFolder({
+      tenantId: access.tenantId,
+      scope,
+      ownerType: "employee",
+      ownerId: owner.ownerId,
+      path,
+      ownerName: input.ownerName?.trim() || owner.ownerName || access.userName || "HR",
+    }));
+
+  if (!folder) {
+    throw new Error("Ordner nicht gefunden.");
+  }
+
+  const updated = await prisma.tenantFileFolder.update({
+    where: { id: folder.id },
+    data: { hiddenFromEmployee: input.hidden },
+    select: { id: true, name: true, path: true, hiddenFromEmployee: true },
+  });
+
+  await recordTenantAudit({
+    tenantId: access.tenantId,
+    actorId: access.userId,
+    actorName: access.userName,
+    action: input.hidden
+      ? "Ordner vor Mitarbeiter verborgen"
+      : "Ordner für Mitarbeiter freigegeben",
+    source: "Dateien",
+    entityType: "file-folder",
+    entityId: updated.id,
+    detail: updated.name,
+  });
+
+  return updated;
 }
 
 export async function getTenantFileSignedUrl(input: {
@@ -694,6 +1001,7 @@ export async function getTenantFileSignedUrl(input: {
 
   if (!aclFile) throw new Error("Datei nicht gefunden.");
   requireFileAcl(aclFile, access);
+  await requireTenantFileAreaAccess(access, baseFile);
 
   const file = input.version
     ? await prisma.tenantFile.findFirst({

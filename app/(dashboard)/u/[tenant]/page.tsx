@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import MetricCard from "@/components/MetricCard";
 import PageHeader from "@/components/PageHeader";
 import { auth } from "@/lib/auth";
@@ -9,7 +10,6 @@ import {
   withAccessRedirect,
 } from "@/lib/tenant-access";
 import { getEmployeesForTenant } from "@/lib/employee-service";
-import { getRecentTenantFiles } from "@/lib/files-server";
 import { getLocationsForTenant } from "@/lib/location-service";
 import { weekdayFromDate, type OpeningHoursWeekday } from "@/lib/opening-hours";
 import { hasPermissionLevel } from "@/lib/roles";
@@ -23,7 +23,6 @@ import {
   ArrowRight,
   CalendarCheck,
   Clock3,
-  FileText,
   MapPin,
   Plus,
   UsersRound,
@@ -128,7 +127,6 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
     sickness,
     locations,
     shiftPlan,
-    recentFiles,
     memberships,
     employeesAccess,
     vacationAccess,
@@ -142,7 +140,6 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
     tryLoad(getSicknessForTenant(tenant)),
     tryLoad(getLocationsForTenant(tenant)),
     tryLoad(getShiftPlanForTenant({ tenantSlug: tenant, year, week })),
-    tryLoad(getRecentTenantFiles(tenant, 4)),
     session?.user?.id
       ? tryLoad(getTenantsForUser(session.user.id))
       : Promise.resolve(null),
@@ -168,7 +165,6 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
   const locationList = locations ?? [];
   const currentSickness = sickness?.current ?? [];
   const sicknessMetrics = sickness?.metrics ?? [];
-  const fileList = recentFiles ?? [];
   const shiftDays = shiftPlan?.days ?? [];
   const shiftConflictCount = shiftPlan?.conflictCount ?? 0;
   const shiftWeekLabel = shiftPlan
@@ -439,15 +435,17 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
                         {!closed && (
                           <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-border">
                             <div
-                              className={`h-full rounded-full ${
+                              className={`h-full w-[var(--pct)] rounded-full ${
                                 hasConflict || emptyCount > 0 ? "bg-warning" : "bg-success"
                               }`}
-                              style={{
-                                width:
-                                  day.shifts.length === 0
-                                    ? "0%"
-                                    : `${Math.max(18, Math.round((assignedCount / day.shifts.length) * 100))}%`,
-                              }}
+                              style={
+                                {
+                                  "--pct":
+                                    day.shifts.length === 0
+                                      ? "0%"
+                                      : `${Math.max(18, Math.round((assignedCount / day.shifts.length) * 100))}%`,
+                                } as CSSProperties
+                              }
                             />
                           </div>
                         )}
@@ -662,37 +660,6 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
           </DashboardCard>
           )}
 
-          {recentFiles && (
-            <DashboardCard
-              title="Zuletzt aktualisiert"
-              meta="Dokumente und Richtlinien"
-              action={<FileText size={18} className="text-muted" />}
-            >
-              <div className="grid gap-2">
-                {fileList.length === 0 ? (
-                  <EmptyHint>Noch keine Dateien hochgeladen.</EmptyHint>
-                ) : (
-                  fileList.map((file) => (
-                    <div
-                      key={file.slug || file.name}
-                      className="flex items-center justify-between gap-3 rounded-[10px] border border-border-light bg-bg px-3 py-2.5"
-                    >
-                      <div className="min-w-0">
-                        <div className="truncate text-[12.5px] font-semibold text-ink">
-                          {file.name}
-                        </div>
-                        <div className="mt-0.5 truncate text-[11px] text-muted">
-                          {file.owner} · {file.updatedAt}
-                        </div>
-                      </div>
-                      <StatusPill>{file.type}</StatusPill>
-                    </div>
-                  ))
-                )}
-              </div>
-            </DashboardCard>
-          )}
-
           {employeesTeamWide && (
           <DashboardCard title="Personalstruktur" meta="Vertragsarten">
             <div className="grid gap-2">
@@ -713,8 +680,8 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
                       </div>
                       <div className="h-1.5 overflow-hidden rounded-full bg-border">
                         <div
-                          className="h-full rounded-full bg-ink"
-                          style={{ width: `${percent}%` }}
+                          className="h-full w-[var(--pct)] rounded-full bg-ink"
+                          style={{ "--pct": `${percent}%` } as CSSProperties}
                         />
                       </div>
                     </div>

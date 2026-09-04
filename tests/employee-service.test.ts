@@ -82,7 +82,27 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  // `EmployeeAddress` wird von TenantEmployee referenziert (nicht umgekehrt)
+  // und hat kein `onDelete: Cascade` in diese Richtung — jede hier angelegte
+  // Personalakte legt beim Anlegen automatisch eine (leere) Privat- und
+  // Arbeitsadresse an, die Tenant-Löschung räumt sie aber nicht mit ab (genau
+  // deshalb räumt `deleteTenantEmployee` sie im echten Code explizit auf,
+  // siehe lib/employee-service.ts). Ohne diesen Schritt hier bleiben bei
+  // jedem Testlauf verwaiste `EmployeeAddress`-Zeilen zurück.
+  const employees = await prisma.tenantEmployee.findMany({
+    where: { tenantId },
+    select: { privateAddressId: true, workAddressId: true },
+  });
+  const addressIds = employees
+    .flatMap((employee) => [employee.privateAddressId, employee.workAddressId])
+    .filter((id): id is string => Boolean(id));
+
   await prisma.tenant.deleteMany({ where: { id: tenantId } });
+
+  if (addressIds.length) {
+    await prisma.employeeAddress.deleteMany({ where: { id: { in: addressIds } } });
+  }
+
   await prisma.user.deleteMany({ where: { id: actorUserId } });
   await prisma.$disconnect();
 });

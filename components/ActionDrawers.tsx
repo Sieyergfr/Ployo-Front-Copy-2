@@ -42,6 +42,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -53,17 +54,22 @@ export type ShiftPlanningSettings = {
   defaultOpeningHours: OpeningHoursDay[];
 };
 
-const sourceLabels = {
-  central: "Zentral",
-  employee: "Mitarbeiter",
-  location: "Standort",
-} satisfies Record<ReminderFileBrowserSource, string>;
+type T = ReturnType<typeof useTranslations>;
+
+function getSourceLabels(t: T): Record<ReminderFileBrowserSource, string> {
+  return {
+    central: t("sourceCentral"),
+    team: t("sourceTeam"),
+    location: t("sourceLocation"),
+    employee: t("sourceEmployee"),
+  };
+}
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
 
-function RightDrawer({
+export function RightDrawer({
   title,
   eyebrow,
   children,
@@ -80,6 +86,7 @@ function RightDrawer({
   // neuen Containing Block für `position: fixed` — die Sidebar würde dann
   // innerhalb dieser Zeile statt am rechten Fensterrand aufgehen. Erst nach
   // dem Client-Mount rendern, da `document.body` serverseitig nicht existiert.
+  const t = useTranslations("ActionDrawers");
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -120,8 +127,8 @@ function RightDrawer({
           </div>
           <button
             type="button"
-            aria-label="Sidebar schließen"
-            title="Schließen"
+            aria-label={t("closeSidebar")}
+            title={t("close")}
             className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-[9px] border border-border bg-white text-muted transition-colors hover:border-muted hover:text-ink"
             onClick={onClose}
           >
@@ -150,7 +157,11 @@ function Field({
   );
 }
 
-function getOwnerOptions(data: ReminderFileBrowserData, source: ReminderFileBrowserSource) {
+function getOwnerOptions(
+  data: ReminderFileBrowserData,
+  source: ReminderFileBrowserSource,
+  t: T,
+) {
   const options = new Map<string, string>();
 
   for (const file of data.files) {
@@ -166,7 +177,7 @@ function getOwnerOptions(data: ReminderFileBrowserData, source: ReminderFileBrow
   }
 
   if (source === "central" && options.size === 0) {
-    options.set("central", "Zentral");
+    options.set("central", t("sourceCentral"));
   }
 
   return Array.from(options, ([id, name]) => ({ id, name }));
@@ -191,14 +202,16 @@ export function LinkedFileBrowser({
   setSelectedIds: (ids: string[]) => void;
   fileBrowserData?: ReminderFileBrowserData;
 }) {
+  const t = useTranslations("ActionDrawers");
+  const sourceLabels = getSourceLabels(t);
   const [source, setSource] = useState<ReminderFileBrowserSource>("central");
   const [ownerId, setOwnerId] = useState("central");
   const [currentPath, setCurrentPath] = useState("");
   const [query, setQuery] = useState("");
   const normalizedQuery = query.trim().toLowerCase();
   const owners = useMemo(
-    () => getOwnerOptions(fileBrowserData, source),
-    [fileBrowserData, source],
+    () => getOwnerOptions(fileBrowserData, source, t),
+    [fileBrowserData, source, t],
   );
   const selectedOwnerId = owners.some((owner) => owner.id === ownerId)
     ? ownerId
@@ -237,7 +250,7 @@ export function LinkedFileBrowser({
   }
 
   function selectSource(nextSource: ReminderFileBrowserSource) {
-    const nextOwners = getOwnerOptions(fileBrowserData, nextSource);
+    const nextOwners = getOwnerOptions(fileBrowserData, nextSource, t);
 
     setSource(nextSource);
     setOwnerId(nextOwners[0]?.id || (nextSource === "central" ? "central" : ""));
@@ -250,11 +263,11 @@ export function LinkedFileBrowser({
         <div className="flex items-center gap-2">
           <Paperclip size={15} className="text-muted" />
           <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.06em] text-muted">
-            Dateien verlinken
+            {t("linkFilesTitle")}
           </span>
         </div>
         <span className="rounded-[7px] border border-border bg-white px-2 py-[3px] font-mono text-[10px] text-muted">
-          {selectedIds.length} gewählt
+          {t("selectedCount", { count: selectedIds.length })}
         </span>
       </div>
 
@@ -302,7 +315,7 @@ export function LinkedFileBrowser({
       <input
         type="search"
         className="input mb-3 bg-white"
-        placeholder="Datei oder Ordner suchen"
+        placeholder={t("searchFilesPlaceholder")}
         value={query}
         onChange={(event) => setQuery(event.target.value)}
       />
@@ -313,7 +326,7 @@ export function LinkedFileBrowser({
           className="cursor-pointer font-semibold text-ink hover:text-muted"
           onClick={() => setCurrentPath("")}
         >
-          Home
+          {t("home")}
         </button>
         {currentPath && <span>/</span>}
         {currentPath && <span className="truncate">{currentPath}</span>}
@@ -329,7 +342,7 @@ export function LinkedFileBrowser({
             <span className="flex size-8 shrink-0 items-center justify-center rounded-[9px] bg-bg text-muted">
               <Folder size={14} />
             </span>
-            <span className="text-[13px] font-semibold text-ink">Zurück</span>
+            <span className="text-[13px] font-semibold text-ink">{t("back")}</span>
           </button>
         )}
 
@@ -348,7 +361,7 @@ export function LinkedFileBrowser({
                 {folder.name}
               </span>
               <span className="mt-0.5 block truncate text-[11px] text-muted">
-                {folder.fileCount} Dateien {"\u00b7"} {folder.ownerName}
+                {t("folderFileCount", { count: folder.fileCount, owner: folder.ownerName })}
               </span>
             </span>
           </button>
@@ -385,7 +398,7 @@ export function LinkedFileBrowser({
                   {file.name}
                 </span>
                 <span className="mt-0.5 block truncate text-[11px] text-muted">
-                  {file.folderName || "Home"} {"\u00b7"} {file.ownerName} {"\u00b7"} {file.updatedAt}
+                  {file.folderName || t("home")} {"\u00b7"} {file.ownerName} {"\u00b7"} {file.updatedAt}
                 </span>
               </span>
               <span className="rounded-[7px] border border-border-light px-2 py-[3px] font-mono text-[10px] text-muted-2">
@@ -397,7 +410,7 @@ export function LinkedFileBrowser({
 
         {visibleFolders.length === 0 && visibleFiles.length === 0 && (
           <div className="rounded-[10px] border border-dashed border-border bg-white px-4 py-6 text-center text-[12px] text-muted">
-            Keine Dateien gefunden.
+            {t("noFilesFound")}
           </div>
         )}
       </div>
@@ -449,6 +462,7 @@ function ReminderFields({
   onCancel: () => void;
   canManage?: boolean;
 }) {
+  const t = useTranslations("ActionDrawers");
   const [linkedFiles, setLinkedFiles] = useState<string[]>(defaultLinkedFiles);
 
   return (
@@ -463,40 +477,40 @@ function ReminderFields({
         <input key={fileId} type="hidden" name="linkedFiles" value={fileId} />
       ))}
       <fieldset disabled={!canManage} className="flex flex-col gap-4 border-0 p-0">
-        <Field label="Titel">
+        <Field label={t("titleLabel")}>
           <input name="title" className="input" defaultValue={defaultTitle} required />
         </Field>
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Ablaufdatum">
+          <Field label={t("dueDateLabel")}>
             <DatePickerField
               name="dueDate"
               defaultValue={defaultDueDate}
-              placeholder="Datum auswählen"
+              placeholder={t("pickDatePlaceholder")}
             />
           </Field>
-          <Field label="Priorität">
+          <Field label={t("priorityLabel")}>
             <select
               name="priority"
               className="input cursor-pointer bg-bg"
               defaultValue={defaultPriority}
             >
-              <option value="urgent">Dringend</option>
-              <option value="important">Wichtig</option>
-              <option value="normal">Normal</option>
+              <option value="urgent">{t("priorityUrgent")}</option>
+              <option value="important">{t("priorityImportant")}</option>
+              <option value="normal">{t("priorityNormal")}</option>
             </select>
           </Field>
         </div>
-        <Field label="Bezug">
+        <Field label={t("subjectLabel")}>
           <input name="subject" className="input" defaultValue={defaultContext} />
         </Field>
-        <Field label="Kategorie">
+        <Field label={t("categoryLabel")}>
           <input name="category" className="input" defaultValue={defaultCategory} />
         </Field>
-        <Field label="Hinweise">
+        <Field label={t("notesLabel")}>
           <textarea
             name="notes"
             className="input min-h-28 resize-none"
-            placeholder="Interne Hinweise, nächste Schritte oder Kontext ergänzen"
+            placeholder={t("notesPlaceholder")}
             defaultValue={defaultNotes}
           />
         </Field>
@@ -508,12 +522,12 @@ function ReminderFields({
       </fieldset>
       <div className="mt-1 flex justify-end gap-2.5 border-t border-border-soft pt-4">
         <button type="button" className="btn btn-secondary" onClick={onCancel}>
-          {canManage ? "Abbrechen" : "Schließen"}
+          {canManage ? t("cancel") : t("close")}
         </button>
         {canManage && (
           <button type="submit" className="btn btn-primary">
             <Save size={15} />
-            Speichern
+            {t("save")}
           </button>
         )}
       </div>
@@ -534,6 +548,7 @@ export function ReminderDrawerButton({
   fileBrowserData?: ReminderFileBrowserData;
   canManage?: boolean;
 }) {
+  const t = useTranslations("ActionDrawers");
   const [isOpen, setIsOpen] = useState(false);
 
   return (
@@ -543,11 +558,11 @@ export function ReminderDrawerButton({
         className="btn btn-secondary btn-sm"
         onClick={() => setIsOpen(true)}
       >
-        Details
+        {t("details")}
       </button>
       {isOpen && (
         <RightDrawer
-          eyebrow="Erinnerung"
+          eyebrow={t("reminderEyebrow")}
           title={reminder.title}
           onClose={() => setIsOpen(false)}
         >
@@ -589,6 +604,7 @@ export function ReminderRowButton({
   children: ReactNode;
   canManage?: boolean;
 }) {
+  const t = useTranslations("ActionDrawers");
   const [isOpen, setIsOpen] = useState(false);
 
   return (
@@ -598,7 +614,7 @@ export function ReminderRowButton({
       </button>
       {isOpen && (
         <RightDrawer
-          eyebrow="Erinnerung"
+          eyebrow={t("reminderEyebrow")}
           title={reminder.title}
           onClose={() => setIsOpen(false)}
         >
@@ -638,6 +654,7 @@ export function FileReminderButton({
   compact?: boolean;
   canManage?: boolean;
 }) {
+  const t = useTranslations("ActionDrawers");
   const [isOpen, setIsOpen] = useState(false);
 
   if (!canManage) {
@@ -653,8 +670,8 @@ export function FileReminderButton({
             ? "flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-[8px] border border-border bg-white text-muted transition-colors hover:border-muted hover:text-ink"
             : "btn btn-secondary btn-sm"
         }
-        title="Erinnerung erstellen"
-        aria-label={`Erinnerung für ${name} erstellen`}
+        title={t("createReminderTitle")}
+        aria-label={t("createReminderAria", { name })}
         onClick={(event) => {
           event.preventDefault();
           event.stopPropagation();
@@ -662,18 +679,18 @@ export function FileReminderButton({
         }}
       >
         <BellPlus size={compact ? 14 : 15} />
-        {!compact && "Erinnerung"}
+        {!compact && t("reminderButtonLabel")}
       </button>
       {isOpen && (
         <RightDrawer
-          eyebrow="Datei-Erinnerung"
-          title="Erinnerung erstellen"
+          eyebrow={t("fileReminderEyebrow")}
+          title={t("createReminderTitle")}
           onClose={() => setIsOpen(false)}
         >
           <ReminderFields
             tenant={tenant}
             returnPath={returnPath}
-            defaultTitle={`Nachfassen: ${name}`}
+            defaultTitle={t("followUpTitle", { name })}
             defaultContext={context}
             onCancel={() => setIsOpen(false)}
           />
@@ -694,6 +711,7 @@ export function SicknessDrawerButton({
   canManage?: boolean;
   canDelete?: boolean;
 }) {
+  const t = useTranslations("ActionDrawers");
   const [isOpen, setIsOpen] = useState(false);
   const isCurrent = "since" in item;
 
@@ -704,24 +722,24 @@ export function SicknessDrawerButton({
         className="btn btn-secondary btn-sm"
         onClick={() => setIsOpen(true)}
       >
-        Details
+        {t("details")}
       </button>
       {isOpen && (
         <RightDrawer
-          eyebrow="Krankmeldung"
+          eyebrow={t("sicknessEyebrow")}
           title={item.name}
           onClose={() => setIsOpen(false)}
         >
           <div className="flex flex-col gap-4">
             <div className="rounded-xl border border-border bg-bg p-4">
               <div className="font-mono text-[10px] uppercase tracking-[0.06em] text-muted">
-                Status
+                {t("statusLabel")}
               </div>
               <div className="mt-2 text-[14px] font-semibold text-ink">
-                {isCurrent ? "Laufende Krankmeldung" : "Abgeschlossen"}
+                {isCurrent ? t("sicknessOngoing") : t("sicknessClosed")}
               </div>
               <div className="mt-1 text-[12px] text-muted">
-                {item.location} · {isCurrent ? `seit ${item.since}` : `${item.startDate}-${item.endDate}`}
+                {item.location} · {isCurrent ? t("sinceDate", { date: item.since }) : t("dateRange", { start: item.startDate, end: item.endDate })}
               </div>
             </div>
             {isCurrent && canManage ? (
@@ -729,7 +747,7 @@ export function SicknessDrawerButton({
                 <input type="hidden" name="tenant" value={tenant} />
                 <input type="hidden" name="reportId" value={item.id} />
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <Field label="Arbeitsunfähig seit">
+                  <Field label={t("sickSinceLabel")}>
                     <input
                       type="date"
                       name="startDate"
@@ -738,7 +756,7 @@ export function SicknessDrawerButton({
                       required
                     />
                   </Field>
-                  <Field label="Voraussichtlich bis">
+                  <Field label={t("expectedUntilLabel")}>
                     <input
                       type="date"
                       name="endDate"
@@ -747,18 +765,18 @@ export function SicknessDrawerButton({
                     />
                   </Field>
                 </div>
-                <Field label="Bescheinigung">
+                <Field label={t("certificateLabel")}>
                   <select
                     name="certificateStatus"
                     className="input cursor-pointer bg-white"
                     defaultValue={item.certificateStatus}
                   >
-                    <option value="pending">Wird nachgereicht</option>
-                    <option value="received">Liegt vor</option>
-                    <option value="not-required">Nicht erforderlich</option>
+                    <option value="pending">{t("certificatePending")}</option>
+                    <option value="received">{t("certificateReceived")}</option>
+                    <option value="not-required">{t("certificateNotRequired")}</option>
                   </select>
                 </Field>
-                <Field label="Hinweise">
+                <Field label={t("notesLabel")}>
                   <textarea
                     name="note"
                     className="input min-h-24 resize-none"
@@ -771,28 +789,28 @@ export function SicknessDrawerButton({
                     className="btn btn-secondary"
                     onClick={() => setIsOpen(false)}
                   >
-                    Abbrechen
+                    {t("cancel")}
                   </button>
                   {canDelete && (
                     <FormSubmitButton
                       formAction={closeSicknessReportAction}
                       Icon={Check}
                       className="btn btn-secondary"
-                      pendingLabel="Wird gespeichert..."
+                      pendingLabel={t("saving")}
                     >
-                      Krankheit beenden
+                      {t("closeSickness")}
                     </FormSubmitButton>
                   )}
-                  <FormSubmitButton Icon={Save} pendingLabel="Wird gespeichert...">
-                    Speichern
+                  <FormSubmitButton Icon={Save} pendingLabel={t("saving")}>
+                    {t("save")}
                   </FormSubmitButton>
                 </div>
               </form>
             ) : (
               <div className="rounded-xl border border-border bg-bg p-4 text-[13px] leading-[1.55] text-muted-2">
                 {isCurrent
-                  ? "Sie haben keine Berechtigung, diese Krankmeldung zu bearbeiten."
-                  : "Diese Krankmeldung ist abgeschlossen und kann nicht mehr bearbeitet werden. Neue Dokumente oder Korrekturen müssen als neuer Vorgang erfasst werden."}
+                  ? t("noSicknessEditPermission")
+                  : t("sicknessClosedHint")}
               </div>
             )}
           </div>
@@ -813,6 +831,7 @@ export function VacationDrawerButton({
   canManage?: boolean;
   canDelete?: boolean;
 }) {
+  const t = useTranslations("ActionDrawers");
   const [isOpen, setIsOpen] = useState(false);
   const deleteFormId = `vacation-delete-${request.dbId ?? request.id}`;
 
@@ -823,17 +842,17 @@ export function VacationDrawerButton({
         className="btn btn-secondary btn-sm"
         onClick={() => setIsOpen(true)}
       >
-        Details
+        {t("details")}
       </button>
       {isOpen && (
         <RightDrawer
-          eyebrow="Urlaubsantrag"
+          eyebrow={t("vacationEyebrow")}
           title={request.name}
           onClose={() => setIsOpen(false)}
         >
           {!canManage && (
             <div className="mb-4 rounded-xl border border-border bg-bg p-4 text-[13px] leading-[1.55] text-muted-2">
-              Sie haben keine Berechtigung, diesen Urlaubsantrag zu bearbeiten.
+              {t("noVacationEditPermission")}
             </div>
           )}
           <form action={updateVacationRequestAction} className="flex flex-col gap-4">
@@ -841,13 +860,13 @@ export function VacationDrawerButton({
             <input type="hidden" name="requestId" value={request.dbId ?? ""} />
             <fieldset disabled={!canManage} className="flex flex-col gap-4 border-0 p-0">
               <div className="grid gap-3 sm:grid-cols-2">
-                <Field label="Von">
+                <Field label={t("fromLabel")}>
                   <DatePickerField
                     name="startDate"
                     defaultValue={request.startDateIso ?? request.startDate}
                   />
                 </Field>
-                <Field label="Bis">
+                <Field label={t("toLabel")}>
                   <DatePickerField
                     name="endDate"
                     defaultValue={request.endDateIso ?? request.endDate}
@@ -855,15 +874,14 @@ export function VacationDrawerButton({
                 </Field>
               </div>
               <div className="rounded-xl border border-border bg-bg p-3 text-[12.5px] text-muted-2">
-                Aktuell erfasst: <span className="font-semibold text-ink">{request.days}</span>.
-                Die Dauer wird beim Speichern aus dem Zeitraum neu berechnet.
+                {t("currentlyLogged", { days: request.days })}
               </div>
-              <Field label="Hinweise">
+              <Field label={t("notesLabel")}>
                 <textarea
                   name="note"
                   className="input min-h-24 resize-none"
                   defaultValue={request.note ?? ""}
-                  placeholder="Vertretung, Übergaben oder Entscheidung dokumentieren"
+                  placeholder={t("vacationNotesPlaceholder")}
                 />
               </Field>
             </fieldset>
@@ -873,24 +891,24 @@ export function VacationDrawerButton({
                   formAction={approveVacationRequestAction}
                   Icon={Check}
                   className="btn btn-primary btn-sm"
-                  pendingLabel="Läuft..."
+                  pendingLabel={t("working")}
                 >
-                  Genehmigen
+                  {t("approve")}
                 </FormSubmitButton>
                 <FormSubmitButton
                   formAction={rejectVacationRequestAction}
                   className="btn btn-secondary btn-sm border-danger/25 text-danger hover:border-danger/40 hover:bg-danger/5"
-                  pendingLabel="Läuft..."
+                  pendingLabel={t("working")}
                 >
-                  Ablehnen
+                  {t("reject")}
                 </FormSubmitButton>
                 {canDelete && (
                   <ConfirmSubmitButton
                     form={deleteFormId}
                     className="btn btn-secondary btn-sm"
-                    description={`Der Urlaubsantrag von ${request.name} wird gelöscht.`}
+                    description={t("deleteVacationDescription", { name: request.name })}
                   >
-                    Löschen
+                    {t("delete")}
                   </ConfirmSubmitButton>
                 )}
               </div>
@@ -901,11 +919,11 @@ export function VacationDrawerButton({
                 className="btn btn-secondary"
                 onClick={() => setIsOpen(false)}
               >
-                {canManage ? "Abbrechen" : "Schließen"}
+                {canManage ? t("cancel") : t("close")}
               </button>
               {canManage && (
-                <FormSubmitButton Icon={Save} pendingLabel="Wird gespeichert...">
-                  Zeitraum speichern
+                <FormSubmitButton Icon={Save} pendingLabel={t("saving")}>
+                  {t("saveVacationRange")}
                 </FormSubmitButton>
               )}
             </div>
@@ -935,6 +953,7 @@ export function ShiftSettingsDrawerButton({
   settings: ShiftPlanningSettings;
   canManage?: boolean;
 }) {
+  const t = useTranslations("ActionDrawers");
   const { openPopup, closePopup } = useUniversalPopup();
   const [isOpen, setIsOpen] = useState(false);
   const [editingShiftId, setEditingShiftId] = useState<string | null>(null);
@@ -960,7 +979,7 @@ export function ShiftSettingsDrawerButton({
       ...items,
       {
         id,
-        label: "Neue Schicht",
+        label: t("newShiftLabel"),
         start: "10:00",
         end: "18:00",
         pause: "30m",
@@ -976,15 +995,15 @@ export function ShiftSettingsDrawerButton({
 
   function confirmRemoveShiftPreset(shift: ShiftPreset) {
     openPopup({
-      title: "Schichtvorlage löschen",
+      title: t("deleteShiftPresetTitle"),
       content: (
         <div>
           <p className="m-0 text-[13px] leading-[1.55] text-muted-2">
-            {`Die Vorlage "${shift.label}" wird entfernt. Das Speichern übernimmt die Änderung.`}
+            {t("deleteShiftPresetDescription", { label: shift.label })}
           </p>
           <div className="mt-5 flex justify-end gap-2.5 border-t border-border-soft pt-4">
             <button type="button" className="btn btn-secondary" onClick={closePopup}>
-              Abbrechen
+              {t("cancel")}
             </button>
             <button
               type="button"
@@ -995,7 +1014,7 @@ export function ShiftSettingsDrawerButton({
               }}
             >
               <Trash2 size={15} />
-              Entfernen
+              {t("remove")}
             </button>
           </div>
         </div>
@@ -1008,16 +1027,16 @@ export function ShiftSettingsDrawerButton({
       <button
         type="button"
         className="btn btn-secondary"
-        title="Schichtplanung Einstellungen"
+        title={t("shiftSettingsTitle")}
         onClick={() => setIsOpen(true)}
       >
         <Settings2 size={15} />
-        Einstellungen
+        {t("settingsLabel")}
       </button>
       {isOpen && (
         <RightDrawer
-          eyebrow="Schichtplanung"
-          title="Planungseinstellungen"
+          eyebrow={t("shiftPlanningEyebrow")}
+          title={t("planningSettingsTitle")}
           onClose={() => setIsOpen(false)}
         >
           <form
@@ -1034,20 +1053,20 @@ export function ShiftSettingsDrawerButton({
             />
             <section className="rounded-xl border border-border bg-bg p-4">
               <div className="mb-3 font-mono text-[11px] font-semibold uppercase tracking-[0.06em] text-muted">
-                Standardwerte
+                {t("defaultValuesTitle")}
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
-                <Field label="Wochenstart">
+                <Field label={t("weekStartLabel")}>
                   <select
                     name="weekStart"
                     className="input cursor-pointer bg-white"
                     defaultValue={settings.weekStart}
                   >
-                    <option value="monday">Montag</option>
-                    <option value="sunday">Sonntag</option>
+                    <option value="monday">{t("monday")}</option>
+                    <option value="sunday">{t("sunday")}</option>
                   </select>
                 </Field>
-                <Field label="Mindestbesetzung">
+                <Field label={t("minStaffingLabel")}>
                   <input
                     type="number"
                     name="minStaffing"
@@ -1056,42 +1075,39 @@ export function ShiftSettingsDrawerButton({
                     defaultValue={settings.minStaffing}
                   />
                 </Field>
-                <Field label="Pausenregel">
+                <Field label={t("breakRuleLabel")}>
                   <select
                     name="breakRule"
                     className="input cursor-pointer bg-white"
                     defaultValue={settings.breakRule}
                   >
-                    <option value="none">Keine automatische Pause</option>
-                    <option value="15-4">15 Minuten ab 4h</option>
-                    <option value="30-6">30 Minuten ab 6h</option>
-                    <option value="45-9">45 Minuten ab 9h</option>
+                    <option value="none">{t("breakRuleNone")}</option>
+                    <option value="15-4">{t("breakRule15_4")}</option>
+                    <option value="30-6">{t("breakRule30_6")}</option>
+                    <option value="45-9">{t("breakRule45_9")}</option>
                   </select>
                 </Field>
               </div>
               <p className="mt-3 text-[11.5px] leading-[1.5] text-muted">
-                Wochenstart steuert die Kalenderansicht. Mindestbesetzung und
-                Pausenregel werden gespeichert, aber noch nicht automatisch auf
-                Schichten angewendet.
+                {t("defaultsHint")}
               </p>
             </section>
             <section className="rounded-xl border border-border bg-bg p-4">
               <div className="mb-3 font-mono text-[11px] font-semibold uppercase tracking-[0.06em] text-muted">
-                Standard-Öffnungszeiten
+                {t("defaultOpeningHoursTitle")}
               </div>
               <OpeningHoursEditor
                 name="defaultOpeningHours"
                 defaultValue={settings.defaultOpeningHours}
               />
               <p className="mt-3 text-[11.5px] leading-[1.5] text-muted">
-                Gilt für alle Standorte ohne eigene Öffnungszeiten — steuert u. a.
-                die &quot;Schichtlage&quot; auf der Übersicht.
+                {t("defaultOpeningHoursHint")}
               </p>
             </section>
             <section className="rounded-xl border border-border bg-bg p-4">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <div className="font-mono text-[11px] font-semibold uppercase tracking-[0.06em] text-muted">
-                  Standardschichten
+                  {t("defaultShiftsTitle")}
                 </div>
                 <button
                   type="button"
@@ -1099,12 +1115,12 @@ export function ShiftSettingsDrawerButton({
                   onClick={addShiftPreset}
                 >
                   <Plus size={14} />
-                  Hinzuf&uuml;gen
+                  {t("addShift")}
                 </button>
               </div>
               {shiftPresets.length === 0 && (
                 <p className="text-[12.5px] text-muted">
-                  Noch keine Standardschichten hinterlegt.
+                  {t("noDefaultShifts")}
                 </p>
               )}
               <div className="grid gap-2">
@@ -1129,7 +1145,7 @@ export function ShiftSettingsDrawerButton({
                                   event.target.value,
                                 )
                               }
-                              aria-label="Schichtname"
+                              aria-label={t("shiftNameAria")}
                               maxLength={64}
                             />
                             <input
@@ -1143,7 +1159,7 @@ export function ShiftSettingsDrawerButton({
                                   event.target.value,
                                 )
                               }
-                              aria-label="Startzeit"
+                              aria-label={t("startTimeAria")}
                             />
                             <input
                               type="time"
@@ -1156,7 +1172,7 @@ export function ShiftSettingsDrawerButton({
                                   event.target.value,
                                 )
                               }
-                              aria-label="Endzeit"
+                              aria-label={t("endTimeAria")}
                             />
                           </div>
                           <select
@@ -1169,13 +1185,13 @@ export function ShiftSettingsDrawerButton({
                                 event.target.value,
                               )
                             }
-                            aria-label="Pausendauer"
+                            aria-label={t("pauseDurationAria")}
                           >
-                            <option value="0m">Keine Pause</option>
-                            <option value="15m">15m Pause</option>
-                            <option value="30m">30m Pause</option>
-                            <option value="45m">45m Pause</option>
-                            <option value="60m">60m Pause</option>
+                            <option value="0m">{t("noPause")}</option>
+                            <option value="15m">{t("pause15")}</option>
+                            <option value="30m">{t("pause30")}</option>
+                            <option value="45m">{t("pause45")}</option>
+                            <option value="60m">{t("pause60")}</option>
                           </select>
                         </div>
                       ) : (
@@ -1184,15 +1200,15 @@ export function ShiftSettingsDrawerButton({
                             {shift.label}
                           </div>
                           <div className="mt-0.5 font-mono text-[10px] text-muted">
-                            {shift.start}-{shift.end} {"·"} {shift.pause} Pause
+                            {t("shiftTimeSummary", { start: shift.start, end: shift.end, pause: shift.pause })}
                           </div>
                         </div>
                       )}
                       <div className="mt-3 flex justify-end gap-2">
                         <button
                           type="button"
-                          aria-label={`${shift.label} bearbeiten`}
-                          title="Bearbeiten"
+                          aria-label={t("editShiftAria", { label: shift.label })}
+                          title={t("editLabel")}
                           className="btn btn-secondary btn-sm px-3"
                           onClick={() =>
                             setEditingShiftId(isEditing ? null : shift.id)
@@ -1201,7 +1217,7 @@ export function ShiftSettingsDrawerButton({
                           {isEditing ? (
                             <>
                               <Check size={14} />
-                              Fertig
+                              {t("done")}
                             </>
                           ) : (
                             <Pencil size={14} />
@@ -1209,7 +1225,7 @@ export function ShiftSettingsDrawerButton({
                         </button>
                         <button
                           type="button"
-                          aria-label={`${shift.label} löschen`}
+                          aria-label={t("deleteShiftAria", { label: shift.label })}
                           className="btn btn-secondary btn-sm px-3 text-danger hover:border-danger/30 hover:bg-danger/5"
                           onClick={() => confirmRemoveShiftPreset(shift)}
                         >
@@ -1227,10 +1243,10 @@ export function ShiftSettingsDrawerButton({
                 className="btn btn-secondary"
                 onClick={() => setIsOpen(false)}
               >
-                Abbrechen
+                {t("cancel")}
               </button>
-              <FormSubmitButton Icon={Save} pendingLabel="Wird gespeichert...">
-                Speichern
+              <FormSubmitButton Icon={Save} pendingLabel={t("saving")}>
+                {t("save")}
               </FormSubmitButton>
             </div>
           </form>

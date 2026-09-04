@@ -7,6 +7,7 @@ import { useUniversalPopup } from "@/components/UniversalPopup";
 import { teamColorPalette } from "@/lib/org-options";
 import { Check, ChevronDown, Plus, Users } from "lucide-react";
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 
 type DropdownOption = {
   value: string;
@@ -116,11 +117,12 @@ function CustomDropdownField({
 }
 
 function TeamColorPicker() {
+  const t = useTranslations("CreateTeamButton");
   const [selectedColor, setSelectedColor] = useState<string>(teamColors[0].value);
 
   return (
     <div className="field">
-      <div className="label">Teamfarbe</div>
+      <div className="label">{t("teamColor")}</div>
       <input type="hidden" name="color" value={selectedColor} />
       <div className="flex flex-wrap gap-2">
         {teamColors.map((color) => {
@@ -157,18 +159,20 @@ function CreateTeamForm({
   locations: string[];
   onDone: () => void;
 }) {
+  const t = useTranslations("CreateTeamButton");
+
   return (
     <form className="flex flex-col gap-4" action={createTeamAction}>
       <input type="hidden" name="tenant" value={tenant} />
       <div className="field">
         <label htmlFor="team-name" className="label">
-          Teamname
+          {t("teamName")}
         </label>
         <input
           id="team-name"
           name="name"
           className="input"
-          placeholder="z. B. Verkauf"
+          placeholder={t("teamNamePlaceholder")}
           required
         />
       </div>
@@ -177,41 +181,40 @@ function CreateTeamForm({
         <LocationMultiSelectDropdown defaultLocations={[]} options={locations} />
 
         <CustomDropdownField
-          label="Teamleitung"
+          label={t("teamLead")}
           name="lead"
-          placeholder="Mitarbeiter auswählen"
+          placeholder={t("selectEmployeePlaceholder")}
           options={employees}
         />
       </div>
 
       <div className="field">
         <label htmlFor="team-description" className="label">
-          Beschreibung
+          {t("description")}
         </label>
         <textarea
           id="team-description"
           name="description"
           className="input min-h-24 resize-none"
-          placeholder="Kurzer Zweck oder Zuständigkeitsbereich"
+          placeholder={t("descriptionPlaceholder")}
         />
       </div>
 
       <TeamColorPicker />
 
       <p className="m-0 text-[12.5px] leading-[1.55] text-muted-2">
-        Mitglieder können nach dem Erstellen direkt über die Teamdetailseite
-        hinzugefügt werden.
+        {t("membersHint")}
       </p>
 
       <div className="mt-1 flex justify-end gap-2.5 border-t border-border-soft pt-4">
         <button type="button" className="btn btn-secondary" onClick={onDone}>
-          Abbrechen
+          {t("cancel")}
         </button>
         <FormSubmitButton
           Icon={Users}
-          pendingLabel="Team wird erstellt..."
+          pendingLabel={t("creatingTeam")}
         >
-          Team erstellen
+          {t("createTeam")}
         </FormSubmitButton>
       </div>
     </form>
@@ -227,6 +230,7 @@ export default function CreateTeamButton({
   employees: DropdownOption[];
   locations: string[];
 }) {
+  const t = useTranslations("CreateTeamButton");
   const { openPopup, closePopup } = useUniversalPopup();
 
   return (
@@ -235,7 +239,7 @@ export default function CreateTeamButton({
       className="btn btn-primary"
       onClick={() => {
         openPopup({
-          title: "Team erstellen",
+          title: t("createTeam"),
           content: (
             <CreateTeamForm
               tenant={tenant}
@@ -248,7 +252,7 @@ export default function CreateTeamButton({
       }}
     >
       <Plus size={15} strokeWidth={2} />
-      Team erstellen
+      {t("createTeam")}
     </button>
   );
 }

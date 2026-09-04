@@ -1,5 +1,3 @@
-import type { Address } from "@prisma/client";
-
 export type AddressInput = {
   street?: string;
   houseNumber?: string;
@@ -9,10 +7,25 @@ export type AddressInput = {
   country?: string;
 };
 
-type AddressShape = Pick<
-  Address,
-  "street" | "houseNumber" | "postalCode" | "city" | "careOf" | "country"
->;
+/**
+ * Strukturell statt an ein konkretes Prisma-Modell gebunden: passt sowohl auf
+ * `Address` (Standort-/Firmenadressen) als auch auf `EmployeeAddress`
+ * (Mitarbeiter-Privat-/Arbeitsadresse, verschlüsselt) — beide haben dieselben
+ * sechs Felder.
+ *
+ * Diese Datei bleibt bewusst client-sicher (`components/AddressFields.tsx`
+ * importiert sie) — die Verschlüsselungs-Gegenstücke `encryptAddress`/
+ * `decryptAddress` liegen deshalb separat in `lib/employee-address.ts`
+ * (server-only, wegen `lib/encryption.ts`'s `node:crypto`-Abhängigkeit).
+ */
+export type AddressShape = {
+  street: string;
+  houseNumber: string;
+  postalCode: string;
+  city: string;
+  careOf: string;
+  country: string;
+};
 
 export function normalizeAddressInput(input: AddressInput = {}) {
   return {

@@ -1,4 +1,5 @@
 import { recordTenantAudit } from "@/lib/audit";
+import { decryptField, encryptField } from "@/lib/encryption";
 import { canAccessFileAcl, getOptionalFileReadAccess } from "@/lib/file-access";
 import { prisma } from "@/lib/prisma";
 import { uploadTenantFile } from "@/lib/storage/storage.service";
@@ -77,8 +78,8 @@ export async function getPayrollStatements(
       id: statement.id,
       period: statement.period,
       issuedAt: statement.issuedAt.toISOString().slice(0, 10),
-      gross: statement.gross,
-      net: statement.net,
+      gross: decryptField(statement.gross),
+      net: decryptField(statement.net),
       status: statement.status === "corrected" ? "corrected" : "available",
       fileId: statement.fileId,
       fileName: statement.file.displayName || statement.file.originalName,
@@ -134,14 +135,16 @@ export async function uploadPayrollStatement(input: {
     tags: ["Abrechnung"],
   });
 
+  const grossPlain = input.gross.trim();
+  const netPlain = input.net.trim();
   const statement = await prisma.tenantPayrollStatement.create({
     data: {
       tenantId: access.tenantId,
       employeeId: employee.id,
       fileId: storedFile.id,
       period,
-      gross: input.gross.trim(),
-      net: input.net.trim(),
+      gross: encryptField(grossPlain),
+      net: encryptField(netPlain),
       status: "available",
     },
   });
@@ -163,8 +166,8 @@ export async function uploadPayrollStatement(input: {
     id: statement.id,
     period: statement.period,
     issuedAt: statement.issuedAt.toISOString().slice(0, 10),
-    gross: statement.gross,
-    net: statement.net,
+    gross: grossPlain,
+    net: netPlain,
     status: statement.status === "corrected" ? "corrected" : "available",
     fileId: statement.fileId,
     fileName: storedFile.displayName || storedFile.originalName,

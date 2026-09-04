@@ -196,6 +196,68 @@
   }
 }
 
+/* Animation-Delay-Werte für die lp-fu/lp-fi-Staffelung. Als Klassen statt
+   inline style="animation-delay" — CSP style-src erlaubt das style=""-
+   Attribut nicht (siehe proxy.ts), nur echte CSS-Klassen. */
+.lp-delay-06 {
+  animation-delay: 0.06s;
+}
+
+.lp-delay-16 {
+  animation-delay: 0.16s;
+}
+
+.lp-delay-26 {
+  animation-delay: 0.26s;
+}
+
+.lp-delay-38 {
+  animation-delay: 0.38s;
+}
+
+.lp-delay-52 {
+  animation-delay: 0.52s;
+}
+
+/* Hintergrund-Glow-Blobs + zugehörige Animation, aus demselben Grund als
+   Klasse statt inline style gebündelt (Größe/Position bleiben Tailwind-
+   Arbitrary-Classes am Element selbst). */
+.lp-glow-hero-a {
+  background: radial-gradient(ellipse, var(--lp-ac-glow) 0%, transparent 68%);
+  animation: lp-glow-pulse 7s ease-in-out infinite;
+}
+
+.lp-glow-hero-b {
+  background: radial-gradient(ellipse, rgba(77, 159, 255, 0.06) 0%, transparent 70%);
+  animation: lp-glow-pulse 9s ease-in-out infinite 2.5s;
+}
+
+.lp-glow-cta {
+  background: radial-gradient(ellipse, var(--lp-ac-glow) 0%, transparent 68%);
+  animation: lp-glow-pulse 6s ease-in-out infinite;
+}
+
+.lp-text-gradient {
+  background-image: linear-gradient(95deg, var(--lp-ac) 20%, var(--lp-blue) 100%);
+}
+
+.lp-scan-line {
+  background: linear-gradient(90deg, transparent, var(--lp-ac), transparent);
+  animation: lp-scan 5s linear infinite;
+}
+
+.lp-anim-blink {
+  animation: lp-blink 2s ease infinite;
+}
+
+.lp-anim-float {
+  animation: lp-float 7s ease-in-out infinite;
+}
+
+.lp-anim-float-badge {
+  animation: lp-float-b 5s ease-in-out infinite 1.8s;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .landing *,
   .landing *::before,

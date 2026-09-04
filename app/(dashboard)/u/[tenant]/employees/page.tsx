@@ -6,6 +6,7 @@ import DataTable, {
   type DataTableColumn,
 } from "@/components/DataTable";
 import EmployeeQuickView from "@/components/EmployeeQuickView";
+import FolderTemplateButton from "@/components/FolderTemplateButton";
 import InviteEmployeeButton from "@/components/InviteEmployeeButton";
 import PageHeader from "@/components/PageHeader";
 import PaginationControls from "@/components/PaginationControls";
@@ -199,6 +200,8 @@ export default async function EmployeesPage({
             { value: "former", label: t("statusFormer") },
           ]}
         />
+
+        {canCreateEmployee && <FolderTemplateButton tenant={tenant} />}
 
         {canCreateEmployee && (
           <InviteEmployeeButton

@@ -8,7 +8,7 @@ import {
   buildReminderFilters,
   buildReminderMetrics,
   getRemindersForTenant,
-  reminderPriorityConfig,
+  getReminderPriorityConfig,
   type Reminder,
   type ReminderMetric,
 } from "@/lib/reminders";
@@ -16,10 +16,13 @@ import { hasPermissionLevel } from "@/lib/roles";
 import { getTeamsForTenant } from "@/lib/team-service";
 import { getTenantCapabilities, withAccessRedirect } from "@/lib/tenant-access";
 import { Check, UsersRound } from "lucide-react";
+import { getTranslations } from "next-intl/server";
 
 export const metadata = {
   title: "Erinnerungen",
 };
+
+type T = Awaited<ReturnType<typeof getTranslations>>;
 
 function ReminderMetricCard({ label, value, caption, tone }: ReminderMetric) {
   const valueClassName =
@@ -49,11 +52,13 @@ function ReminderCompleteButton({
   tenant,
   returnPath,
   canDelete,
+  t,
 }: {
   reminder: Reminder;
   tenant: string;
   returnPath: string;
   canDelete: boolean;
+  t: T;
 }) {
   if (!canDelete) {
     return null;
@@ -66,8 +71,8 @@ function ReminderCompleteButton({
       <input type="hidden" name="reminderId" value={reminder.id} />
       <button
         type="submit"
-        title="Als erledigt markieren"
-        aria-label={`${reminder.title} als erledigt markieren`}
+        title={t("markDoneTitle")}
+        aria-label={t("markDoneAria", { title: reminder.title })}
         className="flex size-[34px] cursor-pointer items-center justify-center rounded-[9px] border border-border bg-white text-muted transition-colors hover:border-success/30 hover:text-success"
       >
         <Check size={14} strokeWidth={2} />
@@ -83,6 +88,7 @@ function ReminderRow({
   fileBrowserData,
   canManage,
   canDelete,
+  t,
 }: {
   reminder: Reminder;
   tenant: string;
@@ -90,8 +96,9 @@ function ReminderRow({
   fileBrowserData: ReminderFileBrowserData;
   canManage: boolean;
   canDelete: boolean;
+  t: T;
 }) {
-  const priority = reminderPriorityConfig[reminder.priority];
+  const priority = getReminderPriorityConfig(t)[reminder.priority];
   const isExpired = reminder.daysLeft < 0;
   const daysLabel = isExpired ? Math.abs(reminder.daysLeft) : reminder.daysLeft;
 
@@ -114,7 +121,7 @@ function ReminderRow({
             {daysLabel}
           </span>
           <div className="mt-0.5 font-mono text-[8px] uppercase tracking-[0.5px] text-muted">
-            {isExpired ? "überfällig" : "Tage"}
+            {isExpired ? t("overdueUnit") : t("daysUnit")}
           </div>
         </div>
 
@@ -130,7 +137,7 @@ function ReminderRow({
             </span>
             {isExpired && (
               <span className="rounded-md bg-danger/10 px-[7px] py-0.5 font-mono text-[10px] font-semibold text-danger">
-                Abgelaufen
+                {t("expiredBadge")}
               </span>
             )}
             {reminder.teamName && (
@@ -141,7 +148,7 @@ function ReminderRow({
             )}
           </div>
           <div className="text-[12.5px] text-muted-2">
-            {reminder.subject || "Ohne Bezug"}
+            {reminder.subject || t("noSubject")}
           </div>
         </div>
 
@@ -157,6 +164,7 @@ function ReminderRow({
         tenant={tenant}
         returnPath={returnPath}
         canDelete={canDelete}
+        t={t}
       />
     </div>
   );
@@ -167,6 +175,7 @@ export default async function RemindersPage({
 }: {
   params: Promise<{ tenant: string }>;
 }) {
+  const t = await getTranslations("RemindersPage");
   const { tenant } = await params;
   const returnPath = `/u/${tenant}/erinnerungen`;
   const reminders = await withAccessRedirect(tenant, () => getRemindersForTenant(tenant));
@@ -182,12 +191,12 @@ export default async function RemindersPage({
   const capabilities = await getTenantCapabilities(tenant);
   const canManage = hasPermissionLevel(capabilities.reminders.level, "write");
   const canDelete = capabilities.reminders.canDelete;
-  const reminderMetrics = buildReminderMetrics(reminders);
-  const reminderFilters = buildReminderFilters(reminders);
+  const reminderMetrics = buildReminderMetrics(reminders, t);
+  const reminderFilters = buildReminderFilters(reminders, t);
 
   return (
     <>
-      <PageHeader eyebrow="Aufgaben & Fristen" title="Erinnerungen">
+      <PageHeader eyebrow={t("eyebrow")} title={t("title")}>
         {canManage && (
           <CreateReminderButton
             tenant={tenant}
@@ -231,11 +240,12 @@ export default async function RemindersPage({
               fileBrowserData={fileBrowserData}
               canManage={canManage}
               canDelete={canDelete}
+              t={t}
             />
           ))
         ) : (
           <div className="rounded-[14px] border border-dashed border-border bg-white px-5 py-10 text-center text-[13px] text-muted">
-            Keine offenen Erinnerungen.
+            {t("emptyState")}
           </div>
         )}
       </section>
