@@ -2,10 +2,13 @@ import Image from "next/image";
 import Link from "next/link";
 import { CookieSettingsLink } from "@/components/CookieSettingsLink";
 import { LocaleSwitcher } from "@/components/LocaleSwitcher";
+import { getTranslations } from "next-intl/server";
 
-export default function LegalLayout({
+export default async function LegalLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  const t = await getTranslations("LegalLayout");
+
   return (
     <div className="flex min-h-svh flex-col bg-bg">
       <header className="mx-auto flex w-full max-w-3xl items-center justify-between px-6 py-5">
@@ -14,7 +17,7 @@ export default function LegalLayout({
           <span className="text-lg font-semibold text-ink">Ployo</span>
         </Link>
         <Link href="/login" className="btn btn-secondary">
-          Anmelden
+          {t("signIn")}
         </Link>
       </header>
       <main className="mx-auto w-full max-w-3xl flex-1 min-h-0 overflow-y-auto px-6 py-8">
@@ -25,19 +28,19 @@ export default function LegalLayout({
           <span>© {new Date().getFullYear()} Ployo</span>
           <nav className="flex flex-wrap gap-4">
             <Link href="/datenschutz" className="hover:text-ink">
-              Datenschutz
+              {t("dataProtection")}
             </Link>
             <Link href="/impressum" className="hover:text-ink">
-              Impressum
+              {t("imprint")}
             </Link>
             <Link href="/kontakt" className="hover:text-ink">
-              Kontakt
+              {t("contact")}
             </Link>
             <Link href="/agb" className="hover:text-ink">
-              AGB
+              {t("terms")}
             </Link>
             <Link href="/konto-loeschung" className="hover:text-ink">
-              Konto löschen
+              {t("deleteAccount")}
             </Link>
             <CookieSettingsLink className="cursor-pointer hover:text-ink" />
           </nav>

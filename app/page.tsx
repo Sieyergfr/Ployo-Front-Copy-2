@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { CookieSettingsLink } from "@/components/CookieSettingsLink";
 import { LocaleSwitcher } from "@/components/LocaleSwitcher";
+import { getTranslations } from "next-intl/server";
 import "./landing.css";
 
 export const metadata = {
@@ -17,12 +18,16 @@ export const metadata = {
     "Ployo vereint Schichtplanung, Personalverwaltung und standortübergreifende Analyse — in einer schlanken, modernen Plattform.",
 };
 
-const navLinks = [
-  { label: "Funktionen", href: "#features" },
-  { label: "So funktioniert's", href: "#how" },
-  { label: "Preise", href: "#" },
-  { label: "Unternehmen", href: "#" },
-];
+type T = Awaited<ReturnType<typeof getTranslations>>;
+
+function getNavLinks(t: T) {
+  return [
+    { label: t("navFeatures"), href: "#features" },
+    { label: t("navHowItWorks"), href: "#how" },
+    { label: t("navPricing"), href: "#" },
+    { label: t("navCompany"), href: "#" },
+  ];
+}
 
 /**
  * Feste, im Quelltext buchstäblich vorhandene Tailwind-Arbitrary-Klassen
@@ -52,95 +57,83 @@ const featureColors = {
   },
 } as const;
 
-const features = [
-  {
-    icon: CalendarClock,
-    color: "ac",
-    title: "Intelligente Schichtplanung",
-    description:
-      "Automatische Vorschläge basierend auf Qualifikationen, Verfügbarkeiten und gesetzlichen Vorgaben. Frühzeitige Erkennung von Unterbesetzung.",
-    points: [
-      "Drag-and-Drop Kalender",
-      "Automatische Konfliktprüfung",
-      "Push-Benachrichtigungen",
-    ],
-  },
-  {
-    icon: Users,
-    color: "blue",
-    title: "Digitale Personalakte",
-    description:
-      "Alle Mitarbeiterdaten DSGVO-konform an einem Ort. Verträge, Zeugnisse, Urlaubsanträge — revisionssicher und sofort abrufbar.",
-    points: [
-      "DSGVO-konforme Speicherung",
-      "Dokumenten-Upload & -Verwaltung",
-      "Rollenbasierte Zugriffsrechte",
-    ],
-  },
-  {
-    icon: BarChart3,
-    color: "red",
-    title: "Echtzeit-Analytics",
-    description:
-      "Überblick über alle Standorte in Echtzeit. Auslastung, Krankheitsquoten, Überstunden — auf einen Blick, immer aktuell.",
-    points: [
-      "Live-Dashboard aller Standorte",
-      "Exportierbare Berichte (Excel, PDF)",
-      "Frühwarnsystem für Engpässe",
-    ],
-  },
-] as const;
+function getFeatures(t: T) {
+  return [
+    {
+      icon: CalendarClock,
+      color: "ac",
+      title: t("feature1Title"),
+      description: t("feature1Description"),
+      points: [t("feature1Point1"), t("feature1Point2"), t("feature1Point3")],
+    },
+    {
+      icon: Users,
+      color: "blue",
+      title: t("feature2Title"),
+      description: t("feature2Description"),
+      points: [t("feature2Point1"), t("feature2Point2"), t("feature2Point3")],
+    },
+    {
+      icon: BarChart3,
+      color: "red",
+      title: t("feature3Title"),
+      description: t("feature3Description"),
+      points: [t("feature3Point1"), t("feature3Point2"), t("feature3Point3")],
+    },
+  ] as const;
+}
 
-const steps = [
-  {
-    number: "01",
-    title: "Konto einrichten",
-    description:
-      "In wenigen Minuten registriert. Standorte anlegen, Team einladen, Rollen vergeben — sofort einsatzbereit.",
-    highlight: false,
-  },
-  {
-    number: "02",
-    title: "Daten importieren",
-    description:
-      "Mitarbeiterdaten aus Excel oder bestehenden Systemen importieren. Ployo erkennt Formate automatisch.",
-    highlight: false,
-  },
-  {
-    number: "03",
-    title: "Loslegen & sparen",
-    description:
-      "Schichtpläne erstellen, Personalakten pflegen, Analytics auswerten — und bis zu 40 Stunden im Monat einsparen.",
-    highlight: true,
-  },
-] as const;
+function getSteps(t: T) {
+  return [
+    {
+      number: "01",
+      title: t("step1Title"),
+      description: t("step1Description"),
+      highlight: false,
+    },
+    {
+      number: "02",
+      title: t("step2Title"),
+      description: t("step2Description"),
+      highlight: false,
+    },
+    {
+      number: "03",
+      title: t("step3Title"),
+      description: t("step3Description"),
+      highlight: true,
+    },
+  ] as const;
+}
 
 // pct als feste Breiten-Klasse statt Laufzeitwert über style={{width}} —
 // die drei Einträge sind ohnehin fest verdrahtete Demo-Werte, keine echten
 // Laufzeitdaten.
-const shiftLoads = [
-  {
-    label: "Frühschicht",
-    value: "28/30",
-    widthClass: "w-[93%]",
-    colorClass: "text-[color:var(--lp-ac)]",
-    barClass: "bg-[color:var(--lp-ac)]",
-  },
-  {
-    label: "Spätschicht",
-    value: "22/30",
-    widthClass: "w-[73%]",
-    colorClass: "text-[color:var(--lp-blue)]",
-    barClass: "bg-[color:var(--lp-blue)]",
-  },
-  {
-    label: "Nachtschicht",
-    value: "8/12",
-    widthClass: "w-[67%]",
-    colorClass: "text-[color:var(--lp-red)]",
-    barClass: "bg-[color:var(--lp-red)]",
-  },
-] as const;
+function getShiftLoads(t: T) {
+  return [
+    {
+      label: t("shiftEarly"),
+      value: "28/30",
+      widthClass: "w-[93%]",
+      colorClass: "text-[color:var(--lp-ac)]",
+      barClass: "bg-[color:var(--lp-ac)]",
+    },
+    {
+      label: t("shiftLate"),
+      value: "22/30",
+      widthClass: "w-[73%]",
+      colorClass: "text-[color:var(--lp-blue)]",
+      barClass: "bg-[color:var(--lp-blue)]",
+    },
+    {
+      label: t("shiftNight"),
+      value: "8/12",
+      widthClass: "w-[67%]",
+      colorClass: "text-[color:var(--lp-red)]",
+      barClass: "bg-[color:var(--lp-red)]",
+    },
+  ] as const;
+}
 
 function LogoMark({ variant }: { variant: "nav" | "footer" }) {
   // Math.round(size * 0.57): nav (size 30) -> 17, footer (size 26) -> 15.
@@ -156,7 +149,13 @@ function LogoMark({ variant }: { variant: "nav" | "footer" }) {
   );
 }
 
-export default function Home() {
+export default async function Home() {
+  const t = await getTranslations("LandingPage");
+  const navLinks = getNavLinks(t);
+  const features = getFeatures(t);
+  const steps = getSteps(t);
+  const shiftLoads = getShiftLoads(t);
+
   return (
     <div className="landing min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
       {/* ─── NAV ─────────────────────────────── */}
@@ -182,14 +181,14 @@ export default function Home() {
 
           <div className="lp-fi lp-delay-26 ml-auto flex flex-none items-center gap-3 sm:gap-4 md:ml-0">
             <Link href="/login" className="lp-nav-link text-[13.5px]">
-              Anmelden
+              {t("signIn")}
             </Link>
             <Link
               href="/register"
               className="lp-btn-primary rounded-[9px] bg-[color:var(--lp-ac)] px-3 py-[9px] text-[13px] font-semibold text-black sm:px-[18px]"
             >
-              <span className="sm:hidden">Start</span>
-              <span className="hidden sm:inline">Kostenlos starten</span>
+              <span className="sm:hidden">{t("ctaStartShort")}</span>
+              <span className="hidden sm:inline">{t("ctaStartFull")}</span>
             </Link>
           </div>
         </div>
@@ -206,23 +205,21 @@ export default function Home() {
             <div className="lp-fu lp-delay-06 mb-[30px] inline-flex items-center gap-2 rounded-full border border-[color:var(--lp-bd-hi)] bg-[color:var(--lp-surf)] py-1.5 pr-[14px] pl-2.5">
               <span className="lp-anim-blink h-1.5 w-1.5 flex-none rounded-full bg-[color:var(--lp-ac)]" />
               <span className="font-mono text-[11px] tracking-[0.4px] text-[var(--lp-tx2)]">
-                NEU — Digitale Schichtplanung
+                {t("heroBadge")}
               </span>
             </div>
 
             <h1 className="font-display text-[clamp(40px,9vw,82px)] leading-[1.0] font-bold tracking-[-2.8px] text-[var(--lp-tx)]">
               <span className="lp-fu lp-delay-16 mb-1 block">
-                Smarter HR.
+                {t("heroTitle1")}
               </span>
               <span className="lp-fu lp-delay-26 lp-text-gradient mb-7 block bg-clip-text text-transparent">
-                Starke Teams.
+                {t("heroTitle2")}
               </span>
             </h1>
 
             <p className="lp-fu lp-delay-38 mb-10 max-w-[450px] text-[17px] leading-[1.68] text-[var(--lp-tx2)]">
-              Ployo vereint Schichtplanung, Personalverwaltung und
-              standortübergreifende Analyse — in einer schlanken, modernen
-              Plattform.
+              {t("heroDescription")}
             </p>
 
             <div className="lp-fu lp-delay-52 flex flex-wrap items-center gap-3">
@@ -230,7 +227,7 @@ export default function Home() {
                 href="/register"
                 className="lp-btn-primary inline-flex items-center gap-2 rounded-[11px] bg-[color:var(--lp-ac)] px-6 py-3.5 text-[14.5px] font-semibold text-black"
               >
-                Kostenlos testen
+                {t("ctaFreeTrial")}
                 <ArrowRight size={14} strokeWidth={2.2} />
               </Link>
               <a
@@ -238,7 +235,7 @@ export default function Home() {
                 className="lp-btn-secondary inline-flex items-center gap-2 rounded-[11px] border border-[color:var(--lp-bd-hi)] px-6 py-3.5 text-[14.5px] font-medium text-[var(--lp-tx2)]"
               >
                 <PlayCircle size={14} strokeWidth={2} />
-                Demo ansehen
+                {t("ctaWatchDemo")}
               </a>
             </div>
 
@@ -253,19 +250,19 @@ export default function Home() {
                 <div className="flex items-center gap-2">
                   <span className="lp-anim-blink h-[7px] w-[7px] rounded-full bg-[color:var(--lp-ac)]" />
                   <span className="font-mono text-[11px] tracking-[0.5px] text-[var(--lp-tx2)]">
-                    PLOYO LIVE
+                    {t("mockLiveLabel")}
                   </span>
                 </div>
                 <span className="font-mono text-[10px] text-[color:var(--lp-mu)]">
-                  KW 26 · 2025
+                  {t("mockWeekLabel", { week: 26, year: 2025 })}
                 </span>
               </div>
 
               <div className="grid grid-cols-3 border-b border-[color:var(--lp-bd)]">
                 {[
-                  { label: "Mitarbeiter", value: "84" },
-                  { label: "Standorte", value: "4" },
-                  { label: "Auslastung", value: "87%", accent: true },
+                  { label: t("mockEmployees"), value: "84" },
+                  { label: t("mockLocations"), value: "4" },
+                  { label: t("mockUtilization"), value: "87%", accent: true },
                 ].map((cell, index) => (
                   <div
                     key={cell.label}
@@ -314,7 +311,7 @@ export default function Home() {
                     Thomas Berger
                   </div>
                   <div className="mt-0.5 font-mono text-[10px] text-[color:var(--lp-mu)]">
-                    Schichtplan KW 27 freigegeben
+                    {t("mockActivityLabel")}
                   </div>
                 </div>
                 <span className="h-1.5 w-1.5 flex-none rounded-full bg-[color:var(--lp-ac)]" />
@@ -324,13 +321,13 @@ export default function Home() {
             {/* Floating badge */}
             <div className="lp-anim-float-badge absolute right-[-10px] bottom-0 rounded-[14px] border border-[color:var(--lp-bd-hi)] bg-[color:var(--lp-surf)] px-[18px] py-3.5 shadow-[0_20px_50px_rgba(0,0,0,.5)]">
               <div className="mb-2 font-mono text-[9px] tracking-[0.5px] text-[color:var(--lp-mu)] uppercase">
-                Offene Schichten
+                {t("mockOpenShiftsLabel")}
               </div>
               <div className="font-display text-[34px] leading-none font-bold tracking-[-1.5px] text-[color:var(--lp-red)]">
                 7
               </div>
               <div className="mt-[5px] text-[11.5px] text-[var(--lp-tx2)]">
-                Diese Woche
+                {t("mockOpenShiftsCaption")}
               </div>
             </div>
           </div>
@@ -345,10 +342,10 @@ export default function Home() {
         <div className="mx-auto max-w-[1200px]">
           <div className="mb-[72px]">
             <div className="mb-4 font-mono text-[10px] tracking-[1px] text-[color:var(--lp-ac)] uppercase">
-              Funktionen
+              {t("featuresEyebrow")}
             </div>
             <h2 className="font-display max-w-[540px] text-[clamp(30px,5vw,54px)] leading-[1.05] font-bold tracking-[-1.8px] text-[var(--lp-tx)]">
-              Alles, was modernes HR braucht.
+              {t("featuresTitle")}
             </h2>
           </div>
 
@@ -395,10 +392,10 @@ export default function Home() {
         <div className="mx-auto max-w-[1200px]">
           <div className="mb-12 sm:mb-20">
             <div className="mb-4 font-mono text-[10px] tracking-[1px] text-[color:var(--lp-ac)] uppercase">
-              So funktioniert&apos;s
+              {t("howEyebrow")}
             </div>
             <h2 className="font-display text-[clamp(30px,5vw,54px)] leading-[1.05] font-bold tracking-[-1.8px] text-[var(--lp-tx)]">
-              In drei Schritten startklar.
+              {t("howTitle")}
             </h2>
           </div>
 
@@ -435,9 +432,7 @@ export default function Home() {
             &ldquo;
           </div>
           <blockquote className="font-display mb-9 text-[clamp(20px,4vw,30px)] leading-[1.35] font-medium tracking-[-0.6px] text-[var(--lp-tx)]">
-            Ployo hat unsere Schichtplanung von 8 Stunden auf unter 45 Minuten
-            pro Woche reduziert. Ich kann mir ein Arbeiten ohne es nicht mehr
-            vorstellen.
+            {t("testimonialQuote")}
           </blockquote>
           <div className="flex items-center justify-center gap-3.5">
             <div
@@ -449,7 +444,7 @@ export default function Home() {
             <div className="text-left">
               <div className="text-sm font-semibold text-[var(--lp-tx)]">Maria Koch</div>
               <div className="mt-[3px] font-mono text-[11px] text-[color:var(--lp-mu)]">
-                HR-Leitung · Hamburg Altona
+                {t("testimonialRole")}
               </div>
             </div>
           </div>
@@ -463,30 +458,29 @@ export default function Home() {
             <div className="lp-glow-cta pointer-events-none absolute top-1/2 left-1/2 h-[350px] w-[600px] -translate-x-1/2 -translate-y-1/2 rounded-full" />
             <div className="relative z-[1]">
               <div className="mb-5 font-mono text-[10px] tracking-[1px] text-[color:var(--lp-ac)] uppercase">
-                Jetzt starten — kostenlos
+                {t("ctaEyebrow")}
               </div>
               <h2 className="font-display mb-5 text-[clamp(32px,7vw,68px)] leading-[1.0] font-bold tracking-[-2.2px] text-[var(--lp-tx)]">
-                Ihr Team verdient
+                {t("ctaTitle1")}
                 <br />
-                besseres HR.
+                {t("ctaTitle2")}
               </h2>
               <p className="mx-auto mb-11 max-w-[420px] text-base leading-[1.65] text-[var(--lp-tx2)]">
-                14 Tage kostenlos testen. Keine Kreditkarte nötig. Jederzeit
-                kündbar.
+                {t("ctaDescription")}
               </p>
               <div className="flex flex-wrap items-center justify-center gap-3.5">
                 <Link
                   href="/register"
                   className="lp-btn-primary inline-flex items-center gap-2 rounded-xl bg-[color:var(--lp-ac)] px-[30px] py-[15px] text-[15px] font-bold text-black"
                 >
-                  Kostenlos testen
+                  {t("ctaFreeTrial")}
                   <ArrowRight size={14} strokeWidth={2.2} />
                 </Link>
                 <a
                   href="#"
                   className="lp-btn-secondary rounded-xl border border-[color:var(--lp-bd-hi)] px-[30px] py-[15px] text-[15px] font-medium text-[var(--lp-tx2)]"
                 >
-                  Demo buchen
+                  {t("ctaBookDemo")}
                 </a>
               </div>
             </div>
@@ -505,25 +499,25 @@ export default function Home() {
           </div>
           <div className="flex flex-wrap items-center justify-center gap-5 sm:gap-7">
             <Link href="/datenschutz" className="lp-footer-link text-[13px] text-[color:var(--lp-mu)]">
-              Datenschutz
+              {t("footerPrivacy")}
             </Link>
             <Link href="/impressum" className="lp-footer-link text-[13px] text-[color:var(--lp-mu)]">
-              Impressum
+              {t("footerImprint")}
             </Link>
             <Link href="/agb" className="lp-footer-link text-[13px] text-[color:var(--lp-mu)]">
-              AGB
+              {t("footerTerms")}
             </Link>
             <Link href="/konto-loeschung" className="lp-footer-link text-[13px] text-[color:var(--lp-mu)]">
-              Konto löschen
+              {t("footerDeleteAccount")}
             </Link>
             <Link href="/kontakt" className="lp-footer-link text-[13px] text-[color:var(--lp-mu)]">
-              Kontakt
+              {t("footerContact")}
             </Link>
             <CookieSettingsLink className="lp-footer-link text-[13px] text-[color:var(--lp-mu)] cursor-pointer" />
             <LocaleSwitcher />
           </div>
           <span className="font-mono text-[11px] text-[color:var(--lp-mu)]">
-            © {new Date().getFullYear()} Ployo · Made in Germany
+            {t("footerCopyright", { year: new Date().getFullYear() })}
           </span>
         </div>
       </footer>
