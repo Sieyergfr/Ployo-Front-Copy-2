@@ -30,6 +30,7 @@ import {
 import { headers } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
 
 export const metadata = {
   title: "Übersicht",
@@ -104,6 +105,7 @@ function EmptyHint({ children }: { children: React.ReactNode }) {
 }
 
 export default async function DashboardHome({ params }: DashboardHomeProps) {
+  const t = await getTranslations("DashboardHome");
   const { tenant } = await params;
 
   if (await isUnassignedEmployee(tenant)) {
@@ -169,7 +171,7 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
   const shiftConflictCount = shiftPlan?.conflictCount ?? 0;
   const shiftWeekLabel = shiftPlan
     ? `${shiftPlan.label} · ${shiftPlan.range}`
-    : `KW ${week}`;
+    : t("weekLabel", { week });
 
   const tenantName =
     memberships?.find((membership) => membership.tenant.slug === tenant)?.tenant
@@ -259,7 +261,7 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
   const contractCounts = new Map<string, number>();
 
   for (const employee of employeeList) {
-    const label = employee.contract?.trim() || "Ohne Angabe";
+    const label = employee.contract?.trim() || t("noContractInfo");
 
     contractCounts.set(label, (contractCounts.get(label) ?? 0) + 1);
   }
@@ -278,7 +280,11 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
     10,
   );
   const greeting =
-    berlinHour < 11 ? "Guten Morgen" : berlinHour < 18 ? "Guten Tag" : "Guten Abend";
+    berlinHour < 11
+      ? t("greetingMorning")
+      : berlinHour < 18
+        ? t("greetingDay")
+        : t("greetingEvening");
   const firstName = session?.user?.name?.trim().split(/\s+/)[0];
   const dateLabel = new Intl.DateTimeFormat("de-DE", {
     weekday: "long",
@@ -290,24 +296,27 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
 
   const actionItems = [
     {
-      title: "Urlaubsanträge prüfen",
-      detail: `${pendingVacations.length} Anträge warten auf Freigabe`,
+      title: t("actionItem1Title"),
+      detail: t("actionItem1Detail", { count: pendingVacations.length }),
       href: `${baseHref}/urlaub`,
       tone: "bg-warning/10 text-[#7A4E00]",
     },
     ...(shiftsTeamWide
       ? [
           {
-            title: "Schichtkonflikte lösen",
-            detail: `${shiftConflictCount} Konflikte in ${shiftPlan?.label ?? `KW ${week}`}`,
+            title: t("actionItem2Title"),
+            detail: t("actionItem2Detail", {
+              count: shiftConflictCount,
+              week: shiftPlan?.label ?? t("weekLabel", { week }),
+            }),
             href: `${baseHref}/schichtplanung`,
             tone: "bg-danger/10 text-danger",
           },
         ]
       : []),
     {
-      title: "Dringende Erinnerungen",
-      detail: `${urgentReminders.length} Fristen laufen in weniger als 7 Tagen ab`,
+      title: t("actionItem3Title"),
+      detail: t("actionItem3Detail", { count: urgentReminders.length }),
       href: `${baseHref}/erinnerungen`,
       tone: "bg-ink text-white",
     },
@@ -316,55 +325,55 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
   return (
     <>
       <PageHeader
-        eyebrow={`${dateLabel} · KW ${week}`}
+        eyebrow={`${dateLabel} · ${t("weekLabel", { week })}`}
         title={firstName ? `${greeting}, ${firstName}` : greeting}
-        subtitle={`Die wichtigsten HR-Signale für ${tenantName} auf einen Blick.`}
+        subtitle={t("subtitleForTenant", { tenant: tenantName })}
       >
         {canInviteEmployees && (
           <Link href={`${baseHref}/employees`} className="btn btn-primary">
             <UsersRound size={15} />
-            Mitarbeiter
+            {t("employeesNav")}
           </Link>
         )}
         <Link href={`${baseHref}/schichtplanung`} className="btn btn-secondary">
           <Plus size={15} />
-          Schicht planen
+          {t("planShift")}
         </Link>
       </PageHeader>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard
-          label="Mitarbeiter aktiv"
+          label={t("metricEmployeesActiveLabel")}
           value={`${activeEmployees.length}/${employeeTotal}`}
-          change={`${vacationEmployees.length} Urlaub`}
-          caption={`${absentEmployees.length} abwesend`}
+          change={t("metricEmployeesActiveChange", { count: vacationEmployees.length })}
+          caption={t("metricEmployeesActiveCaption", { count: absentEmployees.length })}
         />
         <MetricCard
-          label="Heute im Dienst"
+          label={t("metricOnDutyTodayLabel")}
           value={activeToday}
           trend="neutral"
-          change={`${activeLocations.length} Standorte`}
-          caption="melden Aktivität"
+          change={t("metricOnDutyTodayChange", { count: activeLocations.length })}
+          caption={t("metricOnDutyTodayCaption")}
         />
         <MetricCard
-          label="Offene Anfragen"
+          label={t("metricOpenRequestsLabel")}
           value={pendingVacations.length + urgentReminders.length}
-          change={`${pendingVacations.length} Urlaub`}
-          caption={`${urgentReminders.length} dringend`}
+          change={t("metricOpenRequestsChange", { count: pendingVacations.length })}
+          caption={t("metricOpenRequestsCaption", { count: urgentReminders.length })}
         />
         <MetricCard
-          label="Schicht-Risiken"
+          label={t("metricShiftRisksLabel")}
           value={shiftConflictCount + openShiftCount}
-          change={`${shiftConflictCount} Konflikte`}
-          caption={`${openShiftCount} unbesetzt`}
+          change={t("metricShiftRisksChange", { count: shiftConflictCount })}
+          caption={t("metricShiftRisksCaption", { count: openShiftCount })}
         />
       </div>
 
       <div className="mt-6 grid gap-5 xl:grid-cols-[1.35fr_0.95fr]">
         <div className="flex flex-col gap-5">
           <DashboardCard
-            title="Heute wichtig"
-            meta="Priorisierte Aufgaben für HR und Planung"
+            title={t("cardTodayTitle")}
+            meta={t("cardTodayMeta")}
           >
             <div className="grid gap-3">
               {actionItems.map((item) => (
@@ -394,11 +403,11 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
 
           {shiftPlan && shiftsTeamWide && (
             <DashboardCard
-              title="Schichtlage"
+              title={t("cardShiftSituationTitle")}
               meta={shiftWeekLabel}
               action={
                 <Link href={`${baseHref}/schichtplanung`} className="text-link">
-                  Öffnen
+                  {t("open")}
                 </Link>
               }
             >
@@ -427,10 +436,10 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
                       <div className="min-w-0">
                         <div className="text-[12.5px] font-medium text-ink">
                           {closed
-                            ? "Kein Standort geöffnet"
+                            ? t("closedDayNoLocation")
                             : day.shifts.length === 0
-                              ? "Keine Schichten geplant"
-                              : `${assignedCount} besetzt · ${emptyCount} offen`}
+                              ? t("closedDayNoShifts")
+                              : t("assignedOfOpen", { assigned: assignedCount, empty: emptyCount })}
                         </div>
                         {!closed && (
                           <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-border">
@@ -451,13 +460,13 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
                         )}
                       </div>
                       {closed ? (
-                        <StatusPill>Geschlossen</StatusPill>
+                        <StatusPill>{t("statusClosed")}</StatusPill>
                       ) : hasConflict ? (
-                        <StatusPill>Konflikt</StatusPill>
+                        <StatusPill>{t("statusConflict")}</StatusPill>
                       ) : emptyCount > 0 ? (
-                        <StatusPill>Offen</StatusPill>
+                        <StatusPill>{t("statusOpen")}</StatusPill>
                       ) : (
-                        <StatusPill>Stabil</StatusPill>
+                        <StatusPill>{t("statusStable")}</StatusPill>
                       )}
                     </div>
                   );
@@ -468,16 +477,16 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
 
           {locations && (
             <DashboardCard
-              title="Standorte"
-              meta="Auslastung und offene Positionen heute"
+              title={t("cardLocationsTitle")}
+              meta={t("cardLocationsMeta")}
               action={
                 <Link href={`${baseHref}/standorte`} className="text-link">
-                  Alle Standorte
+                  {t("allLocations")}
                 </Link>
               }
             >
               {locationList.length === 0 ? (
-                <EmptyHint>Noch keine Standorte angelegt.</EmptyHint>
+                <EmptyHint>{t("noLocationsYet")}</EmptyHint>
               ) : (
                 <div className="grid gap-3 md:grid-cols-2">
                   {locationList.slice(0, 4).map((location) => (
@@ -503,7 +512,7 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
                             {location.employeeCount}
                           </div>
                           <div className="font-mono text-[9px] uppercase tracking-[0.06em] text-muted">
-                            Team
+                            {t("teamLabel")}
                           </div>
                         </div>
                         <div>
@@ -511,7 +520,7 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
                             {location.activeToday}
                           </div>
                           <div className="font-mono text-[9px] uppercase tracking-[0.06em] text-muted">
-                            Aktiv
+                            {t("activeLabel")}
                           </div>
                         </div>
                         <div>
@@ -519,7 +528,7 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
                             {location.openPositions}
                           </div>
                           <div className="font-mono text-[9px] uppercase tracking-[0.06em] text-muted">
-                            Offen
+                            {t("statusOpen")}
                           </div>
                         </div>
                       </div>
@@ -533,37 +542,37 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
 
         <div className="flex flex-col gap-5">
           {employeesTeamWide && (
-          <DashboardCard title="Teamstatus" meta="Anwesenheit heute">
+          <DashboardCard title={t("cardTeamStatusTitle")} meta={t("cardTeamStatusMeta")}>
             <div className="grid grid-cols-3 gap-2">
               <div className="rounded-[10px] bg-success/10 p-3">
                 <div className="font-display text-[24px] font-semibold text-success">
                   {activeEmployees.length}
                 </div>
-                <div className="mt-1 text-[11px] text-muted-2">Im Dienst</div>
+                <div className="mt-1 text-[11px] text-muted-2">{t("onDutyLabel")}</div>
               </div>
               <div className="rounded-[10px] bg-border-soft p-3">
                 <div className="font-display text-[24px] font-semibold text-ink">
                   {vacationEmployees.length}
                 </div>
-                <div className="mt-1 text-[11px] text-muted-2">Urlaub</div>
+                <div className="mt-1 text-[11px] text-muted-2">{t("vacationLabel")}</div>
               </div>
               <div className="rounded-[10px] bg-danger/10 p-3">
                 <div className="font-display text-[24px] font-semibold text-danger">
                   {absentEmployees.length}
                 </div>
-                <div className="mt-1 text-[11px] text-muted-2">Abwesend</div>
+                <div className="mt-1 text-[11px] text-muted-2">{t("absentLabel")}</div>
               </div>
             </div>
 
             <div className="mt-4 grid gap-2">
               {employeeTotal === 0 ? (
-                <EmptyHint>Noch keine Mitarbeiter angelegt.</EmptyHint>
+                <EmptyHint>{t("noEmployeesYet")}</EmptyHint>
               ) : vacationEmployees.length + absentEmployees.length === 0 ? (
-                <EmptyHint>Alle Mitarbeiter sind im Dienst.</EmptyHint>
+                <EmptyHint>{t("allOnDuty")}</EmptyHint>
               ) : (
                 [
-                  ...vacationEmployees.map((employee) => ({ employee, label: "Urlaub" })),
-                  ...absentEmployees.map((employee) => ({ employee, label: "Abwesend" })),
+                  ...vacationEmployees.map((employee) => ({ employee, label: t("vacationLabel") })),
+                  ...absentEmployees.map((employee) => ({ employee, label: t("absentLabel") })),
                 ]
                   .slice(0, 5)
                   .map(({ employee, label }) => (
@@ -591,13 +600,13 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
 
           {vacationTeamWide && (
           <DashboardCard
-            title="Abwesenheiten"
-            meta={`${averageVacationRemaining} Tage Ø Resturlaub`}
+            title={t("cardAbsencesTitle")}
+            meta={t("cardAbsencesMeta", { avg: averageVacationRemaining })}
             action={<CalendarCheck size={18} className="text-muted" />}
           >
             <div className="grid gap-3">
               {pendingVacations.length === 0 ? (
-                <EmptyHint>Keine offenen Urlaubsanträge.</EmptyHint>
+                <EmptyHint>{t("noOpenVacationRequests")}</EmptyHint>
               ) : (
                 pendingVacations.slice(0, 4).map((request) => (
                   <div
@@ -613,7 +622,7 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
                         {request.startDate}-{request.endDate} · {request.days}
                       </div>
                     </div>
-                    <StatusPill>Ausstehend</StatusPill>
+                    <StatusPill>{t("statusPending")}</StatusPill>
                   </div>
                 ))
               )}
@@ -623,7 +632,7 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
 
           {sicknessTeamWide && (
           <DashboardCard
-            title="Krankmeldungen"
+            title={t("cardSicknessTitle")}
             meta={sicknessMetrics[1]?.caption}
             action={<Clock3 size={18} className="text-muted" />}
           >
@@ -632,12 +641,12 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
                 {currentSickness.length}
               </div>
               <div className="mt-1 text-[12px] text-muted-2">
-                aktuell krankgemeldet
+                {t("currentlySick")}
               </div>
             </div>
             <div className="grid gap-2">
               {currentSickness.length === 0 ? (
-                <EmptyHint>Keine aktuellen Krankmeldungen.</EmptyHint>
+                <EmptyHint>{t("noCurrentSickness")}</EmptyHint>
               ) : (
                 currentSickness.map((item) => (
                   <div
@@ -650,7 +659,7 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
                         {item.name}
                       </div>
                       <div className="mt-0.5 truncate text-[11.5px] text-muted">
-                        seit {item.since} · {item.days} Tage
+                        {t("sinceDaysLabel", { date: item.since, days: item.days })}
                       </div>
                     </div>
                   </div>
@@ -661,10 +670,10 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
           )}
 
           {employeesTeamWide && (
-          <DashboardCard title="Personalstruktur" meta="Vertragsarten">
+          <DashboardCard title={t("cardStaffStructureTitle")} meta={t("cardStaffStructureMeta")}>
             <div className="grid gap-2">
               {contractDistribution.length === 0 ? (
-                <EmptyHint>Noch keine Mitarbeiter angelegt.</EmptyHint>
+                <EmptyHint>{t("noEmployeesYet")}</EmptyHint>
               ) : (
                 contractDistribution.map(([contract, count]) => {
                   const percent =

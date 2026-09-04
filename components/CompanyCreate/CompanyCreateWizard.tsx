@@ -13,12 +13,17 @@ import { useToast } from "@/components/Toasts";
 import { slugify } from "@/lib/slug";
 import { tenantIndustries, tenantSizes } from "@/lib/tenant-options";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { type ChangeEvent, type CSSProperties, useEffect, useState } from "react";
 
 type PlanId = "starter" | "professional" | "business";
 
 type InviteRow = {
   email: string;
+  // Literale Werte, keine Anzeige-Strings: werden 1:1 als `role` im
+  // Einladungs-Payload an /api/tenants gesendet (siehe <option>s in Schritt
+  // 5) — bewusst nicht übersetzt, sonst würde die EN-Oberfläche einen
+  // anderen Rollenwert speichern als die DE-Oberfläche.
   role: "Admin" | "HR" | "Mitarbeiter";
 };
 
@@ -35,13 +40,17 @@ type Plan = {
 
 type SlugState = "empty" | "checking" | "available" | "taken" | "error";
 
-const countries = [
-  { code: "DE", name: "Deutschland", timezone: "Europe/Berlin" },
-  { code: "AT", name: "Österreich", timezone: "Europe/Vienna" },
-  { code: "CH", name: "Schweiz", timezone: "Europe/Zurich" },
-  { code: "FR", name: "Frankreich", timezone: "Europe/Paris" },
-  { code: "NL", name: "Niederlande", timezone: "Europe/Amsterdam" },
-];
+type T = ReturnType<typeof useTranslations>;
+
+function getCountries(t: T) {
+  return [
+    { code: "DE", name: t("countryGermany"), timezone: "Europe/Berlin" },
+    { code: "AT", name: t("countryAustria"), timezone: "Europe/Vienna" },
+    { code: "CH", name: t("countrySwitzerland"), timezone: "Europe/Zurich" },
+    { code: "FR", name: t("countryFrance"), timezone: "Europe/Paris" },
+    { code: "NL", name: t("countryNetherlands"), timezone: "Europe/Amsterdam" },
+  ];
+}
 
 const timezones = [
   "Europe/Berlin",
@@ -58,98 +67,115 @@ const industries = tenantIndustries;
 
 const colorPresets = ["#0E0E0E", "#2A6FDB", "#357A52", "#B4332A", "#7C3AED", "#D97706"];
 
-const plans: Plan[] = [
-  {
-    id: "starter",
-    name: "Starter",
-    monthlyPrice: 29,
-    included: "Bis zu 5 Mitarbeiter",
-    extra: "Danach Upgrade auf Professional nötig",
-    audience: "Für kleine Unternehmen mit einem Standort.",
-    features: [
-      "1 Standort, bis zu 5 Mitarbeiter",
-      "Digitale Personalakten mit Stammdaten, Vertragsdaten und Dokumenten",
-      "Dateiablage mit Versionierung (10 GB Speicher)",
-      "Urlaubs- und Krankheitsverwaltung inkl. Genehmigungsworkflow",
-      "Erinnerungen für Fristen",
-      "2 Rollen (HR-Leitung, Mitarbeiter)",
-      "E-Mail-Support",
-    ],
-  },
-  {
-    id: "professional",
-    name: "Professional",
-    monthlyPrice: 59,
-    included: "Bis zu 25 Mitarbeiter",
-    extra: "Danach Upgrade auf Business nötig",
-    audience: "Für wachsende Unternehmen mit mehreren Standorten und Teams.",
-    recommended: true,
-    features: [
-      "Unbegrenzte Standorte und Teams",
-      "Alles aus Starter",
-      "Schichtplanung mit Wochenansicht, Vorlagen und Unterbesetzungs-Hinweisen",
-      "Vollständiges Rollen- und Rechtesystem inkl. eigener Rollen",
-      "Gehaltsabrechnungen in der Personalakte",
-      "Erweiterte Dateifreigaben (Rollen-/Mitarbeiterfreigaben, Ablaufdaten)",
-      "Kennzahlen-Dashboard über alle Standorte",
-      "100 GB Speicher",
-      "Prioritäts-Support",
-    ],
-  },
-  {
-    id: "business",
-    name: "Business",
-    monthlyPrice: 99,
-    included: "Bis zu 50 Mitarbeiter",
-    extra: "Höhere Limits auf Anfrage",
-    audience: "Für Unternehmen mit Compliance-Anforderungen und Integrationsbedarf.",
-    features: [
-      "Alles aus Professional",
-      "Audit-Logs für Datei- und Systemaktivitäten",
-      "Integrationen: DATEV, Google Kalender, REST API",
-      "Erzwingbare Zwei-Faktor-Authentifizierung",
-      "Session-Timeout-Richtlinien",
-      "Aufbewahrungsrichtlinien (DSGVO-relevant)",
-      "Unbegrenzter Speicher",
-    ],
-  },
-];
+function getPlans(t: T): Plan[] {
+  return [
+    {
+      id: "starter",
+      name: "Starter",
+      monthlyPrice: 29,
+      included: t("planStarterIncluded"),
+      extra: t("planStarterExtra"),
+      audience: t("planStarterAudience"),
+      features: [
+        t("planStarterFeature1"),
+        t("planStarterFeature2"),
+        t("planStarterFeature3"),
+        t("planStarterFeature4"),
+        t("planStarterFeature5"),
+        t("planStarterFeature6"),
+        t("planStarterFeature7"),
+      ],
+    },
+    {
+      id: "professional",
+      name: "Professional",
+      monthlyPrice: 59,
+      included: t("planProfessionalIncluded"),
+      extra: t("planProfessionalExtra"),
+      audience: t("planProfessionalAudience"),
+      recommended: true,
+      features: [
+        t("planProfessionalFeature1"),
+        t("planProfessionalFeature2"),
+        t("planProfessionalFeature3"),
+        t("planProfessionalFeature4"),
+        t("planProfessionalFeature5"),
+        t("planProfessionalFeature6"),
+        t("planProfessionalFeature7"),
+        t("planProfessionalFeature8"),
+        t("planProfessionalFeature9"),
+      ],
+    },
+    {
+      id: "business",
+      name: "Business",
+      monthlyPrice: 99,
+      included: t("planBusinessIncluded"),
+      extra: t("planBusinessExtra"),
+      audience: t("planBusinessAudience"),
+      features: [
+        t("planBusinessFeature1"),
+        t("planBusinessFeature2"),
+        t("planBusinessFeature3"),
+        t("planBusinessFeature4"),
+        t("planBusinessFeature5"),
+        t("planBusinessFeature6"),
+        t("planBusinessFeature7"),
+      ],
+    },
+  ];
+}
 
-const stepLabels = ["Unternehmen", "Details", "Branding", "Abrechnung", "Team"];
+function getStepLabels(t: T) {
+  return [
+    t("step1Label"),
+    t("step2Label"),
+    t("step3Label"),
+    t("step4Label"),
+    t("step5Label"),
+  ];
+}
 
-const stepCopy = {
-  1: {
-    eyebrow: "Schritt 1 von 5",
-    title: "Unternehmen erstellen",
-    subtitle: "Hier meldet sich Ihr Team später täglich an.",
-  },
-  2: {
-    eyebrow: "Schritt 2 von 5",
-    title: "Details & Kontakt",
-    subtitle: "Ein paar Eckdaten helfen dabei, den Arbeitsbereich vorzubereiten.",
-  },
-  3: {
-    eyebrow: "Schritt 3 von 5 · Optional",
-    title: "Auftritt anpassen",
-    subtitle: "Logo und Farbe können Sie später jederzeit ändern.",
-  },
-  4: {
-    eyebrow: "Schritt 4 von 5",
-    title: "Plan auswählen",
-    subtitle: "Wählen Sie den passenden Umfang für Ihr Unternehmen.",
-  },
-  5: {
-    eyebrow: "Schritt 5 von 5 · Optional",
-    title: "Team einladen",
-    subtitle: "Bringen Sie erste Kolleginnen und Kollegen direkt an Bord.",
-  },
-} satisfies Record<number, { eyebrow: string; title: string; subtitle: string }>;
+function getStepCopy(t: T) {
+  return {
+    1: {
+      eyebrow: t("step1Eyebrow"),
+      title: t("step1Title"),
+      subtitle: t("step1Subtitle"),
+    },
+    2: {
+      eyebrow: t("step2Eyebrow"),
+      title: t("step2Title"),
+      subtitle: t("step2Subtitle"),
+    },
+    3: {
+      eyebrow: t("step3Eyebrow"),
+      title: t("step3Title"),
+      subtitle: t("step3Subtitle"),
+    },
+    4: {
+      eyebrow: t("step4Eyebrow"),
+      title: t("step4Title"),
+      subtitle: t("step4Subtitle"),
+    },
+    5: {
+      eyebrow: t("step5Eyebrow"),
+      title: t("step5Title"),
+      subtitle: t("step5Subtitle"),
+    },
+  } satisfies Record<number, { eyebrow: string; title: string; subtitle: string }>;
+}
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
 
 export default function CompanyCreateWizard() {
+  const t = useTranslations("CompanyCreateWizard");
+  const countries = getCountries(t);
+  const plans = getPlans(t);
+  const stepLabels = getStepLabels(t);
+  const stepCopy = getStepCopy(t);
   const { toast } = useToast();
   const [step, setStep] = useState(1);
   const [name, setName] = useState("");
@@ -177,7 +203,7 @@ export default function CompanyCreateWizard() {
 
   const baseSlug = customSlug || slugify(name);
   const showSlugStatus = slugState !== "empty";
-  const companyName = name.trim() || "Muster GmbH";
+  const companyName = name.trim() || t("companyNamePlaceholder");
   const currentCopy = stepCopy[step as keyof typeof stepCopy];
   const blocked = step === 1 && slugState !== "available";
   const canSkip = step >= 3 && step <= 5;
@@ -231,8 +257,8 @@ export default function CompanyCreateWizard() {
       main: `${formatEuro(monthlyEquivalent)} €`,
       detail:
         billingCycle === "yearly"
-          ? `${formatEuro(yearlyTotal)} € jährlich abgerechnet`
-          : "monatlich abgerechnet",
+          ? t("billedYearly", { amount: formatEuro(yearlyTotal) })
+          : t("billedMonthly"),
     };
   }
 
@@ -251,8 +277,8 @@ export default function CompanyCreateWizard() {
     if (file.size > MAX_LOGO_FILE_BYTES) {
       toast({
         tone: "error",
-        title: "Logo zu groß",
-        subtitle: "Bitte ein Bild unter 180 KB verwenden.",
+        title: t("logoTooLargeTitle"),
+        subtitle: t("logoTooLargeSubtitle"),
       });
       event.target.value = "";
       return;
@@ -317,15 +343,15 @@ export default function CompanyCreateWizard() {
     } | null;
 
     if (!response.ok) {
-      const message = data?.error ?? "Unternehmen konnte nicht erstellt werden.";
+      const message = data?.error ?? t("createFailedDefault");
       setCreating(false);
       setCreateError(message);
       toast({
         tone: "error",
         title:
           response.status === 409
-            ? "URL bereits vergeben"
-            : "Unternehmen konnte nicht erstellt werden",
+            ? t("slugTakenTitle")
+            : t("createFailedTitle"),
         subtitle: message,
       });
 
@@ -341,8 +367,8 @@ export default function CompanyCreateWizard() {
     setCreating(false);
     toast({
       tone: "success",
-      title: "Unternehmen erstellt",
-      subtitle: `${companyName} ist jetzt bereit.`,
+      title: t("createdTitle"),
+      subtitle: t("createdSubtitle", { company: companyName }),
     });
     setDone(true);
   }
@@ -368,10 +394,10 @@ export default function CompanyCreateWizard() {
 
         <div className="text-center [animation:fadeup_.5s_ease_.3s_both]">
           <h1 className="m-0 mb-2 font-display text-[30px] font-semibold tracking-[-1px] text-ink">
-            {companyName} ist bereit!
+            {t("doneTitle", { company: companyName })}
           </h1>
           <p className="m-0 text-[14px] text-muted-2">
-            Ihr Arbeitsbereich ist eingerichtet. So holen Sie das Beste aus Ployo heraus.
+            {t("doneSubtitle")}
           </p>
           <div className="mt-3.5 inline-flex items-center gap-[7px] rounded-full border border-border bg-white px-[13px] py-1.5">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -384,7 +410,7 @@ export default function CompanyCreateWizard() {
               />
             </svg>
             <span className="font-mono text-[11.5px] text-muted-2">
-              app.ployo.de/{tenantSlug || "muster-gmbh"}
+              app.ployo.de/{tenantSlug || t("companySlugPlaceholder")}
             </span>
           </div>
         </div>
@@ -392,24 +418,24 @@ export default function CompanyCreateWizard() {
         <div className="mt-[30px] w-full overflow-hidden rounded-2xl border border-border bg-white shadow-[0_4px_24px_rgba(0,0,0,0.05)] [animation:fadeup_.5s_ease_.42s_both]">
           <div className="border-b border-border-soft px-5 pt-4 pb-[13px]">
             <div className="font-mono text-[9.5px] uppercase tracking-[0.06em] text-muted">
-              Loslegen · 3 Schritte
+              {t("gettingStartedEyebrow")}
             </div>
           </div>
           {[
             {
               icon: "+",
-              title: "Ersten Mitarbeiter anlegen",
-              desc: "Erstellen Sie ein Profil und starten Sie die digitale Personalakte.",
+              title: t("onboarding1Title"),
+              desc: t("onboarding1Desc"),
             },
             {
               icon: "*",
-              title: "Urlaubsregeln einrichten",
-              desc: "Definieren Sie Ansprüche, Feiertage und Genehmigungen.",
+              title: t("onboarding2Title"),
+              desc: t("onboarding2Desc"),
             },
             {
               icon: "▦",
-              title: "Standorte und Teams erstellen",
-              desc: "Organisieren Sie Ihr Unternehmen in einer klaren Struktur.",
+              title: t("onboarding3Title"),
+              desc: t("onboarding3Desc"),
             },
           ].map((item) => (
             <div
@@ -446,10 +472,10 @@ export default function CompanyCreateWizard() {
         </div>
 
         <Link
-          href={`/u/${tenantSlug || "muster-gmbh"}`}
+          href={`/u/${tenantSlug || t("companySlugPlaceholder")}`}
           className="mt-5 flex w-full cursor-pointer items-center justify-center gap-2 rounded-[11px] bg-ink px-[18px] py-3.5 text-[14.5px] font-semibold text-white no-underline transition-colors hover:bg-ink-hover active:translate-y-px [animation:fadeup_.5s_ease_.54s_both]"
         >
-          Zum Dashboard
+          {t("goToDashboard")}
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path
               d="M5 12h14M13 6l6 6-6 6"
@@ -542,13 +568,13 @@ export default function CompanyCreateWizard() {
             {step === 1 && (
               <div className="flex flex-col gap-2">
                 <label htmlFor="company-name" className="label">
-                  Unternehmensname *
+                  {t("companyNameLabel")}
                 </label>
                 <input
                   id="company-name"
                   autoFocus
                   className="w-full rounded-[11px] border border-border-light bg-white px-[15px] py-[13px] text-[15px] text-ink outline-none transition-colors placeholder:text-muted focus:border-ink"
-                  placeholder="z. B. Acme GmbH"
+                  placeholder={t("companyNamePlaceholderInput")}
                   value={name}
                   onChange={(event) => {
                     const nextName = event.target.value;
@@ -579,7 +605,7 @@ export default function CompanyCreateWizard() {
                     <div className="break-all font-mono text-[14px] text-ink">
                       app.ployo.de/
                       <span className="font-medium">
-                        {baseSlug || "ihr-unternehmen"}
+                        {baseSlug || t("yourCompanySlugPlaceholder")}
                       </span>
                     </div>
                     {showSlugStatus && (
@@ -611,9 +637,9 @@ export default function CompanyCreateWizard() {
 
                   {editingSlug && (
                     <input
-                      aria-label="Arbeitsbereich-URL anpassen"
+                      aria-label={t("adjustWorkspaceUrlAria")}
                       className="mt-3 w-full rounded-[10px] border border-border-light bg-white px-3 py-2.5 font-mono text-[13px] text-ink outline-none transition-colors placeholder:text-muted focus:border-ink"
-                      placeholder={slugify(name) || "muster-gmbh"}
+                      placeholder={slugify(name) || t("companySlugPlaceholder")}
                       value={customSlug}
                       onChange={(event) => {
                         const nextSlug = slugify(event.target.value);
@@ -632,7 +658,7 @@ export default function CompanyCreateWizard() {
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="field">
                     <label htmlFor="country" className="label">
-                      Land
+                      {t("countryLabel")}
                     </label>
                     <select
                       id="country"
@@ -653,7 +679,7 @@ export default function CompanyCreateWizard() {
                   </div>
                   <div className="field">
                     <label htmlFor="timezone" className="label">
-                      Zeitzone
+                      {t("timezoneLabel")}
                     </label>
                     <select
                       id="timezone"
@@ -671,7 +697,7 @@ export default function CompanyCreateWizard() {
                 </div>
 
                 <div className="field">
-                  <span className="label">Unternehmensgröße</span>
+                  <span className="label">{t("companySizeLabel")}</span>
                   <div className="flex flex-wrap gap-2">
                     {sizes.map((item) => (
                       <button
@@ -694,7 +720,7 @@ export default function CompanyCreateWizard() {
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="field">
                     <label htmlFor="industry" className="label">
-                      Branche
+                      {t("industryLabel")}
                     </label>
                     <select
                       id="industry"
@@ -702,7 +728,7 @@ export default function CompanyCreateWizard() {
                       value={industry}
                       onChange={(event) => setIndustry(event.target.value)}
                     >
-                      <option value="">Bitte auswählen</option>
+                      <option value="">{t("pleaseSelect")}</option>
                       {industries.map((item) => (
                         <option key={item} value={item}>
                           {item}
@@ -712,13 +738,13 @@ export default function CompanyCreateWizard() {
                   </div>
                   <div className="field">
                     <label htmlFor="contact-email" className="label">
-                      Kontakt-E-Mail
+                      {t("contactEmailLabel")}
                     </label>
                     <input
                       id="contact-email"
                       type="email"
                       className="input bg-white"
-                      placeholder="hr@unternehmen.de"
+                      placeholder={t("contactEmailPlaceholder")}
                       value={contactEmail}
                       onChange={(event) => setContactEmail(event.target.value)}
                     />
@@ -745,21 +771,21 @@ export default function CompanyCreateWizard() {
                   </span>
                   <span className="mt-1 inline-flex items-center gap-2 text-[13.5px] font-semibold text-ink">
                     <ImagePlus size={15} />
-                    Logo hochladen
+                    {t("uploadLogo")}
                   </span>
-                  <span className="text-[12.5px] text-muted">PNG, JPG oder SVG</span>
+                  <span className="text-[12.5px] text-muted">{t("logoFormatHint")}</span>
                   <input type="file" accept="image/*" className="sr-only" onChange={readLogo} />
                 </label>
 
                 <div className="field">
-                  <span className="label">Primärfarbe</span>
+                  <span className="label">{t("primaryColorLabel")}</span>
                   <div className="flex flex-wrap items-center gap-2">
                     {colorPresets.map((color) => (
                       <button
                         key={color}
                         type="button"
                         title={color}
-                        aria-label={`Farbe ${color}`}
+                        aria-label={t("colorAria", { color })}
                         className={cx(
                           "size-[38px] cursor-pointer rounded-[10px] border-2 bg-[var(--swatch)] shadow-[inset_0_0_0_1px_rgba(0,0,0,0.06)]",
                           primaryColor.toLowerCase() === color.toLowerCase()
@@ -771,7 +797,7 @@ export default function CompanyCreateWizard() {
                       />
                     ))}
                     <input
-                      aria-label="Hex-Farbe"
+                      aria-label={t("hexColorAria")}
                       className="input input-mono max-w-[130px] bg-white"
                       value={primaryColor}
                       onChange={(event) => setPrimaryColor(event.target.value)}
@@ -780,7 +806,7 @@ export default function CompanyCreateWizard() {
                 </div>
 
                 <div className="flex flex-col gap-[9px]">
-                  <span className="label">Live-Vorschau</span>
+                  <span className="label">{t("livePreviewLabel")}</span>
                   <div className="flex h-[158px] overflow-hidden rounded-[14px] border border-border bg-white">
                     <div
                       className="flex w-16 shrink-0 flex-col items-center gap-3.5 bg-[var(--swatch)] px-0 py-[13px]"
@@ -827,7 +853,7 @@ export default function CompanyCreateWizard() {
                           className="mt-auto w-fit rounded-[7px] bg-[var(--swatch)] px-[11px] py-[5px] text-[10.5px] font-semibold text-white"
                           style={{ "--swatch": primaryColor } as CSSProperties}
                         >
-                          Primäre Aktion
+                          {t("primaryActionPreview")}
                         </div>
                       </div>
                     </div>
@@ -849,7 +875,7 @@ export default function CompanyCreateWizard() {
                     )}
                     onClick={() => setBillingCycle("monthly")}
                   >
-                    Monat
+                    {t("billingMonthly")}
                   </button>
                   <button
                     type="button"
@@ -861,7 +887,7 @@ export default function CompanyCreateWizard() {
                     )}
                     onClick={() => setBillingCycle("yearly")}
                   >
-                    Jahr · -20%
+                    {t("billingYearly")}
                   </button>
                 </div>
 
@@ -889,7 +915,7 @@ export default function CompanyCreateWizard() {
                             </div>
                             {item.recommended && (
                               <span className="rounded-[7px] bg-ink px-2 py-1 font-mono text-[9px] font-semibold uppercase tracking-[0.06em] text-white">
-                                Kernplan
+                                {t("coreplanBadge")}
                               </span>
                             )}
                           </div>
@@ -911,7 +937,7 @@ export default function CompanyCreateWizard() {
                         <span className="font-display text-[28px] font-semibold leading-none text-ink">
                           {price.main}
                         </span>
-                        <span className="text-[12.5px] text-muted-2">/Monat</span>
+                        <span className="text-[12.5px] text-muted-2">{t("perMonth")}</span>
                         {billingCycle === "yearly" && (
                           <span className="rounded-[7px] bg-success/10 px-2 py-1 font-mono text-[9px] font-semibold uppercase tracking-[0.06em] text-success">
                             -20%
@@ -944,7 +970,7 @@ export default function CompanyCreateWizard() {
                   <div key={index} className="grid gap-2.5 rounded-[12px] border border-border-light bg-bg p-3 sm:grid-cols-[1fr_145px]">
                     <div className="field">
                       <label htmlFor={`invite-${index}`} className="label">
-                        E-Mail
+                        {t("emailLabel")}
                       </label>
                       <div className="input-wrapper">
                         <Mail size={14} className="input-icon-left" />
@@ -952,7 +978,7 @@ export default function CompanyCreateWizard() {
                           id={`invite-${index}`}
                           type="email"
                           className="input input-with-icon-left bg-white"
-                          placeholder="name@unternehmen.de"
+                          placeholder={t("invitePlaceholder")}
                           value={row.email}
                           onChange={(event) => setEmailRow(index, "email", event.target.value)}
                         />
@@ -960,7 +986,7 @@ export default function CompanyCreateWizard() {
                     </div>
                     <div className="field">
                       <label htmlFor={`invite-role-${index}`} className="label">
-                        Rolle
+                        {t("roleLabel")}
                       </label>
                       <select
                         id={`invite-role-${index}`}
@@ -968,6 +994,9 @@ export default function CompanyCreateWizard() {
                         value={row.role}
                         onChange={(event) => setEmailRow(index, "role", event.target.value)}
                       >
+                        {/* Bewusst nicht übersetzt: der Options-Text IST der
+                            gesendete `role`-Wert (kein separates `value`),
+                            siehe InviteRow-Typ oben. */}
                         <option>Admin</option>
                         <option>HR</option>
                         <option>Mitarbeiter</option>
@@ -986,10 +1015,10 @@ export default function CompanyCreateWizard() {
                   }
                 >
                   <Plus size={15} />
-                  Weitere Einladung
+                  {t("addAnotherInvite")}
                 </button>
                 <div className="rounded-[12px] border border-border bg-bg px-4 py-3 text-[12.5px] leading-5 text-muted-2">
-                  Kein Stress: Weitere Personen können Sie später in den Einstellungen einladen.
+                  {t("inviteLaterHint")}
                 </div>
               </div>
             )}
@@ -1012,7 +1041,7 @@ export default function CompanyCreateWizard() {
               )}
               onClick={() => setStep((current) => Math.max(1, current - 1))}
             >
-              ← Zurück
+              {t("back")}
             </button>
 
             <div className="flex items-center gap-3.5">
@@ -1023,7 +1052,7 @@ export default function CompanyCreateWizard() {
                   onClick={goNext}
                   disabled={creating}
                 >
-                  Überspringen
+                  {t("skip")}
                 </button>
               )}
               <button
@@ -1039,9 +1068,9 @@ export default function CompanyCreateWizard() {
                 {creating ? (
                   <Loader2 size={15} className="animate-spin" />
                 ) : step === 5 ? (
-                  "Unternehmen erstellen"
+                  t("createCompany")
                 ) : (
-                  "Weiter →"
+                  t("next")
                 )}
               </button>
             </div>
@@ -1051,7 +1080,7 @@ export default function CompanyCreateWizard() {
 
       <div className="mt-[18px] text-center">
         <Link href="/select" className="text-[12.5px] text-muted no-underline transition-colors hover:text-ink">
-          ← Zurück zur Unternehmensauswahl
+          {t("backToCompanySelection")}
         </Link>
       </div>
     </div>

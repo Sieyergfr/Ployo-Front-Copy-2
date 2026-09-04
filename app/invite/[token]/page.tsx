@@ -12,6 +12,7 @@ import {
 } from "@/lib/invitation-service";
 import { headers } from "next/headers";
 import Link from "next/link";
+import { getTranslations } from "next-intl/server";
 import {
   acceptInvitationAction,
   loginAndAcceptInvitationAction,
@@ -22,23 +23,23 @@ export const metadata = {
   title: "Einladung",
 };
 
-const errorMessages: Record<string, string> = {
-  email_mismatch:
-    "Diese Einladung wurde für eine andere E-Mail-Adresse ausgestellt. Bitte melden Sie sich mit dem passenden Konto an.",
-  expired: "Diese Einladung ist abgelaufen. Bitte fordern Sie eine neue an.",
-  already_accepted: "Diese Einladung wurde bereits angenommen.",
-  not_found: "Diese Einladung existiert nicht mehr.",
-  invalid_password: "Das Passwort ist nicht korrekt. Bitte erneut versuchen.",
-  user_exists:
-    "Für diese E-Mail-Adresse existiert bereits ein Konto. Bitte geben Sie Ihr Passwort ein.",
-  password_mismatch: "Die Passwörter stimmen nicht überein.",
-  password_too_short: "Das Passwort muss mindestens 12 Zeichen lang sein.",
-  signup_failed:
-    "Das Konto konnte nicht erstellt werden. Bitte versuchen Sie es erneut.",
-  terms_required: "Bitte akzeptieren Sie die Nutzungsbedingungen.",
-  signin_failed:
-    "Das Konto wurde erstellt, die Anmeldung schlug jedoch fehl. Bitte melden Sie sich über die Anmeldeseite an.",
-};
+type T = Awaited<ReturnType<typeof getTranslations>>;
+
+function getErrorMessages(t: T): Record<string, string> {
+  return {
+    email_mismatch: t("errorEmailMismatch"),
+    expired: t("errorExpired"),
+    already_accepted: t("errorAlreadyAccepted"),
+    not_found: t("errorNotFound"),
+    invalid_password: t("errorInvalidPassword"),
+    user_exists: t("errorUserExists"),
+    password_mismatch: t("errorPasswordMismatch"),
+    password_too_short: t("errorPasswordTooShort"),
+    signup_failed: t("errorSignupFailed"),
+    terms_required: t("errorTermsRequired"),
+    signin_failed: t("errorSigninFailed"),
+  };
+}
 
 export default async function InvitePage({
   params,
@@ -47,6 +48,7 @@ export default async function InvitePage({
   params: Promise<{ token: string }>;
   searchParams: Promise<{ fehler?: string }>;
 }) {
+  const t = await getTranslations("InvitePage");
   const { token } = await params;
   const { fehler } = await searchParams;
   const invitation = await getInvitationByToken(token);
@@ -59,6 +61,7 @@ export default async function InvitePage({
       ? await hasAccountForEmail(invitation.email)
       : false;
 
+  const errorMessages = getErrorMessages(t);
   const errorBox =
     fehler && errorMessages[fehler] ? (
       <p className="mt-3 rounded-[10px] border border-danger/20 bg-danger/5 px-3 py-2 text-[12.5px] text-danger">
@@ -74,36 +77,36 @@ export default async function InvitePage({
           {!invitation ? (
             <>
               <CardHeader
-                title="Einladung nicht gefunden"
-                subtitle="Der Einladungslink ist ungültig oder wurde zurückgezogen."
+                title={t("notFoundTitle")}
+                subtitle={t("notFoundSubtitle")}
               />
               <Link href="/login" className="btn btn-secondary mt-4 justify-center">
-                Zur Anmeldung
+                {t("goToLogin")}
               </Link>
             </>
           ) : invitation.status !== "PENDING" ? (
             <>
               <CardHeader
-                title="Einladung bereits verwendet"
-                subtitle={`Die Einladung zu „${invitation.tenantName}“ wurde bereits angenommen.`}
+                title={t("alreadyUsedTitle")}
+                subtitle={t("alreadyUsedSubtitle", { tenant: invitation.tenantName })}
               />
               <Link href="/select" className="btn btn-secondary mt-4 justify-center">
-                Zur Unternehmensauswahl
+                {t("goToCompanySelection")}
               </Link>
             </>
           ) : invitation.expired ? (
             <>
               <CardHeader
-                title="Einladung abgelaufen"
-                subtitle={`Die Einladung zu „${invitation.tenantName}“ ist abgelaufen. Bitte lassen Sie sich neu einladen.`}
+                title={t("expiredTitle")}
+                subtitle={t("expiredSubtitle", { tenant: invitation.tenantName })}
               />
             </>
           ) : !session?.user ? (
             accountExists ? (
               <>
                 <CardHeader
-                  title={`Einladung zu ${invitation.tenantName}`}
-                  subtitle="Für diese E-Mail-Adresse existiert bereits ein Konto. Geben Sie Ihr Passwort ein, um die Einladung anzunehmen."
+                  title={t("inviteToTenant", { tenant: invitation.tenantName })}
+                  subtitle={t("accountExistsSubtitle")}
                 />
                 {errorBox}
                 <form
@@ -113,34 +116,34 @@ export default async function InvitePage({
                   <input type="hidden" name="token" value={token} />
                   <TextInput
                     id="invite-email"
-                    label="E-Mail"
+                    label={t("emailLabel")}
                     type="email"
                     defaultValue={invitation.email}
                     disabled
                   />
                   <PasswordInput
                     id="password"
-                    label="Passwort"
+                    label={t("passwordLabel")}
                     placeholder="password"
                     autoComplete="current-password"
                     required
                   />
                   <PrimaryButton type="submit">
-                    Anmelden & Einladung annehmen
+                    {t("loginAndAccept")}
                   </PrimaryButton>
                 </form>
                 <Link
                   href="/forgot-password"
                   className="mt-3 block text-center text-[12.5px] font-medium text-muted underline underline-offset-2"
                 >
-                  Passwort vergessen?
+                  {t("forgotPassword")}
                 </Link>
               </>
             ) : (
               <>
                 <CardHeader
-                  title={`Einladung zu ${invitation.tenantName}`}
-                  subtitle="Erstellen Sie ein Konto, um die Einladung anzunehmen. Die E-Mail-Adresse ist durch die Einladung bereits bestätigt."
+                  title={t("inviteToTenant", { tenant: invitation.tenantName })}
+                  subtitle={t("createAccountSubtitle")}
                 />
                 {errorBox}
                 <form
@@ -150,7 +153,7 @@ export default async function InvitePage({
                   <input type="hidden" name="token" value={token} />
                   <TextInput
                     id="invite-email"
-                    label="E-Mail"
+                    label={t("emailLabel")}
                     type="email"
                     defaultValue={invitation.email}
                     disabled
@@ -159,16 +162,16 @@ export default async function InvitePage({
                     <TextInput
                       id="firstName"
                       type="text"
-                      label="Vorname"
-                      placeholder="Anna"
+                      label={t("firstName")}
+                      placeholder={t("firstNamePlaceholder")}
                       autoComplete="given-name"
                       required
                     />
                     <TextInput
                       id="lastName"
                       type="text"
-                      label="Nachname"
-                      placeholder="Müller"
+                      label={t("lastName")}
+                      placeholder={t("lastNamePlaceholder")}
                       autoComplete="family-name"
                       required
                     />
@@ -176,7 +179,7 @@ export default async function InvitePage({
                   <PasswordInput
                     showStrength
                     id="password"
-                    label="Passwort"
+                    label={t("passwordLabel")}
                     placeholder="password"
                     autoComplete="new-password"
                     minLength={12}
@@ -184,25 +187,28 @@ export default async function InvitePage({
                   />
                   <PasswordInput
                     id="password_repeat"
-                    label="Passwort wiederholen"
+                    label={t("repeatPassword")}
                     placeholder="password"
                     autoComplete="new-password"
                     minLength={12}
                     required
                   />
                   <Checkbox id="terms" alignItems="start">
-                    Ich stimme den{" "}
-                    <Link href="/agb" className="text-ink underline underline-offset-2">
-                      Nutzungsbedingungen
-                    </Link>{" "}
-                    und der{" "}
-                    <Link href="/datenschutz" className="text-ink underline underline-offset-2">
-                      Datenschutzerklärung
-                    </Link>{" "}
-                    zu.
+                    {t.rich("termsAgreement", {
+                      terms: (chunks) => (
+                        <Link href="/agb" className="text-ink underline underline-offset-2">
+                          {chunks}
+                        </Link>
+                      ),
+                      privacy: (chunks) => (
+                        <Link href="/datenschutz" className="text-ink underline underline-offset-2">
+                          {chunks}
+                        </Link>
+                      ),
+                    })}
                   </Checkbox>
                   <PrimaryButton type="submit">
-                    Konto erstellen & beitreten
+                    {t("createAccountAndJoin")}
                   </PrimaryButton>
                 </form>
               </>
@@ -210,20 +216,20 @@ export default async function InvitePage({
           ) : (
             <>
               <CardHeader
-                title={`Einladung zu ${invitation.tenantName}`}
-                subtitle={`Angemeldet als ${session.user.email}. Mit dem Beitritt erhalten Sie Zugriff auf den Arbeitsbereich.`}
+                title={t("inviteToTenant", { tenant: invitation.tenantName })}
+                subtitle={t("loggedInAs", { email: session.user.email })}
               />
               {errorBox}
               <form action={acceptInvitationAction} className="mt-4 flex flex-col gap-2">
                 <input type="hidden" name="token" value={token} />
-                <PrimaryButton type="submit">Einladung annehmen</PrimaryButton>
+                <PrimaryButton type="submit">{t("acceptInvite")}</PrimaryButton>
               </form>
               <form action="/logout" method="post" className="mt-2">
                 <button
                   type="submit"
                   className="w-full text-center text-[12.5px] font-medium text-muted underline underline-offset-2"
                 >
-                  Mit anderem Konto anmelden
+                  {t("signInDifferentAccount")}
                 </button>
               </form>
             </>

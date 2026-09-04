@@ -133,6 +133,14 @@ Dabei ein **Korrektheits-Fund aus Punkt 4 nachträglich behoben**: `CreateRemind
 
 Damit sind alle 7 Punkte der ursprünglichen Wiedereinstiegsliste abgearbeitet. Die verbleibenden ~45 Dateien sind nicht mehr in einer nummerierten Liste erfasst — sie kamen im Lauf der Sitzung als Fund dazu (z. B. `mein-bereich`-Zulieferer, `ActionDrawers.tsx`-Nachbarn) oder wurden im ursprünglichen Plan nie einzeln benannt. Für den nächsten Wiedereinstieg: `grep -rL "useTranslations\|getTranslations" --include=*.tsx app components` (grob) liefert eine Startliste noch unangetasteter Dateien.
 
+**Nach Punkt 7 fortgesetzt (2026-09-04, noch nicht committet):** Bestandsaufnahme der ~75 Dateien ohne next-intl ergab eine klare Rangfolge nach Menge deutscher Strings. Die drei größten/wichtigsten zuerst erledigt:
+
+- **`app/(dashboard)/u/[tenant]/page.tsx`** (Tenant-Dashboard, Namespace `DashboardHome`, ~65 Keys): Begrüßung nach Tageszeit, alle Karten (Heute wichtig, Schichtlage, Standorte, Teamstatus, Abwesenheiten, Krankmeldungen, Personalstruktur), Status-Pills. `sicknessMetrics[1]?.caption` bleibt unangetastet (kommt aus der dokumentierten `lib/sickness.ts`-API-Vertrags-Ausnahme). Locale-Formatierung von Datum/Uhrzeit (`Intl.DateTimeFormat("de-DE", ...)`) bewusst nicht angefasst — gleiche, bereits dokumentierte Ausnahme wie bei `formatPublishedAt()` in `ShiftPlanningClient.tsx`.
+- **`app/invite/[token]/page.tsx`** (Einladungs-Flow, Namespace `InvitePage`, 41 Keys): alle Fehlermeldungen (`errorMessages`-Record → `getErrorMessages(t)`), alle Formular-Schritte. Platzhalter-Beispielnamen "Anna"/"Müller" → "Jane"/"Doe" für EN mitübersetzt.
+- **`components/CompanyCreate/CompanyCreateWizard.tsx`** (Firmenanlage-Assistent, 1059 Zeilen, Namespace `CompanyCreateWizard`, 111 Keys — größte Einzeldatei bisher): alle 5 Wizard-Schritte, alle 3 Preispläne (Starter/Professional/Business) inkl. 23 Feature-Bullets, Erfolgs-Bildschirm. Bewusst **nicht** übersetzt: `InviteRow.role`-Werte ("Admin"/"HR"/"Mitarbeiter") und die zugehörigen `<option>`-Texte — der Options-Text selbst ist der gesendete API-Wert (kein separates `value`-Attribut), gleiche Kategorie wie die `CreateReminderButton.tsx`-„Allgemein"-Lehre aus Punkt 4. IANA-Zeitzonen-Strings, Plan-Markennamen (Starter/Professional/Business, bereits englische Marketing-Begriffe) und drei bereits im Original englische UI-Fragmente ("Your workspace URL", "Edit", "Checking"/"Available"/"Not available") ebenfalls unangetastet gelassen — letztere drei sind vorbestehende bewusste Bilingual-Stellen, keine i18n-Lücke dieser Sitzung.
+
+DE/EN-Parität nach jeder Datei geprüft (0 fehlende Keys), `tsc --noEmit`/`eslint`/volle Testsuite (138/138)/Probe-Build nach dem Dreier-Batch grün.
+
 Am Ende: das `disclaimer` in `AccountPreferences` ("Sprache wirkt sich bereits auf diesen Bereich aus — Rest folgt schrittweise") aktualisieren/entfernen, sobald wirklich alles übersetzt ist.
 
 ## 🗒️ Sonstiges
