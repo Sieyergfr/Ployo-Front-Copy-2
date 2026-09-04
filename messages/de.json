@@ -1936,6 +1936,76 @@
   "CompanyListItem": {
     "defaultIndustry": "Unternehmen"
   },
+  "AccountDeletionPage": {
+    "scheduledTitle": "Löschung Ihres Kontos vorgemerkt",
+    "scheduledBody": "Ihr Konto ist zur Löschung vorgemerkt und wird am <bold>{date}</bold> endgültig gelöscht{daysSuffix}. Bis dahin können Sie die Löschung abbrechen und Ihr Konto wieder normal nutzen.",
+    "daysLeftSuffix": " (noch {days} Tage)",
+    "cancelDeletionTitle": "Löschung abbrechen?",
+    "cancelDeletionConfirm": "Ja, Löschung abbrechen",
+    "cancelDeletionDescription": "Ihr Konto wird reaktiviert und die geplante Löschung entfällt.",
+    "cancelDeletion": "Löschung abbrechen",
+    "signOut": "Abmelden",
+    "graceNote": "Schutzfrist: {days} Tage ab Anfrage.",
+    "deleteAccountTitle": "Ployo-Konto löschen",
+    "deleteAccountIntro": "Geben Sie die E-Mail-Adresse Ihres Ployo-Kontos ein. Existiert dazu ein Konto, erhalten Sie einen 15 Minuten gültigen Link. Nach Bestätigung werden Ihre Zugangsdaten, aktive Sitzungen, Social-Login-Verknüpfungen (Apple/Google) und Push-Token unwiderruflich gelöscht.",
+    "deleteAccountNote": "Personal-, Beschäftigungs- und Gehaltsdaten, die Ihr Arbeitgeber gesetzlich aufbewahren muss, sind davon nicht betroffen und bleiben bei ihm gespeichert.",
+    "backToLogin": "Zurück zur Anmeldung"
+  },
+  "AccountDeletionConfirmPage": {
+    "invalidLinkTitle": "Link ungültig oder abgelaufen",
+    "invalidLinkBody": "Dieser Bestätigungslink ist nicht mehr gültig (nach 15 Minuten oder einmaliger Nutzung). Bitte die Löschung erneut anfordern.",
+    "requestAgain": "Löschung erneut anfordern",
+    "confirmDeleteTitle": "Konto endgültig löschen?",
+    "confirmDeleteBody": "Mit Bestätigung werden Ihre Zugangsdaten, aktive Sitzungen, Social-Login-Verknüpfungen (Apple/Google) und Push-Token sofort und unwiderruflich gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.",
+    "confirmDeleteNote": "Personal-, Beschäftigungs- und Gehaltsdaten, die Ihr Arbeitgeber gesetzlich aufbewahren muss, bleiben davon unberührt."
+  },
+  "ErrorPage": {
+    "unauthorized": "Bitte melden Sie sich an, um fortzufahren.",
+    "forbidden": "Sie haben keine Berechtigung für diese Aktion.",
+    "unexpectedError": "Es ist ein unerwarteter Fehler aufgetreten. Bitte versuchen Sie es erneut.",
+    "somethingWrong": "Etwas ist schiefgelaufen",
+    "errorId": "Fehler-ID: {digest}",
+    "tryAgain": "Erneut versuchen",
+    "goHome": "Zur Startseite"
+  },
+  "TenantErrorBoundary": {
+    "somethingWrong": "Etwas ist schiefgelaufen",
+    "unexpectedError": "Es ist ein unerwarteter Fehler aufgetreten. Bitte versuchen Sie es erneut.",
+    "errorId": "Fehler-ID: {digest}",
+    "tryAgain": "Erneut versuchen",
+    "goToOverview": "Zur Übersicht"
+  },
+  "NotFound": {
+    "title": "Seite nicht gefunden",
+    "body": "Die angeforderte Seite existiert nicht oder wurde verschoben.",
+    "goHome": "Zur Startseite"
+  },
+  "DashboardLayout": {
+    "roleOwner": "Inhaber",
+    "roleAdmin": "Admin",
+    "roleHR": "HR",
+    "roleEmployee": "Mitarbeiter"
+  },
+  "TwoFactorRequiredPage": {
+    "title": "Zwei-Faktor-Authentifizierung erforderlich",
+    "body": "Dieses Unternehmen verlangt für alle Mitglieder eine aktivierte Zwei-Faktor-Authentifizierung. Bitte richten Sie sie jetzt ein, um fortzufahren.",
+    "continueToDashboard": "Weiter zum Dashboard"
+  },
+  "CreateCompanyPage": {
+    "privacy": "Datenschutz",
+    "imprint": "Impressum"
+  },
+  "KontaktPage": {
+    "title": "Kontakt & Support",
+    "intro": "Fragen zur Ployo-App, zu Ihrem Konto oder zum Datenschutz? Schreiben Sie uns — wir antworten in der Regel innerhalb eines Werktags.",
+    "directContactTitle": "Direkt erreichbar",
+    "emailLabel": "E-Mail:",
+    "addressHint": "Postanschrift und Telefonnummer stehen im <link>Impressum</link>.",
+    "accountAndDataTitle": "Konto und Daten",
+    "accountAndDataText": "Ihr Konto löschen können Sie jederzeit selbst — in der App unter „Profil → Konto & Sicherheit“ oder <deleteLink>hier über die Webseite</deleteLink>. Wie wir Ihre Daten verarbeiten, steht in der <privacyLink>Datenschutzerklärung</privacyLink>.",
+    "employeeQuestionTitle": "Sie sind Mitarbeiterin oder Mitarbeiter?",
+    "employeeQuestionText": "Fragen zu Schichten, Urlaub, Krankmeldungen oder Ihren Dokumenten beantwortet Ihr Betrieb — wir haben als Anbieter der Software keinen Einblick in einzelne Personalentscheidungen. Bei technischen Problemen mit der App helfen wir gerne weiter."
+  },
   "LegalLayout": {
     "signIn": "Anmelden",
     "dataProtection": "Datenschutz",

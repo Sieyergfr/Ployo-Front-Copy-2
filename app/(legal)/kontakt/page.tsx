@@ -1,4 +1,5 @@
 import ContactForm from "@/components/ContactForm";
+import { getTranslations } from "next-intl/server";
 import Link from "next/link";
 
 export const metadata = {
@@ -11,14 +12,15 @@ export const metadata = {
  * `#`, und `/kontakt` gab es gar nicht. Dieselbe Route ist damit auch das
  * Ziel, das in App Store Connect und Google Play als Support-URL steht.
  */
-export default function KontaktPage() {
+export default async function KontaktPage() {
+  const t = await getTranslations("KontaktPage");
+
   return (
     <article className="flex flex-col gap-6 text-sm leading-7 text-ink">
       <div className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold">Kontakt &amp; Support</h1>
+        <h1 className="text-2xl font-semibold">{t("title")}</h1>
         <p className="text-muted">
-          Fragen zur Ployo-App, zu Ihrem Konto oder zum Datenschutz? Schreiben
-          Sie uns — wir antworten in der Regel innerhalb eines Werktags.
+          {t("intro")}
         </p>
       </div>
 
@@ -27,44 +29,45 @@ export default function KontaktPage() {
       </section>
 
       <section className="flex flex-col gap-1">
-        <h2 className="text-base font-semibold">Direkt erreichbar</h2>
+        <h2 className="text-base font-semibold">{t("directContactTitle")}</h2>
         <p>
-          E-Mail:{" "}
+          {t("emailLabel")}{" "}
           <a href="mailto:info@ployo.io" className="underline underline-offset-2">
             info@ployo.io
           </a>
           <br />
-          Postanschrift und Telefonnummer stehen im{" "}
-          <Link href="/impressum" className="underline underline-offset-2">
-            Impressum
-          </Link>
-          .
+          {t.rich("addressHint", {
+            link: (chunks) => (
+              <Link href="/impressum" className="underline underline-offset-2">
+                {chunks}
+              </Link>
+            ),
+          })}
         </p>
       </section>
 
       <section className="flex flex-col gap-1">
-        <h2 className="text-base font-semibold">Konto und Daten</h2>
+        <h2 className="text-base font-semibold">{t("accountAndDataTitle")}</h2>
         <p>
-          Ihr Konto löschen können Sie jederzeit selbst — in der App unter
-          &bdquo;Profil &rarr; Konto &amp; Sicherheit&ldquo; oder{" "}
-          <Link href="/konto-loeschung" className="underline underline-offset-2">
-            hier über die Webseite
-          </Link>
-          . Wie wir Ihre Daten verarbeiten, steht in der{" "}
-          <Link href="/datenschutz" className="underline underline-offset-2">
-            Datenschutzerklärung
-          </Link>
-          .
+          {t.rich("accountAndDataText", {
+            deleteLink: (chunks) => (
+              <Link href="/konto-loeschung" className="underline underline-offset-2">
+                {chunks}
+              </Link>
+            ),
+            privacyLink: (chunks) => (
+              <Link href="/datenschutz" className="underline underline-offset-2">
+                {chunks}
+              </Link>
+            ),
+          })}
         </p>
       </section>
 
       <section className="flex flex-col gap-1">
-        <h2 className="text-base font-semibold">Sie sind Mitarbeiterin oder Mitarbeiter?</h2>
+        <h2 className="text-base font-semibold">{t("employeeQuestionTitle")}</h2>
         <p className="text-muted">
-          Fragen zu Schichten, Urlaub, Krankmeldungen oder Ihren Dokumenten
-          beantwortet Ihr Betrieb — wir haben als Anbieter der Software keinen
-          Einblick in einzelne Personalentscheidungen. Bei technischen
-          Problemen mit der App helfen wir gerne weiter.
+          {t("employeeQuestionText")}
         </p>
       </section>
     </article>

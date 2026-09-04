@@ -1,6 +1,7 @@
 import AccountDeletionConfirmForm from "@/components/AccountDeletionConfirmForm";
 import { peekAccountDeletionToken } from "@/lib/account-service";
 import { ShieldAlert, Trash2 } from "lucide-react";
+import { getTranslations } from "next-intl/server";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -13,6 +14,7 @@ export default async function AccountDeletionConfirmPage({
 }: {
   searchParams: Promise<{ token?: string }>;
 }) {
+  const t = await getTranslations("AccountDeletionConfirmPage");
   const { token } = await searchParams;
   const isValid = token ? await peekAccountDeletionToken(token) : false;
 
@@ -28,32 +30,26 @@ export default async function AccountDeletionConfirmPage({
             <>
               <ShieldAlert className="mb-3 text-danger" size={26} />
               <h1 className="font-display text-[19px] font-semibold text-ink">
-                Link ungültig oder abgelaufen
+                {t("invalidLinkTitle")}
               </h1>
               <p className="mt-2.5 text-[13.5px] leading-[1.6] text-muted">
-                Dieser Bestätigungslink ist nicht mehr gültig (nach 15 Minuten
-                oder einmaliger Nutzung). Bitte die Löschung erneut anfordern.
+                {t("invalidLinkBody")}
               </p>
               <Link href="/konto-loeschung" className="btn btn-secondary mt-6 w-full">
-                Löschung erneut anfordern
+                {t("requestAgain")}
               </Link>
             </>
           ) : (
             <>
               <Trash2 className="mb-3 text-danger" size={26} />
               <h1 className="font-display text-[19px] font-semibold text-ink">
-                Konto endgültig löschen?
+                {t("confirmDeleteTitle")}
               </h1>
               <p className="mt-2.5 text-[13.5px] leading-[1.6] text-muted">
-                Mit Bestätigung werden Ihre Zugangsdaten, aktive Sitzungen,
-                Social-Login-Verknüpfungen (Apple/Google) und Push-Token
-                sofort und unwiderruflich gelöscht. Diese Aktion kann nicht
-                rückgängig gemacht werden.
+                {t("confirmDeleteBody")}
               </p>
               <p className="mt-2 text-[12.5px] leading-[1.6] text-muted-2">
-                Personal-, Beschäftigungs- und Gehaltsdaten, die Ihr
-                Arbeitgeber gesetzlich aufbewahren muss, bleiben davon
-                unberührt.
+                {t("confirmDeleteNote")}
               </p>
               <div className="mt-6">
                 <AccountDeletionConfirmForm token={token} />

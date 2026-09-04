@@ -1936,6 +1936,76 @@
   "CompanyListItem": {
     "defaultIndustry": "Company"
   },
+  "AccountDeletionPage": {
+    "scheduledTitle": "Account deletion scheduled",
+    "scheduledBody": "Your account is scheduled for deletion and will be permanently deleted on <bold>{date}</bold>{daysSuffix}. Until then, you can cancel the deletion and use your account normally again.",
+    "daysLeftSuffix": " ({days} days left)",
+    "cancelDeletionTitle": "Cancel deletion?",
+    "cancelDeletionConfirm": "Yes, cancel deletion",
+    "cancelDeletionDescription": "Your account will be reactivated and the scheduled deletion will be cancelled.",
+    "cancelDeletion": "Cancel deletion",
+    "signOut": "Sign out",
+    "graceNote": "Protection period: {days} days from the request.",
+    "deleteAccountTitle": "Delete Ployo account",
+    "deleteAccountIntro": "Enter the email address of your Ployo account. If an account exists, you'll receive a link valid for 15 minutes. After confirmation, your login credentials, active sessions, social login links (Apple/Google), and push tokens will be permanently deleted.",
+    "deleteAccountNote": "Personal, employment, and payroll data that your employer is legally required to retain is not affected and remains stored with them.",
+    "backToLogin": "Back to sign in"
+  },
+  "AccountDeletionConfirmPage": {
+    "invalidLinkTitle": "Link invalid or expired",
+    "invalidLinkBody": "This confirmation link is no longer valid (after 15 minutes or one-time use). Please request the deletion again.",
+    "requestAgain": "Request deletion again",
+    "confirmDeleteTitle": "Permanently delete account?",
+    "confirmDeleteBody": "Upon confirmation, your login credentials, active sessions, social login links (Apple/Google), and push tokens will be deleted immediately and permanently. This action cannot be undone.",
+    "confirmDeleteNote": "Personal, employment, and payroll data that your employer is legally required to retain remains unaffected."
+  },
+  "ErrorPage": {
+    "unauthorized": "Please sign in to continue.",
+    "forbidden": "You don't have permission for this action.",
+    "unexpectedError": "An unexpected error occurred. Please try again.",
+    "somethingWrong": "Something went wrong",
+    "errorId": "Error ID: {digest}",
+    "tryAgain": "Try again",
+    "goHome": "Go to homepage"
+  },
+  "TenantErrorBoundary": {
+    "somethingWrong": "Something went wrong",
+    "unexpectedError": "An unexpected error occurred. Please try again.",
+    "errorId": "Error ID: {digest}",
+    "tryAgain": "Try again",
+    "goToOverview": "Go to overview"
+  },
+  "NotFound": {
+    "title": "Page not found",
+    "body": "The requested page doesn't exist or has been moved.",
+    "goHome": "Go to homepage"
+  },
+  "DashboardLayout": {
+    "roleOwner": "Owner",
+    "roleAdmin": "Admin",
+    "roleHR": "HR",
+    "roleEmployee": "Employee"
+  },
+  "TwoFactorRequiredPage": {
+    "title": "Two-factor authentication required",
+    "body": "This company requires two-factor authentication to be enabled for all members. Please set it up now to continue.",
+    "continueToDashboard": "Continue to dashboard"
+  },
+  "CreateCompanyPage": {
+    "privacy": "Privacy Policy",
+    "imprint": "Imprint"
+  },
+  "KontaktPage": {
+    "title": "Contact & Support",
+    "intro": "Questions about the Ployo app, your account, or privacy? Write to us — we usually reply within one business day.",
+    "directContactTitle": "Reach us directly",
+    "emailLabel": "Email:",
+    "addressHint": "Our postal address and phone number are in the <link>Imprint</link>.",
+    "accountAndDataTitle": "Account and data",
+    "accountAndDataText": "You can delete your account yourself at any time — in the app under \"Profile → Account & Security\" or <deleteLink>here on the website</deleteLink>. How we process your data is described in the <privacyLink>Privacy Policy</privacyLink>.",
+    "employeeQuestionTitle": "Are you an employee?",
+    "employeeQuestionText": "Questions about shifts, vacation, sick leave, or your documents are answered by your employer — as the software provider, we don't have insight into individual HR decisions. For technical issues with the app, we're happy to help."
+  },
   "LegalLayout": {
     "signIn": "Sign in",
     "dataProtection": "Privacy Policy",

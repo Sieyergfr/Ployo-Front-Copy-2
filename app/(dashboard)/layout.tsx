@@ -6,6 +6,7 @@ import { getOwnScheduledDeletion } from "@/lib/account-service";
 import { isStripeConfigured } from "@/lib/stripe/client";
 import { computePermissionLevels } from "@/lib/tenant-access";
 import { getTenantsForUser } from "@/lib/tenants";
+import { getTranslations } from "next-intl/server";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
@@ -26,20 +27,20 @@ function getInitials(name: string) {
   return initials || "U";
 }
 
-function getRoleLabel(role: string) {
+function getRoleLabel(role: string, t: Awaited<ReturnType<typeof getTranslations>>) {
   if (role === "OWNER") {
-    return "Inhaber";
+    return t("roleOwner");
   }
 
   if (role === "ADMIN") {
-    return "Admin";
+    return t("roleAdmin");
   }
 
   if (role === "HR") {
-    return "HR";
+    return t("roleHR");
   }
 
-  return "Mitarbeiter";
+  return t("roleEmployee");
 }
 
 export default async function AuthLayout ({
@@ -59,10 +60,11 @@ export default async function AuthLayout ({
         redirect("/konto-loeschung");
     }
 
+    const t = await getTranslations("DashboardLayout");
     const memberships = await getTenantsForUser(session.user.id);
     const tenants: NavigationTenantItem[] = memberships.map((membership, index) => ({
         name: membership.tenant.name,
-        role: getRoleLabel(membership.role),
+        role: getRoleLabel(membership.role, t),
         mark: getInitials(membership.tenant.name),
         href: `/u/${membership.tenant.slug}`,
         colorClass: tenantMarkClasses[index % tenantMarkClasses.length],

@@ -1,6 +1,7 @@
 "use client";
 
 import NoAccessNotice from "@/components/NoAccessNotice";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect } from "react";
@@ -18,6 +19,7 @@ export default function TenantErrorBoundary({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const t = useTranslations("TenantErrorBoundary");
   const pathname = usePathname();
   const tenant = pathname?.split("/")[2] ?? "";
 
@@ -36,21 +38,20 @@ export default function TenantErrorBoundary({
 
   return (
     <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 p-6 text-center">
-      <p className="text-2xl font-semibold text-ink">Etwas ist schiefgelaufen</p>
+      <p className="text-2xl font-semibold text-ink">{t("somethingWrong")}</p>
       <p className="max-w-md text-sm text-muted">
-        Es ist ein unerwarteter Fehler aufgetreten. Bitte versuchen Sie es
-        erneut.
+        {t("unexpectedError")}
       </p>
       {error.digest && (
-        <p className="font-mono text-[11px] text-muted">Fehler-ID: {error.digest}</p>
+        <p className="font-mono text-[11px] text-muted">{t("errorId", { digest: error.digest })}</p>
       )}
       <div className="flex gap-2">
         <button type="button" className="btn btn-primary" onClick={reset}>
-          Erneut versuchen
+          {t("tryAgain")}
         </button>
         {tenant && (
           <Link href={`/u/${tenant}`} className="btn btn-secondary">
-            Zur Übersicht
+            {t("goToOverview")}
           </Link>
         )}
       </div>
