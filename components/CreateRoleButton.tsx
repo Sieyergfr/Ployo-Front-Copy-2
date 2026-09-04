@@ -97,7 +97,10 @@ const roleTemplateData: Omit<RoleTemplate, "label">[] = [
 
 const areaIcons: Record<string, LucideIcon> = {
   employees: UsersRound,
+  contracts: BriefcaseBusiness,
+  employeeFiles: FileText,
   payroll: Landmark,
+  sensitiveData: ShieldCheck,
   locations: MapPin,
   teams: BriefcaseBusiness,
   files: FileText,
@@ -426,10 +429,16 @@ function CreateRoleForm({
                 const selectedPermission = permissions[area.id] ?? "none";
                 const hasAccess = selectedPermission !== "none";
 
+                const parentLabel = area.parentAreaId
+                  ? permissionAreas.find((candidate) => candidate.id === area.parentAreaId)?.label
+                  : undefined;
+
                 return (
                   <div
                     key={area.id}
-                    className="flex flex-col gap-3 border-t border-border-soft px-4 py-3 first:border-t-0"
+                    className={`flex flex-col gap-3 border-t border-border-soft px-4 py-3 first:border-t-0 ${
+                      area.parentAreaId ? "bg-bg/40" : ""
+                    }`}
                   >
                     <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                       <div className="flex min-w-0 items-center gap-3">
@@ -437,6 +446,11 @@ function CreateRoleForm({
                           <Icon size={17} strokeWidth={2} />
                         </div>
                         <div className="min-w-0">
+                          {parentLabel && (
+                            <div className="font-mono text-[10px] uppercase tracking-[0.05em] text-muted-2">
+                              {parentLabel} ↳
+                            </div>
+                          )}
                           <div className="text-[13.5px] font-semibold text-ink">
                             {area.label}
                           </div>

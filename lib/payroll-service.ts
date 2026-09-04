@@ -127,6 +127,9 @@ export async function uploadPayrollStatement(input: {
     tenantSlug: input.tenantSlug,
     file: input.file,
     ownerType: "employee",
+    // Bereits oben per requirePayrollAccess geprüft — keine zusätzliche,
+    // unabhängige "employeeFiles"-Berechtigung nötig.
+    permissionArea: "payroll",
     ownerId: employee.id,
     folderSlug: "abrechnungen",
     folderName: "Abrechnungen",

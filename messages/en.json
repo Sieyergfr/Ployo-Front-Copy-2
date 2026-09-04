@@ -1151,7 +1151,7 @@
     "socialSecurityNumber": "Social security number",
     "healthInsurance": "Health insurance",
     "iban": "IBAN",
-    "payrollFieldsHiddenNote": "Birth, address, and financial data are hidden — this requires the \"Payroll\" permission.",
+    "payrollFieldsHiddenNote": "Birth, address, and financial data are hidden — this requires the \"Sensitive Data\" permission.",
     "employmentTitle": "Employment",
     "contractUnlimited": "Permanent",
     "contractPartTime": "Part-time",

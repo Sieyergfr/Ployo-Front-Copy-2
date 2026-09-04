@@ -576,9 +576,18 @@ export default async function EmployeeDetailPage({
   const canDeleteEmployee = capabilities.employees.canDelete;
   const canViewEmployeeAudit = capabilities.employees.canViewAudit;
   const canInvite = hasPermissionLevel(capabilities.settings.level, "write");
-  const canViewPayroll = hasPermissionLevel(capabilities.payroll.level, "read");
-  const canManagePayroll = hasPermissionLevel(capabilities.payroll.level, "write");
-  const canManageFiles = capabilities.employees.canUploadFiles;
+  // Verträge, Dateien, Lohnabrechnungen und sensible Daten sind eigene,
+  // unabhängig konfigurierbare Berechtigungen unter "Mitarbeiter" (siehe
+  // lib/roles.ts) — bewusst nicht mehr eine einzelne "payroll"-Berechtigung.
+  const canViewContracts = hasPermissionLevel(capabilities.contracts.level, "read");
+  const canManageContracts = hasPermissionLevel(capabilities.contracts.level, "write");
+  const canViewPayrollStatements = hasPermissionLevel(capabilities.payroll.level, "read");
+  const canManagePayrollStatements = hasPermissionLevel(capabilities.payroll.level, "write");
+  // Nur die Bearbeitbarkeit wird hier gesteuert — ob die Werte selbst
+  // sichtbar sind (statt "•••"), entscheidet bereits getEmployeeForTenant().
+  const canEditSensitiveData = hasPermissionLevel(capabilities.sensitiveData.level, "write");
+  const canViewEmployeeFiles = hasPermissionLevel(capabilities.employeeFiles.level, "read");
+  const canManageFiles = hasPermissionLevel(capabilities.employeeFiles.level, "write");
   const deletionEligibility =
     canDeleteEmployee && employee.status === "former" && employee.dbId
       ? await getDeletionEligibilityForEmployee(tenant, employee.dbId)
@@ -587,23 +596,23 @@ export default async function EmployeeDetailPage({
   // Rollen/Teams/Standorte/Uploadoptionen sind hier nur Zusatzinfo für
   // Dropdowns im Bearbeiten-Formular — fehlende Berechtigung dafür (z. B.
   // "Rollen" ist admin-only) soll die Profilseite selbst nicht sperren.
-  // Verträge/Gehaltsabrechnungen brauchen eigens "payroll:read" — ohne das
-  // bleibt der Vertrag-Tab einfach leer statt die ganze Seite zu blockieren.
+  // Verträge brauchen eigens "contracts:read" — ohne das bleibt der
+  // Vertrag-Tab einfach leer statt die ganze Seite zu blockieren.
   const emptyUploadOptions: FileUploadOptions = { employees: [], locations: [], roles: [], users: [] };
   const [roles, teams, locations, uploadOptions, contracts] = await Promise.all([
     getRolesForTenant(tenant).catch(() => null).then((v) => v ?? []),
     getTeamsForTenant(tenant).catch(() => null).then((v) => v ?? []),
     getLocationsForTenant(tenant).catch(() => null).then((v) => v ?? []),
     getFileUploadOptions(tenant).catch(() => emptyUploadOptions),
-    canViewPayroll
+    canViewContracts
       ? getEmployeeContracts(tenant, employeeId).catch(() => [])
       : Promise.resolve([]),
   ]);
 
   const status = employeeStatusConfig[employee.status];
-  const isFilesTab = tab === "files";
-  const isContractTab = tab === "contract" && canViewPayroll;
-  const isPayrollTab = tab === "payroll" && canViewPayroll;
+  const isFilesTab = tab === "files" && canViewEmployeeFiles;
+  const isContractTab = tab === "contract" && canViewContracts;
+  const isPayrollTab = tab === "payroll" && canViewPayrollStatements;
   const isHomeTab = !isFilesTab && !isContractTab && !isPayrollTab;
   const isEditableTab = isHomeTab || isContractTab;
   const isEditing = edit === "1" && isEditableTab && canEditEmployee;
@@ -622,7 +631,7 @@ export default async function EmployeeDetailPage({
     ? `${employeeHref}?tab=contract&edit=1`
     : `${employeeHref}?edit=1`;
   const contractEditHref = `${employeeHref}?tab=contract&edit=1`;
-  const showContractDetailsPrompt = isHomeTab && canViewPayroll && !hasContractDetails(employee);
+  const showContractDetailsPrompt = isHomeTab && canViewContracts && !hasContractDetails(employee);
   const vacationPercent = Math.round(
     (employee.vacationTaken / employee.vacationTotal) * 100,
   );
@@ -800,7 +809,7 @@ export default async function EmployeeDetailPage({
         >
           {t("tabHome")}
         </Link>
-        {canViewPayroll && (
+        {canViewContracts && (
           <Link
             href={`${employeeHref}?tab=contract`}
             className={`mb-[-1px] inline-flex items-center gap-2 border-b-2 px-0.5 py-3 text-[14px] ${
@@ -813,20 +822,22 @@ export default async function EmployeeDetailPage({
             <span className="font-mono text-[11px] text-muted">{contracts.length}</span>
           </Link>
         )}
-        <Link
-          href={`${employeeHref}?tab=files`}
-          className={`mb-[-1px] inline-flex items-center gap-2 border-b-2 px-0.5 py-3 text-[14px] ${
-            isFilesTab
-              ? "border-ink font-semibold text-ink"
-              : "border-transparent font-medium text-muted"
-          }`}
-        >
-          {t("tabFiles")}
-          <span className="font-mono text-[11px] text-muted">
-            {employee.files.length + employee.fileFolders.length}
-          </span>
-        </Link>
-        {canViewPayroll && (
+        {canViewEmployeeFiles && (
+          <Link
+            href={`${employeeHref}?tab=files`}
+            className={`mb-[-1px] inline-flex items-center gap-2 border-b-2 px-0.5 py-3 text-[14px] ${
+              isFilesTab
+                ? "border-ink font-semibold text-ink"
+                : "border-transparent font-medium text-muted"
+            }`}
+          >
+            {t("tabFiles")}
+            <span className="font-mono text-[11px] text-muted">
+              {employee.files.length + employee.fileFolders.length}
+            </span>
+          </Link>
+        )}
+        {canViewPayrollStatements && (
           <Link
             href={`${employeeHref}?tab=payroll`}
             className={`mb-[-1px] inline-flex items-center gap-2 border-b-2 px-0.5 py-3 text-[14px] ${
@@ -854,13 +865,13 @@ export default async function EmployeeDetailPage({
           t={t}
         />
       ) : isPayrollTab ? (
-        <PayrollTab employee={employee} tenant={tenant} canManage={canManagePayroll} t={t} />
+        <PayrollTab employee={employee} tenant={tenant} canManage={canManagePayrollStatements} t={t} />
       ) : isContractTab ? (
         <ContractTab
           employee={employee}
           tenant={tenant}
           contracts={contracts as EmployeeContractItem[]}
-          canManagePayroll={canManagePayroll}
+          canManagePayroll={canManageContracts}
           locationOptions={locationOptions}
           t={t}
         />
@@ -887,7 +898,7 @@ export default async function EmployeeDetailPage({
                     value={employee.employeeNumber}
                     mono
                   />
-                  <fieldset disabled={!canViewPayroll} className="contents border-0 p-0 m-0">
+                  <fieldset disabled={!canEditSensitiveData} className="contents border-0 p-0 m-0">
                     <EditableDateField
                       id="employee-birth-date"
                       label={t("birthDate")}
@@ -938,7 +949,7 @@ export default async function EmployeeDetailPage({
                     value={employee.phone}
                     mono
                   />
-                  <fieldset disabled={!canViewPayroll} className="contents border-0 p-0 m-0">
+                  <fieldset disabled={!canEditSensitiveData} className="contents border-0 p-0 m-0">
                     <EditableTextField
                       id="employee-tax-id"
                       label={t("taxId")}
@@ -968,7 +979,7 @@ export default async function EmployeeDetailPage({
                     />
                   </fieldset>
                 </div>
-                {!canViewPayroll && (
+                {!canEditSensitiveData && (
                   <p className="mt-3 text-[11.5px] leading-[1.5] text-muted">
                     {t("payrollFieldsHiddenNote")}
                   </p>

@@ -1151,7 +1151,7 @@
     "socialSecurityNumber": "Sozialversicherungsnummer",
     "healthInsurance": "Krankenkasse",
     "iban": "IBAN",
-    "payrollFieldsHiddenNote": "Geburts-, Adress- und Finanzdaten sind ausgeblendet — dafür fehlt die Berechtigung „Gehaltsabrechnungen“.",
+    "payrollFieldsHiddenNote": "Geburts-, Adress- und Finanzdaten sind ausgeblendet — dafür fehlt die Berechtigung „Sensible Daten“.",
     "employmentTitle": "Beschäftigung",
     "contractUnlimited": "Unbefristet",
     "contractPartTime": "Teilzeit",

@@ -9,7 +9,7 @@ import { createReadSignedUrl } from "@/lib/storage/signed-url";
 import { uploadObject } from "@/lib/storage/upload";
 import { prisma } from "@/lib/prisma";
 import { headers } from "next/headers";
-import { requireTenantAccess } from "@/lib/tenant-access";
+import { requireTenantAccess, type TenantPermissionArea } from "@/lib/tenant-access";
 import { requireFileAcl, requireTenantFileAreaAccess } from "@/lib/file-access";
 
 export type FileOwnerType = "tenant" | "employee" | "location" | "team";
@@ -19,6 +19,8 @@ export type UploadTenantFileInput = {
   file: File;
   bucketId?: StorageBucketId;
   ownerType?: FileOwnerType;
+  /** Ersetzt die aus `ownerType` abgeleitete Berechtigungsprüfung — siehe `requireTenantFileAccess`. */
+  permissionArea?: TenantPermissionArea;
   ownerId?: string;
   folderSlug?: string;
   folderName?: string;
@@ -114,26 +116,45 @@ async function findNamesById(input: {
 
 /**
  * Für Uploads/Ordner, die an einen Fachbereich hängen (Personalakte-/
- * Standort-Dokumente), zusätzlich zum bestehenden "files:write" das
- * `canUploadFiles` des jeweiligen Bereichs prüfen — sonst würde ein Konto
+ * Standort-Dokumente), zusätzlich zum bestehenden "files:write" die
+ * Hochlade-Fähigkeit des jeweiligen Bereichs prüfen — sonst würde ein Konto
  * ohne diese Fähigkeit weiterhin über die Server Action hochladen können,
  * auch wenn der Button in der UI ausgeblendet ist. Generische Uploads ins
  * eigenständige Dateien-Modul (ownerType "tenant") bleiben unverändert nur
  * an "files:write" gebunden.
+ *
+ * `permissionArea` überschreibt den aus `ownerType` abgeleiteten Standard —
+ * für Verträge/Lohnabrechnungen (siehe contract-service.ts/payroll-service.ts),
+ * die bereits vor dem Upload ihre eigene, speziellere Berechtigung
+ * ("contracts"/"payroll") geprüft haben und keine zusätzliche, generische
+ * "employeeFiles"-Prüfung mehr brauchen (die beiden Bereiche sind bewusst
+ * unabhängig voneinander konfigurierbar).
  */
 async function requireTenantFileAccess(
   tenantSlug: string,
   ownerType: FileOwnerType = "tenant",
+  permissionArea?: TenantPermissionArea,
 ) {
   await requireTenantAccess(tenantSlug, "files", "write");
 
-  if (ownerType === "employee" || ownerType === "location" || ownerType === "team") {
-    const area =
-      ownerType === "employee" ? "employees" : ownerType === "location" ? "locations" : "teams";
-    const areaAccess = await requireTenantAccess(tenantSlug, area, "read");
+  if (permissionArea) {
+    // Bereits eigenständig geprüfte Bereiche (Verträge/Lohnabrechnungen) —
+    // deren `level` selbst ist die Hochlade-Fähigkeit, kein separates Flag.
+    await requireTenantAccess(tenantSlug, permissionArea, "write");
+  } else if (ownerType === "employee" || ownerType === "location" || ownerType === "team") {
+    if (ownerType === "employee") {
+      // "employeeFiles" hat kein eigenes fileRelevant-Flag-Set (wie das
+      // eigenständige "files"-Modul) — `requireTenantAccess` mit
+      // required "write" prüft die Hochlade-Fähigkeit hier bereits selbst
+      // (wirft FORBIDDEN, wenn das Level nicht reicht).
+      await requireTenantAccess(tenantSlug, "employeeFiles", "write");
+    } else {
+      const area = ownerType === "location" ? "locations" : "teams";
+      const areaAccess = await requireTenantAccess(tenantSlug, area, "read");
 
-    if (!areaAccess.canUploadFiles) {
-      throw new Error("FORBIDDEN");
+      if (!areaAccess.canUploadFiles) {
+        throw new Error("FORBIDDEN");
+      }
     }
   }
 
@@ -274,7 +295,7 @@ async function fileToBuffer(file: File) {
 
 export async function uploadTenantFile(input: UploadTenantFileInput) {
   const ownerType = input.ownerType ?? "tenant";
-  const access = await requireTenantFileAccess(input.tenantSlug, ownerType);
+  const access = await requireTenantFileAccess(input.tenantSlug, ownerType, input.permissionArea);
   const owner = await validateOwner({
     tenantId: access.tenantId,
     ownerType,

@@ -45,7 +45,7 @@ import {
   scopeAllowsTarget,
 } from "@/lib/tenant-access";
 import type { PermissionLevel } from "@/lib/roles";
-import { canAccessFileAcl, getOptionalAreaFileAccess } from "@/lib/file-access";
+import { canAccessFileAcl } from "@/lib/file-access";
 import { getISOWeekFromDate, getISOWeekStart } from "@/lib/shift-service";
 import { isStripeConfigured } from "@/lib/stripe/client";
 import { checkEmployeeLimit, planEmployeeLimits } from "@/lib/stripe/plans";
@@ -578,7 +578,11 @@ const REDACTED = "•••";
  * normal, redigiert aber gezielt diese Felder statt die ganze Anfrage
  * abzulehnen.
  */
-function toEmployee(record: EmployeeRecord, sensitiveFieldsVisible = true): Employee {
+function toEmployee(
+  record: EmployeeRecord,
+  sensitiveFieldsVisible = true,
+  contractsVisible = true,
+): Employee {
   const decryptedPrivateAddress = decryptAddress(record.privateAddress);
   const decryptedWorkAddress = decryptAddress(record.workAddress);
   const parsedContractDetails: EmployeeContractDetails = record.contractDetails
@@ -605,8 +609,9 @@ function toEmployee(record: EmployeeRecord, sensitiveFieldsVisible = true): Empl
       }
     : defaultContractDetails();
   const contractDetails =
+    !contractsVisible ||
     parsedContractDetails.linkedFileMeta.trim().toLowerCase() ===
-    CONTRACT_FILE_NOT_UPLOADED
+      CONTRACT_FILE_NOT_UPLOADED
       ? {
           ...parsedContractDetails,
           contractType: "",
@@ -968,7 +973,7 @@ export async function getEmployeesForTenant(
   filters: EmployeeListFilters = {},
 ) {
   const where = await employeeScopeWhere(tenantSlug);
-  const fileAccess = await getOptionalAreaFileAccess(tenantSlug, "employees");
+  const fileAccess = await getOptionalTenantAccess(tenantSlug, "employeeFiles", "read");
 
   if (!where.tenantId) {
     return null;
@@ -1006,10 +1011,13 @@ export async function getEmployeesForTenant(
 
   // Geburtsdaten/Steuer-ID/Sozialversicherungsnummer/IBAN/Krankenversicherung
   // sind sensibler als der Rest der Liste — je Mitarbeiter gegen die
-  // "payroll"-Berechtigung (inkl. deren Scope) prüfen, statt sie an jeden mit
-  // bloßem "employees:read" auszuliefern.
-  const payrollAccess = await getOptionalTenantAccess(tenantSlug, "payroll", "read");
-  const payrollScope = payrollAccess ? await resolveScopeFilter(payrollAccess) : null;
+  // "sensitiveData"-Berechtigung (inkl. deren Scope) prüfen, statt sie an
+  // jeden mit bloßem "employees:read" auszuliefern. Verträge (inkl. Gehalt)
+  // analog gegen "contracts".
+  const sensitiveDataAccess = await getOptionalTenantAccess(tenantSlug, "sensitiveData", "read");
+  const sensitiveDataScope = sensitiveDataAccess ? await resolveScopeFilter(sensitiveDataAccess) : null;
+  const contractsAccess = await getOptionalTenantAccess(tenantSlug, "contracts", "read");
+  const contractsScope = contractsAccess ? await resolveScopeFilter(contractsAccess) : null;
   const locationNamesByEmployeeId = await getEmployeeLocationNamesMap(
     where.tenantId,
     records.map((record) => record.id),
@@ -1026,8 +1034,10 @@ export async function getEmployeesForTenant(
           ? record.storageFiles.filter((file) => canAccessFileAcl(file.parent ?? file, fileAccess))
           : [],
       },
-      payrollScope !== null &&
-        scopeAllowsTarget(payrollScope, { id: record.id, team: record.team }),
+      sensitiveDataScope !== null &&
+        scopeAllowsTarget(sensitiveDataScope, { id: record.id, team: record.team }),
+      contractsScope !== null &&
+        scopeAllowsTarget(contractsScope, { id: record.id, team: record.team }),
     );
     const onVacationToday = record.vacationRequests.some(
       (r) => r.startDate <= today && r.endDate >= today,
@@ -1052,7 +1062,7 @@ export async function getEmployeesForTenant(
 
 export async function getEmployeeForTenant(tenantSlug: string, employeeHandle: string) {
   const where = await employeeScopeWhere(tenantSlug);
-  const fileAccess = await getOptionalAreaFileAccess(tenantSlug, "employees");
+  const fileAccess = await getOptionalTenantAccess(tenantSlug, "employeeFiles", "read");
 
   if (!where.tenantId) {
     return null;
@@ -1103,14 +1113,27 @@ export async function getEmployeeForTenant(tenantSlug: string, employeeHandle: s
     return null;
   }
 
-  // Gehaltsabrechnungen sind sensibler als der Rest des Profils — separat
-  // per "payroll"-Berechtigung (inkl. deren Scope) laden, statt sie
-  // ungeprüft an jeden mit "employees:read" auszuliefern.
+  // Gehaltsabrechnungen, sensible Stammdaten und Verträge sind sensibler als
+  // der Rest des Profils — je eigene Berechtigung (inkl. Scope) prüfen,
+  // statt sie ungeprüft an jeden mit "employees:read" auszuliefern.
   const payrollAccess = await getOptionalTenantAccess(tenantSlug, "payroll", "read");
   const payrollScope = payrollAccess ? await resolveScopeFilter(payrollAccess) : null;
   const canViewPayroll =
     payrollScope !== null &&
     scopeAllowsTarget(payrollScope, { id: record.id, team: record.team });
+
+  const sensitiveDataAccess = await getOptionalTenantAccess(tenantSlug, "sensitiveData", "read");
+  const sensitiveDataScope = sensitiveDataAccess ? await resolveScopeFilter(sensitiveDataAccess) : null;
+  const canViewSensitiveData =
+    sensitiveDataScope !== null &&
+    scopeAllowsTarget(sensitiveDataScope, { id: record.id, team: record.team });
+
+  const contractsAccess = await getOptionalTenantAccess(tenantSlug, "contracts", "read");
+  const contractsScope = contractsAccess ? await resolveScopeFilter(contractsAccess) : null;
+  const canViewContracts =
+    contractsScope !== null &&
+    scopeAllowsTarget(contractsScope, { id: record.id, team: record.team });
+
   const payrollStatements = canViewPayroll
     ? await prisma.tenantPayrollStatement.findMany({
         where: { employeeId: record.id },
@@ -1128,7 +1151,8 @@ export async function getEmployeeForTenant(tenantSlug: string, employeeHandle: s
         ? record.storageFiles.filter((file) => canAccessFileAcl(file.parent ?? file, fileAccess))
         : [],
     },
-    canViewPayroll,
+    canViewSensitiveData,
+    canViewContracts,
   );
 
   const today = todayIso();
@@ -1494,6 +1518,59 @@ export async function createTenantEmployee(input: EmployeeMutationInput) {
     throw new Error("Mandant nicht gefunden.");
   }
 
+  // "employees:write" deckt nur Name/Team/Standort/Kontakt ab — sensible
+  // Stammdaten und Vertragsfelder beim Anlegen brauchen zusätzlich die
+  // jeweils eigene Berechtigung, sonst werden sie aus der Eingabe verworfen.
+  const newEmployeeTarget = { id: "", team: input.team?.trim() || "" };
+  const canEditSensitiveData = await canWriteEmployeeSubarea(
+    input.tenantSlug,
+    "sensitiveData",
+    newEmployeeTarget,
+  );
+  const canEditContracts = await canWriteEmployeeSubarea(
+    input.tenantSlug,
+    "contracts",
+    newEmployeeTarget,
+  );
+
+  if (!canEditSensitiveData) {
+    input = {
+      ...input,
+      birthDate: undefined,
+      birthPlace: undefined,
+      nationality: undefined,
+      maritalStatus: undefined,
+      privateAddress: undefined,
+      taxId: undefined,
+      socialSecurityNumber: undefined,
+      healthInsurance: undefined,
+      iban: undefined,
+    };
+  }
+
+  if (!canEditContracts) {
+    input = {
+      ...input,
+      contractType: undefined,
+      entryDate: undefined,
+      exitDate: undefined,
+      fixedTerm: undefined,
+      probation: undefined,
+      noticePeriod: undefined,
+      position: undefined,
+      department: undefined,
+      supervisor: undefined,
+      workLocation: undefined,
+      parties: undefined,
+      collectiveAgreement: undefined,
+      compensation: undefined,
+      compensationGross: undefined,
+      workingTime: undefined,
+      vacation: undefined,
+      contractDetailsSubmitted: undefined,
+    };
+  }
+
   return createTenantEmployeeRecord({
     tenantId: access.tenantId,
     actorId: access.userId,
@@ -1683,6 +1760,26 @@ export async function getUnlinkedEmployeesForTenant(tenantSlug: string) {
   });
 }
 
+/**
+ * Ob der Aufrufer die sensiblen Stammdaten bzw. Vertragsfelder DIESES
+ * konkreten Mitarbeiters schreiben darf — getrennt von "employees:write",
+ * das nur Name/Team/Standort/Kontakt abdeckt (siehe `sensitiveData`/
+ * `contracts`-Bereiche in lib/roles.ts).
+ */
+async function canWriteEmployeeSubarea(
+  tenantSlug: string,
+  area: "sensitiveData" | "contracts",
+  target: { id: string; team: string },
+) {
+  const access = await getOptionalTenantAccess(tenantSlug, area, "write");
+
+  if (!access) {
+    return false;
+  }
+
+  return scopeAllowsTarget(await resolveScopeFilter(access), target);
+}
+
 export async function updateTenantEmployee(input: EmployeeMutationInput & { employeeId: string }) {
   await requireEmployeeManager(input.tenantSlug);
 
@@ -1718,6 +1815,58 @@ export async function updateTenantEmployee(input: EmployeeMutationInput & { empl
   // könnte eine team-gescopte Rolle trotzdem jeden Mitarbeiter mandantenweit
   // per bekannter ID bearbeiten.
   await assertEmployeeInScope(access, input.employeeId);
+
+  // "employees:write" deckt nur Name/Team/Standort/Kontakt ab — sensible
+  // Stammdaten und Vertragsfelder brauchen zusätzlich die jeweils eigene
+  // Berechtigung. Ohne sie werden die betroffenen Felder aus der Eingabe
+  // verworfen (Rest der Speicherung geht normal durch), statt die ganze
+  // Aktualisierung mit einem Fehler abzubrechen.
+  const canEditSensitiveData = await canWriteEmployeeSubarea(input.tenantSlug, "sensitiveData", {
+    id: current.id,
+    team: current.team,
+  });
+  const canEditContracts = await canWriteEmployeeSubarea(input.tenantSlug, "contracts", {
+    id: current.id,
+    team: current.team,
+  });
+
+  if (!canEditSensitiveData) {
+    input = {
+      ...input,
+      birthDate: undefined,
+      birthPlace: undefined,
+      nationality: undefined,
+      maritalStatus: undefined,
+      privateAddress: undefined,
+      taxId: undefined,
+      socialSecurityNumber: undefined,
+      healthInsurance: undefined,
+      iban: undefined,
+    };
+  }
+
+  if (!canEditContracts) {
+    input = {
+      ...input,
+      contractType: undefined,
+      entryDate: undefined,
+      exitDate: undefined,
+      fixedTerm: undefined,
+      probation: undefined,
+      noticePeriod: undefined,
+      position: undefined,
+      department: undefined,
+      supervisor: undefined,
+      workLocation: undefined,
+      parties: undefined,
+      collectiveAgreement: undefined,
+      compensation: undefined,
+      compensationGross: undefined,
+      workingTime: undefined,
+      vacation: undefined,
+      contractDetailsSubmitted: undefined,
+    };
+  }
 
   const currentLocationNames = await getEmployeeLocationNames(tenantId, input.employeeId);
   const locations =

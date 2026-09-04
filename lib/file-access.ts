@@ -53,8 +53,8 @@ export type TenantFileAreaRecord = {
  * (`getTenantFileSignedUrl`, `getTenantFileContentForUser`). Die reine
  * "files:read"-Berechtigung plus ACL (`requireFileAcl`) sagt nichts über den
  * fachlichen Bereich einer Datei aus — eine Rolle mit "files: read" aber
- * ohne (ausreichenden) Zugriff auf "payroll"/"sickness"/"employees" konnte
- * darüber bislang trotzdem jede Personalakten-Datei jedes Mitarbeiters
+ * ohne (ausreichenden) Zugriff auf "payroll"/"contracts"/"sickness"/
+ * "employeeFiles" konnte darüber bislang trotzdem jede Personalakten-Datei jedes Mitarbeiters
  * abrufen, sobald die Datei-ID bekannt war. Spiegelt für den rollenbasierten
  * Pfad, was `getMyDocumentDownloadUrl` (lib/self-service.ts) bereits für den
  * Self-Service-Pfad tut: Ziel-Bereich inkl. Scope sowie `hiddenFromEmployee`
@@ -80,11 +80,22 @@ export async function requireTenantFileAreaAccess(
         select: { id: true },
       }),
     ]);
-    const area: TenantPermissionArea =
-      payroll || contract ? "payroll" : sickness ? "sickness" : "employees";
+    const area: TenantPermissionArea = payroll
+      ? "payroll"
+      : contract
+        ? "contracts"
+        : sickness
+          ? "sickness"
+          : "employeeFiles";
 
     const areaAccess = await requireTenantAccess(fileAccess.tenantSlug, area, "read");
-    if (!areaAccess.canViewFiles) throw new Error("FORBIDDEN");
+
+    // "sickness" hat weiterhin ein eigenes, vom Level getrenntes
+    // Datei-Sichtbarkeits-Flag (siehe PermissionArea.fileRelevant) — für
+    // "payroll"/"contracts"/"employeeFiles" reicht das Level selbst (wie
+    // beim eigenständigen "files"-Modul), `requireTenantAccess` hat das
+    // oben bereits durchgesetzt.
+    if (area === "sickness" && !areaAccess.canViewFiles) throw new Error("FORBIDDEN");
     await assertEmployeeInScope(areaAccess, file.employeeId);
 
     if (file.hiddenFromEmployee) {

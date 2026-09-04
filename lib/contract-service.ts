@@ -39,7 +39,7 @@ function normalizeContractType(value: string | undefined): EmployeeContractType 
 }
 
 async function requireContractAccess(tenantSlug: string) {
-  return requireTenantAccess(tenantSlug, "payroll", "write");
+  return requireTenantAccess(tenantSlug, "contracts", "write");
 }
 
 async function recordContractAudit(input: {
@@ -48,7 +48,7 @@ async function recordContractAudit(input: {
   contractId: string;
   detail: string;
 }) {
-  const access = await requireTenantAccess(input.tenantSlug, "payroll", "write");
+  const access = await requireTenantAccess(input.tenantSlug, "contracts", "write");
 
   await recordTenantAudit({
     tenantId: access.tenantId,
@@ -63,7 +63,7 @@ async function recordContractAudit(input: {
 }
 
 export async function getEmployeeContracts(tenantSlug: string, employeeId: string) {
-  const access = await requireTenantAccess(tenantSlug, "payroll", "read");
+  const access = await requireTenantAccess(tenantSlug, "contracts", "read");
   const scopeFilter = await resolveScopeFilter(access);
   const scopeConstraint =
     scopeFilter.type === "own"
@@ -134,6 +134,9 @@ export async function createEmployeeContract(input: {
     tenantSlug: input.tenantSlug,
     file: input.file,
     ownerType: "employee",
+    // Bereits oben per requireContractAccess geprüft — keine zusätzliche,
+    // unabhängige "employeeFiles"-Berechtigung nötig.
+    permissionArea: "contracts",
     ownerId: employee.id,
     folderSlug: "vertraege-vereinbarungen",
     folderName: "Verträge & Vereinbarungen",

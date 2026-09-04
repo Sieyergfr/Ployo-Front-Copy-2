@@ -7,12 +7,14 @@ import {
 } from "@/lib/roles";
 
 export type TenantPermissionArea =
-  | "employees" | "payroll" | "locations" | "teams" | "files"
+  | "employees" | "contracts" | "employeeFiles" | "payroll" | "sensitiveData"
+  | "locations" | "teams" | "files"
   | "vacation" | "sickness" | "shifts" | "reminders" | "audit"
   | "roles" | "settings";
 
 export const tenantPermissionAreas: TenantPermissionArea[] = [
-  "employees", "payroll", "locations", "teams", "files",
+  "employees", "contracts", "employeeFiles", "payroll", "sensitiveData",
+  "locations", "teams", "files",
   "vacation", "sickness", "shifts", "reminders", "audit",
   "roles", "settings",
 ];

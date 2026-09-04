@@ -2,6 +2,55 @@
 
 Stand: 2026-09-04. Blocker, Sollte-behoben-werden, Responsive Design, Datenschutz-Umbauplan Phase 0-2 und die komplette i18n-String-Extraktion (108 Dateien, 93 Namespaces, ~1635 Keys) sind vollständig umgesetzt, code-verifiziert, committet und gepusht. Alles Weitere unten sind bewusst offene Punkte, die externe Schritte oder deine Entscheidung brauchen (siehe "Braucht weiterhin deine Aufmerksamkeit").
 
+## ✅ Sicherheitsaudit + Rollen-Feingranularität (2026-09-04)
+
+Auf Zuruf: vollständiger Routen-Audit (alle 109 API-Routen + 14 Server Actions gegen "eingeloggt →
+gehört zum Tenant → hat Berechtigung", 4 parallele Prüfungen + eigene Nachverifikation der
+schwersten Funde) plus Aufteilung der bisher zu groben "Mitarbeiter"/"Lohn & Verträge"-Berechtigung
+in eigene Unterbereiche. Plan unter `~/.claude/plans/tingly-drifting-quokka.md` (Repo-übergreifend
+mit `ployo-mobile` abgestimmt).
+
+**Phase 1 — Sicherheitsfixes, committet+gepusht (`5b24018`):**
+- **Kritisch, behoben:** Identitäts-Übernahme über "Profil verknüpfen" — jedes Mitglied konnte sich
+  eine beliebige, noch nicht verknüpfte Personalakte aneignen (kein E-Mail-Abgleich, offene Liste
+  aller unverknüpften Akten). Jetzt per E-Mail-Abgleich zur Session begrenzt.
+- **Hoch, behoben:** Team-Scope wurde bei Mitarbeiter-/Vertrags-/Lohnabrechnungs-Schreibzugriffen
+  und bei der Wunschfrei-Genehmigung nicht durchgesetzt (nur bei Leselisten) — eine team-gescopte
+  Rolle konnte trotzdem jeden Mitarbeiter mandantenweit per bekannter ID bearbeiten/offboarden/
+  Wunschfrei anderer Teams genehmigen. `assertEmployeeInScope` ergänzt (bestehendes Muster aus dem
+  Urlaubs-Modul).
+- **Mittel, behoben:** Ordner-PIN war über die Server-Action-Variante der signierten Datei-URL
+  umgehbar (API-Route prüfte sie schon, die Aktion nicht).
+- **Mittel, behoben:** Plan-/Abrechnungsintervall ließ sich über die allgemeine Profil-Speicherung
+  auch mit konfiguriertem Stripe ungeprüft setzen — jetzt nur noch ohne Stripe möglich.
+- Nicht behoben (bewusst, vernachlässigbar): Cron-Secret-Vergleich mit `!==` statt zeitkonstant.
+- Alles Übrige (Rollen/Teams/Standorte, Dateien-Modul, restliche Self-Service-Routen) wurde einzeln
+  geprüft und ist korrekt.
+
+**Phase 2-5 — Mitarbeiter-Unterberechtigungen (Verträge/Dateien/Lohnabrechnungen/Sensible Daten),
+fertig, committet+gepusht:**
+- Drei neue Berechtigungsbereiche `contracts`/`employeeFiles`/`sensitiveData` (zusätzlich zum
+  bestehenden, jetzt auf "nur Lohnabrechnungen" verengten `payroll`) — jeweils eigener Level (Kein
+  Zugriff/Lesen/Schreiben) inkl. Scope, unabhängig vom allgemeinen `employees`-Bereich einstellbar.
+- Backfill-Migration (`20260904180000_add_employee_permission_subareas`, gegen die Live-DB
+  angewendet und verifiziert) übernimmt für alle 18 bestehenden Rollen den heutigen Effektiv-Zugriff
+  1:1 in die neuen Bereiche — niemand verliert beim Umstieg stillschweigend Zugriff.
+- Nebenbei behoben: `lib/employee-service.ts` lieferte Vertragsdetails inkl. Gehalt bisher komplett
+  ungegated aus (kein Permission-Check überhaupt) — jetzt korrekt hinter `contracts:read` bzw.
+  `contracts:write`. Sensible Stammdaten (IBAN, Steuer-ID, SV-Nummer etc.) trennen jetzt Ansehen
+  und Bearbeiten (`sensitiveData:read`/`:write`) vom allgemeinen `employees:write`.
+- Rollen-Editor (`CreateRoleButton.tsx`, `rollen/[roleId]/page.tsx`) zeigt die vier Unterbereiche
+  optisch eingerückt unter "Mitarbeiter".
+- Mitarbeiter-Detailseite: Vertrags-/Dateien-/Lohn-Tab sowie Sensible-Daten-Bearbeitbarkeit jetzt
+  einzeln statt über ein gemeinsames `canViewPayroll` gegatet.
+- `ployo-mobile` mitgezogen: `PermissionArea`-Typ, Berechtigungs-Katalog (`contracts.*`,
+  `employeeFiles.*`, `employees.editSensitive`), Vertrags-/Dateien-/Lohn-Tab-Sichtbarkeit auf der
+  Mitarbeiter-Detailseite. Empfehlung: App-Update zeitnah nach diesem Backend-Deploy ausliefern —
+  bis dahin zeigt eine alte App-Version Verträge/Dateien ggf. zu restriktiv an (fail-closed, kein
+  Sicherheitsproblem).
+- Verifiziert: `tsc`/`eslint`/volle Testsuite (138/138)/Probe-Build in ployo-front, `tsc`/`lint` in
+  ployo-mobile — alles grün. Plan-Dokument: `~/.claude/plans/tingly-drifting-quokka.md`.
+
 ## 🙋 Braucht weiterhin deine Aufmerksamkeit
 
 - Phase 3 des Datenschutz-Umbauplans (Produkt-Roadmap: echte Ist-Zeiterfassung, Jugendarbeitsschutz-Prüfung, Mutterschutz-Kennzeichnung, Betriebsrat-Hinweisbaustein) bewusst noch nicht angefasst — eigene Produktentscheidungen, siehe `Datenschutz-Sicherheitsaudit-und-Umbauplan-offene-Punkte.md` Teil 7. — **[Du → Ich]**

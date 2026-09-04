@@ -16,9 +16,11 @@ export type PermissionArea = {
   /**
    * Ob für diesen Bereich Datei-Fähigkeiten (Hochladen/Bearbeiten/Sehen)
    * getrennt vom allgemeinen level konfigurierbar sind — für Bereiche, in
-   * denen Dokumente an fachliche Datensätze gebunden sind (Personalakte,
-   * Gehaltsabrechnungen, Standorte, Krankmeldungen). Das eigenständige
-   * "files"-Modul selbst braucht das nicht, es hat bereits sein eigenes level.
+   * denen Dokumente an fachliche Datensätze gebunden sind (Standorte,
+   * Krankmeldungen). Für Bereiche, die selbst schon reine Datei-/Dokument-
+   * Bereiche sind (das zentrale "files"-Modul, "employeeFiles", "contracts"),
+   * regelt das eigene `level` das direkt — kein zweites, redundantes
+   * Flag-Set nötig.
    */
   fileRelevant: boolean;
   /**
@@ -27,6 +29,14 @@ export type PermissionArea = {
    * `resolveScopeFilter` das auch tatsächlich auflösen kann.
    */
   supportsAssignedScope: boolean;
+  /**
+   * Optische Gruppierung im Rollen-Editor: ein Unterbereich wird direkt unter
+   * seinem übergeordneten Bereich eingerückt dargestellt (siehe
+   * `CreateRoleButton.tsx`/`rollen/[roleId]/page.tsx`). Rein UI-seitig — in
+   * der DB bleibt jeder Bereich eine eigenständige, flache
+   * `TenantRolePermission`-Zeile.
+   */
+  parentAreaId?: string;
 };
 
 export type PermissionRole = {
@@ -79,8 +89,11 @@ export function hasPermissionLevel(
 }
 
 export const permissionAreas: PermissionArea[] = [
-  { id: "employees", label: "Mitarbeiter", description: "Name, Team, Standort, Kontakt, Notfallkontakte — ohne Geburts-/Finanzdaten", supportsScope: true, fileRelevant: true, supportsAssignedScope: false },
-  { id: "payroll", label: "Gehaltsabrechnungen", description: "Abrechnungen, Verträge, sowie Geburtsdatum/-ort, Steuer-ID, IBAN, Krankenkasse, Privatadresse", supportsScope: true, fileRelevant: true, supportsAssignedScope: false },
+  { id: "employees", label: "Mitarbeiter", description: "Name, Team, Standort, Kontakt, Notfallkontakte — ohne Verträge, Dateien, Lohnabrechnungen und sensible Daten (siehe die vier Unterbereiche)", supportsScope: true, fileRelevant: false, supportsAssignedScope: false },
+  { id: "contracts", label: "Verträge", description: "Arbeitsverträge, Vertragsdetails inkl. Gehalt", supportsScope: true, fileRelevant: false, supportsAssignedScope: false, parentAreaId: "employees" },
+  { id: "employeeFiles", label: "Dateien", description: "Dateien und Ordner in der Personalakte", supportsScope: true, fileRelevant: false, supportsAssignedScope: false, parentAreaId: "employees" },
+  { id: "payroll", label: "Lohnabrechnungen", description: "Hochgeladene Gehaltsabrechnungen", supportsScope: true, fileRelevant: false, supportsAssignedScope: false, parentAreaId: "employees" },
+  { id: "sensitiveData", label: "Sensible Daten", description: "Geburtsdatum/-ort, Nationalität, Familienstand, Privatadresse, Steuer-ID, Sozialversicherungsnummer, Krankenkasse, IBAN", supportsScope: true, fileRelevant: false, supportsAssignedScope: false, parentAreaId: "employees" },
   { id: "locations", label: "Standorte", description: "Standortdaten, Schichten, Teams vor Ort", supportsScope: false, fileRelevant: true, supportsAssignedScope: true },
   { id: "teams", label: "Teams", description: "Teamrollen, Teamleitung, Mitglieder", supportsScope: false, fileRelevant: true, supportsAssignedScope: true },
   { id: "files", label: "Dateien", description: "Ablage, Versionen, Ablaufdaten, Freigaben", supportsScope: true, fileRelevant: false, supportsAssignedScope: false },
@@ -92,6 +105,35 @@ export const permissionAreas: PermissionArea[] = [
   { id: "roles", label: "Rollen", description: "Berechtigungen und Sicherheitsrichtlinien", supportsScope: false, fileRelevant: false, supportsAssignedScope: false },
   { id: "settings", label: "Einstellungen", description: "Mandant, Integrationen, Abrechnung", supportsScope: false, fileRelevant: false, supportsAssignedScope: false },
 ];
+
+export type PermissionAreaGroup = { area: PermissionArea; children: PermissionArea[] };
+
+/**
+ * Fasst Unterbereiche (`parentAreaId`) mit ihrem übergeordneten Bereich zu
+ * einer Gruppe zusammen — für die eingerückte Darstellung im Rollen-Editor
+ * (`CreateRoleButton.tsx`, `rollen/[roleId]/page.tsx`). Verlässt sich auf die
+ * Reihenfolge in `permissionAreas` (jeder Unterbereich steht direkt hinter
+ * seinem übergeordneten Bereich) statt eine allgemeine Baumstruktur zu bauen
+ * — für die aktuell einzige Verschachtelungsebene reicht das.
+ */
+export function groupPermissionAreas(areas: PermissionArea[] = permissionAreas): PermissionAreaGroup[] {
+  const groups: PermissionAreaGroup[] = [];
+
+  for (const area of areas) {
+    if (area.parentAreaId) {
+      const parentGroup = groups.find((group) => group.area.id === area.parentAreaId);
+
+      if (parentGroup) {
+        parentGroup.children.push(area);
+        continue;
+      }
+    }
+
+    groups.push({ area, children: [] });
+  }
+
+  return groups;
+}
 
 /**
  * Die Default-Rollen definieren bewusst nur permissions/scopes von Hand —
@@ -114,7 +156,10 @@ export const defaultPermissionRoles: Omit<
     isSystem: true,
     permissions: {
       employees: "admin",
+      contracts: "admin",
+      employeeFiles: "admin",
       payroll: "admin",
+      sensitiveData: "admin",
       locations: "write",
       teams: "admin",
       files: "admin",
@@ -126,7 +171,7 @@ export const defaultPermissionRoles: Omit<
       roles: "admin",
       settings: "write",
     },
-    scopes: { employees: "all", payroll: "all", vacation: "all", sickness: "all" },
+    scopes: { employees: "all", contracts: "all", employeeFiles: "all", payroll: "all", sensitiveData: "all", vacation: "all", sickness: "all" },
   },
   {
     key: "payroll",
@@ -135,7 +180,12 @@ export const defaultPermissionRoles: Omit<
     isSystem: true,
     permissions: {
       employees: "read",
+      contracts: "write",
+      employeeFiles: "write",
       payroll: "admin",
+      // Lohnbuchhaltung braucht IBAN/Steuer-ID/SV-Nummer zwingend, um
+      // Gehalt korrekt auszuzahlen und zu melden.
+      sensitiveData: "admin",
       locations: "read",
       teams: "read",
       files: "write",
@@ -147,7 +197,7 @@ export const defaultPermissionRoles: Omit<
       roles: "none",
       settings: "none",
     },
-    scopes: { employees: "all", payroll: "all", vacation: "all", sickness: "all" },
+    scopes: { employees: "all", contracts: "all", employeeFiles: "all", payroll: "all", sensitiveData: "all", vacation: "all", sickness: "all" },
   },
   {
     key: "teamlead",
@@ -156,7 +206,13 @@ export const defaultPermissionRoles: Omit<
     isSystem: true,
     permissions: {
       employees: "read",
+      // Teamleitung sieht Namen/Team/Standort der eigenen Leute, aber weder
+      // Verträge noch Gehalt noch sensible Stammdaten — das bleibt HR/
+      // Lohnbuchhaltung vorbehalten.
+      contracts: "none",
+      employeeFiles: "read",
       payroll: "none",
+      sensitiveData: "none",
       locations: "read",
       teams: "write",
       files: "read",
@@ -170,7 +226,7 @@ export const defaultPermissionRoles: Omit<
     },
     // Teamleitung plant und genehmigt fuer das eigene Team — nicht
     // mandantenweit.
-    scopes: { employees: "team", vacation: "team", sickness: "team" },
+    scopes: { employees: "team", employeeFiles: "team", vacation: "team", sickness: "team" },
   },
   {
     key: "employee",
@@ -179,7 +235,12 @@ export const defaultPermissionRoles: Omit<
     isSystem: true,
     permissions: {
       employees: "read",
+      // Self-Service: die eigenen Verträge/Dateien/Lohnabrechnungen/
+      // sensiblen Daten (Scope "own" unten), nicht die der Kolleginnen.
+      contracts: "read",
+      employeeFiles: "read",
       payroll: "read",
+      sensitiveData: "read",
       locations: "none",
       teams: "read",
       files: "read",
@@ -196,9 +257,17 @@ export const defaultPermissionRoles: Omit<
       settings: "none",
     },
     // Ein einfaches Mitgliedskonto sieht standardmaessig nur das eigene Team
-    // im Verzeichnis und nur die eigenen Gehalts-/Urlaubs-/Krankheitsdaten —
-    // nicht die des gesamten Unternehmens.
-    scopes: { employees: "team", payroll: "own", vacation: "own", sickness: "own" },
+    // im Verzeichnis und nur die eigenen Vertrags-/Datei-/Gehalts-/sensiblen/
+    // Urlaubs-/Krankheitsdaten — nicht die des gesamten Unternehmens.
+    scopes: {
+      employees: "team",
+      contracts: "own",
+      employeeFiles: "own",
+      payroll: "own",
+      sensitiveData: "own",
+      vacation: "own",
+      sickness: "own",
+    },
   },
 ];
 
