@@ -4,7 +4,7 @@ import {
 } from "@/lib/notifications/events";
 import { prisma } from "@/lib/prisma";
 import { getTenantIdForShifts, requireShiftManager } from "@/lib/shift-service";
-import { requireTenantMembership } from "@/lib/tenant-access";
+import { assertEmployeeInScope, requireTenantAccess, requireTenantMembership } from "@/lib/tenant-access";
 import {
   type WishFreeRequest,
   type WishFreeRequestStatus,
@@ -187,6 +187,13 @@ export async function setTenantWishFreeRequestStatus(input: {
   if (!request) {
     throw new Error("Wunschfrei Anfrage nicht gefunden.");
   }
+
+  // Der Scope begrenzt sonst nur die Liste, nicht das Genehmigen/Ablehnen per
+  // requestId (gleiches Muster wie setTenantVacationRequestStatus).
+  await assertEmployeeInScope(
+    await requireTenantAccess(input.tenantSlug, "shifts", "write"),
+    request.employeeId,
+  );
 
   const rejectReason = input.status === "rejected" ? input.rejectReason?.trim() || "" : "";
 

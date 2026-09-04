@@ -1,7 +1,7 @@
 import { recordTenantAudit } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 import { uploadTenantFile } from "@/lib/storage/storage.service";
-import { requireTenantAccess, resolveScopeFilter } from "@/lib/tenant-access";
+import { assertEmployeeInScope, requireTenantAccess, resolveScopeFilter } from "@/lib/tenant-access";
 import { canAccessFileAcl, getOptionalFileReadAccess } from "@/lib/file-access";
 
 export const contractStatuses = [
@@ -39,7 +39,7 @@ function normalizeContractType(value: string | undefined): EmployeeContractType 
 }
 
 async function requireContractAccess(tenantSlug: string) {
-  return (await requireTenantAccess(tenantSlug, "payroll", "write")).tenantId;
+  return requireTenantAccess(tenantSlug, "payroll", "write");
 }
 
 async function recordContractAudit(input: {
@@ -108,7 +108,8 @@ export async function createEmployeeContract(input: {
   vacationDays: number;
   notes: string;
 }) {
-  const tenantId = await requireContractAccess(input.tenantSlug);
+  const access = await requireContractAccess(input.tenantSlug);
+  const tenantId = access.tenantId;
   const employee = await prisma.tenantEmployee.findFirst({
     where: {
       tenantId,
@@ -120,6 +121,8 @@ export async function createEmployeeContract(input: {
   if (!employee) {
     throw new Error("Mitarbeiter wurde nicht gefunden.");
   }
+
+  await assertEmployeeInScope(access, employee.id);
 
   if (input.file.type !== "application/pdf" && !input.file.name.toLowerCase().endsWith(".pdf")) {
     throw new Error("Jeder Vertrag benötigt eine PDF-Datei.");
@@ -214,7 +217,8 @@ export async function updateEmployeeContractStatus(input: {
   terminationDate?: string;
   terminationReason?: string;
 }) {
-  const tenantId = await requireContractAccess(input.tenantSlug);
+  const access = await requireContractAccess(input.tenantSlug);
+  const tenantId = access.tenantId;
   const contract = await prisma.tenantEmployeeContract.findFirst({
     where: {
       id: input.contractId,
@@ -227,6 +231,8 @@ export async function updateEmployeeContractStatus(input: {
   if (!contract) {
     throw new Error("Vertrag wurde nicht gefunden.");
   }
+
+  await assertEmployeeInScope(access, contract.employeeId);
 
   const updated = await prisma.$transaction(async (tx) => {
     if (input.status === "active") {
@@ -282,19 +288,22 @@ export async function updateEmployeeContractDetails(input: {
   vacationDays: number;
   notes: string;
 }) {
-  const tenantId = await requireContractAccess(input.tenantSlug);
+  const access = await requireContractAccess(input.tenantSlug);
+  const tenantId = access.tenantId;
   const contract = await prisma.tenantEmployeeContract.findFirst({
     where: {
       id: input.contractId,
       tenantId,
       employee: { OR: [{ id: input.employeeId }, { key: input.employeeId }] },
     },
-    select: { id: true },
+    select: { id: true, employeeId: true },
   });
 
   if (!contract) {
     throw new Error("Vertrag wurde nicht gefunden.");
   }
+
+  await assertEmployeeInScope(access, contract.employeeId);
 
   const updated = await prisma.tenantEmployeeContract.update({
     where: { id: contract.id },

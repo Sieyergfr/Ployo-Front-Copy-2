@@ -16,6 +16,7 @@ import {
 } from "@/lib/tenants";
 import { headers } from "next/headers";
 import { requireTenantAccess } from "@/lib/tenant-access";
+import { isStripeConfigured } from "@/lib/stripe/client";
 
 const INVITATION_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 
@@ -296,6 +297,18 @@ export async function updateTenantProfile(input: {
     throw new Error("Diese Arbeitsbereich-URL ist bereits vergeben.");
   }
 
+  // Sobald Stripe konfiguriert ist, lässt sich der Plan nicht mehr über diese
+  // allgemeine Profil-Speicherung setzen — sonst könnte jeder mit
+  // "settings:write" (nicht nur der Owner) sich per Formular auf einen
+  // höheren, nicht bezahlten Plan setzen. Echte Wechsel laufen dann
+  // ausschließlich über Checkout/Billing-Portal. Die Felder werden dafür aus
+  // `data` ausgelassen (nicht auf einen Normalisierungs-Default gesetzt) —
+  // sonst würde ein fehlendes `input.plan` den bestehenden, echten Plan
+  // stillschweigend auf den Default zurücksetzen.
+  const billingFields = isStripeConfigured()
+    ? {}
+    : { plan: normalizePlan(input.plan), billingCycle: normalizeBillingCycle(input.billingCycle) };
+
   return prisma.tenant.update({
     where: { id: access.tenantId },
     data: {
@@ -308,8 +321,7 @@ export async function updateTenantProfile(input: {
       contactEmail: normalizeEmail(input.contactEmail),
       logoUrl: normalizeLogoUrl(input.logoUrl),
       primaryColor: optionalString(input.primaryColor, 16) || "#2A6FDB",
-      plan: normalizePlan(input.plan),
-      billingCycle: normalizeBillingCycle(input.billingCycle),
+      ...billingFields,
     },
   });
 }

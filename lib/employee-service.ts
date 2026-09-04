@@ -37,6 +37,7 @@ import { purgeTenantFiles } from "@/lib/storage/delete";
 import { ensureEmployeeTemplateFolder } from "@/lib/storage/storage.service";
 import { headers } from "next/headers";
 import {
+  assertEmployeeInScope,
   getOptionalTenantAccess,
   requireTenantAccess,
   requireTenantMembership,
@@ -740,6 +741,14 @@ async function getSessionUserId() {
   });
 
   return session?.user?.id ?? null;
+}
+
+async function getSessionUserEmail() {
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  });
+
+  return session?.user?.email ?? null;
 }
 
 export async function getTenantIdForEmployees(tenantSlug: string) {
@@ -1547,7 +1556,7 @@ export async function linkOwnTenantEmployee(input: { tenantSlug: string; employe
 
   const target = await prisma.tenantEmployee.findFirst({
     where: { id: input.employeeId, tenantId: access.tenantId },
-    select: { id: true, userId: true, name: true, role: true },
+    select: { id: true, userId: true, name: true, role: true, email: true },
   });
 
   if (!target) {
@@ -1556,6 +1565,15 @@ export async function linkOwnTenantEmployee(input: { tenantSlug: string; employe
 
   if (target.userId) {
     throw new Error("Diese Personalakte ist bereits mit einem Konto verknüpft.");
+  }
+
+  // Verhindert, dass sich ein beliebiges Mitglied eine fremde, noch nicht
+  // verknüpfte Personalakte aneignet: die Akte muss nachweislich zur
+  // anfragenden Person gehören, nicht nur zum selben Mandanten.
+  const sessionEmail = await getSessionUserEmail();
+
+  if (!sessionEmail || target.email.trim().toLowerCase() !== sessionEmail.trim().toLowerCase()) {
+    throw new Error("Diese Personalakte gehört nicht zu Ihrem Konto.");
   }
 
   await prisma.tenantEmployee.update({
@@ -1629,12 +1647,29 @@ export async function getMyEmployeeHandle(tenantSlug: string) {
   return employee?.key ?? null;
 }
 
-/** Personalakten im Mandanten ohne verknüpftes Konto — Auswahl für "Bestehendes Profil verknüpfen". */
+/**
+ * Personalakten im Mandanten ohne verknüpftes Konto — Auswahl für "Bestehendes
+ * Profil verknüpfen". Nur Akten, deren hinterlegte E-Mail zur anfragenden
+ * Person passt: sonst könnte jedes Mitglied die noch offene Akte einer
+ * beliebigen anderen (z. B. noch nicht aktivierten) Person sehen und
+ * verknüpfen (siehe `linkOwnTenantEmployee`, das denselben Abgleich als
+ * eigentliche Sicherheitsgrenze durchsetzt — diese Liste ist nur die
+ * Komfort-Vorauswahl dazu).
+ */
 export async function getUnlinkedEmployeesForTenant(tenantSlug: string) {
   const access = await requireTenantMembership(tenantSlug);
+  const sessionEmail = await getSessionUserEmail();
+
+  if (!sessionEmail) {
+    return [];
+  }
 
   return prisma.tenantEmployee.findMany({
-    where: { tenantId: access.tenantId, userId: null },
+    where: {
+      tenantId: access.tenantId,
+      userId: null,
+      email: { equals: sessionEmail, mode: "insensitive" },
+    },
     orderBy: { name: "asc" },
     select: {
       id: true,
@@ -1678,6 +1713,11 @@ export async function updateTenantEmployee(input: EmployeeMutationInput & { empl
   if (!current) {
     throw new Error("Mitarbeiter nicht gefunden.");
   }
+
+  // Scope (own/team/all) begrenzt sonst nur Leselisten — ohne diesen Check
+  // könnte eine team-gescopte Rolle trotzdem jeden Mitarbeiter mandantenweit
+  // per bekannter ID bearbeiten.
+  await assertEmployeeInScope(access, input.employeeId);
 
   const currentLocationNames = await getEmployeeLocationNames(tenantId, input.employeeId);
   const locations =
@@ -1947,6 +1987,8 @@ export async function offboardEmployee(input: {
     throw new Error("Mitarbeiter nicht gefunden.");
   }
 
+  await assertEmployeeInScope(access, input.employeeId);
+
   const endDate = input.endDate.trim();
 
   if (!/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
@@ -2007,6 +2049,8 @@ export async function deleteEmployeeAccess(input: { tenantSlug: string; employee
     throw new Error("Mitarbeiter nicht gefunden.");
   }
 
+  await assertEmployeeInScope(access, input.employeeId);
+
   if (!employee.userId) {
     throw new Error("EMPLOYEE_ACCESS_NOT_LINKED");
   }
@@ -2061,6 +2105,8 @@ export async function reactivateEmployee(input: { tenantSlug: string; employeeId
   if (!current) {
     throw new Error("Mitarbeiter nicht gefunden.");
   }
+
+  await assertEmployeeInScope(access, input.employeeId);
 
   await prisma.tenantEmployee.update({
     where: { id: input.employeeId },

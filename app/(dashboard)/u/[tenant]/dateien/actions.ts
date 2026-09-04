@@ -1,9 +1,11 @@
 "use server";
 
 import {
+  assertFolderPinAccess,
   createTenantFileFolder,
   folderScope,
   getTenantFileSignedUrl,
+  resolveTenantFileFolderPath,
   softDeleteTenantFile,
   uploadTenantFile,
   uploadTenantFileVersion,
@@ -321,6 +323,21 @@ export async function getHrFileSignedUrlAction(input: {
   version?: number;
   disposition?: "inline" | "attachment";
 }) {
+  // Gleicher PIN-Gate wie in files/[fileId]/signed-url/route.ts — ohne diese
+  // Prüfung würde diese Server Action eine gültige Download-URL für eine
+  // Datei in einem gesperrten Ordner liefern, ohne je die PIN zu verlangen.
+  // Die reguläre Datei-Oberfläche zeigt diese Aktion ohnehin erst, nachdem
+  // der Ordner per Cookie freigeschaltet wurde (siehe FolderPinGate) — der
+  // Check hier greift nur, wenn jemand die Aktion direkt aufruft.
+  const { folderPath, scope } = await resolveTenantFileFolderPath({
+    tenantSlug: input.tenant,
+    fileId: input.fileId,
+  });
+
+  if (folderPath) {
+    await assertFolderPinAccess({ tenantSlug: input.tenant, folderPath, scope });
+  }
+
   return getTenantFileSignedUrl({
     tenantSlug: input.tenant,
     fileId: input.fileId,

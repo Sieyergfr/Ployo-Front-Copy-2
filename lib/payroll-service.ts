@@ -3,7 +3,7 @@ import { decryptField, encryptField } from "@/lib/encryption";
 import { canAccessFileAcl, getOptionalFileReadAccess } from "@/lib/file-access";
 import { prisma } from "@/lib/prisma";
 import { uploadTenantFile } from "@/lib/storage/storage.service";
-import { requireTenantAccess, resolveScopeFilter } from "@/lib/tenant-access";
+import { assertEmployeeInScope, requireTenantAccess, resolveScopeFilter } from "@/lib/tenant-access";
 
 /**
  * Gleiche Berechtigungsebene wie Verträge (siehe contract-service.ts) —
@@ -107,6 +107,8 @@ export async function uploadPayrollStatement(input: {
   if (!employee) {
     throw new Error("Mitarbeiter wurde nicht gefunden.");
   }
+
+  await assertEmployeeInScope(access, employee.id);
 
   if (
     input.file.type !== "application/pdf" &&
