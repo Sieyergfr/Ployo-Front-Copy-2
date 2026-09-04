@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { useSyncExternalStore } from "react";
 import { CONSENT_BANNER_VERSION, CONSENT_COOKIE, CONSENT_MAX_AGE_DAYS } from "@/lib/consent";
 
@@ -76,6 +77,7 @@ function decide(value: "granted" | "denied") {
 }
 
 export function CookieConsent() {
+  const t = useTranslations("CookieConsent");
   const visible = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
   if (!visible) {
@@ -86,20 +88,18 @@ export function CookieConsent() {
     <div
       role="dialog"
       aria-live="polite"
-      aria-label="Cookie-Einstellungen"
+      aria-label={t("settingsAria")}
       className="fixed inset-x-0 bottom-0 z-[1700] flex justify-center px-3 pb-3 md:px-4 md:pb-4"
     >
       <div className="flex w-full max-w-[560px] flex-col gap-3 rounded-card border border-border bg-white p-4 shadow-[0_14px_42px_rgba(0,0,0,0.14)] md:p-5">
         <p className="text-[13.5px] leading-6 text-ink">
-          Wir verwenden technisch notwendige Cookies für Anmeldung und
-          Sitzung. Mit Ihrer Einwilligung setzen wir zusätzlich
-          Fehler- und Performance-Monitoring (Sentry) ein, das dabei auch
-          Session-Aufzeichnungen bei Fehlern anfertigen kann, um Probleme in
-          der Anwendung zu erkennen und zu beheben. Mehr dazu in unserer{" "}
-          <Link href="/datenschutz" className="underline underline-offset-2">
-            Datenschutzerklärung
-          </Link>
-          .
+          {t.rich("bannerText", {
+            link: (chunks) => (
+              <Link href="/datenschutz" className="underline underline-offset-2">
+                {chunks}
+              </Link>
+            ),
+          })}
         </p>
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <button
@@ -107,14 +107,14 @@ export function CookieConsent() {
             className="btn btn-secondary btn-sm"
             onClick={() => decide("denied")}
           >
-            Nur notwendige
+            {t("onlyNecessary")}
           </button>
           <button
             type="button"
             className="btn btn-primary btn-sm"
             onClick={() => decide("granted")}
           >
-            Alle akzeptieren
+            {t("acceptAll")}
           </button>
         </div>
       </div>

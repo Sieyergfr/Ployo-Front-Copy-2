@@ -1788,6 +1788,87 @@
     "add": "Hinzufügen",
     "addMembers": "Mitglieder hinzufügen"
   },
+  "ConfirmSubmitButton": {
+    "delete": "Löschen",
+    "confirmActionDescription": "Diese Aktion kann nicht automatisch rückgängig gemacht werden.",
+    "confirmDeleteTitle": "Löschen bestätigen",
+    "cancel": "Abbrechen"
+  },
+  "FormSubmitButton": {
+    "saving": "Wird gespeichert..."
+  },
+  "ListSearchBox": {
+    "searchPlaceholder": "Suchen…",
+    "clearSearchAria": "Suche zurücksetzen"
+  },
+  "Toasts": {
+    "closeToastAria": "Toast schliessen",
+    "close": "Schliessen"
+  },
+  "UniversalPopup": {
+    "closePopupAria": "Popup schließen",
+    "close": "Schliessen"
+  },
+  "CookieConsent": {
+    "settingsAria": "Cookie-Einstellungen",
+    "bannerText": "Wir verwenden technisch notwendige Cookies für Anmeldung und Sitzung. Mit Ihrer Einwilligung setzen wir zusätzlich Fehler- und Performance-Monitoring (Sentry) ein, das dabei auch Session-Aufzeichnungen bei Fehlern anfertigen kann, um Probleme in der Anwendung zu erkennen und zu beheben. Mehr dazu in unserer <link>Datenschutzerklärung</link>.",
+    "onlyNecessary": "Nur notwendige",
+    "acceptAll": "Alle akzeptieren"
+  },
+  "OpeningHoursEditor": {
+    "useCustomLabel": "Eigene Öffnungszeiten für diesen Standort festlegen",
+    "defaultHoursNote": "Es gelten die Standard-Öffnungszeiten des Unternehmens (Schichtplanung → Einstellungen).",
+    "modeClosed": "Geschlossen",
+    "mode24h": "Rund um die Uhr",
+    "modeCustom": "Benutzerdefiniert",
+    "modeAria": "{weekday} Modus",
+    "startAria": "{weekday} Beginn {index}",
+    "endAria": "{weekday} Ende {index}",
+    "breakAria": "{weekday} Pause {index}",
+    "noBreak": "Keine Pause",
+    "break15": "15m Pause",
+    "break30": "30m Pause",
+    "break45": "45m Pause",
+    "break60": "60m Pause",
+    "removeRangeAria": "{weekday} Zeitfenster {index} entfernen",
+    "addRange": "Zeitfenster hinzufügen",
+    "lunchBreakHint": "z. B. für eine Mittagsschließung"
+  },
+  "PayrollDownloadButton": {
+    "view": "Ansehen",
+    "viewAria": "Gehaltsabrechnung ansehen",
+    "download": "Herunterladen",
+    "downloadAria": "Gehaltsabrechnung herunterladen"
+  },
+  "OffboardEmployeeButton": {
+    "offboardNotice": "<bold>{employeeName}</bold> wird als ausgeschieden markiert. Die Personalakte bleibt erhalten, zählt aber nicht mehr als aktive Belegschaft.",
+    "endDateLabel": "Austrittsdatum",
+    "reasonLabel": "Grund (optional)",
+    "reasonPlaceholder": "z. B. Eigenkündigung, Vertragsende",
+    "cancel": "Abbrechen",
+    "saving": "Wird gespeichert...",
+    "confirmOffboard": "Ausscheiden bestätigen",
+    "offboardTitle": "Mitarbeiter ausscheiden",
+    "offboard": "Ausscheiden",
+    "reactivateNotice": "Der Mitarbeiter wird wieder als aktiv geführt, das Austrittsdatum wird entfernt.",
+    "reactivating": "Wird reaktiviert...",
+    "reactivate": "Reaktivieren",
+    "reactivateTitle": "Mitarbeiter reaktivieren"
+  },
+  "PayrollUploadButton": {
+    "periodLabel": "Zeitraum",
+    "periodPlaceholder": "Januar 2026",
+    "grossLabel": "Brutto (optional)",
+    "grossPlaceholder": "3.500,00 €",
+    "netLabel": "Netto (optional)",
+    "netPlaceholder": "2.310,00 €",
+    "fileLabel": "PDF-Datei",
+    "cancel": "Abbrechen",
+    "uploading": "Wird hochgeladen...",
+    "upload": "Hochladen",
+    "uploadTitle": "Gehaltsabrechnung hochladen",
+    "uploadStatement": "Abrechnung hochladen"
+  },
   "LegalLayout": {
     "signIn": "Anmelden",
     "dataProtection": "Datenschutz",

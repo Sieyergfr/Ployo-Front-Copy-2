@@ -1,6 +1,7 @@
 "use client";
 
 import { Download, Eye } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 /**
  * Ansehen/Herunterladen einer Gehaltsabrechnung.
@@ -17,6 +18,7 @@ export default function PayrollDownloadButton({
   tenant: string;
   fileId: string;
 }) {
+  const t = useTranslations("PayrollDownloadButton");
   const href = (disposition: "inline" | "attachment") =>
     `/api/tenants/${encodeURIComponent(tenant)}/files/${encodeURIComponent(fileId)}/content?disposition=${disposition}`;
 
@@ -27,16 +29,16 @@ export default function PayrollDownloadButton({
         target="_blank"
         rel="noopener noreferrer"
         className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-[8px] border border-border bg-white text-muted transition-colors hover:border-muted hover:text-ink"
-        title="Ansehen"
-        aria-label="Gehaltsabrechnung ansehen"
+        title={t("view")}
+        aria-label={t("viewAria")}
       >
         <Eye size={14} />
       </a>
       <a
         href={href("attachment")}
         className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-[8px] border border-border bg-white text-muted transition-colors hover:border-muted hover:text-ink"
-        title="Herunterladen"
-        aria-label="Gehaltsabrechnung herunterladen"
+        title={t("download")}
+        aria-label={t("downloadAria")}
       >
         <Download size={14} />
       </a>

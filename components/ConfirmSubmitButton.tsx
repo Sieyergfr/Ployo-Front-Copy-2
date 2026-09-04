@@ -2,6 +2,7 @@
 
 import { useUniversalPopup } from "@/components/UniversalPopup";
 import { Trash2 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useRef, type ReactNode } from "react";
 
 type ConfirmSubmitButtonProps = {
@@ -32,12 +33,16 @@ type ConfirmSubmitButtonProps = {
 export default function ConfirmSubmitButton({
   children,
   className = "btn btn-secondary text-danger",
-  confirmLabel = "Löschen",
-  description = "Diese Aktion kann nicht automatisch rückgängig gemacht werden.",
+  confirmLabel,
+  description,
   form,
   formAction,
-  title = "Löschen bestätigen",
+  title,
 }: ConfirmSubmitButtonProps) {
+  const t = useTranslations("ConfirmSubmitButton");
+  const effectiveConfirmLabel = confirmLabel ?? t("delete");
+  const effectiveDescription = description ?? t("confirmActionDescription");
+  const effectiveTitle = title ?? t("confirmDeleteTitle");
   const { openPopup, closePopup } = useUniversalPopup();
   const submitRef = useRef<HTMLButtonElement>(null);
 
@@ -56,16 +61,16 @@ export default function ConfirmSubmitButton({
         className={className}
         onClick={() => {
           openPopup({
-            title,
+            title: effectiveTitle,
             size: "narrow",
             content: (
               <div>
                 <p className="m-0 text-[13px] leading-[1.55] text-muted-2">
-                  {description}
+                  {effectiveDescription}
                 </p>
                 <div className="mt-5 flex justify-end gap-2.5 border-t border-border-soft pt-4">
                   <button type="button" className="btn btn-secondary" onClick={closePopup}>
-                    Abbrechen
+                    {t("cancel")}
                   </button>
                   <button
                     type="button"
@@ -73,7 +78,7 @@ export default function ConfirmSubmitButton({
                     onClick={submit}
                   >
                     <Trash2 size={15} />
-                    {confirmLabel}
+                    {effectiveConfirmLabel}
                   </button>
                 </div>
               </div>
@@ -84,7 +89,7 @@ export default function ConfirmSubmitButton({
         {children ?? (
           <>
             <Trash2 size={15} />
-            {confirmLabel}
+            {effectiveConfirmLabel}
           </>
         )}
       </button>

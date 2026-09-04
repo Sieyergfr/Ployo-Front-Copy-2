@@ -8,6 +8,9 @@ import DatePickerField from "@/components/DatePickerField";
 import FormSubmitButton from "@/components/FormSubmitButton";
 import { useUniversalPopup } from "@/components/UniversalPopup";
 import { LogOut, RotateCcw } from "lucide-react";
+import { useTranslations } from "next-intl";
+
+type T = ReturnType<typeof useTranslations>;
 
 function OffboardForm({
   tenant,
@@ -15,12 +18,14 @@ function OffboardForm({
   employeeHandle,
   employeeName,
   onDone,
+  t,
 }: {
   tenant: string;
   employeeId: string;
   employeeHandle: string;
   employeeName: string;
   onDone: () => void;
+  t: T;
 }) {
   return (
     <form className="flex flex-col gap-4" action={offboardEmployeeAction}>
@@ -28,36 +33,38 @@ function OffboardForm({
       <input type="hidden" name="employeeId" value={employeeId} />
       <input type="hidden" name="employeeHandle" value={employeeHandle} />
       <div className="rounded-xl border border-border bg-bg p-3 text-[12.5px] text-muted-2">
-        <span className="font-semibold text-ink">{employeeName}</span> wird als ausgeschieden
-        markiert. Die Personalakte bleibt erhalten, zählt aber nicht mehr als aktive Belegschaft.
+        {t.rich("offboardNotice", {
+          employeeName,
+          bold: (chunks) => <span className="font-semibold text-ink">{chunks}</span>,
+        })}
       </div>
       <div className="field">
         <label htmlFor="offboard-end-date" className="label">
-          Austrittsdatum
+          {t("endDateLabel")}
         </label>
         <DatePickerField id="offboard-end-date" name="endDate" />
       </div>
       <div className="field">
         <label htmlFor="offboard-reason" className="label">
-          Grund (optional)
+          {t("reasonLabel")}
         </label>
         <textarea
           id="offboard-reason"
           name="reason"
           className="input min-h-20 resize-none"
-          placeholder="z. B. Eigenkündigung, Vertragsende"
+          placeholder={t("reasonPlaceholder")}
         />
       </div>
       <div className="mt-1 flex justify-end gap-2.5 border-t border-border-soft pt-4">
         <button type="button" className="btn btn-secondary" onClick={onDone}>
-          Abbrechen
+          {t("cancel")}
         </button>
         <FormSubmitButton
           Icon={LogOut}
-          pendingLabel="Wird gespeichert..."
+          pendingLabel={t("saving")}
           className="btn btn-secondary text-danger"
         >
-          Ausscheiden bestätigen
+          {t("confirmOffboard")}
         </FormSubmitButton>
       </div>
     </form>
@@ -75,6 +82,7 @@ export function OffboardEmployeeButton({
   employeeHandle: string;
   employeeName: string;
 }) {
+  const t = useTranslations("OffboardEmployeeButton");
   const { openPopup, closePopup } = useUniversalPopup();
 
   return (
@@ -83,7 +91,7 @@ export function OffboardEmployeeButton({
       className="btn btn-secondary btn-sm text-danger"
       onClick={() =>
         openPopup({
-          title: "Mitarbeiter ausscheiden",
+          title: t("offboardTitle"),
           content: (
             <OffboardForm
               tenant={tenant}
@@ -91,13 +99,14 @@ export function OffboardEmployeeButton({
               employeeHandle={employeeHandle}
               employeeName={employeeName}
               onDone={closePopup}
+              t={t}
             />
           ),
         })
       }
     >
       <LogOut size={14} />
-      Ausscheiden
+      {t("offboard")}
     </button>
   );
 }
@@ -107,11 +116,13 @@ function ReactivateForm({
   employeeId,
   employeeHandle,
   onDone,
+  t,
 }: {
   tenant: string;
   employeeId: string;
   employeeHandle: string;
   onDone: () => void;
+  t: T;
 }) {
   return (
     <form className="flex flex-col gap-4" action={reactivateEmployeeAction}>
@@ -119,14 +130,14 @@ function ReactivateForm({
       <input type="hidden" name="employeeId" value={employeeId} />
       <input type="hidden" name="employeeHandle" value={employeeHandle} />
       <p className="m-0 text-[13px] leading-[1.55] text-muted-2">
-        Der Mitarbeiter wird wieder als aktiv geführt, das Austrittsdatum wird entfernt.
+        {t("reactivateNotice")}
       </p>
       <div className="mt-1 flex justify-end gap-2.5 border-t border-border-soft pt-4">
         <button type="button" className="btn btn-secondary" onClick={onDone}>
-          Abbrechen
+          {t("cancel")}
         </button>
-        <FormSubmitButton Icon={RotateCcw} pendingLabel="Wird reaktiviert...">
-          Reaktivieren
+        <FormSubmitButton Icon={RotateCcw} pendingLabel={t("reactivating")}>
+          {t("reactivate")}
         </FormSubmitButton>
       </div>
     </form>
@@ -142,6 +153,7 @@ export function ReactivateEmployeeButton({
   employeeId: string;
   employeeHandle: string;
 }) {
+  const t = useTranslations("OffboardEmployeeButton");
   const { openPopup, closePopup } = useUniversalPopup();
 
   return (
@@ -150,20 +162,21 @@ export function ReactivateEmployeeButton({
       className="btn btn-secondary btn-sm"
       onClick={() =>
         openPopup({
-          title: "Mitarbeiter reaktivieren",
+          title: t("reactivateTitle"),
           content: (
             <ReactivateForm
               tenant={tenant}
               employeeId={employeeId}
               employeeHandle={employeeHandle}
               onDone={closePopup}
+              t={t}
             />
           ),
         })
       }
     >
       <RotateCcw size={14} />
-      Reaktivieren
+      {t("reactivate")}
     </button>
   );
 }

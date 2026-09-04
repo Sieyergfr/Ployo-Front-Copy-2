@@ -1788,6 +1788,87 @@
     "add": "Add",
     "addMembers": "Add members"
   },
+  "ConfirmSubmitButton": {
+    "delete": "Delete",
+    "confirmActionDescription": "This action cannot be automatically undone.",
+    "confirmDeleteTitle": "Confirm deletion",
+    "cancel": "Cancel"
+  },
+  "FormSubmitButton": {
+    "saving": "Saving..."
+  },
+  "ListSearchBox": {
+    "searchPlaceholder": "Search…",
+    "clearSearchAria": "Clear search"
+  },
+  "Toasts": {
+    "closeToastAria": "Close toast",
+    "close": "Close"
+  },
+  "UniversalPopup": {
+    "closePopupAria": "Close popup",
+    "close": "Close"
+  },
+  "CookieConsent": {
+    "settingsAria": "Cookie settings",
+    "bannerText": "We use technically necessary cookies for sign-in and sessions. With your consent, we also use error and performance monitoring (Sentry), which may capture session recordings on errors to identify and fix issues in the application. Learn more in our <link>Privacy Policy</link>.",
+    "onlyNecessary": "Necessary only",
+    "acceptAll": "Accept all"
+  },
+  "OpeningHoursEditor": {
+    "useCustomLabel": "Set custom opening hours for this location",
+    "defaultHoursNote": "The company's default opening hours apply (Shift planning → Settings).",
+    "modeClosed": "Closed",
+    "mode24h": "Open 24 hours",
+    "modeCustom": "Custom",
+    "modeAria": "{weekday} mode",
+    "startAria": "{weekday} start {index}",
+    "endAria": "{weekday} end {index}",
+    "breakAria": "{weekday} break {index}",
+    "noBreak": "No break",
+    "break15": "15m break",
+    "break30": "30m break",
+    "break45": "45m break",
+    "break60": "60m break",
+    "removeRangeAria": "Remove {weekday} time slot {index}",
+    "addRange": "Add time slot",
+    "lunchBreakHint": "e.g. for a lunch closure"
+  },
+  "PayrollDownloadButton": {
+    "view": "View",
+    "viewAria": "View payroll statement",
+    "download": "Download",
+    "downloadAria": "Download payroll statement"
+  },
+  "OffboardEmployeeButton": {
+    "offboardNotice": "<bold>{employeeName}</bold> will be marked as offboarded. The HR record remains, but no longer counts as active staff.",
+    "endDateLabel": "Departure date",
+    "reasonLabel": "Reason (optional)",
+    "reasonPlaceholder": "e.g. resignation, contract end",
+    "cancel": "Cancel",
+    "saving": "Saving...",
+    "confirmOffboard": "Confirm offboarding",
+    "offboardTitle": "Offboard employee",
+    "offboard": "Offboard",
+    "reactivateNotice": "The employee will be marked active again, and the departure date will be removed.",
+    "reactivating": "Reactivating...",
+    "reactivate": "Reactivate",
+    "reactivateTitle": "Reactivate employee"
+  },
+  "PayrollUploadButton": {
+    "periodLabel": "Period",
+    "periodPlaceholder": "January 2026",
+    "grossLabel": "Gross (optional)",
+    "grossPlaceholder": "3,500.00 €",
+    "netLabel": "Net (optional)",
+    "netPlaceholder": "2,310.00 €",
+    "fileLabel": "PDF file",
+    "cancel": "Cancel",
+    "uploading": "Uploading...",
+    "upload": "Upload",
+    "uploadTitle": "Upload payroll statement",
+    "uploadStatement": "Upload statement"
+  },
   "LegalLayout": {
     "signIn": "Sign in",
     "dataProtection": "Privacy Policy",

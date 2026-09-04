@@ -1,6 +1,7 @@
 "use client";
 
 import { Loader2, type LucideIcon } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { type ButtonHTMLAttributes, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
 
@@ -22,11 +23,12 @@ export default function FormSubmitButton({
   children,
   Icon,
   icon,
-  pendingLabel = "Wird gespeichert...",
+  pendingLabel,
   className = "btn btn-primary",
   disabled,
   ...props
 }: FormSubmitButtonProps) {
+  const t = useTranslations("FormSubmitButton");
   const { pending } = useFormStatus();
 
   return (
@@ -40,7 +42,7 @@ export default function FormSubmitButton({
       {pending ? (
         <>
           <Loader2 size={15} className="animate-spin" />
-          {pendingLabel}
+          {pendingLabel ?? t("saving")}
         </>
       ) : (
         <>

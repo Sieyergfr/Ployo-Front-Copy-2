@@ -1,6 +1,7 @@
 "use client";
 
 import { X } from "lucide-react";
+import { useTranslations } from "next-intl";
 import {
   createContext,
   type ReactNode,
@@ -42,6 +43,7 @@ const UniversalPopupContext =
   createContext<UniversalPopupContextValue | null>(null);
 
 export function UniversalPopupProvider({ children }: { children: ReactNode }) {
+  const t = useTranslations("UniversalPopup");
   const [popup, setPopup] = useState<ActivePopup | null>(null);
 
   const closePopup = useCallback(() => {
@@ -101,8 +103,8 @@ export function UniversalPopupProvider({ children }: { children: ReactNode }) {
             {!popup.hideCloseButton && (
               <button
                 type="button"
-                aria-label="Popup schließen"
-                title="Schließen"
+                aria-label={t("closePopupAria")}
+                title={t("close")}
                 className="absolute top-4 right-4 flex size-8 cursor-pointer items-center justify-center rounded-[9px] border border-border bg-white text-muted transition-colors hover:border-muted hover:text-ink"
                 onClick={closePopup}
               >

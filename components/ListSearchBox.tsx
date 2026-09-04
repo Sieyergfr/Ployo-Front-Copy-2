@@ -1,6 +1,7 @@
 "use client";
 
 import { Search, X } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 type ListSearchBoxProps = {
   value: string;
@@ -13,23 +14,25 @@ type ListSearchBoxProps = {
 export function ListSearchBox({
   value,
   onChange,
-  placeholder = "Suchen…",
+  placeholder,
   className,
 }: ListSearchBoxProps) {
+  const t = useTranslations("ListSearchBox");
+
   return (
     <div className={`input-wrapper ${className ?? ""}`}>
       <Search size={14} className="input-icon-left" />
       <input
         type="search"
         className={`input bg-white ${value ? "input-with-icons" : "input-with-icon-left"}`}
-        placeholder={placeholder}
+        placeholder={placeholder ?? t("searchPlaceholder")}
         value={value}
         onChange={(event) => onChange(event.target.value)}
       />
       {value && (
         <button
           type="button"
-          aria-label="Suche zurücksetzen"
+          aria-label={t("clearSearchAria")}
           className="input-icon-right"
           onClick={() => onChange("")}
         >

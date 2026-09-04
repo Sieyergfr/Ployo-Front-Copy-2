@@ -8,6 +8,7 @@ import {
   XCircle,
   type LucideIcon,
 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import {
   createContext,
   type CSSProperties,
@@ -82,6 +83,7 @@ function ToastCard({
   item: ToastItem;
   onDismiss: (id: number) => void;
 }) {
+  const t = useTranslations("Toasts");
   const touchStartX = useRef<number | null>(null);
   const [dragX, setDragX] = useState(0);
   const config = toneConfig[item.tone];
@@ -144,8 +146,8 @@ function ToastCard({
       <button
         type="button"
         className="hidden size-6 shrink-0 cursor-pointer items-center justify-center rounded-[7px] text-muted transition-colors hover:bg-bg hover:text-ink md:flex"
-        aria-label="Toast schliessen"
-        title="Schliessen"
+        aria-label={t("closeToastAria")}
+        title={t("close")}
         onClick={() => onDismiss(item.id)}
       >
         <X size={13} strokeWidth={2.2} />

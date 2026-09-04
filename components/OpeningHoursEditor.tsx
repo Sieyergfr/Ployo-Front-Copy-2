@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Plus, X } from "lucide-react";
+import { useTranslations } from "next-intl";
 import {
   MAX_OPENING_HOURS_RANGES_PER_DAY,
   OPENING_HOURS_WEEKDAYS,
@@ -48,6 +49,7 @@ export function OpeningHoursEditor({
   initiallyCustom = true,
   formId,
 }: OpeningHoursEditorProps) {
+  const t = useTranslations("OpeningHoursEditor");
   const [days, setDays] = useState<OpeningHoursDay[]>(() => withDefaults(defaultValue));
   const [useCustom, setUseCustom] = useState(!allowInherit || initiallyCustom);
 
@@ -105,7 +107,7 @@ export function OpeningHoursEditor({
             checked={useCustom}
             onChange={(event) => setUseCustom(event.target.checked)}
           />
-          Eigene Öffnungszeiten für diesen Standort festlegen
+          {t("useCustomLabel")}
         </label>
       )}
 
@@ -113,9 +115,7 @@ export function OpeningHoursEditor({
         <>
           <input type="hidden" name={name} value="[]" form={formId} />
           <p className="text-[12.5px] text-muted">
-            Es gelten die Standard-Öffnungszeiten des Unternehmens (Schichtplanung
-            {" "}
-            {"→"} Einstellungen).
+            {t("defaultHoursNote")}
           </p>
         </>
       ) : (
@@ -145,11 +145,11 @@ export function OpeningHoursEditor({
                         ranges: mode === "custom" ? (day.ranges.length ? day.ranges : [{ ...DEFAULT_RANGE }]) : [],
                       });
                     }}
-                    aria-label={`${WEEKDAY_LABELS[day.weekday]} Modus`}
+                    aria-label={t("modeAria", { weekday: WEEKDAY_LABELS[day.weekday] })}
                   >
-                    <option value="closed">Geschlossen</option>
-                    <option value="24h">Rund um die Uhr</option>
-                    <option value="custom">Benutzerdefiniert</option>
+                    <option value="closed">{t("modeClosed")}</option>
+                    <option value="24h">{t("mode24h")}</option>
+                    <option value="custom">{t("modeCustom")}</option>
                   </select>
                 </div>
 
@@ -164,7 +164,7 @@ export function OpeningHoursEditor({
                           onChange={(event) =>
                             updateRange(day.weekday, index, { start: event.target.value })
                           }
-                          aria-label={`${WEEKDAY_LABELS[day.weekday]} Beginn ${index + 1}`}
+                          aria-label={t("startAria", { weekday: WEEKDAY_LABELS[day.weekday], index: index + 1 })}
                         />
                         <span className="text-muted">–</span>
                         <input
@@ -174,7 +174,7 @@ export function OpeningHoursEditor({
                           onChange={(event) =>
                             updateRange(day.weekday, index, { end: event.target.value })
                           }
-                          aria-label={`${WEEKDAY_LABELS[day.weekday]} Ende ${index + 1}`}
+                          aria-label={t("endAria", { weekday: WEEKDAY_LABELS[day.weekday], index: index + 1 })}
                         />
                         <select
                           className="input w-auto cursor-pointer bg-white"
@@ -184,20 +184,20 @@ export function OpeningHoursEditor({
                               breakMinutes: Number.parseInt(event.target.value, 10) || 0,
                             })
                           }
-                          aria-label={`${WEEKDAY_LABELS[day.weekday]} Pause ${index + 1}`}
+                          aria-label={t("breakAria", { weekday: WEEKDAY_LABELS[day.weekday], index: index + 1 })}
                         >
-                          <option value="0">Keine Pause</option>
-                          <option value="15">15m Pause</option>
-                          <option value="30">30m Pause</option>
-                          <option value="45">45m Pause</option>
-                          <option value="60">60m Pause</option>
+                          <option value="0">{t("noBreak")}</option>
+                          <option value="15">{t("break15")}</option>
+                          <option value="30">{t("break30")}</option>
+                          <option value="45">{t("break45")}</option>
+                          <option value="60">{t("break60")}</option>
                         </select>
                         {day.ranges.length > 1 && (
                           <button
                             type="button"
                             className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[8px] border border-border bg-white text-muted transition-colors hover:border-danger/30 hover:text-danger"
                             onClick={() => removeRange(day.weekday, index)}
-                            aria-label={`${WEEKDAY_LABELS[day.weekday]} Zeitfenster ${index + 1} entfernen`}
+                            aria-label={t("removeRangeAria", { weekday: WEEKDAY_LABELS[day.weekday], index: index + 1 })}
                           >
                             <X size={13} />
                           </button>
@@ -212,11 +212,11 @@ export function OpeningHoursEditor({
                           onClick={() => addRange(day.weekday)}
                         >
                           <Plus size={13} />
-                          Zeitfenster hinzufügen
+                          {t("addRange")}
                         </button>
                         {day.ranges.length === 1 && (
                           <span className="text-[11.5px] text-muted">
-                            z. B. für eine Mittagsschließung
+                            {t("lunchBreakHint")}
                           </span>
                         )}
                       </div>
