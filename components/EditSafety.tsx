@@ -2,10 +2,12 @@
 
 import { useUniversalPopup } from "@/components/UniversalPopup";
 import { Save } from "lucide-react";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { type ReactNode, useEffect } from "react";
 
 export function UnsavedChangesGuard({ active }: { active: boolean }) {
+  const t = useTranslations("EditSafety");
   const { openPopup, closePopup } = useUniversalPopup();
 
   useEffect(() => {
@@ -41,16 +43,15 @@ export function UnsavedChangesGuard({ active }: { active: boolean }) {
       event.stopPropagation();
 
       openPopup({
-        title: "Ungespeicherte Änderungen",
+        title: t("unsavedChangesTitle"),
         content: (
           <div>
             <p className="m-0 text-[13px] leading-[1.55] text-muted-2">
-              Es gibt ungespeicherte Änderungen. Wenn du die Seite verlässt,
-              gehen diese Änderungen verloren.
+              {t("unsavedChangesBody")}
             </p>
             <div className="mt-5 flex justify-end gap-2.5 border-t border-border-soft pt-4">
               <button type="button" className="btn btn-secondary" onClick={closePopup}>
-                Weiter bearbeiten
+                {t("continueEditing")}
               </button>
               <Link
                 href={href}
@@ -58,7 +59,7 @@ export function UnsavedChangesGuard({ active }: { active: boolean }) {
                 data-unsaved-allow="true"
                 onClick={closePopup}
               >
-                Seite verlassen
+                {t("leavePage")}
               </Link>
             </div>
           </div>
@@ -73,7 +74,7 @@ export function UnsavedChangesGuard({ active }: { active: boolean }) {
       window.removeEventListener("beforeunload", handleBeforeUnload);
       document.removeEventListener("click", handleDocumentClick, true);
     };
-  }, [active, closePopup, openPopup]);
+  }, [active, closePopup, openPopup, t]);
 
   return null;
 }
@@ -87,6 +88,7 @@ export function ConfirmedSaveLink({
   children?: ReactNode;
   className?: string;
 }) {
+  const t = useTranslations("EditSafety");
   const { openPopup, closePopup } = useUniversalPopup();
 
   return (
@@ -95,16 +97,15 @@ export function ConfirmedSaveLink({
       className={className}
       onClick={() => {
         openPopup({
-          title: "Speichern bestätigen",
+          title: t("confirmSaveTitle"),
           content: (
             <div>
               <p className="m-0 text-[13px] leading-[1.55] text-muted-2">
-                Bitte bestätige, dass die Änderungen gespeichert und im Audit Log
-                protokolliert werden sollen.
+                {t("confirmSaveBody")}
               </p>
               <div className="mt-5 flex justify-end gap-2.5 border-t border-border-soft pt-4">
                 <button type="button" className="btn btn-secondary" onClick={closePopup}>
-                  Abbrechen
+                  {t("cancel")}
                 </button>
                 <Link
                   href={href}
@@ -113,7 +114,7 @@ export function ConfirmedSaveLink({
                   onClick={closePopup}
                 >
                   <Save size={15} />
-                  Speichern
+                  {t("save")}
                 </Link>
               </div>
             </div>
@@ -124,7 +125,7 @@ export function ConfirmedSaveLink({
       {children ?? (
         <>
           <Save size={14} />
-          Speichern
+          {t("save")}
         </>
       )}
     </button>

@@ -220,7 +220,7 @@ export default async function EmployeesPage({
         getRowKey={(employee) => employee.id}
         getRowHref={(employee) => `/u/${tenant}/employees/${employee.id}`}
         minWidth={980}
-        emptyState={isFiltered ? t("noResults") : undefined}
+        emptyState={isFiltered ? t("noResults") : t("noEmployeesYet")}
       />
       <PaginationControls
         page={page.page}

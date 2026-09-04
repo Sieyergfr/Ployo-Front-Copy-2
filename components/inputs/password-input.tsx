@@ -1,6 +1,7 @@
 "use client";
 
 import { Eye, EyeOff } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 
 type PasswordInputProps = {
@@ -20,6 +21,7 @@ export default function PasswordInput({
   className,
   ...props
 }: PasswordInputProps) {
+  const t = useTranslations("PasswordInput");
   const [show, setShow] = useState(false);
   const [internalValue, setInternalValue] = useState("");
 
@@ -40,7 +42,13 @@ export default function PasswordInput({
     return score;
   }, [password, showStrength]);
 
-  const strengthText = ["", "Schwach", "Mittel", "Gut", "Stark"];
+  const strengthText = [
+    "",
+    t("strengthWeak"),
+    t("strengthMedium"),
+    t("strengthGood"),
+    t("strengthStrong"),
+  ];
 
   const strengthColor = [
     "bg-border",
@@ -80,7 +88,7 @@ export default function PasswordInput({
           type="button"
           className="input-icon-right"
           onClick={() => setShow((v) => !v)}
-          aria-label={show ? "Passwort verbergen" : "Passwort anzeigen"}
+          aria-label={show ? t("hidePassword") : t("showPassword")}
         >
           {show ? (
             <EyeOff size={16} strokeWidth={1.8} />

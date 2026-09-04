@@ -31,7 +31,11 @@ export default function DataTable<T>({
   getRowKey,
   getRowHref,
   minWidth = 900,
-  emptyState = "Keine Eintr\u00e4ge gefunden.",
+  // Kein hartkodierter deutscher Default: diese Datei hat bewusst kein
+  // "use client" (Server- und Client-Aufrufer, next-intl-Hook w\u00e4re hier
+  // nicht sicher aufrufbar) \u2014 jeder Aufrufer \u00fcbergibt sein eigenes,
+  // \u00fcbersetztes emptyState.
+  emptyState = null,
   className,
 }: DataTableProps<T>) {
   const gridTemplateColumns = columns

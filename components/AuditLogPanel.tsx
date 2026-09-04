@@ -1,13 +1,16 @@
 import type { AuditLogEntry } from "@/lib/audit";
 import { ShieldCheck } from "lucide-react";
+import { getTranslations } from "next-intl/server";
 
-export default function AuditLogPanel({
+export default async function AuditLogPanel({
   entries,
-  title = "Audit Log",
+  title,
 }: {
   entries: AuditLogEntry[];
   title?: string;
 }) {
+  const t = await getTranslations("AuditLogPanel");
+
   return (
     <section className="rounded-card border border-border bg-white px-6 py-[22px]">
       <div className="mb-4 flex items-center gap-2.5">
@@ -16,17 +19,17 @@ export default function AuditLogPanel({
         </span>
         <div>
           <h2 className="font-display text-[16px] font-semibold tracking-[-0.3px] text-ink">
-            {title}
+            {title ?? t("defaultTitle")}
           </h2>
           <div className="mt-0.5 font-mono text-[10px] text-muted">
-            Actor, Source, Zeitpunkt und Kontext
+            {t("columnsHint")}
           </div>
         </div>
       </div>
       <div>
         {entries.length === 0 && (
           <div className="border-t border-border-soft py-4 text-[12.5px] text-muted">
-            Noch keine Audit-Einträge vorhanden.
+            {t("noEntriesYet")}
           </div>
         )}
         {entries.map((entry) => (

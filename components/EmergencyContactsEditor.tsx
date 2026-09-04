@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { X } from "lucide-react";
 import type { EmergencyContact } from "@/lib/employees";
+import { useTranslations } from "next-intl";
 
 let tempIdCounter = 0;
 
@@ -17,6 +18,7 @@ export default function EmergencyContactsEditor({
 }: {
   contacts: EmergencyContact[];
 }) {
+  const t = useTranslations("EmergencyContactsEditor");
   const [rows, setRows] = useState<EmergencyContact[]>(contacts);
   // `contacts` kommt vom Server und ändert bei jedem Re-Render die
   // Objekt-/Array-Referenz — auch wenn sich der Inhalt nicht geändert hat.
@@ -46,51 +48,51 @@ export default function EmergencyContactsEditor({
           <div className="grid gap-2 sm:grid-cols-2">
             <div className="field">
               <label htmlFor={`${contact.id}-name`} className="label">
-                Name
+                {t("nameLabel")}
               </label>
               <input
                 id={`${contact.id}-name`}
                 className="input bg-white"
                 name="emergencyContactName"
-                aria-label={`Notfallkontakt ${index + 1} Name`}
+                aria-label={t("nameAria", { index: index + 1 })}
                 defaultValue={contact.name}
               />
             </div>
             <div className="field">
               <label htmlFor={`${contact.id}-relation`} className="label">
-                Beziehung
+                {t("relationLabel")}
               </label>
               <input
                 id={`${contact.id}-relation`}
                 className="input bg-white"
                 name="emergencyContactRelation"
-                aria-label={`Notfallkontakt ${index + 1} Beziehung`}
+                aria-label={t("relationAria", { index: index + 1 })}
                 defaultValue={contact.relation}
               />
             </div>
             <div className="field">
               <label htmlFor={`${contact.id}-phone`} className="label">
-                Telefon
+                {t("phoneLabel")}
               </label>
               <input
                 id={`${contact.id}-phone`}
                 className="input input-mono bg-white"
                 name="emergencyContactPhone"
-                aria-label={`Notfallkontakt ${index + 1} Telefon`}
+                aria-label={t("phoneAria", { index: index + 1 })}
                 defaultValue={contact.phone}
               />
             </div>
             <div className="field">
               <label htmlFor={`${contact.id}-email`} className="label">
-                E-Mail
+                {t("emailLabel")}
               </label>
               <input
                 id={`${contact.id}-email`}
                 className="input bg-white"
                 name="emergencyContactEmail"
-                aria-label={`Notfallkontakt ${index + 1} E-Mail`}
+                aria-label={t("emailAria", { index: index + 1 })}
                 defaultValue={contact.email ?? ""}
-                placeholder="Optional"
+                placeholder={t("optional")}
               />
             </div>
           </div>
@@ -102,7 +104,7 @@ export default function EmergencyContactsEditor({
             }
           >
             <X size={13} />
-            Kontakt entfernen
+            {t("removeContact")}
           </button>
         </div>
       ))}
@@ -111,7 +113,7 @@ export default function EmergencyContactsEditor({
         className="btn btn-secondary btn-sm w-fit"
         onClick={() => setRows((prev) => [...prev, createEmptyContact()])}
       >
-        Kontakt hinzufügen
+        {t("addContact")}
       </button>
     </div>
   );

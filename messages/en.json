@@ -224,7 +224,8 @@
     "statusActive": "Active",
     "statusVacation": "Vacation",
     "statusAbsent": "Absent",
-    "statusFormer": "Former"
+    "statusFormer": "Former",
+    "noEmployeesYet": "No employees added yet."
   },
   "EmployeeQuickView": {
     "title": "Quick View",
@@ -1868,6 +1869,72 @@
     "upload": "Upload",
     "uploadTitle": "Upload payroll statement",
     "uploadStatement": "Upload statement"
+  },
+  "EmployeeVisibilityToggle": {
+    "subjectFolder": "Folder",
+    "subjectFile": "File",
+    "titleShow": "{subject} is hidden from the employee — make visible again",
+    "titleHide": "Hide {subject} from the employee",
+    "toggleAria": "{name}: {title}"
+  },
+  "OwnerFileActions": {
+    "view": "View",
+    "viewAria": "View {name}",
+    "download": "Download",
+    "downloadAria": "Download {name}"
+  },
+  "EditSafety": {
+    "unsavedChangesTitle": "Unsaved changes",
+    "unsavedChangesBody": "There are unsaved changes. If you leave the page, these changes will be lost.",
+    "continueEditing": "Continue editing",
+    "leavePage": "Leave page",
+    "confirmSaveTitle": "Confirm save",
+    "confirmSaveBody": "Please confirm that the changes should be saved and logged in the audit log.",
+    "cancel": "Cancel",
+    "save": "Save"
+  },
+  "EmergencyContactsEditor": {
+    "nameLabel": "Name",
+    "nameAria": "Emergency contact {index} name",
+    "relationLabel": "Relationship",
+    "relationAria": "Emergency contact {index} relationship",
+    "phoneLabel": "Phone",
+    "phoneAria": "Emergency contact {index} phone",
+    "emailLabel": "Email",
+    "emailAria": "Emergency contact {index} email",
+    "optional": "Optional",
+    "removeContact": "Remove contact",
+    "addContact": "Add contact"
+  },
+  "PasswordInput": {
+    "showPassword": "Show password",
+    "hidePassword": "Hide password",
+    "strengthWeak": "Weak",
+    "strengthMedium": "Medium",
+    "strengthGood": "Good",
+    "strengthStrong": "Strong"
+  },
+  "AuditLogPanel": {
+    "defaultTitle": "Audit Log",
+    "columnsHint": "Actor, source, timestamp, and context",
+    "noEntriesYet": "No audit entries yet."
+  },
+  "AccountDeletionRequestForm": {
+    "emailOnWayTitle": "Email on its way",
+    "emailOnWayBody": "If a Ployo account exists for this address, we've just sent an email with a confirmation link. The link is valid for 15 minutes. Please also check your spam folder.",
+    "emailLabel": "Email address",
+    "emailPlaceholder": "name@company.com",
+    "sending": "Sending …",
+    "requestByEmail": "Request deletion by email"
+  },
+  "AccountDeletionConfirmForm": {
+    "deletedTitle": "Account deleted",
+    "deletedBody": "Your login credentials, sessions, social login links, and push tokens have been deleted. Personal and employment data that your employer is legally required to retain remains unaffected.",
+    "deleting": "Deleting …",
+    "deletePermanently": "Permanently delete account"
+  },
+  "CompanyListItem": {
+    "defaultIndustry": "Company"
   },
   "LegalLayout": {
     "signIn": "Sign in",

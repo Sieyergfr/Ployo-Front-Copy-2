@@ -5,6 +5,7 @@ import {
   setEmployeeFolderVisibilityAction,
 } from "@/app/(dashboard)/u/[tenant]/employees/actions";
 import { Eye, EyeOff } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 
@@ -34,13 +35,14 @@ export default function EmployeeVisibilityToggle({
   hidden: boolean;
   name: string;
 }) {
+  const t = useTranslations("EmployeeVisibilityToggle");
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
-  const subject = target.kind === "folder" ? "Ordner" : "Datei";
+  const subject = target.kind === "folder" ? t("subjectFolder") : t("subjectFile");
   const title = hidden
-    ? `${subject} ist vor dem Mitarbeiter verborgen — wieder freigeben`
-    : `${subject} vor dem Mitarbeiter verbergen`;
+    ? t("titleShow", { subject })
+    : t("titleHide", { subject });
 
   const toggle = () => {
     const formData = new FormData();
@@ -76,7 +78,7 @@ export default function EmployeeVisibilityToggle({
           : "border-border text-muted hover:border-muted hover:text-ink"
       }`}
       title={title}
-      aria-label={`${name}: ${title}`}
+      aria-label={t("toggleAria", { name, title })}
       aria-pressed={hidden}
       disabled={isPending}
       onClick={toggle}

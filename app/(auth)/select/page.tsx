@@ -37,10 +37,11 @@ export default async function TenantSelectPage() {
     redirect("/konto-loeschung");
   }
 
-  const [memberships, preference, t] = await Promise.all([
+  const [memberships, preference, t, tCompanyItem] = await Promise.all([
     getTenantsForUser(session.user.id),
     getOwnPreferences(),
     getTranslations("Auth.select"),
+    getTranslations("CompanyListItem"),
   ]);
 
   return (
@@ -60,6 +61,7 @@ export default async function TenantSelectPage() {
               title={membership.tenant.name}
               industry={membership.tenant.industry}
               initials={getInitials(membership.tenant.name)}
+              t={tCompanyItem}
             />
           ))
         )}

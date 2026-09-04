@@ -6,6 +6,7 @@ type Props = {
   title: string;
   industry?: string | null;
   initials?: string;
+  t: (key: string) => string;
 }
 
 export default function CompanyListItem({
@@ -13,6 +14,7 @@ export default function CompanyListItem({
   title,
   industry,
   initials = title.slice(0, 2).toUpperCase(),
+  t,
 }: Props) {
   return (
     <Link href={href} className="list-card no-underline">
@@ -21,7 +23,7 @@ export default function CompanyListItem({
         <div className="list-card-title">{title}</div>
         <div className="list-card-meta">
           <span className="list-card-meta-text">
-            {industry || "Unternehmen"}
+            {industry || t("defaultIndustry")}
           </span>
         </div>
       </div>

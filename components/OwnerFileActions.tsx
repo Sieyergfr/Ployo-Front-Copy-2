@@ -2,6 +2,7 @@
 
 import { getHrFileSignedUrlAction } from "@/app/(dashboard)/u/[tenant]/dateien/actions";
 import { Download, Eye } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useTransition } from "react";
 
 /**
@@ -21,6 +22,7 @@ export function OwnerFileActions({
   storageFileId?: string;
   name: string;
 }) {
+  const t = useTranslations("OwnerFileActions");
   const [isPending, startTransition] = useTransition();
 
   if (!storageFileId) {
@@ -38,8 +40,8 @@ export function OwnerFileActions({
       <button
         type="button"
         className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-[8px] border border-border bg-white text-muted transition-colors hover:border-muted hover:text-ink disabled:cursor-wait disabled:opacity-60"
-        title="Ansehen"
-        aria-label={`${name} ansehen`}
+        title={t("view")}
+        aria-label={t("viewAria", { name })}
         disabled={isPending}
         onClick={() => open("inline")}
       >
@@ -48,8 +50,8 @@ export function OwnerFileActions({
       <button
         type="button"
         className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-[8px] border border-border bg-white text-muted transition-colors hover:border-muted hover:text-ink disabled:cursor-wait disabled:opacity-60"
-        title="Herunterladen"
-        aria-label={`${name} herunterladen`}
+        title={t("download")}
+        aria-label={t("downloadAria", { name })}
         disabled={isPending}
         onClick={() => open("attachment")}
       >
