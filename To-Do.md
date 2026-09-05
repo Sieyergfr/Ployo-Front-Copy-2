@@ -2,6 +2,19 @@
 
 Stand: 2026-09-05. Blocker, Sollte-behoben-werden, Responsive Design, Datenschutz-Umbauplan Phase 0-2 und die komplette i18n-String-Extraktion (108 Dateien, 93 Namespaces, ~1635 Keys) sind vollständig umgesetzt, code-verifiziert, committet und gepusht. Alles Weitere unten sind bewusst offene Punkte, die externe Schritte oder deine Entscheidung brauchen (siehe "Braucht weiterhin deine Aufmerksamkeit").
 
+## ✅ Toasts statt Absturz bei Formularfehlern (2026-09-05)
+
+Der bei "optimierung.md" dokumentierte Fund (rohe `action={fn}`-Formulare crashen bei einem Fehler unbehandelt in die generische Error-Boundary, Formular samt Eingaben geht verloren) auf deinen Zuruf hin vollständig behoben — Umfang war beim ersten Fund auf "~20 Dialoge" geschätzt, tatsächlich **~65 Server Actions über ~35 Dateien** (Rollen, Teams, Standorte, Mitarbeiter — größter Block, Schichtplanung, Urlaub, Krankheit, Erinnerungen, Dateien, Konto, Einstellungen-Popup, Kontolöschung).
+
+- **Neue Infrastruktur:** `withActionErrorHandling()` (lib/action-state.ts) wrapt eine Action; lässt `redirect()`/`notFound()` über `unstable_rethrow()` unverändert durch, reicht bekannte kuratierte Fehlermeldungen (dieselbe Allowlist wie `lib/api/self-service-errors.ts`, jetzt geteilt über `isKnownSelfServiceErrorMessage`) 1:1 durch, ersetzt alles andere durch eine feste generische Meldung (kein Leak) und loggt den echten Fehler serverseitig. `useActionStateWithToast()` (components/Toasts.tsx) = `useActionState` + automatischer Fehler-Toast. Ein bereits vorhandenes, vollständiges Toast-System (`components/Toasts.tsx`, im Root-Layout gemountet) musste dafür nicht neu gebaut werden.
+- **Mehrfach-Action-Formulare** (z. B. "Speichern" + "Löschen" auf demselben `<form>`) bekommen je einen eigenen Dispatcher, damit ein fehlgeschlagenes Löschen nicht als Speichern-Fehler auftaucht. Neue kleine Client-Wrapper dafür: `RoleEditForms.tsx`, `TeamActionForms.tsx`, `LocationActionForms.tsx`, `EmployeeActionForms.tsx`; ein generischer `ActionForm.tsx` für die übrigen, einfachen Ein-Action-Formulare auf Server-Component-Seiten.
+- `FloatingEditBar.tsx`: `isPending`-Prop ersetzt lokales "submit"-Event-Tracking (ging nur gut, solange Erfolg immer per `redirect()` wegnavigiert hat).
+- `krankheit/actions.ts`s `"INVALID_SICKNESS_REPORT"`-Sentinel durch echte deutsche Fehlermeldungen ersetzt (einzige Datei, die noch einen Code statt Prosa warf).
+- 5 verwaiste, ungenutzte Actions in `einstellungen/actions.ts` entfernt (abgelöst durch das bereits korrekte `saveSettingsPopupAction`).
+- **Bewusst anders gelöst:** `invite/[token]/actions.ts` behält seine bestehende, funktionierende `?fehler=`-Query-Param-Architektur — nur die zwei verbliebenen `throw error;`-Stellen für echte unerwartete Auth-Provider-Fehler leiten jetzt auf einen neuen `unexpected_error`-Code um, statt abzustürzen.
+
+Verifiziert nach jedem der 4 Batches: `tsc --noEmit`, `eslint`, volle Testsuite (148/148, 6 davon neu für `withActionErrorHandling`), je ein Probe-Build. Alle 4 Commits gepusht. Plan-Dokument: `~/.claude/plans/expressive-forging-russell.md`.
+
 ## ✅ optimierung.md abgearbeitet (2026-09-05)
 
 Alle Punkte aus `optimierung.md` (Performance, Security, Sonstiges) einzeln gegen den Code geprüft statt blind "erledigt" zu markieren — die meisten waren durch frühere Audits bereits erfüllt (Rate-Limiting, Auth auf allen Routen, Parallel-Fetching statt Loops, SQLi/XSS-Schutz, Sentry-Logging, Fehlerseiten ohne Leak, Cookie-Banner, Favicon/robots.txt/sitemap.xml). Echte Lücken behoben:
