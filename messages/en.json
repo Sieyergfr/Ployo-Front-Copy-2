@@ -117,7 +117,9 @@
         "employeeNumberSuffixPlaceholder": "optional",
         "archiveFormerEmployees": "Automatically archive former employees",
         "exportDescription": "Download all HR, team, location, and scheduling data for this company as a JSON file.",
-        "exportButton": "Export data"
+        "exportButton": "Export data",
+        "processingRegisterDescription": "Automatically generated register of processing activities (Art. 30 GDPR), based on the features actually in use.",
+        "processingRegisterButton": "View register"
       },
       "roles": {
         "title": "Roles & permissions",
@@ -2137,5 +2139,20 @@
     "previousWeek": "Previous week",
     "weekLabel": "Week {week} · {year}",
     "nextWeek": "Next week"
+  },
+  "ProcessingRegisterPage": {
+    "eyebrow": "Data protection",
+    "title": "Register of processing activities",
+    "subtitle": "Automatically generated from the features actually in use (Art. 30(2) GDPR).",
+    "printButton": "Print / save as PDF",
+    "colTitle": "Processing activity",
+    "colZweck": "Purpose",
+    "colBetroffene": "Data subjects",
+    "colDaten": "Categories of data",
+    "colRechtsgrundlage": "Legal basis",
+    "colEmpfaenger": "Recipients",
+    "colLoeschfrist": "Retention period",
+    "footnote": "Automatically generated from actual usage — does not replace a legal review. Please have it reviewed by qualified counsel before presenting it to supervisory authorities.",
+    "emptyState": "No processing activities recorded yet for this tenant — once employees are added, the applicable categories will appear here automatically."
   }
 }

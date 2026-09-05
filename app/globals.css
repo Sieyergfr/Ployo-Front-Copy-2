@@ -650,6 +650,27 @@ body {
   @apply mx-auto w-full max-w-[1200px] px-[clamp(24px,4vw,60px)] pt-16 pb-16 md:pt-10;
 }
 
+/* Sidebar/Navigation blenden beim Drucken aus (z. B. Verzeichnis von
+   Verarbeitungstätigkeiten, Personalakte) — der äußere Layout-Wrapper ist
+   fest positioniert (`fixed inset-0`), das schneidet mehrseitige Ausdrucke
+   sonst auf eine Seite ab. */
+@media print {
+  aside,
+  .no-print {
+    display: none !important;
+  }
+
+  .fixed.inset-0.overflow-hidden {
+    position: static !important;
+    overflow: visible !important;
+  }
+
+  .main-content {
+    overflow: visible !important;
+    height: auto !important;
+  }
+}
+
 @keyframes action-drawer-backdrop-in {
   from {
     opacity: 0;

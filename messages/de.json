@@ -117,7 +117,9 @@
         "employeeNumberSuffixPlaceholder": "optional",
         "archiveFormerEmployees": "Ausgeschiedene Mitarbeiter automatisch archivieren",
         "exportDescription": "Alle Personal-, Team-, Standort- und Planungsdaten dieses Unternehmens als JSON-Datei herunterladen.",
-        "exportButton": "Daten exportieren"
+        "exportButton": "Daten exportieren",
+        "processingRegisterDescription": "Automatisch erstelltes Verzeichnis von Verarbeitungstätigkeiten (Art. 30 DSGVO) auf Basis der tatsächlich genutzten Funktionen.",
+        "processingRegisterButton": "Verzeichnis ansehen"
       },
       "roles": {
         "title": "Rollen & Rechte",
@@ -2137,5 +2139,20 @@
     "previousWeek": "Vorherige Woche",
     "weekLabel": "KW {week} · {year}",
     "nextWeek": "Nächste Woche"
+  },
+  "ProcessingRegisterPage": {
+    "eyebrow": "Datenschutz",
+    "title": "Verzeichnis von Verarbeitungstätigkeiten",
+    "subtitle": "Automatisch aus den tatsächlich genutzten Funktionen erstellt (Art. 30 Abs. 2 DSGVO).",
+    "printButton": "Drucken / Als PDF speichern",
+    "colTitle": "Verarbeitung",
+    "colZweck": "Zweck",
+    "colBetroffene": "Betroffene Personen",
+    "colDaten": "Datenkategorien",
+    "colRechtsgrundlage": "Rechtsgrundlage",
+    "colEmpfaenger": "Empfänger",
+    "colLoeschfrist": "Löschfrist",
+    "footnote": "Automatisch aus der tatsächlichen Nutzung erstellt — ersetzt keine rechtliche Prüfung. Bitte vor Verwendung gegenüber Aufsichtsbehörden fachlich/anwaltlich freigeben lassen.",
+    "emptyState": "Für diesen Mandanten sind noch keine Verarbeitungstätigkeiten erfasst — sobald Mitarbeiter angelegt sind, erscheinen die zutreffenden Kategorien hier automatisch."
   }
 }

@@ -629,6 +629,18 @@ function SettingsPanel({
                 {t("company.exportButton")}
               </a>
             </div>
+            <div className="flex items-center justify-between gap-3 border-t border-border-soft pt-3">
+              <p className="text-[12px] text-muted">
+                {t("company.processingRegisterDescription")}
+              </p>
+              <a
+                href={`/u/${tenant.slug ?? tenantSlugFromHref(tenant.href)}/verarbeitungsverzeichnis`}
+                className="btn btn-secondary btn-sm shrink-0"
+              >
+                <FileText className="size-4" />
+                {t("company.processingRegisterButton")}
+              </a>
+            </div>
           </div>
         </SettingsSection>
       </div>
