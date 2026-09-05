@@ -94,6 +94,7 @@ export const permissionAreas: PermissionArea[] = [
   { id: "employeeFiles", label: "Dateien", description: "Dateien und Ordner in der Personalakte", supportsScope: true, fileRelevant: false, supportsAssignedScope: false, parentAreaId: "employees" },
   { id: "payroll", label: "Lohnabrechnungen", description: "Hochgeladene Gehaltsabrechnungen", supportsScope: true, fileRelevant: false, supportsAssignedScope: false, parentAreaId: "employees" },
   { id: "sensitiveData", label: "Sensible Daten", description: "Geburtsdatum/-ort, Nationalität, Familienstand, Privatadresse, Steuer-ID, Sozialversicherungsnummer, Krankenkasse, IBAN", supportsScope: true, fileRelevant: false, supportsAssignedScope: false, parentAreaId: "employees" },
+  { id: "mutterschutz", label: "Mutterschutz", description: "Mutterschutz-Kennzeichnung — bewusst getrennt von \"Sensible Daten\", damit z. B. die Lohnbuchhaltung nicht automatisch mitsieht", supportsScope: true, fileRelevant: false, supportsAssignedScope: false, parentAreaId: "employees" },
   { id: "locations", label: "Standorte", description: "Standortdaten, Schichten, Teams vor Ort", supportsScope: false, fileRelevant: true, supportsAssignedScope: true },
   { id: "teams", label: "Teams", description: "Teamrollen, Teamleitung, Mitglieder", supportsScope: false, fileRelevant: true, supportsAssignedScope: true },
   { id: "files", label: "Dateien", description: "Ablage, Versionen, Ablaufdaten, Freigaben", supportsScope: true, fileRelevant: false, supportsAssignedScope: false },
@@ -160,6 +161,7 @@ export const defaultPermissionRoles: Omit<
       employeeFiles: "admin",
       payroll: "admin",
       sensitiveData: "admin",
+      mutterschutz: "admin",
       locations: "write",
       teams: "admin",
       files: "admin",
@@ -171,7 +173,7 @@ export const defaultPermissionRoles: Omit<
       roles: "admin",
       settings: "write",
     },
-    scopes: { employees: "all", contracts: "all", employeeFiles: "all", payroll: "all", sensitiveData: "all", vacation: "all", sickness: "all" },
+    scopes: { employees: "all", contracts: "all", employeeFiles: "all", payroll: "all", sensitiveData: "all", mutterschutz: "all", vacation: "all", sickness: "all" },
   },
   {
     key: "payroll",
@@ -186,6 +188,9 @@ export const defaultPermissionRoles: Omit<
       // Lohnbuchhaltung braucht IBAN/Steuer-ID/SV-Nummer zwingend, um
       // Gehalt korrekt auszuzahlen und zu melden.
       sensitiveData: "admin",
+      // Mutterschutz ist bewusst eigener Bereich statt Teil von
+      // sensitiveData — die Lohnbuchhaltung braucht ihn nicht.
+      mutterschutz: "none",
       locations: "read",
       teams: "read",
       files: "write",
@@ -213,6 +218,7 @@ export const defaultPermissionRoles: Omit<
       employeeFiles: "read",
       payroll: "none",
       sensitiveData: "none",
+      mutterschutz: "none",
       locations: "read",
       teams: "write",
       files: "read",
@@ -241,6 +247,9 @@ export const defaultPermissionRoles: Omit<
       employeeFiles: "read",
       payroll: "read",
       sensitiveData: "read",
+      // Bewusst "none", nicht wie sensitiveData "read own" — Mutterschutz
+      // ist kein Self-Service-Feld, nur HR/Admin setzt und sieht es.
+      mutterschutz: "none",
       locations: "none",
       teams: "read",
       files: "read",

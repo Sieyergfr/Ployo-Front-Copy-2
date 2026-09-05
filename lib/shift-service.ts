@@ -1076,10 +1076,11 @@ function shiftDateBy(date: string, days: number): string {
  * Ruhezeit (§5 ArbZG), Höchstarbeitszeit je Schicht (§3 ArbZG) gegen die
  * Mandanten-Einstellungen (`TenantSettings.minRestHours`/`maxShiftHours`,
  * Default 11h/10h) sowie — sofern ein Geburtsdatum hinterlegt ist und die
- * Person minderjährig ist — Nachtruhe und Sonntagsruhe nach JArbSchG
- * prüfen. Wirft bei Verstoß, passend zum bestehenden Fehlerverhalten von
- * createTenantShift/updateTenantShift (Server Actions lassen den Fehler bis
- * zum Error Boundary durchreichen).
+ * Person minderjährig ist — Nachtruhe und Sonntagsruhe nach JArbSchG sowie
+ * — bei aktiver Mutterschutz-Kennzeichnung — Nachtruhe und Sonntagsruhe
+ * nach MuSchG prüfen. Wirft bei Verstoß, passend zum bestehenden
+ * Fehlerverhalten von createTenantShift/updateTenantShift (Server Actions
+ * lassen den Fehler bis zum Error Boundary durchreichen).
  */
 async function assertArbzgCompliant(input: {
   tenantId: string;
@@ -1090,6 +1091,7 @@ async function assertArbzgCompliant(input: {
   excludeShiftId?: string;
   /** Verschlüsselter Rohwert aus `TenantEmployee.birthDate` — wird hier entschlüsselt. */
   employeeBirthDate?: string;
+  employeeMaternityProtectionActive?: boolean;
 }) {
   const settings = await prisma.tenantSettings.findUnique({
     where: { tenantId: input.tenantId },
@@ -1143,6 +1145,20 @@ async function assertArbzgCompliant(input: {
       );
     }
   }
+
+  if (input.employeeMaternityProtectionActive) {
+    if (overlapsNightWindow(candidate)) {
+      throw new Error(
+        "Schicht verstößt gegen das Beschäftigungsverbot bei Mutterschutz (§ 5 MuSchG, keine Beschäftigung 20-6 Uhr).",
+      );
+    }
+
+    if (isSunday(candidate.date)) {
+      throw new Error(
+        "Schicht verstößt gegen das Beschäftigungsverbot bei Mutterschutz (§ 6 MuSchG, keine Sonntagsbeschäftigung).",
+      );
+    }
+  }
 }
 
 export async function createTenantShift(input: {
@@ -1160,7 +1176,13 @@ export async function createTenantShift(input: {
   const employee = input.employeeId
     ? await prisma.tenantEmployee.findFirst({
         where: { id: input.employeeId, tenantId: access.tenantId },
-        select: { id: true, name: true, team: true, birthDate: true },
+        select: {
+          id: true,
+          name: true,
+          team: true,
+          birthDate: true,
+          maternityProtectionActive: true,
+        },
       })
     : null;
   const key = await createUniqueShiftKey({
@@ -1189,6 +1211,7 @@ export async function createTenantShift(input: {
       startTime: input.startTime,
       endTime: input.endTime,
       employeeBirthDate: employee.birthDate,
+      employeeMaternityProtectionActive: employee.maternityProtectionActive,
     });
   }
 
@@ -1256,7 +1279,13 @@ export async function updateTenantShift(input: {
   const employee = input.employeeId
     ? await prisma.tenantEmployee.findFirst({
         where: { id: input.employeeId, tenantId: access.tenantId },
-        select: { id: true, name: true, team: true, birthDate: true },
+        select: {
+          id: true,
+          name: true,
+          team: true,
+          birthDate: true,
+          maternityProtectionActive: true,
+        },
       })
     : null;
   const key = await createUniqueShiftKey({
@@ -1276,6 +1305,7 @@ export async function updateTenantShift(input: {
       endTime: input.endTime,
       excludeShiftId: input.shiftId,
       employeeBirthDate: employee.birthDate,
+      employeeMaternityProtectionActive: employee.maternityProtectionActive,
     });
   }
 

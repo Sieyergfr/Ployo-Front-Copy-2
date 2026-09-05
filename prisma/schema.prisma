@@ -687,6 +687,15 @@ model TenantEmployee {
   /// beides mit Audit-Pflicht.
   legalHold             Boolean                        @default(false)
   legalHoldReason       String                         @default("")
+  /// Mutterschutz-Kennzeichnung (§ 5/§ 6 MuSchG, Beschäftigungsverbote
+  /// Nacht/Sonntag) — nur über den eigenen "mutterschutz"-Berechtigungs-
+  /// bereich sicht-/bearbeitbar (lib/roles.ts), nicht über das allgemeine
+  /// "sensitiveData". Muss wie legalHold von Hand gesetzt/aufgehoben werden,
+  /// beides mit Audit-Pflicht — kein automatischer Fristablauf.
+  maternityProtectionActive Boolean                    @default(false)
+  /// Verschlüsselt wie birthDate/legalHoldReason (lib/encryption.ts) — z. B.
+  /// für ein handschriftliches "geschützt bis ca. TT.MM.JJJJ".
+  maternityProtectionNote   String                     @default("")
   /// Zeitpunkt, an dem Kategorie-1-Stammdaten automatisch anonymisiert wurden
   /// (siehe cron/cleanup). null = noch nicht anonymisiert.
   piiAnonymizedAt       DateTime?

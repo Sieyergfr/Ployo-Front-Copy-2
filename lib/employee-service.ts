@@ -77,6 +77,8 @@ type EmployeeRecord = {
   socialSecurityNumber: string;
   healthInsurance: string;
   iban: string;
+  maternityProtectionActive: boolean;
+  maternityProtectionNote: string;
   location: string;
   team: string;
   role: string;
@@ -216,6 +218,8 @@ type EmployeeMutationInput = {
   socialSecurityNumber?: string;
   healthInsurance?: string;
   iban?: string;
+  maternityProtectionActive?: boolean;
+  maternityProtectionNote?: string;
   /** Primärstandort — nur wirksam, wenn `locations` nicht mitgeschickt wird. */
   location?: string;
   /** "Mehrere Standorte pro Mitarbeiter" — hat Vorrang vor `location`, wenn beide gesetzt sind. */
@@ -582,6 +586,7 @@ function toEmployee(
   record: EmployeeRecord,
   sensitiveFieldsVisible = true,
   contractsVisible = true,
+  mutterschutzVisible = true,
 ): Employee {
   const decryptedPrivateAddress = decryptAddress(record.privateAddress);
   const decryptedWorkAddress = decryptAddress(record.workAddress);
@@ -682,6 +687,10 @@ function toEmployee(
       : REDACTED,
     healthInsurance: sensitiveFieldsVisible ? decryptField(record.healthInsurance) : REDACTED,
     iban: sensitiveFieldsVisible ? decryptField(record.iban) : REDACTED,
+    maternityProtectionActive: mutterschutzVisible ? record.maternityProtectionActive : false,
+    maternityProtectionNote: mutterschutzVisible
+      ? decryptField(record.maternityProtectionNote)
+      : "",
     location: record.location,
     team: record.team,
     role: record.role,
@@ -1018,6 +1027,11 @@ export async function getEmployeesForTenant(
   const sensitiveDataScope = sensitiveDataAccess ? await resolveScopeFilter(sensitiveDataAccess) : null;
   const contractsAccess = await getOptionalTenantAccess(tenantSlug, "contracts", "read");
   const contractsScope = contractsAccess ? await resolveScopeFilter(contractsAccess) : null;
+  // Mutterschutz ist ein eigener Berechtigungsbereich, nicht Teil von
+  // sensitiveData (siehe lib/roles.ts) — z. B. damit die Lohnbuchhaltung
+  // nicht automatisch mitsieht.
+  const mutterschutzAccess = await getOptionalTenantAccess(tenantSlug, "mutterschutz", "read");
+  const mutterschutzScope = mutterschutzAccess ? await resolveScopeFilter(mutterschutzAccess) : null;
   const locationNamesByEmployeeId = await getEmployeeLocationNamesMap(
     where.tenantId,
     records.map((record) => record.id),
@@ -1038,6 +1052,8 @@ export async function getEmployeesForTenant(
         scopeAllowsTarget(sensitiveDataScope, { id: record.id, team: record.team }),
       contractsScope !== null &&
         scopeAllowsTarget(contractsScope, { id: record.id, team: record.team }),
+      mutterschutzScope !== null &&
+        scopeAllowsTarget(mutterschutzScope, { id: record.id, team: record.team }),
     );
     const onVacationToday = record.vacationRequests.some(
       (r) => r.startDate <= today && r.endDate >= today,
@@ -1134,6 +1150,15 @@ export async function getEmployeeForTenant(tenantSlug: string, employeeHandle: s
     contractsScope !== null &&
     scopeAllowsTarget(contractsScope, { id: record.id, team: record.team });
 
+  // Mutterschutz ist ein eigener Berechtigungsbereich, nicht Teil von
+  // sensitiveData (siehe lib/roles.ts) — z. B. damit die Lohnbuchhaltung
+  // nicht automatisch mitsieht.
+  const mutterschutzAccess = await getOptionalTenantAccess(tenantSlug, "mutterschutz", "read");
+  const mutterschutzScope = mutterschutzAccess ? await resolveScopeFilter(mutterschutzAccess) : null;
+  const canViewMutterschutz =
+    mutterschutzScope !== null &&
+    scopeAllowsTarget(mutterschutzScope, { id: record.id, team: record.team });
+
   const payrollStatements = canViewPayroll
     ? await prisma.tenantPayrollStatement.findMany({
         where: { employeeId: record.id },
@@ -1153,6 +1178,7 @@ export async function getEmployeeForTenant(tenantSlug: string, employeeHandle: s
     },
     canViewSensitiveData,
     canViewContracts,
+    canViewMutterschutz,
   );
 
   const today = todayIso();
@@ -1373,6 +1399,8 @@ export async function createTenantEmployeeRecord({
       socialSecurityNumber: encryptField(input.socialSecurityNumber?.trim() || ""),
       healthInsurance: encryptField(input.healthInsurance?.trim() || ""),
       iban: encryptField(input.iban?.trim() || ""),
+      maternityProtectionActive: input.maternityProtectionActive ?? false,
+      maternityProtectionNote: encryptField(input.maternityProtectionNote?.trim() || ""),
       location: locations[0] ?? "",
       team,
       role,
@@ -1532,6 +1560,19 @@ export async function createTenantEmployee(input: EmployeeMutationInput) {
     "contracts",
     newEmployeeTarget,
   );
+  const canEditMutterschutz = await canWriteEmployeeSubarea(
+    input.tenantSlug,
+    "mutterschutz",
+    newEmployeeTarget,
+  );
+
+  if (!canEditMutterschutz) {
+    input = {
+      ...input,
+      maternityProtectionActive: undefined,
+      maternityProtectionNote: undefined,
+    };
+  }
 
   if (!canEditSensitiveData) {
     input = {
@@ -1768,7 +1809,7 @@ export async function getUnlinkedEmployeesForTenant(tenantSlug: string) {
  */
 async function canWriteEmployeeSubarea(
   tenantSlug: string,
-  area: "sensitiveData" | "contracts",
+  area: "sensitiveData" | "contracts" | "mutterschutz",
   target: { id: string; team: string },
 ) {
   const access = await getOptionalTenantAccess(tenantSlug, area, "write");
@@ -1829,6 +1870,18 @@ export async function updateTenantEmployee(input: EmployeeMutationInput & { empl
     id: current.id,
     team: current.team,
   });
+  const canEditMutterschutz = await canWriteEmployeeSubarea(input.tenantSlug, "mutterschutz", {
+    id: current.id,
+    team: current.team,
+  });
+
+  if (!canEditMutterschutz) {
+    input = {
+      ...input,
+      maternityProtectionActive: undefined,
+      maternityProtectionNote: undefined,
+    };
+  }
 
   if (!canEditSensitiveData) {
     input = {
@@ -1998,6 +2051,11 @@ export async function updateTenantEmployee(input: EmployeeMutationInput & { empl
         input.healthInsurance?.trim() ?? currentEmployee.healthInsurance,
       ),
       iban: encryptField(input.iban?.trim() ?? currentEmployee.iban),
+      maternityProtectionActive:
+        input.maternityProtectionActive ?? currentEmployee.maternityProtectionActive,
+      maternityProtectionNote: encryptField(
+        input.maternityProtectionNote?.trim() ?? currentEmployee.maternityProtectionNote,
+      ),
       location,
       team,
       role,
@@ -2094,6 +2152,10 @@ export async function updateTenantEmployee(input: EmployeeMutationInput & { empl
     input.healthInsurance !== undefined &&
     input.healthInsurance !== currentEmployee.healthInsurance
       ? "Krankenkasse"
+      : null,
+    input.maternityProtectionActive !== undefined &&
+    input.maternityProtectionActive !== currentEmployee.maternityProtectionActive
+      ? "Mutterschutz-Kennzeichnung"
       : null,
   ].filter(Boolean);
 

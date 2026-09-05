@@ -48,6 +48,23 @@ function optionalString(formData: FormData, key: string) {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
+/**
+ * Für Checkboxen: ein unangehakter Checkbox-Input sendet gar nichts mit —
+ * nicht von "Feld war auf diesem Tab gar nicht gerendert" unterscheidbar.
+ * `presenceKey` ist ein verstecktes Zusatzfeld, das nur mitgerendert wird,
+ * wenn die Checkbox selbst im Formular vorhanden ist (siehe
+ * employees/[employeeId]/page.tsx, Mutterschutz-Feld) — erst wenn das
+ * gesetzt ist, zählt eine fehlende Checkbox als "abgehakt entfernt" statt
+ * als "unverändert lassen".
+ */
+function optionalBoolean(formData: FormData, presenceKey: string, valueKey: string) {
+  if (formData.get(presenceKey) !== "1") {
+    return undefined;
+  }
+
+  return formData.get(valueKey) === "on";
+}
+
 function fieldString(formData: FormData, key: string) {
   const value = formData.get(key);
 
@@ -202,6 +219,12 @@ export async function updateEmployeeAction(
       socialSecurityNumber: optionalString(formData, "socialSecurityNumber"),
       healthInsurance: optionalString(formData, "healthInsurance"),
       iban: optionalString(formData, "iban"),
+      maternityProtectionActive: optionalBoolean(
+        formData,
+        "maternityProtectionActive_present",
+        "maternityProtectionActive",
+      ),
+      maternityProtectionNote: optionalString(formData, "maternityProtectionNote"),
       location: optionalString(formData, "location"),
       // Immer explizit mitgeschickt (nicht `undefined` bei leerer Auswahl!) —
       // das Bearbeiten-Formular rendert den Mehrfachauswahl-Standort-Bereich

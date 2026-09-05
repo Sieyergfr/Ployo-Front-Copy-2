@@ -174,6 +174,9 @@ export type Employee = {
   socialSecurityNumber: string;
   healthInsurance: string;
   iban: string;
+  /** Mutterschutz-Kennzeichnung — eigener Berechtigungsbereich "mutterschutz", nicht Teil von sensitiveData. */
+  maternityProtectionActive: boolean;
+  maternityProtectionNote: string;
   /** Primärer Standort — abgeleitet aus `locations[0]`, für Stellen, die weiterhin nur einen String erwarten. */
   location: string;
   /**

@@ -582,6 +582,11 @@ export default async function EmployeeDetailPage({
   // Nur die Bearbeitbarkeit wird hier gesteuert — ob die Werte selbst
   // sichtbar sind (statt "•••"), entscheidet bereits getEmployeeForTenant().
   const canEditSensitiveData = hasPermissionLevel(capabilities.sensitiveData.level, "write");
+  // Mutterschutz ist bewusst ein eigener Berechtigungsbereich, nicht Teil
+  // von sensitiveData (siehe lib/roles.ts) — z. B. damit die Lohnbuchhaltung
+  // nicht automatisch mitsieht.
+  const canViewMutterschutz = hasPermissionLevel(capabilities.mutterschutz.level, "read");
+  const canEditMutterschutz = hasPermissionLevel(capabilities.mutterschutz.level, "write");
   const canViewEmployeeFiles = hasPermissionLevel(capabilities.employeeFiles.level, "read");
   const canManageFiles = hasPermissionLevel(capabilities.employeeFiles.level, "write");
   const deletionEligibility =
@@ -1005,6 +1010,50 @@ export default async function EmployeeDetailPage({
                 </div>
               )}
             </DetailCard>
+
+            {canViewMutterschutz && (
+              <DetailCard title={t("mutterschutzTitle")}>
+                {isEditing && canEditMutterschutz ? (
+                  <div className="flex flex-col gap-3">
+                    <input type="hidden" name="maternityProtectionActive_present" value="1" />
+                    <label className="flex items-center gap-2.5 text-[13.5px] text-ink">
+                      <input
+                        type="checkbox"
+                        name="maternityProtectionActive"
+                        defaultChecked={employee.maternityProtectionActive}
+                      />
+                      {t("maternityProtectionActive")}
+                    </label>
+                    <EditableTextField
+                      id="employee-maternity-protection-note"
+                      label={t("maternityProtectionNote")}
+                      name="maternityProtectionNote"
+                      value={employee.maternityProtectionNote}
+                    />
+                    <p className="text-[11.5px] leading-[1.5] text-muted">
+                      {t("maternityProtectionHint")}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-3">
+                    <FieldValue
+                      label={t("maternityProtectionActive")}
+                      value={
+                        employee.maternityProtectionActive
+                          ? t("maternityProtectionActiveYes")
+                          : t("maternityProtectionActiveNo")
+                      }
+                    />
+                    {employee.maternityProtectionNote && (
+                      <FieldValue
+                        label={t("maternityProtectionNote")}
+                        value={employee.maternityProtectionNote}
+                      />
+                    )}
+                  </div>
+                )}
+              </DetailCard>
+            )}
 
             <DetailCard title={t("employmentTitle")}>
               {isEditing ? (
