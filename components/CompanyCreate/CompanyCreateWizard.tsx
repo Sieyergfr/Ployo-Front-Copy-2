@@ -1020,6 +1020,9 @@ export default function CompanyCreateWizard() {
                 <div className="rounded-[12px] border border-border bg-bg px-4 py-3 text-[12.5px] leading-5 text-muted-2">
                   {t("inviteLaterHint")}
                 </div>
+                <div className="rounded-[12px] border border-border bg-bg px-4 py-3 text-[12.5px] leading-5 text-muted-2">
+                  {t("worksCouncilHint")}
+                </div>
               </div>
             )}
           </div>
