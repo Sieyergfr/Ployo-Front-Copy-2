@@ -10,6 +10,16 @@ test.describe.configure({ mode: "serial" });
 test("Login → Dashboard → Mitarbeiter anlegen", async ({ page }) => {
   await test.step("Login", async () => {
     await page.goto("/login");
+
+    // Frischer Browser-Kontext ohne Consent-Cookie → Banner ist immer da und
+    // überlappt auf gängigen Viewport-Höhen den "Anmelden"-Button (langer
+    // Sentry-Hinweistext). Ein echter Erstbesucher würde hier genauso zuerst
+    // eine Cookie-Entscheidung treffen, bevor er das Formular bedienen kann.
+    await page
+      .getByRole("dialog", { name: "Cookie-Einstellungen" })
+      .getByRole("button", { name: "Nur notwendige" })
+      .click();
+
     await page.getByLabel("E-Mail").fill(E2E_USER_EMAIL);
     await page.getByLabel("Passwort", { exact: true }).fill(E2E_USER_PASSWORD);
     await page.getByRole("button", { name: "Anmelden" }).click();
