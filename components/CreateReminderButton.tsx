@@ -3,6 +3,7 @@
 import { createReminderAction } from "@/app/(dashboard)/u/[tenant]/erinnerungen/actions";
 import { LinkedFileBrowser } from "@/components/ActionDrawers";
 import DatePickerField from "@/components/DatePickerField";
+import { useActionStateWithToast } from "@/components/Toasts";
 import { useUniversalPopup } from "@/components/UniversalPopup";
 import type { ReminderFileBrowserData } from "@/lib/files";
 import { BellPlus, Plus } from "lucide-react";
@@ -28,9 +29,10 @@ function CreateReminderForm({
   t: T;
 }) {
   const [linkedFiles, setLinkedFiles] = useState<string[]>([]);
+  const [, formAction] = useActionStateWithToast(createReminderAction);
 
   return (
-    <form className="flex flex-col gap-4" action={createReminderAction}>
+    <form className="flex flex-col gap-4" action={formAction}>
       <input type="hidden" name="tenant" value={tenant} />
       <input type="hidden" name="returnPath" value={returnPath} />
       {linkedFiles.map((fileId) => (

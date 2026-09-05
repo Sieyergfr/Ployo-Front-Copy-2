@@ -1,7 +1,7 @@
-import { completeReminderAction } from "@/app/(dashboard)/u/[tenant]/erinnerungen/actions";
 import CreateReminderButton from "@/components/CreateReminderButton";
 import { ReminderRowButton } from "@/components/ActionDrawers";
 import PageHeader from "@/components/PageHeader";
+import ReminderCompleteButton from "@/components/ReminderCompleteButton";
 import { getReminderFileBrowserData } from "@/lib/files-server";
 import { type ReminderFileBrowserData } from "@/lib/files";
 import {
@@ -15,7 +15,7 @@ import {
 import { hasPermissionLevel } from "@/lib/roles";
 import { getTeamsForTenant } from "@/lib/team-service";
 import { getTenantCapabilities, withAccessRedirect } from "@/lib/tenant-access";
-import { Check, UsersRound } from "lucide-react";
+import { UsersRound } from "lucide-react";
 import { getTranslations } from "next-intl/server";
 
 export const metadata = {
@@ -44,40 +44,6 @@ function ReminderMetricCard({ label, value, caption, tone }: ReminderMetric) {
       </div>
       <div className="text-[12px] text-muted">{caption}</div>
     </div>
-  );
-}
-
-function ReminderCompleteButton({
-  reminder,
-  tenant,
-  returnPath,
-  canDelete,
-  t,
-}: {
-  reminder: Reminder;
-  tenant: string;
-  returnPath: string;
-  canDelete: boolean;
-  t: T;
-}) {
-  if (!canDelete) {
-    return null;
-  }
-
-  return (
-    <form action={completeReminderAction} className="shrink-0">
-      <input type="hidden" name="tenant" value={tenant} />
-      <input type="hidden" name="returnPath" value={returnPath} />
-      <input type="hidden" name="reminderId" value={reminder.id} />
-      <button
-        type="submit"
-        title={t("markDoneTitle")}
-        aria-label={t("markDoneAria", { title: reminder.title })}
-        className="flex size-[34px] cursor-pointer items-center justify-center rounded-[9px] border border-border bg-white text-muted transition-colors hover:border-success/30 hover:text-success"
-      >
-        <Check size={14} strokeWidth={2} />
-      </button>
-    </form>
   );
 }
 
@@ -164,7 +130,6 @@ function ReminderRow({
         tenant={tenant}
         returnPath={returnPath}
         canDelete={canDelete}
-        t={t}
       />
     </div>
   );

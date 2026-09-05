@@ -24,6 +24,7 @@ import DatePickerField from "@/components/DatePickerField";
 import FormSubmitButton from "@/components/FormSubmitButton";
 import { ListSearchBox } from "@/components/ListSearchBox";
 import PageHeader from "@/components/PageHeader";
+import { useActionStateWithToast } from "@/components/Toasts";
 import {
   type ShiftLocationOption,
   type ShiftEmployeeOption,
@@ -270,6 +271,9 @@ function WishFreeDrawer({
 }) {
   const wishFreeStatusLabels = getWishFreeStatusLabels(t);
   const wishFreeFilters = getWishFreeFilters(t);
+  const [, createFormAction] = useActionStateWithToast(createWishFreeRequestAction);
+  const [, approveFormAction] = useActionStateWithToast(approveWishFreeRequestAction);
+  const [, rejectFormAction] = useActionStateWithToast(rejectWishFreeRequestAction);
   const statusFiltered =
     activeFilter === "all"
       ? requests
@@ -443,7 +447,7 @@ function WishFreeDrawer({
 
           <div className="min-h-0 overflow-y-auto p-6">
             {isCreating ? (
-              <form className="flex min-h-full flex-col" action={createWishFreeRequestAction}>
+              <form className="flex min-h-full flex-col" action={createFormAction}>
                 <input type="hidden" name="tenant" value={tenant} />
                 <input type="hidden" name="year" value={year} />
                 <input type="hidden" name="week" value={week} />
@@ -581,13 +585,13 @@ function WishFreeDrawer({
                   <div className="mt-6 flex justify-end gap-2.5 border-t border-border-soft pt-4">
                     <button
                       type="submit"
-                      formAction={rejectWishFreeRequestAction}
+                      formAction={rejectFormAction}
                       className="btn btn-secondary text-danger"
                     >
                       {t("reject")}
                     </button>
                     <FormSubmitButton
-                      formAction={approveWishFreeRequestAction}
+                      formAction={approveFormAction}
                       className="btn btn-primary"
                     >
                       <Check size={15} />
@@ -798,12 +802,18 @@ function ShiftDrawer({
   canDelete: boolean;
   t: T;
 }) {
+  // Hooks vor dem frühen `return null` unten aufrufen (Regel der Hooks) —
+  // welcher Dispatcher tatsächlich verwendet wird, entscheidet sich erst danach.
+  const [, createFormAction] = useActionStateWithToast(createShiftAction);
+  const [, updateFormAction] = useActionStateWithToast(updateShiftAction);
+  const [, deleteFormAction] = useActionStateWithToast(deleteShiftAction);
+
   if (!drawer) {
     return null;
   }
 
   const shift = drawer.shift;
-  const action = shift?.dbId ? updateShiftAction : createShiftAction;
+  const action = shift?.dbId ? updateFormAction : createFormAction;
 
   /** Übernimmt eine gespeicherte Standardschicht in die Zeitfelder. */
   function applyPreset(preset: ShiftPlanningSettings["presets"][number]) {
@@ -1025,7 +1035,7 @@ function ShiftDrawer({
               <ConfirmSubmitButton
                 className="btn btn-secondary text-danger"
                 form="shift-drawer-form"
-                formAction={deleteShiftAction}
+                formAction={deleteFormAction}
                 description={t("deleteShiftConfirmDescription")}
               >
                 {t("delete")}
@@ -1184,6 +1194,7 @@ function TemplateEditDrawer({
     () => (template?.entries ?? []).map((entry, index) => ({ ...entry, key: index })),
   );
   const nextKeyRef = useRef(rows.length);
+  const [, formAction] = useActionStateWithToast(updateShiftTemplateAction);
 
   if (!template) {
     return null;
@@ -1244,7 +1255,7 @@ function TemplateEditDrawer({
 
         <form
           id="template-edit-form"
-          action={updateShiftTemplateAction}
+          action={formAction}
           className="flex flex-col gap-4"
         >
           <input type="hidden" name="tenant" value={tenant} />
@@ -1329,6 +1340,12 @@ export default function ShiftPlanningClient({
 }: ShiftPlanningClientProps) {
   const t = useTranslations("ShiftPlanningClient");
   const router = useRouter();
+  const [, publishFormAction] = useActionStateWithToast(publishShiftWeekAction);
+  const [, resetFormAction] = useActionStateWithToast(resetShiftWeekAction);
+  const [, unpublishFormAction] = useActionStateWithToast(unpublishShiftWeekAction);
+  const [, applyTemplateFormAction] = useActionStateWithToast(applyShiftTemplateAction);
+  const [, saveTemplateFormAction] = useActionStateWithToast(saveShiftTemplateAction);
+  const [, deleteTemplateFormAction] = useActionStateWithToast(deleteShiftTemplateAction);
   const [drawer, setDrawer] = useState<DrawerState | null>(null);
   const [editingTemplate, setEditingTemplate] = useState<ShiftTemplateSummary | null>(null);
   const [isWishFreeDrawerOpen, setIsWishFreeDrawerOpen] = useState(false);
@@ -1496,7 +1513,7 @@ export default function ShiftPlanningClient({
             </div>
           )}
           {canManage && (
-            <form action={publishShiftWeekAction}>
+            <form action={publishFormAction}>
               <input type="hidden" name="tenant" value={tenant} />
               <input type="hidden" name="year" value={year} />
               <input type="hidden" name="week" value={week} />
@@ -1510,7 +1527,7 @@ export default function ShiftPlanningClient({
             </form>
           )}
           {canManage && status === "published" && hasUnpublishedChanges && (
-            <form id="shift-week-reset-form" action={resetShiftWeekAction}>
+            <form id="shift-week-reset-form" action={resetFormAction}>
               <input type="hidden" name="tenant" value={tenant} />
               <input type="hidden" name="year" value={year} />
               <input type="hidden" name="week" value={week} />
@@ -1527,7 +1544,7 @@ export default function ShiftPlanningClient({
             </form>
           )}
           {canManage && status === "published" && (
-            <form action={unpublishShiftWeekAction}>
+            <form action={unpublishFormAction}>
               <input type="hidden" name="tenant" value={tenant} />
               <input type="hidden" name="year" value={year} />
               <input type="hidden" name="week" value={week} />
@@ -1603,7 +1620,7 @@ export default function ShiftPlanningClient({
           <span className="font-mono text-[11px] text-muted">{t("weekTemplatesLabel")}</span>
 
           {templates.length > 0 ? (
-            <form action={applyShiftTemplateAction} className="flex items-center gap-2">
+            <form action={applyTemplateFormAction} className="flex items-center gap-2">
               <input type="hidden" name="tenant" value={tenant} />
               <input type="hidden" name="year" value={year} />
               <input type="hidden" name="week" value={week} />
@@ -1630,7 +1647,7 @@ export default function ShiftPlanningClient({
             <span className="text-[12px] text-muted-2">{t("noTemplatesSaved")}</span>
           )}
 
-          <form action={saveShiftTemplateAction} className="ml-auto flex items-center gap-2">
+          <form action={saveTemplateFormAction} className="ml-auto flex items-center gap-2">
             <input type="hidden" name="tenant" value={tenant} />
             <input type="hidden" name="year" value={year} />
             <input type="hidden" name="week" value={week} />
@@ -1670,7 +1687,7 @@ export default function ShiftPlanningClient({
                     <Pencil size={10} />
                   </button>
                   {canDelete && (
-                    <form action={deleteShiftTemplateAction}>
+                    <form action={deleteTemplateFormAction}>
                       <input type="hidden" name="tenant" value={tenant} />
                       <input type="hidden" name="templateId" value={template.id} />
                       <button

@@ -9,6 +9,8 @@ import { VacationDrawerButton } from "@/components/ActionDrawers";
 import FormSubmitButton from "@/components/FormSubmitButton";
 import { ListSearchBox } from "@/components/ListSearchBox";
 import PaginationControls from "@/components/PaginationControls";
+import { useActionStateWithToast } from "@/components/Toasts";
+import type { ActionState } from "@/lib/action-state";
 import { getVacationStatusConfig, type VacationRequest } from "@/lib/vacations";
 import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
@@ -48,13 +50,15 @@ function DecisionForm({
 }: {
   tenant: string;
   request: VacationRequest;
-  action: (formData: FormData) => Promise<void>;
+  action: (state: ActionState, formData: FormData) => Promise<ActionState>;
   children: ReactNode;
   className: string;
   t: T;
 }) {
+  const [, formAction] = useActionStateWithToast(action);
+
   return (
-    <form action={action}>
+    <form action={formAction}>
       <input type="hidden" name="tenant" value={tenant} />
       <input type="hidden" name="requestId" value={request.dbId ?? ""} />
       <FormSubmitButton className={className} pendingLabel={t("decisionPending")}>

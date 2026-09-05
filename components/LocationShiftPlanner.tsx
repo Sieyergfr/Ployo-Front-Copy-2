@@ -11,6 +11,7 @@ import {
 import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
 import DatePickerField from "@/components/DatePickerField";
 import FormSubmitButton from "@/components/FormSubmitButton";
+import { useActionStateWithToast } from "@/components/Toasts";
 import type { Location } from "@/lib/locations";
 import { calculateBreakMinutes } from "@/lib/shift-break-rule";
 import type { ShiftEmployeeOption } from "@/lib/shift-service";
@@ -223,6 +224,9 @@ function WishFreeDrawer({
   const wishFreeStatusLabels = getWishFreeStatusLabels(t);
   const wishFreeFilters = getWishFreeFilters(t);
   const returnTo = `/u/${tenant}/standorte/${location.id}?tab=shifts&year=${year}&week=${week}`;
+  const [, createFormAction] = useActionStateWithToast(createWishFreeRequestAction);
+  const [, approveFormAction] = useActionStateWithToast(approveWishFreeRequestAction);
+  const [, rejectFormAction] = useActionStateWithToast(rejectWishFreeRequestAction);
   const filteredRequests =
     activeFilter === "all"
       ? requests
@@ -379,7 +383,7 @@ function WishFreeDrawer({
 
           <div className="min-h-0 overflow-y-auto p-6">
             {isCreating ? (
-              <form className="flex min-h-full flex-col" action={createWishFreeRequestAction}>
+              <form className="flex min-h-full flex-col" action={createFormAction}>
                 <input type="hidden" name="tenant" value={tenant} />
                 <input type="hidden" name="year" value={year} />
                 <input type="hidden" name="week" value={week} />
@@ -516,13 +520,13 @@ function WishFreeDrawer({
                   <div className="mt-6 flex justify-end gap-2.5 border-t border-border-soft pt-4">
                     <button
                       type="submit"
-                      formAction={rejectWishFreeRequestAction}
+                      formAction={rejectFormAction}
                       className="btn btn-secondary text-danger"
                     >
                       {t("reject")}
                     </button>
                     <FormSubmitButton
-                      formAction={approveWishFreeRequestAction}
+                      formAction={approveFormAction}
                       className="btn btn-primary"
                     >
                       <Check size={15} />
@@ -566,12 +570,18 @@ function ShiftDrawer({
   canManage: boolean;
   t: T;
 }) {
+  // Hooks vor dem frühen `return null` unten aufrufen (Regel der Hooks) —
+  // welcher Dispatcher tatsächlich verwendet wird, entscheidet sich erst danach.
+  const [, createFormAction] = useActionStateWithToast(createShiftAction);
+  const [, updateFormAction] = useActionStateWithToast(updateShiftAction);
+  const [, deleteFormAction] = useActionStateWithToast(deleteShiftAction);
+
   if (!drawer) {
     return null;
   }
 
   const shift = drawer.shift;
-  const action = shift?.dbId ? updateShiftAction : createShiftAction;
+  const action = shift?.dbId ? updateFormAction : createFormAction;
   const returnTo = `/u/${tenant}/standorte/${location.id}?tab=shifts&year=${year}&week=${week}`;
 
   /** Berechnet die Pause aus der Pausenregel des Mandanten neu, sobald sich Start/Ende ändern. */
@@ -740,7 +750,7 @@ function ShiftDrawer({
               <ConfirmSubmitButton
                 className="btn btn-secondary text-danger"
                 form="location-shift-form"
-                formAction={deleteShiftAction}
+                formAction={deleteFormAction}
                 description={t("deleteShiftConfirmDescription")}
               >
                 {t("delete")}

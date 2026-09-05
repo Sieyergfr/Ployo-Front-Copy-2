@@ -6,6 +6,7 @@ import {
   setTenantVacationRequestStatus,
   updateTenantVacationRequest,
 } from "@/lib/vacation-service";
+import { type ActionState, withActionErrorHandling } from "@/lib/action-state";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -37,112 +38,137 @@ function todayDateOnly() {
   return new Date(now.getFullYear(), now.getMonth(), now.getDate());
 }
 
-export async function createVacationRequestAction(formData: FormData) {
-  const tenant = formString(formData, "tenant");
-  const employeeId = formString(formData, "employeeId");
-  const startDate = formString(formData, "startDate");
-  const endDate = formString(formData, "endDate");
+export async function createVacationRequestAction(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  return withActionErrorHandling(async () => {
+    const tenant = formString(formData, "tenant");
+    const employeeId = formString(formData, "employeeId");
+    const startDate = formString(formData, "startDate");
+    const endDate = formString(formData, "endDate");
 
-  if (!tenant || !employeeId || !startDate || !endDate) {
-    throw new Error("Urlaubsantrag konnte nicht erstellt werden.");
-  }
+    if (!tenant || !employeeId || !startDate || !endDate) {
+      throw new Error("Urlaubsantrag konnte nicht erstellt werden.");
+    }
 
-  const parsedStartDate = parseDateOnly(startDate);
-  const parsedEndDate = parseDateOnly(endDate);
-  const today = todayDateOnly();
+    const parsedStartDate = parseDateOnly(startDate);
+    const parsedEndDate = parseDateOnly(endDate);
+    const today = todayDateOnly();
 
-  if (!parsedStartDate || !parsedEndDate) {
-    throw new Error("Bitte gültige Datumswerte auswählen.");
-  }
+    if (!parsedStartDate || !parsedEndDate) {
+      throw new Error("Bitte gültige Datumswerte auswählen.");
+    }
 
-  if (parsedStartDate < today || parsedEndDate < today) {
-    throw new Error("Urlaubsantrag darf nicht in der Vergangenheit liegen.");
-  }
+    if (parsedStartDate < today || parsedEndDate < today) {
+      throw new Error("Urlaubsantrag darf nicht in der Vergangenheit liegen.");
+    }
 
-  if (parsedEndDate < parsedStartDate) {
-    throw new Error("Das Enddatum darf nicht vor dem Startdatum liegen.");
-  }
+    if (parsedEndDate < parsedStartDate) {
+      throw new Error("Das Enddatum darf nicht vor dem Startdatum liegen.");
+    }
 
-  await createTenantVacationRequest({
-    tenantSlug: tenant,
-    employeeId,
-    startDate,
-    endDate,
-    note: formString(formData, "note"),
-  });
+    await createTenantVacationRequest({
+      tenantSlug: tenant,
+      employeeId,
+      startDate,
+      endDate,
+      note: formString(formData, "note"),
+    });
 
-  revalidatePath(vacationPath(tenant));
-  redirect(vacationPath(tenant));
+    revalidatePath(vacationPath(tenant));
+    redirect(vacationPath(tenant));
+  }, "Urlaubsantrag erstellen");
 }
 
-export async function updateVacationRequestAction(formData: FormData) {
-  const tenant = formString(formData, "tenant");
-  const requestId = formString(formData, "requestId");
-  const startDate = formString(formData, "startDate");
-  const endDate = formString(formData, "endDate");
+export async function updateVacationRequestAction(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  return withActionErrorHandling(async () => {
+    const tenant = formString(formData, "tenant");
+    const requestId = formString(formData, "requestId");
+    const startDate = formString(formData, "startDate");
+    const endDate = formString(formData, "endDate");
 
-  if (!tenant || !requestId || !startDate || !endDate) {
-    throw new Error("Urlaubsantrag konnte nicht aktualisiert werden.");
-  }
+    if (!tenant || !requestId || !startDate || !endDate) {
+      throw new Error("Urlaubsantrag konnte nicht aktualisiert werden.");
+    }
 
-  await updateTenantVacationRequest({
-    tenantSlug: tenant,
-    requestId,
-    startDate,
-    endDate,
-    note: formString(formData, "note"),
-  });
+    await updateTenantVacationRequest({
+      tenantSlug: tenant,
+      requestId,
+      startDate,
+      endDate,
+      note: formString(formData, "note"),
+    });
 
-  revalidatePath(vacationPath(tenant));
-  redirect(vacationPath(tenant));
+    revalidatePath(vacationPath(tenant));
+    redirect(vacationPath(tenant));
+  }, "Urlaubsantrag speichern");
 }
 
-export async function approveVacationRequestAction(formData: FormData) {
-  const tenant = formString(formData, "tenant");
-  const requestId = formString(formData, "requestId");
+export async function approveVacationRequestAction(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  return withActionErrorHandling(async () => {
+    const tenant = formString(formData, "tenant");
+    const requestId = formString(formData, "requestId");
 
-  if (!tenant || !requestId) {
-    throw new Error("Urlaubsantrag konnte nicht genehmigt werden.");
-  }
+    if (!tenant || !requestId) {
+      throw new Error("Urlaubsantrag konnte nicht genehmigt werden.");
+    }
 
-  await setTenantVacationRequestStatus({
-    tenantSlug: tenant,
-    requestId,
-    status: "approved",
-  });
+    await setTenantVacationRequestStatus({
+      tenantSlug: tenant,
+      requestId,
+      status: "approved",
+    });
 
-  revalidatePath(vacationPath(tenant));
-  redirect(vacationPath(tenant));
+    revalidatePath(vacationPath(tenant));
+    redirect(vacationPath(tenant));
+  }, "Urlaubsantrag genehmigen");
 }
 
-export async function rejectVacationRequestAction(formData: FormData) {
-  const tenant = formString(formData, "tenant");
-  const requestId = formString(formData, "requestId");
+export async function rejectVacationRequestAction(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  return withActionErrorHandling(async () => {
+    const tenant = formString(formData, "tenant");
+    const requestId = formString(formData, "requestId");
 
-  if (!tenant || !requestId) {
-    throw new Error("Urlaubsantrag konnte nicht abgelehnt werden.");
-  }
+    if (!tenant || !requestId) {
+      throw new Error("Urlaubsantrag konnte nicht abgelehnt werden.");
+    }
 
-  await setTenantVacationRequestStatus({
-    tenantSlug: tenant,
-    requestId,
-    status: "rejected",
-  });
+    await setTenantVacationRequestStatus({
+      tenantSlug: tenant,
+      requestId,
+      status: "rejected",
+    });
 
-  revalidatePath(vacationPath(tenant));
-  redirect(vacationPath(tenant));
+    revalidatePath(vacationPath(tenant));
+    redirect(vacationPath(tenant));
+  }, "Urlaubsantrag ablehnen");
 }
 
-export async function deleteVacationRequestAction(formData: FormData) {
-  const tenant = formString(formData, "tenant");
-  const requestId = formString(formData, "requestId");
+export async function deleteVacationRequestAction(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  return withActionErrorHandling(async () => {
+    const tenant = formString(formData, "tenant");
+    const requestId = formString(formData, "requestId");
 
-  if (!tenant || !requestId) {
-    throw new Error("Urlaubsantrag konnte nicht gelöscht werden.");
-  }
+    if (!tenant || !requestId) {
+      throw new Error("Urlaubsantrag konnte nicht gelöscht werden.");
+    }
 
-  await deleteTenantVacationRequest({ tenantSlug: tenant, requestId });
+    await deleteTenantVacationRequest({ tenantSlug: tenant, requestId });
 
-  revalidatePath(vacationPath(tenant));
-  redirect(vacationPath(tenant));
+    revalidatePath(vacationPath(tenant));
+    redirect(vacationPath(tenant));
+  }, "Urlaubsantrag löschen");
 }

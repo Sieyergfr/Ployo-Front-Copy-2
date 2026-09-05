@@ -21,6 +21,7 @@ import {
 import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
 import DatePickerField from "@/components/DatePickerField";
 import FormSubmitButton from "@/components/FormSubmitButton";
+import { useActionStateWithToast } from "@/components/Toasts";
 import { useUniversalPopup } from "@/components/UniversalPopup";
 import type {
   ReminderFileBrowserData,
@@ -464,12 +465,12 @@ function ReminderFields({
 }) {
   const t = useTranslations("ActionDrawers");
   const [linkedFiles, setLinkedFiles] = useState<string[]>(defaultLinkedFiles);
+  const [, formAction] = useActionStateWithToast(
+    reminderId ? updateReminderAction : createReminderAction,
+  );
 
   return (
-    <form
-      className="flex flex-col gap-4"
-      action={reminderId ? updateReminderAction : createReminderAction}
-    >
+    <form className="flex flex-col gap-4" action={formAction}>
       <input type="hidden" name="tenant" value={tenant} />
       <input type="hidden" name="returnPath" value={returnPath} />
       <input type="hidden" name="reminderId" value={reminderId ?? ""} />
@@ -714,6 +715,8 @@ export function SicknessDrawerButton({
   const t = useTranslations("ActionDrawers");
   const [isOpen, setIsOpen] = useState(false);
   const isCurrent = "since" in item;
+  const [, updateFormAction] = useActionStateWithToast(updateSicknessReportAction);
+  const [, closeFormAction] = useActionStateWithToast(closeSicknessReportAction);
 
   return (
     <>
@@ -743,7 +746,7 @@ export function SicknessDrawerButton({
               </div>
             </div>
             {isCurrent && canManage ? (
-              <form action={updateSicknessReportAction} className="flex flex-col gap-4">
+              <form action={updateFormAction} className="flex flex-col gap-4">
                 <input type="hidden" name="tenant" value={tenant} />
                 <input type="hidden" name="reportId" value={item.id} />
                 <div className="grid gap-3 sm:grid-cols-2">
@@ -793,7 +796,7 @@ export function SicknessDrawerButton({
                   </button>
                   {canDelete && (
                     <FormSubmitButton
-                      formAction={closeSicknessReportAction}
+                      formAction={closeFormAction}
                       Icon={Check}
                       className="btn btn-secondary"
                       pendingLabel={t("saving")}
@@ -834,6 +837,10 @@ export function VacationDrawerButton({
   const t = useTranslations("ActionDrawers");
   const [isOpen, setIsOpen] = useState(false);
   const deleteFormId = `vacation-delete-${request.dbId ?? request.id}`;
+  const [, updateFormAction] = useActionStateWithToast(updateVacationRequestAction);
+  const [, approveFormAction] = useActionStateWithToast(approveVacationRequestAction);
+  const [, rejectFormAction] = useActionStateWithToast(rejectVacationRequestAction);
+  const [, deleteFormAction] = useActionStateWithToast(deleteVacationRequestAction);
 
   return (
     <>
@@ -855,7 +862,7 @@ export function VacationDrawerButton({
               {t("noVacationEditPermission")}
             </div>
           )}
-          <form action={updateVacationRequestAction} className="flex flex-col gap-4">
+          <form action={updateFormAction} className="flex flex-col gap-4">
             <input type="hidden" name="tenant" value={tenant} />
             <input type="hidden" name="requestId" value={request.dbId ?? ""} />
             <fieldset disabled={!canManage} className="flex flex-col gap-4 border-0 p-0">
@@ -888,7 +895,7 @@ export function VacationDrawerButton({
             {canManage && (
               <div className="flex flex-wrap gap-2 border-t border-border-soft pt-4">
                 <FormSubmitButton
-                  formAction={approveVacationRequestAction}
+                  formAction={approveFormAction}
                   Icon={Check}
                   className="btn btn-primary btn-sm"
                   pendingLabel={t("working")}
@@ -896,7 +903,7 @@ export function VacationDrawerButton({
                   {t("approve")}
                 </FormSubmitButton>
                 <FormSubmitButton
-                  formAction={rejectVacationRequestAction}
+                  formAction={rejectFormAction}
                   className="btn btn-secondary btn-sm border-danger/25 text-danger hover:border-danger/40 hover:bg-danger/5"
                   pendingLabel={t("working")}
                 >
@@ -929,7 +936,7 @@ export function VacationDrawerButton({
             </div>
           </form>
           {canDelete && (
-            <form id={deleteFormId} action={deleteVacationRequestAction}>
+            <form id={deleteFormId} action={deleteFormAction}>
               <input type="hidden" name="tenant" value={tenant} />
               <input type="hidden" name="requestId" value={request.dbId ?? ""} />
             </form>
@@ -958,6 +965,7 @@ export function ShiftSettingsDrawerButton({
   const [isOpen, setIsOpen] = useState(false);
   const [editingShiftId, setEditingShiftId] = useState<string | null>(null);
   const [shiftPresets, setShiftPresets] = useState<ShiftPreset[]>(settings.presets);
+  const [, formAction] = useActionStateWithToast(updateShiftSettingsAction);
 
   if (!canManage) {
     return null;
@@ -1040,7 +1048,7 @@ export function ShiftSettingsDrawerButton({
           onClose={() => setIsOpen(false)}
         >
           <form
-            action={updateShiftSettingsAction}
+            action={formAction}
             className="flex flex-col gap-4"
           >
             <input type="hidden" name="tenant" value={tenant} />

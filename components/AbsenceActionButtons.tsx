@@ -4,6 +4,7 @@ import { createVacationRequestAction } from "@/app/(dashboard)/u/[tenant]/urlaub
 import { createSicknessReportAction } from "@/app/(dashboard)/u/[tenant]/krankheit/actions";
 import DatePickerField from "@/components/DatePickerField";
 import FormSubmitButton from "@/components/FormSubmitButton";
+import { useActionStateWithToast } from "@/components/Toasts";
 import { useUniversalPopup } from "@/components/UniversalPopup";
 import { CalendarPlus, Plus, Stethoscope, X } from "lucide-react";
 import { useTranslations } from "next-intl";
@@ -70,9 +71,10 @@ function VacationRequestForm({
   t: T;
 }) {
   const today = todayInputValue();
+  const [, formAction] = useActionStateWithToast(createVacationRequestAction);
 
   return (
-    <form className="flex flex-col gap-4" action={createVacationRequestAction}>
+    <form className="flex flex-col gap-4" action={formAction}>
       <input type="hidden" name="tenant" value={tenant} />
       <EmployeeSelect employees={employees} name="employeeId" t={t} />
       <div className="grid gap-3 sm:grid-cols-2">
@@ -126,8 +128,10 @@ function SicknessReportForm({
   onDone: () => void;
   t: T;
 }) {
+  const [, formAction] = useActionStateWithToast(createSicknessReportAction);
+
   return (
-    <form className="flex flex-col gap-4" action={createSicknessReportAction}>
+    <form className="flex flex-col gap-4" action={formAction}>
       <input type="hidden" name="tenant" value={tenant} />
       <div className="rounded-xl border border-border bg-bg p-3 text-[12.5px] leading-5 text-muted-2">
         {t("sicknessInfoBox")}
