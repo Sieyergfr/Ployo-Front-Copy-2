@@ -4,6 +4,7 @@ import Link from "next/link";
 
 export const metadata = {
   title: "Kontakt & Support",
+  description: "Support kontaktieren oder eine Frage zu Ployo stellen.",
 };
 
 /**

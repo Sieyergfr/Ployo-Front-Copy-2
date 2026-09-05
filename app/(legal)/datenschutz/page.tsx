@@ -1,5 +1,7 @@
 export const metadata = {
   title: "Datenschutzerklärung",
+  description:
+    "Wie Ployo personenbezogene Daten von Nutzern und Mitarbeitern erhebt, verarbeitet und schützt.",
 };
 
 /**
@@ -286,15 +288,25 @@ export default function DatenschutzPage() {
       <section className="flex flex-col gap-1">
         <h2 className="text-base font-semibold">15. Werbung und Tracking</h2>
         <p>
-          Ployo setzt keine Werbe- oder Tracking-SDKs ein und verkauft keine
-          personenbezogenen Daten. Sollten künftig Analyse- oder
+          Ployo setzt keine Werbe- oder Tracking-SDKs Dritter ein und verkauft
+          keine personenbezogenen Daten. Auf den öffentlichen Seiten
+          (Startseite, Anmeldung, Registrierung, Impressum, Datenschutz, AGB,
+          Kontakt) zählen wir Seitenaufrufe rein anonym auf eigener
+          Infrastruktur mit: gespeichert werden nur der aufgerufene Pfad, der
+          Hostname eines eventuellen Verweisers (nie die vollständige
+          Verweis-URL) und der Zeitpunkt – keine IP-Adresse, keine Cookie-
+          oder Geräte-ID und kein Personenbezug. Da keine personenbezogenen
+          Daten verarbeitet werden, ist hierfür keine Einwilligung
+          erforderlich (§ 25 Abs. 2 Nr. 2 TTDSG, Art. 6 DSGVO nicht
+          einschlägig). Die Datensätze werden nach 13 Monaten automatisch
+          gelöscht. Sollten künftig personenbezogene Analyse- oder
           Marketing-Dienste ergänzt werden, wird diese Erklärung vorab
           aktualisiert und – soweit erforderlich – Ihre Einwilligung
           eingeholt.
         </p>
       </section>
 
-      <p className="text-muted">Stand: 03.09.2026</p>
+      <p className="text-muted">Stand: 05.09.2026</p>
     </article>
   );
 }

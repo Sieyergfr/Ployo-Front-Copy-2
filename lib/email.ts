@@ -148,7 +148,7 @@ export async function sendChangeEmailConfirmationEmail(input: {
     text: `Für Ihr Ployo-Konto wurde eine Änderung der Anmelde-E-Mail zu ${input.newEmail} angefordert.\n\nBestätigen: ${input.url}\n\nWenn Sie das nicht waren, ignorieren Sie diese E-Mail — Ihre Adresse bleibt unverändert.`,
     html: emailLayout(
       "E-Mail-Änderung bestätigen",
-      `<p style="font-size:14px;line-height:1.5;">Für Ihr Ployo-Konto wurde eine Änderung der Anmelde-E-Mail zu <strong>${input.newEmail}</strong> angefordert.</p>${actionButton(input.url, "Änderung bestätigen")}<p style="font-size:12px;color:#6e6e6b;">Wenn Sie das nicht waren, ignorieren Sie diese E-Mail — Ihre Adresse bleibt unverändert.</p>`,
+      `<p style="font-size:14px;line-height:1.5;">Für Ihr Ployo-Konto wurde eine Änderung der Anmelde-E-Mail zu <strong>${escapeHtml(input.newEmail)}</strong> angefordert.</p>${actionButton(input.url, "Änderung bestätigen")}<p style="font-size:12px;color:#6e6e6b;">Wenn Sie das nicht waren, ignorieren Sie diese E-Mail — Ihre Adresse bleibt unverändert.</p>`,
     ),
   });
 }
@@ -163,8 +163,8 @@ export async function sendInvitationEmail(input: {
     subject: `Einladung zu ${input.tenantName} bei Ployo`,
     text: `Sie wurden zu „${input.tenantName}“ bei Ployo eingeladen.\n\nEinladung annehmen: ${input.url}`,
     html: emailLayout(
-      `Einladung zu ${input.tenantName}`,
-      `<p style="font-size:14px;line-height:1.5;">Sie wurden eingeladen, dem Arbeitsbereich „${input.tenantName}“ bei Ployo beizutreten.</p>${actionButton(input.url, "Einladung annehmen")}`,
+      `Einladung zu ${escapeHtml(input.tenantName)}`,
+      `<p style="font-size:14px;line-height:1.5;">Sie wurden eingeladen, dem Arbeitsbereich „${escapeHtml(input.tenantName)}“ bei Ployo beizutreten.</p>${actionButton(input.url, "Einladung annehmen")}`,
     ),
   });
 }

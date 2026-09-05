@@ -4,10 +4,32 @@ import { checkRateLimit, tooManyRequests } from "@/lib/rate-limit";
 import { mapSelfServiceError } from "@/lib/api/self-service-errors";
 import { headers } from "next/headers";
 
-function defaultTenantUrl(tenant: string) {
-  const baseUrl = (process.env.BETTER_AUTH_URL ?? "http://localhost:3000").replace(/\/$/, "");
+function appBaseUrl() {
+  return (process.env.BETTER_AUTH_URL ?? "http://localhost:3000").replace(/\/$/, "");
+}
 
-  return `${baseUrl}/u/${tenant}`;
+function defaultTenantUrl(tenant: string) {
+  return `${appBaseUrl()}/u/${tenant}`;
+}
+
+// `returnUrl` steuert, wohin Stripe nach dem Billing-Portal zurückleitet —
+// ohne Origin-Prüfung ließe sich darüber eine beliebige externe Adresse
+// einschleusen. Nur ein Ziel auf der eigenen Origin wird akzeptiert, sonst
+// greift der Tenant-Default.
+function sameOriginReturnUrl(candidate: string | undefined, tenant: string) {
+  if (!candidate) {
+    return defaultTenantUrl(tenant);
+  }
+
+  try {
+    const resolved = new URL(candidate, appBaseUrl());
+
+    return resolved.origin === new URL(appBaseUrl()).origin
+      ? resolved.toString()
+      : defaultTenantUrl(tenant);
+  } catch {
+    return defaultTenantUrl(tenant);
+  }
 }
 
 /** Stripe-Billing-Portal-Session — gibt die Portal-URL als JSON zurück. Body optional: `{ returnUrl, intent: "switch-plan" }`. */
@@ -41,7 +63,7 @@ export async function POST(
   try {
     const url = await createBillingPortalSession({
       tenantSlug: tenant,
-      returnUrl: body?.returnUrl || defaultTenantUrl(tenant),
+      returnUrl: sameOriginReturnUrl(body?.returnUrl, tenant),
       intent: body?.intent === "switch-plan" ? "switch-plan" : undefined,
     });
 

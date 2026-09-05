@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { CookieSettingsLink } from "@/components/CookieSettingsLink";
 import { LocaleSwitcher } from "@/components/LocaleSwitcher";
+import PageviewBeacon from "@/components/PageviewBeacon";
 import { getTranslations } from "next-intl/server";
 
 export default async function LegalLayout({
@@ -11,6 +12,7 @@ export default async function LegalLayout({
 
   return (
     <div className="flex min-h-svh flex-col bg-bg">
+      <PageviewBeacon />
       <header className="mx-auto flex w-full max-w-3xl items-center justify-between px-6 py-5">
         <Link href="/" className="flex items-center gap-2">
           <Image src="/logo_square_brand.svg" alt="Ployo Logo" width={24} height={24} />

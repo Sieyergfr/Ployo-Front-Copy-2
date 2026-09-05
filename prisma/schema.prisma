@@ -1184,3 +1184,21 @@ model TenantWishFreeRequest {
   @@index([date])
   @@index([status])
 }
+
+/**
+ * Eigenes, cookie-freies Seitenaufruf-Tracking für die öffentlichen
+ * Marketing-/Rechtsseiten (Landingpage, Login/Registrierung, Impressum/
+ * Datenschutz/AGB/Kontakt) — keine Nutzer-ID, keine IP, kein Consent nötig,
+ * da anonym und ohne Personenbezug (s. lib/analytics.ts). Bewusst kein
+ * Dritt-Tool: schreibt in dieselbe Datenbank statt Daten an Google/Meta o. Ä.
+ * abzugeben.
+ */
+model PageView {
+  id           String   @id @default(cuid())
+  path         String
+  referrerHost String   @default("")
+  occurredAt   DateTime @default(now())
+
+  @@index([path, occurredAt])
+  @@index([occurredAt])
+}

@@ -2,6 +2,7 @@ import AuthHeader from "@/components/AuthHeader";
 import AuthSegmented from "@/components/AuthSegmented";
 import Card from "@/components/Card/card";
 import { LocaleSwitcher } from "@/components/LocaleSwitcher";
+import PageviewBeacon from "@/components/PageviewBeacon";
 import { getTranslations } from "next-intl/server";
 
 export default async function AuthLayout ({
@@ -13,6 +14,7 @@ export default async function AuthLayout ({
 
     return (
         <div className="min-h-svh flex items-center justify-center p-6">
+            <PageviewBeacon />
             <div className="w-full max-w-[420px]">
                 <AuthHeader />
                 <AuthSegmented />

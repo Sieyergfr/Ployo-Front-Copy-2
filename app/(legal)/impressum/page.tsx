@@ -1,5 +1,6 @@
 export const metadata = {
   title: "Impressum",
+  description: "Anbieterkennzeichnung und Kontaktdaten von Ployo gemäß § 5 TMG.",
 };
 
 export default function ImpressumPage() {

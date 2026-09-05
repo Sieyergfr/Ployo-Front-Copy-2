@@ -1,17 +1,22 @@
 export const runtime = "nodejs";
 
 export async function GET() {
-  return Response.json({
-    providers: {
-      google: Boolean(
-        process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET,
-      ),
-      apple: Boolean(
-        process.env.APPLE_CLIENT_ID &&
-          process.env.APPLE_TEAM_ID &&
-          process.env.APPLE_KEY_ID &&
-          process.env.APPLE_PRIVATE_KEY,
-      ),
+  return Response.json(
+    {
+      providers: {
+        google: Boolean(
+          process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET,
+        ),
+        apple: Boolean(
+          process.env.APPLE_CLIENT_ID &&
+            process.env.APPLE_TEAM_ID &&
+            process.env.APPLE_KEY_ID &&
+            process.env.APPLE_PRIVATE_KEY,
+        ),
+      },
     },
-  });
+    // Hängt nur von Env-Variablen ab, die sich frühestens mit einem Neustart
+    // ändern — unangemeldet abrufbar (Login-Screen), daher öffentlich cachbar.
+    { headers: { "cache-control": "public, max-age=3600" } },
+  );
 }

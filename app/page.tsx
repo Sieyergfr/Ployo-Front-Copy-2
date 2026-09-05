@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { CookieSettingsLink } from "@/components/CookieSettingsLink";
 import { LocaleSwitcher } from "@/components/LocaleSwitcher";
+import PageviewBeacon from "@/components/PageviewBeacon";
 import { getTranslations } from "next-intl/server";
 import "./landing.css";
 
@@ -158,6 +159,7 @@ export default async function Home() {
 
   return (
     <div className="landing min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
+      <PageviewBeacon />
       {/* ─── NAV ─────────────────────────────── */}
       <header className="fixed top-0 right-0 left-0 z-[100] h-16 border-b border-[color:var(--lp-bd)] bg-[rgba(7,7,12,.82)] backdrop-blur-[22px]">
         <div className="mx-auto flex h-full max-w-[1200px] items-center px-5 sm:px-6 lg:px-10">

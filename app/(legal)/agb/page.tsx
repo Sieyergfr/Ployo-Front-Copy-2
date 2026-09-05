@@ -1,5 +1,6 @@
 export const metadata = {
   title: "AGB",
+  description: "Allgemeine Geschäftsbedingungen für die Nutzung von Ployo.",
 };
 
 export default function AgbPage() {

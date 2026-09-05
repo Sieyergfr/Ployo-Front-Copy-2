@@ -11,6 +11,14 @@ export const runtime = "nodejs";
 
 const SOFT_DELETE_GRACE_DAYS = 30;
 /**
+ * PageView (lib/analytics.ts) ist anonym (kein Personenbezug, keine
+ * IP/Nutzer-ID) und fällt nicht unter das Löschkonzept — reine
+ * Datensparsamkeit, damit die Tabelle nicht unbegrenzt wächst. 13 statt 12
+ * Monate, damit ein Jahresvergleich (z. B. "Dezember vs. Vorjahresdezember")
+ * bis kurz vor dem nächsten Lauf noch möglich ist.
+ */
+const PAGE_VIEW_RETENTION_DAYS = 395;
+/**
  * Die App frischt ihren Push-Token bei jedem Login auf. Bleibt ein Eintrag so
  * lange unberührt, ist das Gerät weg (deinstalliert, verloren, ersetzt) —
  * einen Push würde es nie sehen. Beim nächsten Start trägt sich die App
@@ -32,6 +40,7 @@ const PUSH_SUBSCRIPTION_STALE_DAYS = 90;
  * - anonymisiert Kategorie-1-Stammdaten ehemaliger Mitarbeiter nach Ablauf
  *   der Frist (lib/data-retention.ts), erinnert HR an ablaufende
  *   Gesundheitsdaten-Freitexte statt sie automatisch zu löschen
+ * - entfernt anonyme Pageview-Datensätze (lib/analytics.ts) nach 13 Monaten
  */
 export async function GET(request: Request) {
   return runWithRequestId((requestId) => handleCleanup(request, requestId));
@@ -59,11 +68,15 @@ async function handleCleanup(request: Request, requestId: string) {
   logger.info("Cron cleanup gestartet.");
   const now = new Date();
 
-  const [expiredSessions, expiredVerifications, staleRateLimits] =
+  const pageViewCutoff = new Date(
+    now.getTime() - PAGE_VIEW_RETENTION_DAYS * 24 * 60 * 60 * 1000,
+  );
+  const [expiredSessions, expiredVerifications, staleRateLimits, oldPageViews] =
     await prisma.$transaction([
       prisma.session.deleteMany({ where: { expiresAt: { lt: now } } }),
       prisma.verification.deleteMany({ where: { expiresAt: { lt: now } } }),
       prisma.appRateLimit.deleteMany({ where: { resetAt: { lt: now } } }),
+      prisma.pageView.deleteMany({ where: { occurredAt: { lt: pageViewCutoff } } }),
     ]);
 
   const expiredInvitations = await prisma.tenantInvitation.updateMany({
@@ -177,6 +190,7 @@ async function handleCleanup(request: Request, requestId: string) {
     accounts: accountsDeleted,
     staleRateLimits: staleRateLimits.count,
     stalePushSubscriptions: stalePushSubscriptions.count,
+    oldPageViews: oldPageViews.count,
     anonymizedFormerEmployees: dueForAnonymisierung.length,
     healthDataRemindersCreated: healthDataReminders.remindersCreated,
   };

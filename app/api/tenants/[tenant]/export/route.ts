@@ -38,10 +38,24 @@ export async function GET(
   try {
     payload = await buildTenantExport(tenant);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Export fehlgeschlagen.";
-    const status = message === "Nicht angemeldet." ? 401 : 403;
+    // Nur bekannte, kontrollierte Fehlertexte an den Client durchreichen —
+    // gleiches Muster wie app/api/me/*/route.ts. Alles andere (z. B. eine
+    // unerwartete DB-Ausnahme) würde sonst Interna leaken; stattdessen
+    // weiterwerfen und Next die generische 500-Antwort erzeugen lassen.
+    if (
+      error instanceof Error &&
+      (error.message === "Nicht angemeldet." ||
+        error.message === "UNAUTHORIZED" ||
+        error.message === "FORBIDDEN" ||
+        error.message === "TWO_FACTOR_REQUIRED")
+    ) {
+      const status =
+        error.message === "Nicht angemeldet." || error.message === "UNAUTHORIZED" ? 401 : 403;
 
-    return Response.json({ error: message }, { status });
+      return Response.json({ error: error.message }, { status });
+    }
+
+    throw error;
   }
 
   return new Response(JSON.stringify(payload, null, 2), {

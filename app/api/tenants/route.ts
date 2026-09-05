@@ -4,6 +4,10 @@ import { checkRateLimit, tooManyRequests } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
+// Der Name landet u. a. ungekürzt in Einladungs-E-Mails (Betreff + Titel) —
+// eine Obergrenze verhindert übermäßig lange Werte.
+const MAX_TENANT_NAME_LENGTH = 120;
+
 async function getSession(request: Request) {
   return auth.api.getSession({
     headers: request.headers,
@@ -71,9 +75,9 @@ export async function POST(request: Request) {
   } | null;
   const name = body?.name?.trim();
 
-  if (!name) {
+  if (!name || name.length > MAX_TENANT_NAME_LENGTH) {
     return Response.json(
-      { error: "Unternehmensname ist erforderlich." },
+      { error: `Unternehmensname ist erforderlich (maximal ${MAX_TENANT_NAME_LENGTH} Zeichen).` },
       { status: 400 },
     );
   }

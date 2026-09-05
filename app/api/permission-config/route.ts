@@ -14,5 +14,10 @@ export async function GET() {
     return Response.json({ error: "Nicht angemeldet." }, { status: 401 });
   }
 
-  return Response.json({ areas: permissionAreas, levels: permissionLevels, scopes: permissionScopes });
+  return Response.json(
+    { areas: permissionAreas, levels: permissionLevels, scopes: permissionScopes },
+    // Reine Code-Konstanten, ändern sich nur mit einem Deploy — clientseitig
+    // eine Stunde cachen statt bei jedem Rollen-Editor-Öffnen neu zu holen.
+    { headers: { "cache-control": "private, max-age=3600" } },
+  );
 }
