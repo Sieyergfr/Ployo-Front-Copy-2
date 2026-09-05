@@ -1,3 +1,4 @@
+import ActionForm from "@/components/ActionForm";
 import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
 import FormSubmitButton from "@/components/FormSubmitButton";
 import PageHeader from "@/components/PageHeader";
@@ -98,7 +99,7 @@ export default async function AccountPage({
             <div className="mb-4 border-b border-border-soft pb-4">
               <AvatarUploadForm image={account.image} initials={getInitials(account.name)} />
             </div>
-            <form action={updateAccountNameAction} className="flex flex-col gap-3">
+            <ActionForm action={updateAccountNameAction} className="flex flex-col gap-3">
               <div className="field">
                 <label htmlFor="account-name" className="label">
                   {tPage("displayNameLabel")}
@@ -123,7 +124,7 @@ export default async function AccountPage({
                   {tPage("save")}
                 </FormSubmitButton>
               </div>
-            </form>
+            </ActionForm>
           </Card>
 
           <Card title={tPage("cardMembershipsTitle")} icon={UserCog}>
@@ -160,7 +161,7 @@ export default async function AccountPage({
           </Card>
 
           <Card title={t("cardTitle")} icon={SlidersHorizontal}>
-            <form action={updatePreferencesAction} className="flex flex-col gap-3">
+            <ActionForm action={updatePreferencesAction} className="flex flex-col gap-3">
               <div className="field">
                 <label htmlFor="pref-start-page" className="label">
                   {t("startPageLabel")}
@@ -231,13 +232,13 @@ export default async function AccountPage({
                   {t("save")}
                 </FormSubmitButton>
               </div>
-            </form>
+            </ActionForm>
           </Card>
         </div>
 
         <div className="flex flex-col gap-4">
           <Card title={tPage("cardPasswordTitle")} icon={KeyRound}>
-            <form action={changePasswordAction} className="flex flex-col gap-3">
+            <ActionForm action={changePasswordAction} className="flex flex-col gap-3">
               <div className="field">
                 <label htmlFor="account-current-password" className="label">
                   {tPage("currentPasswordLabel")}
@@ -299,7 +300,7 @@ export default async function AccountPage({
                   {tPage("changePassword")}
                 </FormSubmitButton>
               </div>
-            </form>
+            </ActionForm>
           </Card>
 
           <Card title={tPage("cardTwoFactorTitle")} icon={ShieldCheck}>
@@ -310,7 +311,7 @@ export default async function AccountPage({
             <p className="text-[12.5px] leading-5 text-muted">
               {tPage("deleteAccountDescription")}
             </p>
-            <form
+            <ActionForm
               id="delete-account-form"
               action={deleteAccountAction}
               className="mt-3 flex flex-col gap-3"
@@ -328,7 +329,7 @@ export default async function AccountPage({
                   required
                 />
               </div>
-            </form>
+            </ActionForm>
             <div className="mt-3 flex justify-end border-t border-border-soft pt-4">
               <ConfirmSubmitButton
                 form="delete-account-form"

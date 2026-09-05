@@ -10,7 +10,7 @@ import AddressFields from "@/components/AddressFields";
 import type { AddressInput } from "@/lib/address";
 import type { BillingInvoice } from "@/lib/billing-service";
 import FormSubmitButton from "@/components/FormSubmitButton";
-import { useToast } from "@/components/Toasts";
+import { useActionStateWithToast, useToast } from "@/components/Toasts";
 import Checkbox from "@/components/inputs/checkbox";
 import { useSlugAvailability } from "@/lib/hooks/useSlugAvailability";
 import { permissionLevels, type PermissionLevel } from "@/lib/roles";
@@ -474,6 +474,8 @@ function SettingsPanel({
   const t = useTranslations("Navigation.settings");
   const tAddress = useTranslations("AddressFields");
   const currentLocale = useLocale();
+  const [, openBillingPortalFormAction] = useActionStateWithToast(openBillingPortalAction);
+  const [, startBillingCheckoutFormAction] = useActionStateWithToast(startBillingCheckoutAction);
   if (activeCategory === "company") {
     return (
       <div className="flex flex-col gap-4">
@@ -867,7 +869,7 @@ function SettingsPanel({
             <div className="mt-3 flex flex-wrap gap-2">
               <button
                 type="submit"
-                formAction={openBillingPortalAction}
+                formAction={openBillingPortalFormAction}
                 name="portalIntent"
                 value="switch-plan"
                 className="btn btn-secondary btn-sm"
@@ -876,7 +878,7 @@ function SettingsPanel({
               </button>
               <button
                 type="submit"
-                formAction={openBillingPortalAction}
+                formAction={openBillingPortalFormAction}
                 className="btn btn-secondary btn-sm"
               >
                 {t("billing.managePayment")}
@@ -921,7 +923,7 @@ function SettingsPanel({
             </div>
             <button
               type="submit"
-              formAction={startBillingCheckoutAction}
+              formAction={startBillingCheckoutFormAction}
               className="btn btn-primary btn-sm mt-3"
             >
               {t("billing.subscribeNow")}
@@ -1392,6 +1394,7 @@ export default function NavigationSidebar({
   const [isTenantMenuOpen, setIsTenantMenuOpen] = useState(false);
   const currentLocale = useLocale();
   const t = useTranslations("Navigation");
+  const [, switchLanguageFormAction] = useActionStateWithToast(switchLanguageAction);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [readNotificationIds, setReadNotificationIds] = useState<string[]>([]);
@@ -1736,7 +1739,7 @@ export default function NavigationSidebar({
         {!isCollapsed && (
           <div className="flex items-center gap-1 px-1 py-1">
             {availableLocales.map((locale) => (
-              <form key={locale.code} action={switchLanguageAction}>
+              <form key={locale.code} action={switchLanguageFormAction}>
                 <input type="hidden" name="redirectTo" value={pathname} />
                 <input type="hidden" name="language" value={locale.code} />
                 <button

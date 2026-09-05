@@ -8,7 +8,7 @@ import {
   updateOwnPreferences,
 } from "@/lib/account-service";
 import { uploadOwnAvatar } from "@/lib/avatar-service";
-import { type ActionState } from "@/lib/action-state";
+import { type ActionState, withActionErrorHandling } from "@/lib/action-state";
 import { LOCALE_COOKIE, LOCALE_COOKIE_MAX_AGE_DAYS } from "@/lib/locale-shared";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
@@ -20,34 +20,49 @@ function formString(formData: FormData, key: string) {
   return typeof value === "string" ? value : "";
 }
 
-export async function updateAccountNameAction(formData: FormData) {
-  await updateAccountName(formString(formData, "name"));
+export async function updateAccountNameAction(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  return withActionErrorHandling(async () => {
+    await updateAccountName(formString(formData, "name"));
 
-  revalidatePath("/konto");
-  redirect("/konto?saved=name");
+    revalidatePath("/konto");
+    redirect("/konto?saved=name");
+  }, "Namen speichern");
 }
 
-export async function changePasswordAction(formData: FormData) {
-  const newPassword = formString(formData, "newPassword");
+export async function changePasswordAction(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  return withActionErrorHandling(async () => {
+    const newPassword = formString(formData, "newPassword");
 
-  if (newPassword !== formString(formData, "newPasswordRepeat")) {
-    throw new Error("Die neuen Passwörter stimmen nicht überein.");
-  }
+    if (newPassword !== formString(formData, "newPasswordRepeat")) {
+      throw new Error("Die neuen Passwörter stimmen nicht überein.");
+    }
 
-  await changeAccountPassword({
-    currentPassword: formString(formData, "currentPassword"),
-    newPassword,
-    revokeOtherSessions: formData.get("revokeOtherSessions") === "on",
-  });
+    await changeAccountPassword({
+      currentPassword: formString(formData, "currentPassword"),
+      newPassword,
+      revokeOtherSessions: formData.get("revokeOtherSessions") === "on",
+    });
 
-  revalidatePath("/konto");
-  redirect("/konto?saved=password");
+    revalidatePath("/konto");
+    redirect("/konto?saved=password");
+  }, "Passwort ändern");
 }
 
-export async function deleteAccountAction(formData: FormData) {
-  await scheduleOwnAccountDeletion(formString(formData, "password"));
+export async function deleteAccountAction(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  return withActionErrorHandling(async () => {
+    await scheduleOwnAccountDeletion(formString(formData, "password"));
 
-  redirect("/login?accountDeletionScheduled=1");
+    redirect("/login?accountDeletionScheduled=1");
+  }, "Konto löschen");
 }
 
 export async function uploadAvatarAction(
@@ -79,38 +94,48 @@ export async function uploadAvatarAction(
  * updatePreferencesAction bleiben die übrigen Präferenzen unangetastet und
  * es wird zur aufrufenden Seite statt immer zu /konto zurückgesprungen.
  */
-export async function switchLanguageAction(formData: FormData) {
-  const language = formString(formData, "language");
-  const redirectTo = formString(formData, "redirectTo") || "/konto";
-  const current = await getOwnPreferences();
+export async function switchLanguageAction(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  return withActionErrorHandling(async () => {
+    const language = formString(formData, "language");
+    const redirectTo = formString(formData, "redirectTo") || "/konto";
+    const current = await getOwnPreferences();
 
-  await updateOwnPreferences({
-    language,
-    timezone: current.timezone,
-    startPage: current.startPage,
-    dateFormat: current.dateFormat,
-  });
+    await updateOwnPreferences({
+      language,
+      timezone: current.timezone,
+      startPage: current.startPage,
+      dateFormat: current.dateFormat,
+    });
 
-  // Damit die Wahl auch nach dem Logout (Login-/Marketing-Seiten ohne
-  // Session, siehe lib/i18n.ts) erhalten bleibt statt auf "de" zurückzufallen.
-  (await cookies()).set(LOCALE_COOKIE, language, {
-    maxAge: LOCALE_COOKIE_MAX_AGE_DAYS * 24 * 60 * 60,
-    path: "/",
-    sameSite: "lax",
-  });
+    // Damit die Wahl auch nach dem Logout (Login-/Marketing-Seiten ohne
+    // Session, siehe lib/i18n.ts) erhalten bleibt statt auf "de" zurückzufallen.
+    (await cookies()).set(LOCALE_COOKIE, language, {
+      maxAge: LOCALE_COOKIE_MAX_AGE_DAYS * 24 * 60 * 60,
+      path: "/",
+      sameSite: "lax",
+    });
 
-  revalidatePath(redirectTo);
-  redirect(redirectTo);
+    revalidatePath(redirectTo);
+    redirect(redirectTo);
+  }, "Sprache wechseln");
 }
 
-export async function updatePreferencesAction(formData: FormData) {
-  await updateOwnPreferences({
-    language: formString(formData, "language"),
-    timezone: formString(formData, "timezone"),
-    startPage: formString(formData, "startPage"),
-    dateFormat: formString(formData, "dateFormat"),
-  });
+export async function updatePreferencesAction(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  return withActionErrorHandling(async () => {
+    await updateOwnPreferences({
+      language: formString(formData, "language"),
+      timezone: formString(formData, "timezone"),
+      startPage: formString(formData, "startPage"),
+      dateFormat: formString(formData, "dateFormat"),
+    });
 
-  revalidatePath("/konto");
-  redirect("/konto?saved=preferences");
+    revalidatePath("/konto");
+    redirect("/konto?saved=preferences");
+  }, "Einstellungen speichern");
 }

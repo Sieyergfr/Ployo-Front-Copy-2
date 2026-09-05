@@ -132,7 +132,7 @@ export async function loginAndAcceptInvitationAction(formData: FormData) {
     } else if (error instanceof APIError) {
       redirect(invitePath(token, "invalid_password"));
     } else {
-      throw error;
+      redirect(invitePath(token, "unexpected_error"));
     }
   }
 
@@ -196,7 +196,7 @@ export async function registerAndAcceptInvitationAction(formData: FormData) {
       redirect(invitePath(token, "signup_failed"));
     }
 
-    throw error;
+    redirect(invitePath(token, "unexpected_error"));
   }
 
   await markEmailVerified(invitation.email);

@@ -1,4 +1,5 @@
 import { cancelAccountDeletionAction } from "@/app/konto-loeschung/actions";
+import ActionForm from "@/components/ActionForm";
 import AccountDeletionRequestForm from "@/components/AccountDeletionRequestForm";
 import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
 import { ACCOUNT_DELETION_GRACE_DAYS, getOwnScheduledDeletion } from "@/lib/account-service";
@@ -49,7 +50,7 @@ export default async function AccountDeletionPage() {
               bold: (chunks) => <strong className="text-ink">{chunks}</strong>,
             })}
           </p>
-          <form
+          <ActionForm
             id="cancel-deletion-form"
             action={cancelAccountDeletionAction}
             className="mt-6"
@@ -63,7 +64,7 @@ export default async function AccountDeletionPage() {
             >
               {t("cancelDeletion")}
             </ConfirmSubmitButton>
-          </form>
+          </ActionForm>
           <Link
             href="/logout"
             className="mt-4 inline-block text-[12.5px] font-medium text-muted underline underline-offset-2"

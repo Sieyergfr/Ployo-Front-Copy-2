@@ -1540,7 +1540,8 @@
     "errorPasswordTooShort": "The password must be at least 12 characters long.",
     "errorSignupFailed": "The account could not be created. Please try again.",
     "errorTermsRequired": "Please accept the terms of service.",
-    "errorSigninFailed": "The account was created, but signing in failed. Please sign in on the login page."
+    "errorSigninFailed": "The account was created, but signing in failed. Please sign in on the login page.",
+    "errorUnexpected": "Something went wrong. Please try again."
   },
   "CompanyCreateWizard": {
     "countryGermany": "Germany",

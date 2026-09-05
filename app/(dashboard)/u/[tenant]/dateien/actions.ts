@@ -15,7 +15,7 @@ import {
 import { markFolderUnlocked } from "@/lib/folder-pin";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { auth } from "@/lib/auth";
-import { type ActionState } from "@/lib/action-state";
+import { type ActionState, withActionErrorHandling } from "@/lib/action-state";
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -69,79 +69,89 @@ function revalidateFileAreas(input: {
   }
 }
 
-export async function uploadHrFileAction(formData: FormData) {
-  const tenant = formString(formData, "tenant");
-  const file = formFile(formData);
-  const ownerType = formString(formData, "ownerType", "tenant") as FileOwnerType;
-  const ownerId = formString(formData, "ownerId") || undefined;
-  const returnPath = formString(formData, "returnPath") || filesPath(tenant);
+export async function uploadHrFileAction(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  return withActionErrorHandling(async () => {
+    const tenant = formString(formData, "tenant");
+    const file = formFile(formData);
+    const ownerType = formString(formData, "ownerType", "tenant") as FileOwnerType;
+    const ownerId = formString(formData, "ownerId") || undefined;
+    const returnPath = formString(formData, "returnPath") || filesPath(tenant);
 
-  if (!tenant || !file) {
-    throw new Error("Datei konnte nicht hochgeladen werden.");
-  }
+    if (!tenant || !file) {
+      throw new Error("Datei konnte nicht hochgeladen werden.");
+    }
 
-  await uploadTenantFile({
-    tenantSlug: tenant,
-    file,
-    ownerType,
-    ownerId,
-    folderSlug: formString(formData, "folderSlug"),
-    folderName: formString(formData, "folderName"),
-    ownerName: formString(formData, "ownerName"),
-    documentType: formString(formData, "documentType", "Sonstiges"),
-    validFrom: formString(formData, "validFrom"),
-    expiresAt: formString(formData, "expiresAt"),
-    reminderAt: formString(formData, "reminderAt"),
-    description: formString(formData, "description"),
-    tags: formString(formData, "tags")
-      .split(",")
-      .map((tag) => tag.trim())
-      .filter(Boolean),
-    assignedEmployeeId: formString(formData, "assignedEmployeeId"),
-    assignedLocationId: formString(formData, "assignedLocationId"),
-    accessRoleIds: formStrings(formData, "accessRoleIds"),
-    accessUserIds: formStrings(formData, "accessUserIds"),
-  });
+    await uploadTenantFile({
+      tenantSlug: tenant,
+      file,
+      ownerType,
+      ownerId,
+      folderSlug: formString(formData, "folderSlug"),
+      folderName: formString(formData, "folderName"),
+      ownerName: formString(formData, "ownerName"),
+      documentType: formString(formData, "documentType", "Sonstiges"),
+      validFrom: formString(formData, "validFrom"),
+      expiresAt: formString(formData, "expiresAt"),
+      reminderAt: formString(formData, "reminderAt"),
+      description: formString(formData, "description"),
+      tags: formString(formData, "tags")
+        .split(",")
+        .map((tag) => tag.trim())
+        .filter(Boolean),
+      assignedEmployeeId: formString(formData, "assignedEmployeeId"),
+      assignedLocationId: formString(formData, "assignedLocationId"),
+      accessRoleIds: formStrings(formData, "accessRoleIds"),
+      accessUserIds: formStrings(formData, "accessUserIds"),
+    });
 
-  revalidateFileAreas({ tenant, ownerType, ownerId, returnPath });
-  redirect(returnPath);
+    revalidateFileAreas({ tenant, ownerType, ownerId, returnPath });
+    redirect(returnPath);
+  }, "Datei hochladen");
 }
 
-export async function createHrFolderAction(formData: FormData) {
-  const tenant = formString(formData, "tenant");
-  const name = formString(formData, "name");
-  const ownerType = formString(formData, "ownerType", "tenant") as FileOwnerType;
-  const ownerId = formString(formData, "ownerId") || undefined;
-  const parentPath = formString(formData, "parentPath");
-  const returnPath = formString(formData, "returnPath") || filesPath(tenant);
+export async function createHrFolderAction(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  return withActionErrorHandling(async () => {
+    const tenant = formString(formData, "tenant");
+    const name = formString(formData, "name");
+    const ownerType = formString(formData, "ownerType", "tenant") as FileOwnerType;
+    const ownerId = formString(formData, "ownerId") || undefined;
+    const parentPath = formString(formData, "parentPath");
+    const returnPath = formString(formData, "returnPath") || filesPath(tenant);
 
-  if (!tenant || !name) {
-    throw new Error("Ordner konnte nicht erstellt werden.");
-  }
+    if (!tenant || !name) {
+      throw new Error("Ordner konnte nicht erstellt werden.");
+    }
 
-  await createTenantFileFolder({
-    tenantSlug: tenant,
-    name,
-    ownerType,
-    ownerId,
-    parentPath,
-    ownerName: formString(formData, "ownerName"),
-    locked: formData.get("locked") === "on",
-    pin: formString(formData, "pin"),
-  });
+    await createTenantFileFolder({
+      tenantSlug: tenant,
+      name,
+      ownerType,
+      ownerId,
+      parentPath,
+      ownerName: formString(formData, "ownerName"),
+      locked: formData.get("locked") === "on",
+      pin: formString(formData, "pin"),
+    });
 
-  revalidatePath(filesPath(tenant));
-  if (ownerType === "employee" && ownerId) {
-    revalidatePath(`/u/${tenant}/employees/${ownerId}`);
-  }
-  if (ownerType === "location" && ownerId) {
-    revalidatePath(`/u/${tenant}/standorte/${ownerId}`);
-  }
-  if (ownerType === "team" && ownerId) {
-    revalidatePath(`/u/${tenant}/teams/${ownerId}`);
-  }
-  revalidatePath(returnPath);
-  redirect(returnPath);
+    revalidatePath(filesPath(tenant));
+    if (ownerType === "employee" && ownerId) {
+      revalidatePath(`/u/${tenant}/employees/${ownerId}`);
+    }
+    if (ownerType === "location" && ownerId) {
+      revalidatePath(`/u/${tenant}/standorte/${ownerId}`);
+    }
+    if (ownerType === "team" && ownerId) {
+      revalidatePath(`/u/${tenant}/teams/${ownerId}`);
+    }
+    revalidatePath(returnPath);
+    redirect(returnPath);
+  }, "Ordner erstellen");
 }
 
 /**
@@ -282,39 +292,49 @@ export async function verifyFolderPinAction(
   redirect(returnPath);
 }
 
-export async function uploadHrFileVersionAction(formData: FormData) {
-  const tenant = formString(formData, "tenant");
-  const fileId = formString(formData, "fileId");
-  const file = formFile(formData);
-  const returnPath = formString(formData, "returnPath") || filesPath(tenant);
+export async function uploadHrFileVersionAction(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  return withActionErrorHandling(async () => {
+    const tenant = formString(formData, "tenant");
+    const fileId = formString(formData, "fileId");
+    const file = formFile(formData);
+    const returnPath = formString(formData, "returnPath") || filesPath(tenant);
 
-  if (!tenant || !fileId || !file) {
-    throw new Error("Version konnte nicht hochgeladen werden.");
-  }
+    if (!tenant || !fileId || !file) {
+      throw new Error("Version konnte nicht hochgeladen werden.");
+    }
 
-  await uploadTenantFileVersion({
-    tenantSlug: tenant,
-    fileId,
-    file,
-  });
+    await uploadTenantFileVersion({
+      tenantSlug: tenant,
+      fileId,
+      file,
+    });
 
-  revalidatePath(returnPath);
-  redirect(returnPath);
+    revalidatePath(returnPath);
+    redirect(returnPath);
+  }, "Dateiversion hochladen");
 }
 
-export async function softDeleteHrFileAction(formData: FormData) {
-  const tenant = formString(formData, "tenant");
-  const fileId = formString(formData, "fileId");
-  const returnPath = formString(formData, "returnPath") || filesPath(tenant);
+export async function softDeleteHrFileAction(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  return withActionErrorHandling(async () => {
+    const tenant = formString(formData, "tenant");
+    const fileId = formString(formData, "fileId");
+    const returnPath = formString(formData, "returnPath") || filesPath(tenant);
 
-  if (!tenant || !fileId) {
-    throw new Error("Datei konnte nicht gelöscht werden.");
-  }
+    if (!tenant || !fileId) {
+      throw new Error("Datei konnte nicht gelöscht werden.");
+    }
 
-  await softDeleteTenantFile({ tenantSlug: tenant, fileId });
+    await softDeleteTenantFile({ tenantSlug: tenant, fileId });
 
-  revalidatePath(returnPath);
-  redirect(returnPath);
+    revalidatePath(returnPath);
+    redirect(returnPath);
+  }, "Datei löschen");
 }
 
 export async function getHrFileSignedUrlAction(input: {

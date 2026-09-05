@@ -38,6 +38,7 @@ function getErrorMessages(t: T): Record<string, string> {
     signup_failed: t("errorSignupFailed"),
     terms_required: t("errorTermsRequired"),
     signin_failed: t("errorSigninFailed"),
+    unexpected_error: t("errorUnexpected"),
   };
 }
 

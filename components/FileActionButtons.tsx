@@ -8,6 +8,7 @@ import {
   uploadHrFileVersionAction,
 } from "@/app/(dashboard)/u/[tenant]/dateien/actions";
 import DatePickerField from "@/components/DatePickerField";
+import { useActionStateWithToast } from "@/components/Toasts";
 import { useUniversalPopup } from "@/components/UniversalPopup";
 import {
   getFileDownloadHref,
@@ -92,9 +93,10 @@ function CreateFolderForm({
   t: T;
 }) {
   const [isLocked, setIsLocked] = useState(false);
+  const [, formAction] = useActionStateWithToast(createHrFolderAction);
 
   return (
-    <form className="flex flex-col gap-4" action={createHrFolderAction}>
+    <form className="flex flex-col gap-4" action={formAction}>
       <input type="hidden" name="tenant" value={tenant} />
       <input type="hidden" name="returnPath" value={returnPath} />
       <input type="hidden" name="ownerType" value={ownerType} />
@@ -372,6 +374,7 @@ function UploadFileForm({
   const [hasReminder, setHasReminder] = useState(false);
   const [fileError, setFileError] = useState("");
   const [isDragging, setIsDragging] = useState(false);
+  const [, formAction] = useActionStateWithToast(uploadHrFileAction);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const needsFolderSelection = !folderSlug;
 
@@ -393,7 +396,7 @@ function UploadFileForm({
   };
 
   return (
-    <form className="flex flex-col gap-4" action={uploadHrFileAction}>
+    <form className="flex flex-col gap-4" action={formAction}>
       <input type="hidden" name="tenant" value={tenant} />
       <input type="hidden" name="returnPath" value={returnPath} />
       <input type="hidden" name="ownerType" value={ownerType} />
@@ -741,9 +744,10 @@ function UploadVersionForm({
   t: T;
 }) {
   const [fileError, setFileError] = useState("");
+  const [, formAction] = useActionStateWithToast(uploadHrFileVersionAction);
 
   return (
-    <form className="flex flex-col gap-4" action={uploadHrFileVersionAction}>
+    <form className="flex flex-col gap-4" action={formAction}>
       <input type="hidden" name="tenant" value={tenant} />
       <input type="hidden" name="returnPath" value={returnPath} />
       <input type="hidden" name="fileId" value={file.storageFileId ?? ""} />
@@ -1097,8 +1101,10 @@ function DeleteFileConfirmForm({
   onCancel: () => void;
   t: T;
 }) {
+  const [, formAction] = useActionStateWithToast(softDeleteHrFileAction);
+
   return (
-    <form className="flex flex-col gap-4" action={softDeleteHrFileAction}>
+    <form className="flex flex-col gap-4" action={formAction}>
       <input type="hidden" name="tenant" value={tenant} />
       <input type="hidden" name="returnPath" value={returnPath} />
       <input type="hidden" name="fileId" value={file.storageFileId ?? ""} />

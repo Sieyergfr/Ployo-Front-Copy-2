@@ -6,13 +6,15 @@ import {
   confirmAccountDeletionByToken,
 } from "@/lib/account-service";
 import { checkRateLimit } from "@/lib/rate-limit";
-import type { ActionState } from "@/lib/action-state";
+import { type ActionState, withActionErrorHandling } from "@/lib/action-state";
 import { redirect } from "next/navigation";
 
-export async function cancelAccountDeletionAction() {
-  await cancelOwnAccountDeletion();
+export async function cancelAccountDeletionAction(): Promise<ActionState> {
+  return withActionErrorHandling(async () => {
+    await cancelOwnAccountDeletion();
 
-  redirect("/select");
+    redirect("/select");
+  }, "Kontolöschung abbrechen");
 }
 
 /**
