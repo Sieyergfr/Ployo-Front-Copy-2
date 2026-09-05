@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { exceedsMaxShiftHours, findRestPeriodViolation, shiftDurationHours } from "@/lib/arbzg-rules";
+import {
+  calculateAge,
+  exceedsMaxShiftHours,
+  findRestPeriodViolation,
+  isSunday,
+  overlapsNightWindow,
+  shiftDurationHours,
+} from "@/lib/arbzg-rules";
 
 describe("findRestPeriodViolation", () => {
   it("meldet eine Verletzung bei zu kurzer Ruhezeit zur vorherigen Schicht", () => {
@@ -54,5 +61,52 @@ describe("shiftDurationHours / exceedsMaxShiftHours", () => {
     const longShift = { date: "2026-09-01", startTime: "06:00", endTime: "18:00" }; // 12h
     expect(exceedsMaxShiftHours(longShift, 10)).toBe(true);
     expect(exceedsMaxShiftHours(longShift, 12)).toBe(false);
+  });
+});
+
+describe("overlapsNightWindow", () => {
+  it("erkennt eine Spätschicht, die ins Nachtfenster hineinreicht", () => {
+    expect(overlapsNightWindow({ date: "2026-09-01", startTime: "18:00", endTime: "22:00" })).toBe(true);
+  });
+
+  it("erkennt eine Frühschicht, die kurz nach Mitternacht beginnt (Nachtfenster des Vortags)", () => {
+    expect(overlapsNightWindow({ date: "2026-09-02", startTime: "02:00", endTime: "10:00" })).toBe(true);
+  });
+
+  it("meldet keine Überschneidung für eine reine Tagschicht", () => {
+    expect(overlapsNightWindow({ date: "2026-09-01", startTime: "08:00", endTime: "16:00" })).toBe(false);
+  });
+
+  it("erkennt eine Nachtschicht über Mitternacht als vollständig im Nachtfenster", () => {
+    expect(overlapsNightWindow({ date: "2026-09-01", startTime: "22:00", endTime: "06:00" })).toBe(true);
+  });
+});
+
+describe("isSunday", () => {
+  it("erkennt einen Sonntag", () => {
+    expect(isSunday("2026-09-06")).toBe(true); // Sonntag
+  });
+
+  it("erkennt einen Nicht-Sonntag", () => {
+    expect(isSunday("2026-09-07")).toBe(false); // Montag
+  });
+});
+
+describe("calculateAge", () => {
+  it("berechnet das Alter korrekt, wenn der Geburtstag im Jahr schon war", () => {
+    expect(calculateAge("2010-01-15", new Date(2026, 8, 5))).toBe(16);
+  });
+
+  it("berechnet das Alter korrekt, wenn der Geburtstag im Jahr noch aussteht", () => {
+    expect(calculateAge("2010-12-15", new Date(2026, 8, 5))).toBe(15);
+  });
+
+  it("berechnet das Alter korrekt am Geburtstag selbst", () => {
+    expect(calculateAge("2010-09-05", new Date(2026, 8, 5))).toBe(16);
+  });
+
+  it("liefert null bei leerem oder ungültigem Geburtsdatum", () => {
+    expect(calculateAge("", new Date(2026, 8, 5))).toBeNull();
+    expect(calculateAge("nicht-auswertbar", new Date(2026, 8, 5))).toBeNull();
   });
 });

@@ -20,7 +20,14 @@ import {
   type ShiftTemplateEntry,
 } from "@/lib/shift-templates";
 import { isUniqueConstraintError } from "@/lib/prisma-errors";
-import { exceedsMaxShiftHours, findRestPeriodViolation } from "@/lib/arbzg-rules";
+import {
+  calculateAge,
+  exceedsMaxShiftHours,
+  findRestPeriodViolation,
+  isSunday,
+  overlapsNightWindow,
+} from "@/lib/arbzg-rules";
+import { decryptField } from "@/lib/encryption";
 import {
   notifyEmployeeOfShiftPlanPublished,
   notifyShiftPlanManagersOfAbsenceConflict,
@@ -1066,11 +1073,13 @@ function shiftDateBy(date: string, days: number): string {
 }
 
 /**
- * Ruhezeit (§5 ArbZG) und Höchstarbeitszeit je Schicht (§3 ArbZG) gegen die
+ * Ruhezeit (§5 ArbZG), Höchstarbeitszeit je Schicht (§3 ArbZG) gegen die
  * Mandanten-Einstellungen (`TenantSettings.minRestHours`/`maxShiftHours`,
- * Default 11h/10h) prüfen. Wirft bei Verstoß, passend zum bestehenden
- * Fehlerverhalten von createTenantShift/updateTenantShift (Server Actions
- * lassen den Fehler bis zum Error Boundary durchreichen).
+ * Default 11h/10h) sowie — sofern ein Geburtsdatum hinterlegt ist und die
+ * Person minderjährig ist — Nachtruhe und Sonntagsruhe nach JArbSchG
+ * prüfen. Wirft bei Verstoß, passend zum bestehenden Fehlerverhalten von
+ * createTenantShift/updateTenantShift (Server Actions lassen den Fehler bis
+ * zum Error Boundary durchreichen).
  */
 async function assertArbzgCompliant(input: {
   tenantId: string;
@@ -1079,6 +1088,8 @@ async function assertArbzgCompliant(input: {
   startTime: string;
   endTime: string;
   excludeShiftId?: string;
+  /** Verschlüsselter Rohwert aus `TenantEmployee.birthDate` — wird hier entschlüsselt. */
+  employeeBirthDate?: string;
 }) {
   const settings = await prisma.tenantSettings.findUnique({
     where: { tenantId: input.tenantId },
@@ -1114,6 +1125,24 @@ async function assertArbzgCompliant(input: {
         `(§5 ArbZG verlangt mind. ${minRestHours}h).`,
     );
   }
+
+  const age = input.employeeBirthDate
+    ? calculateAge(decryptField(input.employeeBirthDate), new Date(input.date))
+    : null;
+
+  if (age !== null && age < 18) {
+    if (overlapsNightWindow(candidate)) {
+      throw new Error(
+        "Schicht verstößt gegen die Nachtruhe für Jugendliche (§ 14 JArbSchG, keine Beschäftigung 20-6 Uhr).",
+      );
+    }
+
+    if (isSunday(candidate.date)) {
+      throw new Error(
+        "Schicht verstößt gegen die Sonntagsruhe für Jugendliche (§ 17/18 JArbSchG).",
+      );
+    }
+  }
 }
 
 export async function createTenantShift(input: {
@@ -1131,7 +1160,7 @@ export async function createTenantShift(input: {
   const employee = input.employeeId
     ? await prisma.tenantEmployee.findFirst({
         where: { id: input.employeeId, tenantId: access.tenantId },
-        select: { id: true, name: true, team: true },
+        select: { id: true, name: true, team: true, birthDate: true },
       })
     : null;
   const key = await createUniqueShiftKey({
@@ -1159,6 +1188,7 @@ export async function createTenantShift(input: {
       date: input.date,
       startTime: input.startTime,
       endTime: input.endTime,
+      employeeBirthDate: employee.birthDate,
     });
   }
 
@@ -1226,7 +1256,7 @@ export async function updateTenantShift(input: {
   const employee = input.employeeId
     ? await prisma.tenantEmployee.findFirst({
         where: { id: input.employeeId, tenantId: access.tenantId },
-        select: { id: true, name: true, team: true },
+        select: { id: true, name: true, team: true, birthDate: true },
       })
     : null;
   const key = await createUniqueShiftKey({
@@ -1245,6 +1275,7 @@ export async function updateTenantShift(input: {
       startTime: input.startTime,
       endTime: input.endTime,
       excludeShiftId: input.shiftId,
+      employeeBirthDate: employee.birthDate,
     });
   }
 

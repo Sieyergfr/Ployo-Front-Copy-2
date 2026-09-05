@@ -95,7 +95,15 @@ function classifySelfServiceError(message: string): number | null {
     // lib/shift-service.ts resetShiftWeekToPublished() — nichts zum
     // Zurücksetzen bzw. Alt-Schnappschuss ohne vollständige Daten.
     message.includes("noch nicht veröffentlicht") ||
-    message.includes("lässt sich nicht vollständig wiederherstellen")
+    message.includes("lässt sich nicht vollständig wiederherstellen") ||
+    // lib/shift-service.ts assertArbzgCompliant() — §3/§5 ArbZG (Höchst-
+    // arbeitszeit/Ruhezeit) sowie § 14/17/18 JArbSchG (Nachtruhe/Sonntags-
+    // ruhe für Jugendliche). Standen bisher nicht in dieser Allowlist, fielen
+    // also seit der Toast-Umstellung auf die generische Fehlermeldung
+    // zurück, obwohl es sorgfältig formulierte, gesetzeszitierende Texte
+    // sind — hier nachgetragen.
+    message.includes("ArbZG") ||
+    message.includes("JArbSchG")
   ) {
     return 400;
   }
