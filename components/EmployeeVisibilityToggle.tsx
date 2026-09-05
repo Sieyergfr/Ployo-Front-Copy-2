@@ -4,10 +4,14 @@ import {
   setEmployeeFileVisibilityAction,
   setEmployeeFolderVisibilityAction,
 } from "@/app/(dashboard)/u/[tenant]/employees/actions";
+import type { ActionState } from "@/lib/action-state";
+import { useToast } from "@/components/Toasts";
 import { Eye, EyeOff } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
+
+const EMPTY_ACTION_STATE: ActionState = {};
 
 /**
  * Datei oder Ordner einer Personalakte vor dem Mitarbeiter selbst verbergen —
@@ -37,6 +41,7 @@ export default function EmployeeVisibilityToggle({
 }) {
   const t = useTranslations("EmployeeVisibilityToggle");
   const router = useRouter();
+  const { toast } = useToast();
   const [isPending, startTransition] = useTransition();
 
   const subject = target.kind === "folder" ? t("subjectFolder") : t("subjectFile");
@@ -59,10 +64,14 @@ export default function EmployeeVisibilityToggle({
     }
 
     startTransition(async () => {
-      if (target.kind === "file") {
-        await setEmployeeFileVisibilityAction(formData);
-      } else {
-        await setEmployeeFolderVisibilityAction(formData);
+      const state =
+        target.kind === "file"
+          ? await setEmployeeFileVisibilityAction(EMPTY_ACTION_STATE, formData)
+          : await setEmployeeFolderVisibilityAction(EMPTY_ACTION_STATE, formData);
+
+      if (state.error) {
+        toast({ tone: "error", title: state.error });
+        return;
       }
 
       router.refresh();

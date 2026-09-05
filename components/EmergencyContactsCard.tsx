@@ -7,6 +7,7 @@ import {
   updateEmergencyContactAction,
 } from "@/app/(dashboard)/u/[tenant]/employees/actions";
 import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
+import { useActionStateWithToast } from "@/components/Toasts";
 import { useUniversalPopup } from "@/components/UniversalPopup";
 import type { EmergencyContact } from "@/lib/employees";
 import { AlertTriangle, Ellipsis, Pencil, Plus, Star, Trash2 } from "lucide-react";
@@ -79,10 +80,13 @@ function ContactForm({
   onDone: () => void;
   t: T;
 }) {
+  const [, addFormAction] = useActionStateWithToast(addEmergencyContactAction);
+  const [, updateFormAction] = useActionStateWithToast(updateEmergencyContactAction);
+
   return (
     <form
       className="flex flex-col gap-4"
-      action={contact ? updateEmergencyContactAction : addEmergencyContactAction}
+      action={contact ? updateFormAction : addFormAction}
     >
       <input type="hidden" name="tenant" value={tenant} />
       <input type="hidden" name="employeeId" value={employeeId} />
@@ -178,6 +182,8 @@ function ContactQuickMenu({
   t: T;
 }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [, setPrimaryFormAction] = useActionStateWithToast(setPrimaryEmergencyContactAction);
+  const [, deleteFormAction] = useActionStateWithToast(deleteEmergencyContactAction);
 
   return (
     <div
@@ -221,7 +227,7 @@ function ContactQuickMenu({
               type="submit"
               role="menuitem"
               form={formId}
-              formAction={setPrimaryEmergencyContactAction}
+              formAction={setPrimaryFormAction}
               className="flex w-full cursor-pointer items-center gap-2 rounded-[8px] px-2.5 py-2 text-left text-[12.5px] font-medium text-ink hover:bg-bg"
             >
               <Star size={13} />
@@ -230,7 +236,7 @@ function ContactQuickMenu({
           )}
           <ConfirmSubmitButton
             form={formId}
-            formAction={deleteEmergencyContactAction}
+            formAction={deleteFormAction}
             className="flex w-full cursor-pointer items-center gap-2 rounded-[8px] px-2.5 py-2 text-left text-[12.5px] font-medium text-danger hover:bg-danger/5"
             description={t("deleteConfirmDescription", { name: contact.name })}
           >

@@ -3,21 +3,17 @@ import AddressFields from "@/components/AddressFields";
 import AddLocationEmployeesButton from "@/components/AddLocationEmployeesButton";
 import AuditLogPanel from "@/components/AuditLogPanel";
 import EmployeeSelector from "@/components/EmployeeSelector";
-import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
-import {
-} from "@/components/FileActionButtons";
 import { UnsavedChangesGuard } from "@/components/EditSafety";
-import FloatingEditBar from "@/components/FloatingEditBar";
+import {
+  LocationEditFormAndBar,
+  LocationHeaderActions,
+} from "@/components/LocationActionForms";
 import LocationShiftPlanner from "@/components/LocationShiftPlanner";
 import { OpeningHoursEditor } from "@/components/OpeningHoursEditor";
 import {
   OPENING_HOURS_WEEKDAY_LABELS,
   formatOpeningHoursRange,
 } from "@/lib/opening-hours";
-import {
-  deleteLocationAction,
-  updateLocationAction,
-} from "@/app/(dashboard)/u/[tenant]/standorte/actions";
 import { getAuditLogsForEntity } from "@/lib/audit";
 import { getEmployeesForTenant } from "@/lib/employee-service";
 import { getLocationForTenant } from "@/lib/location-service";
@@ -36,10 +32,7 @@ import {
   type LocationActivity,
   type LocationStatus,
 } from "@/lib/locations";
-import {
-  ArrowLeft,
-  Pencil,
-} from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
@@ -490,15 +483,12 @@ export default async function LocationDetailPage({
         </Link>
       </div>
 
-      <form
-        id="location-edit-form"
-        action={updateLocationAction}
-        className="hidden"
-        aria-hidden="true"
-      >
-        <input type="hidden" name="tenant" value={tenant} />
-        <input type="hidden" name="locationId" value={locationDbId} />
-      </form>
+      <LocationEditFormAndBar
+        tenant={tenant}
+        locationId={locationDbId}
+        cancelHref={locationHref}
+        isEditing={isEditing}
+      />
       <section className="mb-5 overflow-hidden rounded-card border border-border bg-white">
         <div className={`h-1 w-full ${location.accentClassName}`} />
         <div className="flex flex-wrap items-start gap-6 px-7 py-7">
@@ -560,24 +550,14 @@ export default async function LocationDetailPage({
             )}
           </div>
 
-          <div className="flex flex-wrap gap-2.5">
-            {!isEditing && canDeleteLocation && (
-              <ConfirmSubmitButton
-                form="location-edit-form"
-                formAction={deleteLocationAction}
-                className="btn btn-secondary btn-sm border-danger/25 text-danger hover:border-danger/40 hover:bg-danger/5"
-                description={t("deleteConfirmDescription", { name: location.name })}
-              >
-                {t("delete")}
-              </ConfirmSubmitButton>
-            )}
-            {!isEditing && canEditLocation && (
-              <Link href={locationEditHref} className="btn btn-secondary btn-sm">
-                <Pencil size={14} />
-                {t("edit")}
-              </Link>
-            )}
-          </div>
+          {!isEditing && (
+            <LocationHeaderActions
+              locationName={location.name}
+              locationEditHref={locationEditHref}
+              canDeleteLocation={canDeleteLocation}
+              canEditLocation={canEditLocation}
+            />
+          )}
         </div>
       </section>
 
@@ -802,10 +782,6 @@ export default async function LocationDetailPage({
         <div className="mt-4">
           <AuditLogPanel entries={auditEntries} />
         </div>
-      )}
-
-      {isEditing && (
-        <FloatingEditBar cancelHref={locationHref} formId="location-edit-form" />
       )}
     </>
   );

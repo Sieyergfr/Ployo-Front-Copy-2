@@ -13,12 +13,15 @@ import {
   createContext,
   type CSSProperties,
   type ReactNode,
+  useActionState,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
+import type { ActionState } from "@/lib/action-state";
 
 export type ToastTone = "success" | "warning" | "error" | "info";
 
@@ -220,4 +223,42 @@ export function useToast() {
   }
 
   return context;
+}
+
+/**
+ * Zeigt einen Fehler-Toast, sobald eine mit `useActionState` verdrahtete
+ * Server Action mit `state.error` durchgelaufen ist — Gegenstück zu
+ * `useCloseOnSuccess` (components/UniversalPopup.tsx), gleiches
+ * Pending→Settled-Tracking, nur für den Fehler- statt den Erfolgsfall.
+ */
+export function useActionErrorToast(state: ActionState, isPending: boolean) {
+  const { toast } = useToast();
+  const wasPending = useRef(false);
+
+  useEffect(() => {
+    if (wasPending.current && !isPending && state.error) {
+      toast({ tone: "error", title: state.error });
+    }
+
+    wasPending.current = isPending;
+  }, [isPending, state, toast]);
+}
+
+const EMPTY_ACTION_STATE: ActionState = {};
+
+/**
+ * `useActionState` + `useActionErrorToast` in einem Aufruf — der Regelfall
+ * für jede rohe Server Action, die auf einen Toast statt auf die
+ * Error-Boundary umgestellt wird. Eigene lokale Leer-Konstante statt des
+ * `initialActionState`-Exports aus `lib/action-state.ts`: diese Datei ist
+ * `"server-only"`, ein Werte-Import davon würde den Client-Bundle brechen
+ * (gleiches Muster wie in `components/auth/AvatarUploadForm.tsx`).
+ */
+export function useActionStateWithToast<Payload>(
+  action: (state: ActionState, payload: Payload) => Promise<ActionState>,
+) {
+  const [state, dispatch, isPending] = useActionState(action, EMPTY_ACTION_STATE);
+  useActionErrorToast(state, isPending);
+
+  return [state, dispatch, isPending] as const;
 }

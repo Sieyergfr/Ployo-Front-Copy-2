@@ -4,6 +4,7 @@ import {
   deleteEmployeeDocumentSlotFileAction,
   uploadEmployeeDocumentSlotAction,
 } from "@/app/(dashboard)/u/[tenant]/employees/actions";
+import type { ActionState } from "@/lib/action-state";
 import EmployeeVisibilityToggle from "@/components/EmployeeVisibilityToggle";
 import { FormErrorBanner } from "@/components/FormFeedback";
 import { OwnerFileActions } from "@/components/OwnerFileActions";
@@ -20,6 +21,8 @@ import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
 
 type T = ReturnType<typeof useTranslations>;
+
+const EMPTY_ACTION_STATE: ActionState = {};
 
 /**
  * Strukturierte "Felder" für Ausweisdokumente/Zertifikate (siehe
@@ -132,7 +135,13 @@ function DocumentSlotCard({
     setError(undefined);
     startTransition(async () => {
       try {
-        await uploadEmployeeDocumentSlotAction(formData);
+        const state = await uploadEmployeeDocumentSlotAction(EMPTY_ACTION_STATE, formData);
+
+        if (state.error) {
+          setError(state.error);
+          return;
+        }
+
         router.refresh();
       } catch (uploadError) {
         // Server Actions, die per `redirect` enden, werfen einen internen
@@ -176,7 +185,15 @@ function DocumentSlotCard({
 
                 startTransition(async () => {
                   try {
-                    await deleteEmployeeDocumentSlotFileAction(formData);
+                    const state = await deleteEmployeeDocumentSlotFileAction(
+                      EMPTY_ACTION_STATE,
+                      formData,
+                    );
+
+                    if (state.error) {
+                      setError(state.error);
+                      return;
+                    }
                   } catch (deleteError) {
                     if (!isRedirectError(deleteError)) {
                       setError(

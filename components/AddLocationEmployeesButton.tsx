@@ -5,6 +5,7 @@ import EmployeeSelector, {
   type EmployeeSelectorOption,
 } from "@/components/EmployeeSelector";
 import FormSubmitButton from "@/components/FormSubmitButton";
+import { useActionStateWithToast } from "@/components/Toasts";
 import { useUniversalPopup } from "@/components/UniversalPopup";
 import { Plus, UserPlus } from "lucide-react";
 import { useTranslations } from "next-intl";
@@ -23,9 +24,10 @@ function AddLocationEmployeesForm({
   onDone: () => void;
 }) {
   const t = useTranslations("AddLocationEmployeesButton");
+  const [, formAction] = useActionStateWithToast(addLocationEmployeesAction);
 
   return (
-    <form action={addLocationEmployeesAction} className="flex flex-col gap-4">
+    <form action={formAction} className="flex flex-col gap-4">
       <input type="hidden" name="tenant" value={tenant} />
       <input type="hidden" name="locationId" value={locationId} />
 

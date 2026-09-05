@@ -9,6 +9,7 @@ import { getHrFileSignedUrlAction } from "@/app/(dashboard)/u/[tenant]/dateien/a
 import FormSubmitButton from "@/components/FormSubmitButton";
 import DatePickerField from "@/components/DatePickerField";
 import { LocationMultiSelectDropdown } from "@/components/TeamEditControls";
+import { useActionStateWithToast } from "@/components/Toasts";
 import { useUniversalPopup } from "@/components/UniversalPopup";
 import type { ContractStatus } from "@/lib/contract-service";
 import { Eye, FilePlus2, FileText, FileUp, Pencil, Power, XCircle } from "lucide-react";
@@ -67,9 +68,10 @@ function NewContractForm({ tenant, employeeId, employeeHandle, locationOptions }
   const t = useTranslations("EmployeeContracts");
   const statuses = getStatuses(t);
   const [fileName, setFileName] = useState("");
+  const [, formAction] = useActionStateWithToast(createEmployeeContractAction);
 
   return (
-    <form action={createEmployeeContractAction} className="grid gap-4 sm:grid-cols-2">
+    <form action={formAction} className="grid gap-4 sm:grid-cols-2">
       <HiddenContext tenant={tenant} employeeId={employeeId} employeeHandle={employeeHandle} />
       <label className="field sm:col-span-2"><span className="label">{t("newContractTitle")}</span><input className="input" name="title" placeholder={t("newContractPlaceholder")} required /></label>
       <label className="field"><span className="label">{t("contractType")}</span><select className="input" name="contractType" defaultValue="Arbeitsvertrag"><option value="Arbeitsvertrag">{t("contractTypeStandard")}</option><option value="Befristeter Arbeitsvertrag">{t("contractTypeFixedTerm")}</option><option value="Teilzeitvertrag">{t("contractTypePartTime")}</option><option value="Änderungsvertrag">{t("contractTypeAmendment")}</option><option value="Zusatzvereinbarung">{t("contractTypeSupplement")}</option></select></label>
@@ -128,9 +130,10 @@ function EditContractForm({ tenant, employeeId, employeeHandle, contract, locati
   const defaultLocations = contract.workLocation
     ? contract.workLocation.split(",").map((value) => value.trim()).filter(Boolean)
     : [];
+  const [, formAction] = useActionStateWithToast(updateEmployeeContractDetailsAction);
 
   return (
-    <form action={updateEmployeeContractDetailsAction} className="grid gap-4 sm:grid-cols-2">
+    <form action={formAction} className="grid gap-4 sm:grid-cols-2">
       <HiddenContext tenant={tenant} employeeId={employeeId} employeeHandle={employeeHandle} />
       <input type="hidden" name="contractId" value={contract.id} />
       <label className="field sm:col-span-2"><span className="label">{t("newContractTitle")}</span><input className="input" name="title" defaultValue={contract.title} required /></label>
@@ -193,8 +196,9 @@ function StatusForm({ tenant, employeeId, employeeHandle, contract, target }: {
   target: ContractStatus;
 }) {
   const t = useTranslations("EmployeeContracts");
+  const [, formAction] = useActionStateWithToast(updateEmployeeContractStatusAction);
 
-  return <form action={updateEmployeeContractStatusAction} className="flex flex-col gap-4">
+  return <form action={formAction} className="flex flex-col gap-4">
     <HiddenContext tenant={tenant} employeeId={employeeId} employeeHandle={employeeHandle} />
     <input type="hidden" name="contractId" value={contract.id} />
     <input type="hidden" name="status" value={target} />

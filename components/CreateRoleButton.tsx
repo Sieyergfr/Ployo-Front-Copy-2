@@ -2,6 +2,7 @@
 
 import { createRoleAction } from "@/app/(dashboard)/u/[tenant]/rollen/actions";
 import FormSubmitButton from "@/components/FormSubmitButton";
+import { useActionStateWithToast } from "@/components/Toasts";
 import { useUniversalPopup } from "@/components/UniversalPopup";
 import {
   emptyBooleanCapabilitySet,
@@ -193,6 +194,7 @@ function CreateRoleForm({
   );
   const [capabilities, setCapabilities] = useState<RoleCapabilities>(emptyCapabilities);
   const [query, setQuery] = useState("");
+  const [, formAction] = useActionStateWithToast(createRoleAction);
 
   const filteredAreas = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -221,7 +223,7 @@ function CreateRoleForm({
   );
 
   return (
-    <form action={createRoleAction} className="flex max-h-[92svh] flex-col overflow-hidden">
+    <form action={formAction} className="flex max-h-[92svh] flex-col overflow-hidden">
       <input type="hidden" name="tenant" value={tenant} />
       {permissionAreas.map((area) => (
         <input

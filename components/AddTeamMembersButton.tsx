@@ -5,6 +5,7 @@ import EmployeeSelector, {
   type EmployeeSelectorOption,
 } from "@/components/EmployeeSelector";
 import FormSubmitButton from "@/components/FormSubmitButton";
+import { useActionStateWithToast } from "@/components/Toasts";
 import { useUniversalPopup } from "@/components/UniversalPopup";
 import { Plus, UserPlus } from "lucide-react";
 import { useTranslations } from "next-intl";
@@ -34,8 +35,10 @@ function AddTeamMembersForm({
   onDone: () => void;
   t: T;
 }) {
+  const [, formAction] = useActionStateWithToast(addTeamMembersAction);
+
   return (
-    <form action={addTeamMembersAction} className="flex flex-col gap-4">
+    <form action={formAction} className="flex flex-col gap-4">
       <input type="hidden" name="tenant" value={tenant} />
       <input type="hidden" name="teamId" value={teamId} />
       <input type="hidden" name="teamHandle" value={teamHandle} />

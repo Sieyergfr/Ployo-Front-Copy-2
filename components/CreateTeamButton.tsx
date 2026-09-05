@@ -3,6 +3,7 @@
 import { createTeamAction } from "@/app/(dashboard)/u/[tenant]/teams/actions";
 import FormSubmitButton from "@/components/FormSubmitButton";
 import { LocationMultiSelectDropdown } from "@/components/TeamEditControls";
+import { useActionStateWithToast } from "@/components/Toasts";
 import { useUniversalPopup } from "@/components/UniversalPopup";
 import { teamColorPalette } from "@/lib/org-options";
 import { Check, ChevronDown, Plus, Users } from "lucide-react";
@@ -160,9 +161,10 @@ function CreateTeamForm({
   onDone: () => void;
 }) {
   const t = useTranslations("CreateTeamButton");
+  const [, formAction] = useActionStateWithToast(createTeamAction);
 
   return (
-    <form className="flex flex-col gap-4" action={createTeamAction}>
+    <form className="flex flex-col gap-4" action={formAction}>
       <input type="hidden" name="tenant" value={tenant} />
       <div className="field">
         <label htmlFor="team-name" className="label">

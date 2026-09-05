@@ -2,38 +2,28 @@
 
 import { Loader2, Save, X } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
 export default function FloatingEditBar({
   cancelHref,
   formId,
+  isPending,
   children,
 }: {
   cancelHref: string;
   formId: string;
+  /**
+   * `isPending` von `useActionState` des zugehörigen Formulars — ersetzt das
+   * frühere lokale "submit"-Event-Tracking. Das ging nur gut, solange jede
+   * Action bei Erfolg immer per `redirect()` wegnavigiert hat (die
+   * Komponente verschwand einfach mit); seit Fehler jetzt als `ActionState`
+   * zurückkommen statt zu werfen, bleibt das Formular bei einem Fehler auf
+   * der Seite — ohne diesen Prop wäre "Wird gespeichert…" für immer hängen
+   * geblieben.
+   */
+  isPending: boolean;
   children?: ReactNode;
 }) {
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  useEffect(() => {
-    const form = document.getElementById(formId);
-
-    if (!(form instanceof HTMLFormElement)) {
-      return;
-    }
-
-    function handleSubmit() {
-      setIsSubmitting(true);
-    }
-
-    form.addEventListener("submit", handleSubmit);
-
-    return () => {
-      form.removeEventListener("submit", handleSubmit);
-    };
-  }, [formId]);
-
   return (
     <>
       <div
@@ -59,7 +49,7 @@ export default function FloatingEditBar({
             <button
               type="button"
               className="btn btn-primary btn-sm"
-              disabled={isSubmitting}
+              disabled={isPending}
               onClick={() => {
                 const form = document.getElementById(formId);
 
@@ -72,11 +62,10 @@ export default function FloatingEditBar({
                   return;
                 }
 
-                setIsSubmitting(true);
                 form.requestSubmit();
               }}
             >
-              {isSubmitting ? (
+              {isPending ? (
                 <>
                   <Loader2 size={14} className="animate-spin" />
                   Wird gespeichert...

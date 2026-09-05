@@ -1,21 +1,18 @@
-import {
-  addTeamMemberAction,
-  deleteTeamAction,
-  removeTeamMemberAction,
-  setTeamLeadAction,
-  updateTeamAction,
-} from "@/app/(dashboard)/u/[tenant]/teams/actions";
 import AuditLogPanel from "@/components/AuditLogPanel";
 import AddTeamMembersButton from "@/components/AddTeamMembersButton";
-import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
 import { UnsavedChangesGuard } from "@/components/EditSafety";
-import FormSubmitButton from "@/components/FormSubmitButton";
-import FloatingEditBar from "@/components/FloatingEditBar";
 import OwnerFilesTab from "@/components/OwnerFilesTab";
 import {
   LocationMultiSelectDropdown,
   TeamColorButtons,
 } from "@/components/TeamEditControls";
+import {
+  RemoveTeamMemberForm,
+  TeamEditFormAndBar,
+  TeamHeaderActions,
+  TeamLeaderEditorForm,
+  TeamMemberAssignmentForm,
+} from "@/components/TeamActionForms";
 import TeamRoleEditorButton from "@/components/TeamRoleEditorButton";
 import { getAuditLogsForEntity } from "@/lib/audit";
 import { type FileUploadOptions } from "@/lib/files";
@@ -30,13 +27,7 @@ import {
 import { type Team, type TeamMember } from "@/lib/teams";
 import { hasPermissionLevel } from "@/lib/roles";
 import { getTenantCapabilities, withAccessRedirect } from "@/lib/tenant-access";
-import {
-  ArrowLeft,
-  Pencil,
-  Plus,
-  UserRoundCheck,
-  UserRoundMinus,
-} from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
@@ -154,8 +145,6 @@ function MemberRow({
   isEditing: boolean;
   t: T;
 }) {
-  const removeMemberFormId = member.id ? `remove-team-member-${member.id}` : undefined;
-
   return (
     <div className="grid items-center gap-3.5 border-t border-border-soft px-6 py-[13px] [grid-template-columns:2fr_120px_1.2fr_130px_110px_150px]">
       <div className="flex min-w-0 items-center gap-[11px]">
@@ -181,22 +170,7 @@ function MemberRow({
       <StatusPill status={member.status} t={t} />
       <div className="flex items-center justify-end gap-2">
         {isEditing && !member.isLead && member.id && (
-          <form id={removeMemberFormId} action={removeTeamMemberAction}>
-            <input type="hidden" name="tenant" value={tenant} />
-            <input type="hidden" name="teamId" value={team.dbId} />
-            <input type="hidden" name="teamHandle" value={team.id} />
-            <input type="hidden" name="memberId" value={member.id} />
-            <ConfirmSubmitButton
-              form={removeMemberFormId}
-              className="flex size-8 cursor-pointer items-center justify-center rounded-[8px] border border-border bg-white text-muted transition-colors hover:border-danger hover:text-danger"
-              title={t("removeFromTeamTitle")}
-              confirmLabel={t("remove")}
-              description={t("removeConfirmDescription", { name: member.name, team: team.name })}
-            >
-              <UserRoundMinus size={14} />
-              <span className="sr-only">{t("removeSrLabel", { name: member.name })}</span>
-            </ConfirmSubmitButton>
-          </form>
+          <RemoveTeamMemberForm tenant={tenant} team={team} member={member} />
         )}
         {isEditing ? (
           <TeamRoleEditorButton
@@ -210,123 +184,6 @@ function MemberRow({
         )}
       </div>
     </div>
-  );
-}
-
-function TeamLeaderEditor({ team, tenant, t }: { team: Team; tenant: string; t: T }) {
-  return (
-    <form
-      action={setTeamLeadAction}
-      className="mb-3.5 rounded-card border border-border bg-white px-6 py-4"
-    >
-      <input type="hidden" name="tenant" value={tenant} />
-      <input type="hidden" name="teamId" value={team.dbId} />
-      <input type="hidden" name="teamHandle" value={team.id} />
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="min-w-[220px] flex-1">
-          <label
-            htmlFor="team-lead"
-            className="mb-2 block font-mono text-[9.5px] uppercase tracking-[0.6px] text-muted"
-          >
-            {t("editTeamLead")}
-          </label>
-          <div className="relative">
-            <select
-              id="team-lead"
-              name="memberId"
-              defaultValue={team.lead.id}
-              className="input cursor-pointer appearance-none bg-white pr-9 font-medium"
-              required
-            >
-              {team.members.map((member) => (
-                <option key={member.id ?? member.initials} value={member.id}>
-                  {member.name}
-                </option>
-              ))}
-            </select>
-            <UserRoundCheck
-              size={15}
-              className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-muted"
-            />
-          </div>
-        </div>
-
-        <FormSubmitButton
-          className="btn btn-primary"
-          pendingLabel={t("saving")}
-        >
-          {t("saveTeamLead")}
-        </FormSubmitButton>
-      </div>
-    </form>
-  );
-}
-
-function TeamMemberAssignment({
-  team,
-  tenant,
-  assignableEmployees,
-  t,
-}: {
-  team: Team;
-  tenant: string;
-  assignableEmployees: TeamMember[];
-  t: T;
-}) {
-  return (
-    <form action={addTeamMemberAction} className="border-b border-border bg-bg px-6 py-4">
-      <input type="hidden" name="tenant" value={tenant} />
-      <input type="hidden" name="teamId" value={team.dbId} />
-      <input type="hidden" name="teamHandle" value={team.id} />
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="min-w-[220px] flex-1">
-          <label
-            htmlFor="team-member-add"
-            className="mb-2 block font-mono text-[9.5px] uppercase tracking-[0.6px] text-muted"
-          >
-            {t("addMemberToTeam")}
-          </label>
-          <select
-            id="team-member-add"
-            name="employeeId"
-            defaultValue=""
-            className="input cursor-pointer appearance-none bg-white font-medium"
-            required
-          >
-            <option value="" disabled>
-              {t("selectEmployee")}
-            </option>
-            {assignableEmployees.map((employee) => (
-              <option key={employee.employeeId ?? employee.initials} value={employee.employeeId}>
-                {employee.name} - {employee.location}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="min-w-[180px]">
-          <label
-            htmlFor="team-member-role"
-            className="mb-2 block font-mono text-[9.5px] uppercase tracking-[0.6px] text-muted"
-          >
-            {t("roleInTeam")}
-          </label>
-          <input
-            id="team-member-role"
-            name="role"
-            className="input bg-white"
-            defaultValue={team.name}
-          />
-        </div>
-
-        <FormSubmitButton
-          icon={<Plus size={15} strokeWidth={2} />}
-          pendingLabel={t("adding")}
-        >
-          {t("add")}
-        </FormSubmitButton>
-      </div>
-    </form>
   );
 }
 
@@ -432,9 +289,12 @@ export default async function TeamDetailPage({
         </span>
       </div>
 
-      <form id="team-edit-form" action={updateTeamAction}>
-        <input type="hidden" name="tenant" value={tenant} />
-        <input type="hidden" name="teamId" value={team.dbId} />
+      <TeamEditFormAndBar
+        tenant={tenant}
+        teamId={team.dbId ?? ""}
+        cancelHref={teamHref}
+        isEditing={isEditing}
+      >
         <section className="mb-3.5 overflow-hidden rounded-card border border-border bg-white">
           <div className={`h-1 w-full ${team.colorClassName}`} />
           <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-[22px]">
@@ -487,25 +347,13 @@ export default async function TeamDetailPage({
                 </div>
               </div>
 
-              {!isEditing && (canManage || canDeleteTeam) && (
-                <div className="flex gap-2">
-                  {canDeleteTeam && (
-                    <ConfirmSubmitButton
-                      form="team-edit-form"
-                      formAction={deleteTeamAction}
-                      className="btn btn-secondary btn-sm border-danger/25 text-danger hover:border-danger/40 hover:bg-danger/5"
-                      description={t("deleteConfirmDescription", { name: team.name })}
-                    >
-                      {t("delete")}
-                    </ConfirmSubmitButton>
-                  )}
-                  {canManage && (
-                    <Link href={teamEditHref} className="btn btn-secondary btn-sm">
-                      <Pencil size={14} />
-                      {t("edit")}
-                    </Link>
-                  )}
-                </div>
+              {!isEditing && (
+                <TeamHeaderActions
+                  teamName={team.name}
+                  teamEditHref={teamEditHref}
+                  canDeleteTeam={canDeleteTeam}
+                  canManage={canManage}
+                />
               )}
             </div>
           </div>
@@ -518,7 +366,7 @@ export default async function TeamDetailPage({
             </div>
           </section>
         )}
-      </form>
+      </TeamEditFormAndBar>
 
       <div className="mb-3.5 flex gap-[26px] border-b border-border">
         <Link
@@ -558,7 +406,7 @@ export default async function TeamDetailPage({
         />
       ) : (
         <>
-          {isEditing && <TeamLeaderEditor team={team} tenant={tenant} t={t} />}
+          {isEditing && <TeamLeaderEditorForm team={team} tenant={tenant} />}
 
           <section className="overflow-hidden rounded-card border border-border bg-white">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-6 pt-5 pb-3.5">
@@ -584,11 +432,10 @@ export default async function TeamDetailPage({
               )}
             </div>
             {isEditing && (
-              <TeamMemberAssignment
+              <TeamMemberAssignmentForm
                 team={team}
                 tenant={tenant}
                 assignableEmployees={assignableEmployees}
-                t={t}
               />
             )}
             <div className="overflow-x-auto">
@@ -621,10 +468,6 @@ export default async function TeamDetailPage({
         <div className="mt-4">
           <AuditLogPanel entries={auditEntries} />
         </div>
-      )}
-
-      {isEditing && (
-        <FloatingEditBar cancelHref={teamHref} formId="team-edit-form" />
       )}
     </>
   );

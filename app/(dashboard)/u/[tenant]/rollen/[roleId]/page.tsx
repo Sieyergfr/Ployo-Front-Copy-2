@@ -1,9 +1,8 @@
-import { deleteRoleAction, updateRoleAction } from "@/app/(dashboard)/u/[tenant]/rollen/actions";
 import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
 import { UnsavedChangesGuard } from "@/components/EditSafety";
-import FloatingEditBar from "@/components/FloatingEditBar";
 import Checkbox from "@/components/inputs/checkbox";
 import PageHeader from "@/components/PageHeader";
+import { DeleteRoleForm, EditRoleForm } from "@/components/RoleEditForms";
 import RolePermissionAreaFields from "@/components/RolePermissionAreaFields";
 import { getRoleForTenant } from "@/lib/role-service";
 import {
@@ -197,9 +196,7 @@ export default async function RoleDetailPage({
         {!isEditing && (
           <>
             {canDelete && (
-              <form id="role-delete-form" action={deleteRoleAction}>
-                <input type="hidden" name="tenant" value={tenant} />
-                <input type="hidden" name="roleId" value={role.id} />
+              <DeleteRoleForm tenant={tenant} roleId={role.id}>
                 <ConfirmSubmitButton
                   form="role-delete-form"
                   className="btn btn-secondary border-danger/25 text-danger hover:border-danger/40 hover:bg-danger/5"
@@ -207,7 +204,7 @@ export default async function RoleDetailPage({
                 >
                   {t("delete")}
                 </ConfirmSubmitButton>
-              </form>
+              </DeleteRoleForm>
             )}
             <Link href={`${roleHref}?edit=1`} className="btn btn-secondary">
               <ShieldCheck size={15} />
@@ -218,9 +215,7 @@ export default async function RoleDetailPage({
       </PageHeader>
 
       {isEditing ? (
-        <form id="role-edit-form" action={updateRoleAction} className="grid gap-3">
-          <input type="hidden" name="tenant" value={tenant} />
-          <input type="hidden" name="roleId" value={role.id} />
+        <EditRoleForm tenant={tenant} roleId={role.id} cancelHref={roleHref}>
           <section className="rounded-card border border-border bg-white p-5">
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="field">
@@ -285,7 +280,7 @@ export default async function RoleDetailPage({
               )}
             </div>
           ))}
-        </form>
+        </EditRoleForm>
       ) : (
         <section className="overflow-hidden rounded-card border border-border bg-white">
           <div className="overflow-x-auto">
@@ -332,9 +327,6 @@ export default async function RoleDetailPage({
             </div>
           </div>
         </section>
-      )}
-      {isEditing && (
-        <FloatingEditBar cancelHref={roleHref} formId="role-edit-form" />
       )}
     </>
   );

@@ -6,6 +6,7 @@ import {
 } from "@/app/(dashboard)/u/[tenant]/employees/actions";
 import DatePickerField from "@/components/DatePickerField";
 import FormSubmitButton from "@/components/FormSubmitButton";
+import { useActionStateWithToast } from "@/components/Toasts";
 import { useUniversalPopup } from "@/components/UniversalPopup";
 import { LogOut, RotateCcw } from "lucide-react";
 import { useTranslations } from "next-intl";
@@ -27,8 +28,10 @@ function OffboardForm({
   onDone: () => void;
   t: T;
 }) {
+  const [, formAction] = useActionStateWithToast(offboardEmployeeAction);
+
   return (
-    <form className="flex flex-col gap-4" action={offboardEmployeeAction}>
+    <form className="flex flex-col gap-4" action={formAction}>
       <input type="hidden" name="tenant" value={tenant} />
       <input type="hidden" name="employeeId" value={employeeId} />
       <input type="hidden" name="employeeHandle" value={employeeHandle} />
@@ -124,8 +127,10 @@ function ReactivateForm({
   onDone: () => void;
   t: T;
 }) {
+  const [, formAction] = useActionStateWithToast(reactivateEmployeeAction);
+
   return (
-    <form className="flex flex-col gap-4" action={reactivateEmployeeAction}>
+    <form className="flex flex-col gap-4" action={formAction}>
       <input type="hidden" name="tenant" value={tenant} />
       <input type="hidden" name="employeeId" value={employeeId} />
       <input type="hidden" name="employeeHandle" value={employeeHandle} />

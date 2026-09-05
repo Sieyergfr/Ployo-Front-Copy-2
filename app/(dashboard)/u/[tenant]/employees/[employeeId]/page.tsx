@@ -1,10 +1,7 @@
 import { DataTableStatus } from "@/components/DataTable";
 import AddressFields from "@/components/AddressFields";
 import AuditLogPanel from "@/components/AuditLogPanel";
-import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
 import DatePickerField from "@/components/DatePickerField";
-import {
-} from "@/components/FileActionButtons";
 import EmployeeDocumentSlots from "@/components/EmployeeDocumentSlots";
 import OwnerFilesTab from "@/components/OwnerFilesTab";
 import EmployeeContracts, { type EmployeeContractItem } from "@/components/EmployeeContracts";
@@ -19,13 +16,12 @@ import {
   ReactivateEmployeeButton,
 } from "@/components/OffboardEmployeeButton";
 import { UnsavedChangesGuard } from "@/components/EditSafety";
-import FloatingEditBar from "@/components/FloatingEditBar";
 import {
-  deleteEmployeeAction,
-  deleteEmployeeDataByCategoryAction,
-  inviteEmployeeAction,
-  updateEmployeeAction,
-} from "@/app/(dashboard)/u/[tenant]/employees/actions";
+  EmployeeDeleteButton,
+  EmployeeEditFormAndBar,
+  EmployeeInviteButton,
+  RetentionDeleteButton,
+} from "@/components/EmployeeActionForms";
 import { getAuditLogsForEntity } from "@/lib/audit";
 import { getEmployeeForTenant } from "@/lib/employee-service";
 import { getDeletionEligibilityForEmployee, type CategoryEligibility } from "@/lib/retention-service";
@@ -657,15 +653,14 @@ export default async function EmployeeDetailPage({
   return (
     <>
       <UnsavedChangesGuard active={isEditing} />
-      <form id="employee-edit-form" action={updateEmployeeAction}>
-        <input type="hidden" name="tenant" value={tenant} />
-        <input type="hidden" name="employeeId" value={employee.dbId ?? ""} />
-        <input type="hidden" name="employeeHandle" value={employee.id} />
-        <input
-          type="hidden"
-          name="activeTab"
-          value={isContractTab ? "contract" : "home"}
-        />
+      <EmployeeEditFormAndBar
+        tenant={tenant}
+        employeeId={employee.dbId ?? ""}
+        employeeHandle={employee.id}
+        activeTab={isContractTab ? "contract" : "home"}
+        cancelHref={activeTabHref}
+        isEditing={isEditing}
+      >
       <div className="mb-[22px] flex flex-wrap items-center gap-3.5">
         <Link href={`/u/${tenant}/employees`} className="btn btn-secondary btn-sm">
           <ArrowLeft size={14} />
@@ -724,14 +719,12 @@ export default async function EmployeeDetailPage({
         <div className="flex flex-wrap gap-[9px]">
           {isEditing ? (
             canDeleteEmployee && (
-              <ConfirmSubmitButton
+              <EmployeeDeleteButton
                 className="btn btn-secondary btn-sm text-danger"
-                form="employee-edit-form"
-                formAction={deleteEmployeeAction}
                 description={t("deleteConfirmDescription", { name: employee.name })}
               >
                 {t("delete")}
-              </ConfirmSubmitButton>
+              </EmployeeDeleteButton>
             )
           ) : (
             <>
@@ -744,14 +737,9 @@ export default async function EmployeeDetailPage({
               {canInvite &&
                 !employee.hasAccount &&
                 (employee.email ? (
-                  <button
-                    type="submit"
-                    formAction={inviteEmployeeAction}
-                    className="btn btn-secondary btn-sm"
-                  >
-                    <UserPlus size={14} />
-                    {hasPendingInvitation ? t("inviteAgain") : t("invite")}
-                  </button>
+                  <EmployeeInviteButton
+                    label={hasPendingInvitation ? t("inviteAgain") : t("invite")}
+                  />
                 ) : (
                   <button
                     type="button"
@@ -1246,15 +1234,13 @@ export default async function EmployeeDetailPage({
               ))}
             </form>
             <div className="mt-3 flex justify-end">
-              <ConfirmSubmitButton
+              <RetentionDeleteButton
                 className="btn btn-secondary btn-sm text-danger"
-                form="employee-retention-form"
-                formAction={deleteEmployeeDataByCategoryAction}
                 title={t("retentionDeleteSelected")}
                 description={t("retentionDeleteConfirmDescription")}
               >
                 {t("retentionDeleteSelected")}
-              </ConfirmSubmitButton>
+              </RetentionDeleteButton>
             </div>
           </DetailCard>
         </div>
@@ -1265,11 +1251,7 @@ export default async function EmployeeDetailPage({
           <AuditLogPanel entries={auditEntries} />
         </div>
       )}
-
-      {isEditing && (
-        <FloatingEditBar cancelHref={activeTabHref} formId="employee-edit-form" />
-      )}
-      </form>
+      </EmployeeEditFormAndBar>
     </>
   );
 }

@@ -2,6 +2,7 @@
 
 import { createEmployeeFolderTemplateAction } from "@/app/(dashboard)/u/[tenant]/employees/actions";
 import FormSubmitButton from "@/components/FormSubmitButton";
+import { useActionStateWithToast } from "@/components/Toasts";
 import { useUniversalPopup } from "@/components/UniversalPopup";
 import { FolderPlus } from "lucide-react";
 import { useTranslations } from "next-intl";
@@ -9,8 +10,10 @@ import { useTranslations } from "next-intl";
 type T = ReturnType<typeof useTranslations>;
 
 function FolderTemplateForm({ tenant, onDone, t }: { tenant: string; onDone: () => void; t: T }) {
+  const [, formAction] = useActionStateWithToast(createEmployeeFolderTemplateAction);
+
   return (
-    <form className="flex flex-col gap-4" action={createEmployeeFolderTemplateAction}>
+    <form className="flex flex-col gap-4" action={formAction}>
       <input type="hidden" name="tenant" value={tenant} />
 
       <div className="field">

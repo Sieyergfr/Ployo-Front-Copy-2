@@ -7,6 +7,7 @@ import EmployeeSelector, {
 } from "@/components/EmployeeSelector";
 import FormSubmitButton from "@/components/FormSubmitButton";
 import { OpeningHoursEditor } from "@/components/OpeningHoursEditor";
+import { useActionStateWithToast } from "@/components/Toasts";
 import { useUniversalPopup } from "@/components/UniversalPopup";
 import { locationColorPalette, locationKinds } from "@/lib/org-options";
 import { Building2, Check, ChevronDown, Plus } from "lucide-react";
@@ -166,9 +167,10 @@ function CreateLocationForm({
 }) {
   const t = useTranslations("CreateLocationButton");
   const tAddress = useTranslations("AddressFields");
+  const [, formAction] = useActionStateWithToast(createLocationAction);
 
   return (
-    <form className="flex flex-col gap-4" action={createLocationAction}>
+    <form className="flex flex-col gap-4" action={formAction}>
       <input type="hidden" name="tenant" value={tenant} />
       <div className="field">
         <label htmlFor="location-name" className="label">

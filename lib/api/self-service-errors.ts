@@ -7,14 +7,14 @@
  * alle einfache `Error`s mit deutschsprachiger oder SCREAMING_CASE-Message
  * statt eigener Fehlerklassen — hier zentral auf HTTP-Status gemappt, damit
  * das nicht in jeder Route dupliziert wird.
+ *
+ * `classifySelfServiceError` ist die eigentliche Klassifikation (Message ->
+ * Status oder `null` für "unbekannt/nicht sicher genug zum Anzeigen") —
+ * separat exportierbar, weil `withActionErrorHandling` (lib/action-state.ts)
+ * dieselbe Allowlist für Server-Action-Fehler (Toasts statt HTTP-Antworten)
+ * braucht, ohne sie ein zweites Mal zu pflegen.
  */
-export function mapSelfServiceError(error: unknown): Response {
-  if (!(error instanceof Error)) {
-    throw error;
-  }
-
-  const message = error.message;
-
+function classifySelfServiceError(message: string): number | null {
   if (
     message === "FORBIDDEN" ||
     message === "TWO_FACTOR_REQUIRED" ||
@@ -23,7 +23,7 @@ export function mapSelfServiceError(error: unknown): Response {
     message === "FOLDER_LOCKED" ||
     message.startsWith("Keine Berechtigung")
   ) {
-    return Response.json({ error: message }, { status: 403 });
+    return 403;
   }
 
   if (
@@ -50,7 +50,7 @@ export function mapSelfServiceError(error: unknown): Response {
     message.includes("bereits eine Wunschfrei-Anfrage vor") ||
     message.includes("nicht mehr zurückziehen")
   ) {
-    return Response.json({ error: message }, { status: 409 });
+    return 409;
   }
 
   if (
@@ -60,13 +60,13 @@ export function mapSelfServiceError(error: unknown): Response {
     message === "EMPLOYEE_NOT_FOUND" ||
     message === "ROLE_NOT_FOUND"
   ) {
-    return Response.json({ error: message }, { status: 404 });
+    return 404;
   }
 
   // lib/stripe/plans.ts checkEmployeeLimit() — Plan-/Abo-Grenze erreicht,
   // reachable über den Self-Service-"Personalakte anlegen"-Pfad.
   if (message.includes("aktives Abonnement") || message.includes("Plan erlaubt maximal")) {
-    return Response.json({ error: message }, { status: 402 });
+    return 402;
   }
 
   if (
@@ -97,21 +97,46 @@ export function mapSelfServiceError(error: unknown): Response {
     message.includes("noch nicht veröffentlicht") ||
     message.includes("lässt sich nicht vollständig wiederherstellen")
   ) {
-    return Response.json({ error: message }, { status: 400 });
+    return 400;
   }
 
   // lib/billing-service.ts — Stripe ist serverseitig nicht konfiguriert
   // (fehlende Env-Vars), kein Client-Fehler.
   if (message === "STRIPE_NOT_CONFIGURED") {
-    return Response.json({ error: message }, { status: 503 });
+    return 503;
   }
 
   // lib/storage/virus-scan.ts assertNoVirus() — clamd nicht erreichbar,
   // Timeout oder unerwartete Antwort. Upload wird im Zweifel abgelehnt
   // (fail-closed), daher 503 statt 500.
   if (message.includes("Virenscan derzeit nicht verfügbar")) {
-    return Response.json({ error: message }, { status: 503 });
+    return 503;
   }
 
-  throw error;
+  return null;
+}
+
+export function mapSelfServiceError(error: unknown): Response {
+  if (!(error instanceof Error)) {
+    throw error;
+  }
+
+  const status = classifySelfServiceError(error.message);
+
+  if (status === null) {
+    throw error;
+  }
+
+  return Response.json({ error: error.message }, { status });
+}
+
+/**
+ * Dieselbe Allowlist wie `mapSelfServiceError`, aber als Prädikat statt als
+ * HTTP-Antwort — für Server Actions (lib/action-state.ts
+ * `withActionErrorHandling`), die einen Toast-Text statt einer Response
+ * brauchen. Ein `true` bedeutet: die Message ist eine unserer eigenen,
+ * bewusst formulierten Fehlermeldungen und darf 1:1 angezeigt werden.
+ */
+export function isKnownSelfServiceErrorMessage(error: unknown): error is Error {
+  return error instanceof Error && classifySelfServiceError(error.message) !== null;
 }

@@ -2,6 +2,7 @@
 
 import { updateTeamMemberAction } from "@/app/(dashboard)/u/[tenant]/teams/actions";
 import FormSubmitButton from "@/components/FormSubmitButton";
+import { useActionStateWithToast } from "@/components/Toasts";
 import { useUniversalPopup } from "@/components/UniversalPopup";
 import type { TeamMember } from "@/lib/teams";
 import { Crown, Pencil, Save } from "lucide-react";
@@ -21,6 +22,7 @@ export default function TeamRoleEditorButton({
   const t = useTranslations("TeamRoleEditorButton");
   const { openPopup, closePopup } = useUniversalPopup();
   const memberId = member.id ?? "";
+  const [, formAction] = useActionStateWithToast(updateTeamMemberAction);
 
   return (
     <button
@@ -30,7 +32,7 @@ export default function TeamRoleEditorButton({
         openPopup({
           title: t("editTeamRole"),
           content: (
-            <form className="flex flex-col gap-4" action={updateTeamMemberAction}>
+            <form className="flex flex-col gap-4" action={formAction}>
               <input type="hidden" name="tenant" value={tenant} />
               <input type="hidden" name="teamId" value={teamId} />
               <input type="hidden" name="teamHandle" value={teamHandle} />
