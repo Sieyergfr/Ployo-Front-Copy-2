@@ -1,6 +1,17 @@
 # To-Do — Live-Gang Ployo
 
-Stand: 2026-09-05. Blocker, Sollte-behoben-werden, Responsive Design, Datenschutz-Umbauplan Phase 0-2 und die komplette i18n-String-Extraktion (108 Dateien, 93 Namespaces, ~1635 Keys) sind vollständig umgesetzt, code-verifiziert, committet und gepusht. Alles Weitere unten sind bewusst offene Punkte, die externe Schritte oder deine Entscheidung brauchen (siehe "Braucht weiterhin deine Aufmerksamkeit").
+Stand: 2026-09-05. Blocker, Sollte-behoben-werden, Responsive Design, Datenschutz-Umbauplan Phase 0-2 und die komplette i18n-String-Extraktion (108 Dateien, 93 Namespaces, ~1635 Keys) sind vollständig umgesetzt, code-verifiziert, committet und gepusht. Die machbaren Teile von Phase 3 (Jugendarbeitsschutz, Mutterschutz, Betriebsrat-Hinweis, Verarbeitungsverzeichnis) sind ebenfalls umgesetzt und code-verifiziert, aber noch nicht gepusht/deployt (steht noch dein Go aus). Alles Weitere unten sind bewusst offene Punkte, die externe Schritte oder deine Entscheidung brauchen (siehe "Braucht weiterhin deine Aufmerksamkeit").
+
+## ✅ Datenschutz-Umbauplan Phase 3 (2026-09-05)
+
+Auf Zuruf ("Ja phase 3") die vier machbaren Punkte aus Teil 7 des Umbauplans umgesetzt (echte Ist-Zeiterfassung bewusst zurückgestellt, siehe unten):
+
+- **Betriebsrat-Hinweisbaustein:** einfacher Infotext in `CompanyCreateWizard.tsx` Schritt 5 (§ 87 Abs. 1 Nr. 6 BetrVG), reine Aufklärung, kein Formularfeld.
+- **Jugendarbeitsschutz-Prüfung:** `lib/arbzg-rules.ts` um Nachtruhe-/Sonntags-/Altersprüfung erweitert, hartes Blockieren beim Schicht-Anlegen/-Verschieben (§ 14/17/18 JArbSchG) für Minderjährige, sofern ein Geburtsdatum hinterlegt ist. **Beiläufig einen echten Bug gefixt:** die bestehenden ArbZG-Fehlertexte (§3/§5) standen seit der Toast-Umstellung nicht in der Allowlist von `classifySelfServiceError()` und fielen auf die generische Meldung zurück — nachgetragen.
+- **Mutterschutz-Kennzeichnung:** neuer, eigener Berechtigungsbereich `mutterschutz` (bewusst getrennt von "Sensible Daten", damit z. B. die Lohnbuchhaltung nicht automatisch mitsieht) — nur HR/Admin setzt das Kennzeichen, kein Self-Service. Aktives Kennzeichen blockiert Nacht-/Sonntagsschichten hart (§ 5/§ 6 MuSchG), analog zu JArbSchG. `ployo-mobile` mitgezogen (Berechtigungs-Katalog, keine neue App-UI nötig).
+- **Verzeichnis von Verarbeitungstätigkeiten:** neue Seite je Mandant (`u/[tenant]/verarbeitungsverzeichnis`, verlinkt aus "Daten & Aufbewahrung" neben dem Export), Kategorien werden automatisch anhand tatsächlicher Nutzung erkannt (`lib/processing-register.ts`), druckbar via `window.print()`.
+
+Verifiziert nach jedem der 4 Batches: `tsc --noEmit`, `eslint`, volle Testsuite (172/172, 12 davon neu), Probe-Builds nach den beiden größeren Batches (Schema-Änderung bzw. neue Route), `ployo-mobile` `tsc`/`lint` separat geprüft. Migration additiv (`maternityProtectionActive`/`maternityProtectionNote`, kein Backfill nötig — neue Berechtigung ohne Vorgänger). 4 Commits lokal, Push/Deploy erst nach deinem Go (wie beim letzten Mal). Plan-Dokument: `~/.claude/plans/expressive-forging-russell.md`.
 
 ## ✅ Toasts statt Absturz bei Formularfehlern (2026-09-05)
 
@@ -84,7 +95,7 @@ fertig, committet+gepusht:**
 
 ## 🙋 Braucht weiterhin deine Aufmerksamkeit
 
-- Phase 3 des Datenschutz-Umbauplans (Produkt-Roadmap: echte Ist-Zeiterfassung, Jugendarbeitsschutz-Prüfung, Mutterschutz-Kennzeichnung, Betriebsrat-Hinweisbaustein) bewusst noch nicht angefasst — eigene Produktentscheidungen, siehe `Datenschutz-Sicherheitsaudit-und-Umbauplan-offene-Punkte.md` Teil 7. — **[Du → Ich]**
+- Phase 3 des Datenschutz-Umbauplans: nur noch die echte Ist-Zeiterfassung offen — bewusst zurückgestellt, das zugrundeliegende Gesetz ist noch Referentenentwurf, kein Regierungsentwurf. Die anderen vier Punkte (Jugendarbeitsschutz, Mutterschutz, Betriebsrat-Hinweis, Verzeichnis von Verarbeitungstätigkeiten) sind erledigt, siehe oben. — **[Du → Ich, sobald das Gesetz konkreter wird]**
 - Vier neue Rechtsdokument-Entwürfe (`AVV-Vorlage-Entwurf.md`, `Verzeichnis-von-Verarbeitungstaetigkeiten-Entwurf.md`, `DSFA-Entwurf.md`, `Loeschkonzept.md`) brauchen wie die bestehenden Rechtstexte eine Anwalts-/Steuerberater-Freigabe, bevor sie verbindlich verwendet werden. — **[Du]**
 - Solltest du beim Anlegen/Bearbeiten von Mitarbeitern weiterhin Fehler sehen: Browser-Reload machen — die "Failed to find Server Action"-Fehler in den PM2-Logs sind harmlos-erwartbar (Client-Bundles vor dem Reload zeigen noch auf die alte Deployment-Version) und verschwinden von selbst, sobald die Seite neu geladen wird.
 - AVV (Auftragsverarbeitungsvertrag) mit Sentry abschließen — externer Vertrag, braucht deine Unterschrift/deinen Sentry-Account. Solange offen: Sentry sendet mit Consent Fehler-/Replay-Daten ohne unterschriebenen AVV — rechtlich das größte verbleibende Risiko. — **[Du]**
