@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { uploadTenantFile } from "@/lib/storage/storage.service";
 import { assertEmployeeInScope, requireTenantAccess, resolveScopeFilter } from "@/lib/tenant-access";
 import { canAccessFileAcl, getOptionalFileReadAccess } from "@/lib/file-access";
+import { decryptField, encryptField } from "@/lib/encryption";
 
 export const contractStatuses = [
   "draft",
@@ -69,7 +70,11 @@ export async function getEmployeeContracts(tenantSlug: string, employeeId: strin
     scopeFilter.type === "own"
       ? { id: scopeFilter.employeeId ?? "__none__" }
       : scopeFilter.type === "team"
-        ? { team: scopeFilter.team }
+        // Kein eigenes Team darf nicht "alle nicht zugeordneten Kolleg:innen"
+        // bedeuten (Audit-Finding H03).
+        ? scopeFilter.team
+          ? { team: scopeFilter.team }
+          : { id: "__none__" }
         : {};
   const fileAccess = await getOptionalFileReadAccess(tenantSlug);
   const contracts = await prisma.tenantEmployeeContract.findMany({
@@ -85,7 +90,9 @@ export async function getEmployeeContracts(tenantSlug: string, employeeId: strin
     orderBy: [{ startDate: "desc" }, { createdAt: "desc" }],
   });
   return fileAccess
-    ? contracts.filter((contract) => canAccessFileAcl(contract.file.parent ?? contract.file, fileAccess))
+    ? contracts
+        .filter((contract) => canAccessFileAcl(contract.file.parent ?? contract.file, fileAccess))
+        .map((contract) => ({ ...contract, compensation: decryptField(contract.compensation) }))
     : [];
 }
 
@@ -173,7 +180,7 @@ export async function createEmployeeContract(input: {
         department: input.department,
         workLocation: input.workLocation,
         weeklyHours: input.weeklyHours,
-        compensation: input.compensation,
+        compensation: encryptField(input.compensation),
         vacationDays: input.vacationDays,
         notes: input.notes,
       },
@@ -321,7 +328,7 @@ export async function updateEmployeeContractDetails(input: {
       department: input.department,
       workLocation: input.workLocation,
       weeklyHours: input.weeklyHours,
-      compensation: input.compensation,
+      compensation: encryptField(input.compensation),
       vacationDays: input.vacationDays,
       notes: input.notes,
     },

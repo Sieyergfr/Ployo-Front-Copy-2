@@ -1549,7 +1549,8 @@
     "errorSignupFailed": "Das Konto konnte nicht erstellt werden. Bitte versuchen Sie es erneut.",
     "errorTermsRequired": "Bitte akzeptieren Sie die Nutzungsbedingungen.",
     "errorSigninFailed": "Das Konto wurde erstellt, die Anmeldung schlug jedoch fehl. Bitte melden Sie sich über die Anmeldeseite an.",
-    "errorUnexpected": "Etwas ist schiefgelaufen. Bitte versuchen Sie es erneut."
+    "errorUnexpected": "Etwas ist schiefgelaufen. Bitte versuchen Sie es erneut.",
+    "errorRateLimited": "Zu viele Versuche. Bitte warten Sie kurz und versuchen Sie es erneut."
   },
   "CompanyCreateWizard": {
     "countryGermany": "Deutschland",

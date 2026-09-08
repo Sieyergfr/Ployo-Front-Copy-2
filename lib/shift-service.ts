@@ -4,9 +4,11 @@ import { prisma } from "@/lib/prisma";
 import { type Shift, type ShiftDay } from "@/lib/shifts";
 import { headers } from "next/headers";
 import {
+  assertEmployeeInScope,
   requireTenantAccess,
   requireTenantMembership,
   resolveScopeFilter,
+  scopeAllowsTarget,
 } from "@/lib/tenant-access";
 import { hasPermissionLevel } from "@/lib/roles";
 import {
@@ -22,10 +24,13 @@ import {
 import { isUniqueConstraintError } from "@/lib/prisma-errors";
 import {
   calculateAge,
-  exceedsMaxShiftHours,
   findRestPeriodViolation,
+  findShiftOverlap,
   isSunday,
+  netWorkingMinutes,
   overlapsNightWindow,
+  requiredBreakMinutes,
+  shiftDurationHours,
 } from "@/lib/arbzg-rules";
 import { decryptField } from "@/lib/encryption";
 import {
@@ -195,10 +200,11 @@ function hasConflict(input: {
 }
 
 /**
- * Liefert eine Prüffunktion `(employeeId, date) => boolean`, die erkennt, ob
- * der Mitarbeiter an diesem Tag genehmigten Urlaub oder eine offene
- * Krankmeldung hat — genutzt, um Schichten als Konflikt zu markieren, wenn
- * eine Abwesenheit NACH der Schichteinteilung hinzukam (siehe `getShiftPlanForTenant`).
+ * Liefert eine Prüffunktion `(employeeId, date) => "vacation" | "sickness" | null`,
+ * die erkennt, ob der Mitarbeiter an diesem Tag genehmigten Urlaub oder eine
+ * offene Krankmeldung hat — genutzt, um Schichten als Konflikt zu markieren
+ * (samt Grund), wenn eine Abwesenheit NACH der Schichteinteilung hinzukam
+ * (siehe `getShiftPlanForTenant`).
  */
 async function buildAbsenceCheck(
   tenantId: string,
@@ -232,25 +238,33 @@ async function buildAbsenceCheck(
     }),
   ]);
 
-  return (employeeId: string, date: string) => {
+  return (employeeId: string, date: string): "vacation" | "sickness" | null => {
     const inVacation = vacations.some(
       (v) => v.employeeId === employeeId && v.startDate <= date && v.endDate >= date,
     );
 
     if (inVacation) {
-      return true;
+      return "vacation";
     }
 
     const dateValue = new Date(`${date}T00:00:00.000Z`);
 
-    return sicknesses.some(
+    const inSickness = sicknesses.some(
       (s) =>
         s.employeeId === employeeId &&
         s.startDate <= dateValue &&
         (!s.endDate || s.endDate >= dateValue),
     );
+
+    return inSickness ? "sickness" : null;
   };
 }
+
+const CONFLICT_REASON_LABELS: Record<"vacation" | "sickness" | "overlap", string> = {
+  overlap: "Überschneidung mit einer anderen Schicht am selben Tag",
+  vacation: "Mitarbeiter hat an diesem Tag genehmigten Urlaub",
+  sickness: "Mitarbeiter ist an diesem Tag krankgemeldet",
+};
 
 async function getSessionUserId() {
   const session = await auth.api.getSession({
@@ -283,7 +297,11 @@ async function shiftScopeWhere(tenantSlug: string) {
   }
 
   if (scopeFilter.type === "team") {
-    return { tenantId: access.tenantId, employee: { team: scopeFilter.team } };
+    // Kein eigenes Team darf nicht "alle Schichten nicht zugeordneter
+    // Kolleg:innen" bedeuten (Audit-Finding H03).
+    return scopeFilter.team
+      ? { tenantId: access.tenantId, employee: { team: scopeFilter.team } }
+      : { tenantId: access.tenantId, employeeId: "__none__" };
   }
 
   // "shifts" unterstützt (bisher) keinen "assigned"-Scope — sollte er
@@ -477,10 +495,14 @@ async function publishedShiftRecords(
   if (scopeFilter.type === "own") {
     visible = entries.filter((entry) => entry.employeeId === scopeFilter.employeeId);
   } else if (scopeFilter.type === "team") {
-    const teammates = await prisma.tenantEmployee.findMany({
-      where: { tenantId, team: scopeFilter.team },
-      select: { id: true },
-    });
+    // Kein eigenes Team darf nicht "alle nicht zugeordneten Kolleg:innen"
+    // bedeuten (Audit-Finding H03).
+    const teammates = scopeFilter.team
+      ? await prisma.tenantEmployee.findMany({
+          where: { tenantId, team: scopeFilter.team },
+          select: { id: true },
+        })
+      : [];
     const teammateIds = new Set(teammates.map((employee) => employee.id));
 
     visible = entries.filter((entry) => entry.employeeId && teammateIds.has(entry.employeeId));
@@ -585,25 +607,30 @@ export async function getShiftPlanForTenant(input: {
   const minStaffing = settings?.shiftMinStaffing ?? 0;
   const locationMinStaffing = await getLocationMinStaffing(tenantId, minStaffing);
   const conflictIds = new Set<string>();
+  const conflictReasons = new Map<string, string>();
   const employeeIds = Array.from(
     new Set(records.map((record) => record.employeeId).filter((id): id is string => Boolean(id))),
   );
   const isAbsent = employeeIds.length
     ? await buildAbsenceCheck(tenantId, employeeIds, dayIds[0], dayIds[dayIds.length - 1])
-    : () => false;
+    : () => null;
 
   for (const record of records) {
-    if (
-      hasConflict({
-        employeeId: record.employeeId,
-        date: record.date,
-        startTime: record.startTime,
-        endTime: record.endTime,
-        existing: records.filter((item) => item.id !== record.id),
-      }) ||
-      (record.employeeId && isAbsent(record.employeeId, record.date))
-    ) {
+    const overlaps = hasConflict({
+      employeeId: record.employeeId,
+      date: record.date,
+      startTime: record.startTime,
+      endTime: record.endTime,
+      existing: records.filter((item) => item.id !== record.id),
+    });
+    const absenceReason = record.employeeId ? isAbsent(record.employeeId, record.date) : null;
+
+    if (overlaps || absenceReason) {
       conflictIds.add(record.id);
+      conflictReasons.set(
+        record.id,
+        CONFLICT_REASON_LABELS[overlaps ? "overlap" : (absenceReason as "vacation" | "sickness")],
+      );
     }
   }
 
@@ -625,6 +652,7 @@ export async function getShiftPlanForTenant(input: {
       location: record.location?.name,
       team: record.team || record.employee?.team || "",
       conflict: record.conflict || conflictIds.has(record.id),
+      conflictReason: conflictReasons.get(record.id),
       note: record.note,
     };
     const dateShifts = shiftsByDate.get(record.date) ?? [];
@@ -799,13 +827,16 @@ export async function getMyShiftsForCurrentWeek(
 }
 
 export async function getShiftFormOptions(tenantSlug: string) {
-  const tenantId = await getTenantIdForShifts(tenantSlug);
+  const access = await requireTenantAccess(tenantSlug, "shifts", "read");
+  const tenantId = access.tenantId;
 
   if (!tenantId) {
     return null;
   }
 
-  const [employees, locationRecords, tenantDefaultOpeningHours] = await Promise.all([
+  const scopeFilter = await resolveScopeFilter(access);
+
+  const [employeeRecords, locationRecords, tenantDefaultOpeningHours] = await Promise.all([
     prisma.tenantEmployee.findMany({
       where: { tenantId },
       orderBy: { name: "asc" },
@@ -842,6 +873,12 @@ export async function getShiftFormOptions(tenantSlug: string) {
       tenantDefaultOpeningHours,
     ),
   }));
+
+  // Formularoptionen respektieren denselben shifts-Scope wie die Schichtliste
+  // selbst — sonst erhält ein team-/own-gescopter Planer über dieses
+  // Auswahlfeld zusätzliche Mitarbeiterstammdaten außerhalb seines Scopes
+  // (Audit-Finding H15).
+  const employees = employeeRecords.filter((employee) => scopeAllowsTarget(scopeFilter, employee));
 
   return {
     employees: employees satisfies ShiftEmployeeOption[],
@@ -892,7 +929,7 @@ export async function getDefaultOpeningHours(tenantSlug: string) {
 }
 
 export async function requireShiftManager(tenantSlug: string) {
-  await requireTenantAccess(tenantSlug, "shifts", "write");
+  const tenantAccess = await requireTenantAccess(tenantSlug, "shifts", "write");
   const userId = await getSessionUserId();
 
   if (!userId) {
@@ -933,12 +970,36 @@ export async function requireShiftManager(tenantSlug: string) {
     permission === "admin"
   ) {
     return {
+      ...tenantAccess,
       tenantId: membership.tenant.id,
       userId,
     };
   }
 
   throw new Error("Keine Berechtigung zum Bearbeiten von Schichten.");
+}
+
+/**
+ * Für die atomaren Wochen-Operationen (Veröffentlichen/Zurückziehen/
+ * Zurücksetzen, Vorlage auf Woche anwenden): `TenantShiftWeek` ist EINE Zeile
+ * pro (Tenant, Jahr, Woche) ohne Team-Dimension, und `resetShiftWeekToPublished`
+ * löscht/erstellt dabei ALLE Schichten der Woche neu — über alle Teams
+ * hinweg. Ein Team-/Own-Scope kann diese Reichweite nicht sicher einschränken
+ * (anders als eine einzelne Schicht), ein Team-Planer könnte sonst fremde
+ * Teams derselben Woche veröffentlichen, zurückziehen oder überschreiben
+ * (Audit-Finding H05/R08). Deshalb hier ausdrücklich vollen ("all") Scope
+ * verlangen statt eine unsichere Teiloperation vorzutäuschen.
+ */
+async function requireTenantWideShiftManager(tenantSlug: string) {
+  const access = await requireShiftManager(tenantSlug);
+
+  if (access.scope !== "all") {
+    throw new Error(
+      "Diese Aktion wirkt sich auf die gesamte Wochenplanung aller Teams aus und erfordert uneingeschränkte Schichtplan-Berechtigung.",
+    );
+  }
+
+  return access;
 }
 
 /** `requireShiftManager` liefert keinen Namen — hier für Audit-Einträge separat nachgeladen. */
@@ -948,8 +1009,16 @@ async function getActorName() {
   return session?.user?.name || session?.user?.email || "System";
 }
 
-/** Alle Mitglieder mit Schichtplan-Admin-Recht (gleiche Regel wie `requireShiftManager`) — für Konflikt-Benachrichtigungen. */
-async function getShiftPlanManagers(tenantId: string) {
+/**
+ * Mitglieder mit Schichtplan-Admin-Recht, DEREN Planungsscope den
+ * betroffenen Mitarbeiter tatsächlich abdeckt — vorher wurde jeder
+ * Schicht-Schreibberechtigte im gesamten Mandanten benachrichtigt,
+ * unabhängig von dessen eigenem Team-/Own-Scope (Audit-Finding H14).
+ * Liefert zusätzlich je Empfänger, ob er auch `sickness` lesen darf — nur
+ * dann bekommt die Konflikt-Meldung den konkreten Krankheitsbezug, sonst
+ * einen neutralen Abwesenheits-Hinweis (siehe `notifyShiftPlanManagersOfAbsenceConflict`).
+ */
+async function getShiftPlanManagers(tenantId: string, targetEmployee: { team: string }) {
   const memberships = await prisma.tenantMembership.findMany({
     where: { tenantId },
     select: {
@@ -959,27 +1028,89 @@ async function getShiftPlanManagers(tenantId: string) {
       roleRef: {
         select: {
           permissions: {
-            where: { area: "shifts" },
-            select: { level: true },
+            where: { area: { in: ["shifts", "sickness"] } },
+            select: { area: true, level: true, scope: true },
           },
         },
       },
     },
   });
 
-  return memberships
+  const isLegacyManager = (role: string) => role === "OWNER" || role === "ADMIN" || role === "HR";
+  const candidateIds = memberships
     .filter((membership) => {
-      const permission = membership.roleRef?.permissions[0]?.level ?? "none";
+      const level =
+        membership.roleRef?.permissions.find((p) => p.area === "shifts")?.level ?? "none";
 
-      return (
-        membership.role === "OWNER" ||
-        membership.role === "ADMIN" ||
-        membership.role === "HR" ||
-        permission === "write" ||
-        permission === "admin"
-      );
+      return isLegacyManager(membership.role) || hasPermissionLevel(level, "write");
     })
-    .map((membership) => ({ userId: membership.userId, email: membership.user.email }));
+    .map((membership) => membership.userId);
+
+  const linkedEmployees = await prisma.tenantEmployee.findMany({
+    where: { tenantId, userId: { in: candidateIds } },
+    select: { userId: true, team: true },
+  });
+  const teamByUserId = new Map(
+    linkedEmployees
+      .filter((employee): employee is { userId: string; team: string } => Boolean(employee.userId))
+      .map((employee) => [employee.userId, employee.team]),
+  );
+
+  const result: Array<{ userId: string; email: string | null; canViewSicknessReason: boolean }> = [];
+
+  for (const membership of memberships) {
+    if (!candidateIds.includes(membership.userId)) {
+      continue;
+    }
+
+    const shiftsPermission = membership.roleRef?.permissions.find((p) => p.area === "shifts");
+    const legacyManager = isLegacyManager(membership.role);
+    const scope = legacyManager ? "all" : (shiftsPermission?.scope ?? "all");
+
+    if (scope === "own") {
+      // Der eigene Konflikt wird nicht an einen selbst gemeldet.
+      continue;
+    }
+
+    if (scope === "team") {
+      const managerTeam = teamByUserId.get(membership.userId) ?? "";
+
+      if (!managerTeam || !targetEmployee.team || managerTeam !== targetEmployee.team) {
+        continue;
+      }
+    }
+
+    const sicknessPermission = membership.roleRef?.permissions.find((p) => p.area === "sickness");
+    const sicknessLevel = sicknessPermission?.level ?? "none";
+    const sicknessScope = legacyManager ? "all" : (sicknessPermission?.scope ?? "all");
+
+    // Wie beim shifts-Scope oben reicht das bloße Leserecht nicht — "own"/
+    // "team" bei "sickness" muss sich auf DIESEN konkreten Mitarbeiter
+    // beziehen, sonst zählte z. B. sickness:read/own fälschlich als Recht auf
+    // die Krankheit eines FREMDEN Mitarbeiters (Audit-Finding H14/R08).
+    let canViewSicknessReason = legacyManager || hasPermissionLevel(sicknessLevel, "read");
+
+    if (canViewSicknessReason && !legacyManager) {
+      if (sicknessScope === "own") {
+        // Der Empfänger sieht hier fremde Konflikte (siehe "own"-Continue für
+        // shifts oben) — "own" bei sickness kann sich damit nie auf DIESEN
+        // Zielmitarbeiter beziehen.
+        canViewSicknessReason = false;
+      } else if (sicknessScope === "team") {
+        const managerTeam = teamByUserId.get(membership.userId) ?? "";
+        canViewSicknessReason =
+          Boolean(managerTeam) && Boolean(targetEmployee.team) && managerTeam === targetEmployee.team;
+      }
+    }
+
+    result.push({
+      userId: membership.userId,
+      email: membership.user.email,
+      canViewSicknessReason,
+    });
+  }
+
+  return result;
 }
 
 /** Alle (Jahr/Woche)-Paare, die der Zeitraum [startDate, endDate] berührt. */
@@ -1053,7 +1184,11 @@ export async function notifyIfAbsenceConflictsWithPublishedShifts(input: {
     return;
   }
 
-  const managers = await getShiftPlanManagers(input.tenantId);
+  const targetEmployee = await prisma.tenantEmployee.findFirst({
+    where: { id: input.employeeId, tenantId: input.tenantId },
+    select: { team: true },
+  });
+  const managers = await getShiftPlanManagers(input.tenantId, { team: targetEmployee?.team ?? "" });
 
   await notifyShiftPlanManagersOfAbsenceConflict({
     tenantId: input.tenantId,
@@ -1072,15 +1207,35 @@ function shiftDateBy(date: string, days: number): string {
   return shifted.toISOString().slice(0, 10);
 }
 
+/** `dateIso` (YYYY-MM-DD) um `months` Kalendermonate verschieben (UTC-basiert). */
+function shiftDateByMonths(dateIso: string, months: number): string {
+  const [year, month, day] = dateIso.split("-").map(Number);
+  const shifted = new Date(Date.UTC(year, month - 1 + months, day));
+
+  return shifted.toISOString().slice(0, 10);
+}
+
 /**
- * Ruhezeit (§5 ArbZG), Höchstarbeitszeit je Schicht (§3 ArbZG) gegen die
- * Mandanten-Einstellungen (`TenantSettings.minRestHours`/`maxShiftHours`,
- * Default 11h/10h) sowie — sofern ein Geburtsdatum hinterlegt ist und die
- * Person minderjährig ist — Nachtruhe und Sonntagsruhe nach JArbSchG sowie
- * — bei aktiver Mutterschutz-Kennzeichnung — Nachtruhe und Sonntagsruhe
- * nach MuSchG prüfen. Wirft bei Verstoß, passend zum bestehenden
+ * Ruhezeit (§5 ArbZG), Höchstarbeitszeit je Schicht (§3 ArbZG, jetzt als
+ * NETTO-Arbeitszeit — Anwesenheit minus Pause, wie in §2 ArbZG definiert,
+ * statt der reinen Anwesenheitsspanne) gegen die Mandanten-Einstellungen
+ * (`TenantSettings.minRestHours`/`maxShiftHours`, Default 11h/10h) sowie
+ * echte zeitliche Überschneidungen mit anderen Schichten derselben Person,
+ * die gesetzlich vorgeschriebene Mindestpause (§4 ArbZG bzw. §11 JArbSchG
+ * für Jugendliche) und — sofern ein Geburtsdatum hinterlegt ist und die
+ * Person minderjährig ist — Nachtruhe, Sonntagsruhe sowie Tages-/
+ * Wochenhöchstarbeitszeit nach JArbSchG (§8: 8h/Tag, 40h/Woche) sowie — bei
+ * aktiver Mutterschutz-Kennzeichnung — Nachtruhe und Sonntagsruhe nach
+ * MuSchG prüfen. Für Erwachsene zusätzlich eine vereinfachte Prüfung des
+ * §3-Ausgleichszeitraums (Durchschnitt der letzten 6 Kalendermonate darf 8h
+ * Nettoarbeitszeit je Schichttag nicht überschreiten, wenn ein einzelner Tag
+ * über 8h hinausgeht). Wirft bei Verstoß, passend zum bestehenden
  * Fehlerverhalten von createTenantShift/updateTenantShift (Server Actions
  * lassen den Fehler bis zum Error Boundary durchreichen).
+ *
+ * Deckt bewusst nicht das ganze jeweilige Gesetz ab (siehe lib/arbzg-rules.ts):
+ * kein Bundesland-Feiertagskalender, keine behördlichen Ausnahmegenehmigungen
+ * (z. B. verlängerte Ausgleichszeiträume), kein Tarifvertrags-Sonderrecht.
  */
 async function assertArbzgCompliant(input: {
   tenantId: string;
@@ -1088,6 +1243,7 @@ async function assertArbzgCompliant(input: {
   date: string;
   startTime: string;
   endTime: string;
+  breakMinutes: number;
   excludeShiftId?: string;
   /** Verschlüsselter Rohwert aus `TenantEmployee.birthDate` — wird hier entschlüsselt. */
   employeeBirthDate?: string;
@@ -1100,10 +1256,24 @@ async function assertArbzgCompliant(input: {
   const minRestHours = settings?.minRestHours ?? 11;
   const maxShiftHours = settings?.maxShiftHours ?? 10;
   const candidate = { date: input.date, startTime: input.startTime, endTime: input.endTime };
+  const age = input.employeeBirthDate
+    ? calculateAge(decryptField(input.employeeBirthDate), new Date(input.date))
+    : null;
+  const isMinor = age !== null && age < 18;
+  const netMinutes = netWorkingMinutes(candidate, input.breakMinutes);
 
-  if (exceedsMaxShiftHours(candidate, maxShiftHours)) {
+  const requiredBreak = requiredBreakMinutes(shiftDurationHours(candidate) * 60, isMinor);
+
+  if (input.breakMinutes < requiredBreak) {
     throw new Error(
-      `Schicht überschreitet die Höchstarbeitszeit von ${maxShiftHours}h (§3 ArbZG).`,
+      `Pause von ${input.breakMinutes} Min. reicht nicht aus — bei dieser Schichtlänge sind mindestens ` +
+        `${requiredBreak} Min. vorgeschrieben (${isMinor ? "§11 JArbSchG" : "§4 ArbZG"}).`,
+    );
+  }
+
+  if (netMinutes / 60 > maxShiftHours) {
+    throw new Error(
+      `Schicht überschreitet die Höchstarbeitszeit von ${maxShiftHours}h (§3 ArbZG, Nettoarbeitszeit nach Abzug der Pause).`,
     );
   }
 
@@ -1116,8 +1286,16 @@ async function assertArbzgCompliant(input: {
       date: { gte: shiftDateBy(input.date, -2), lte: shiftDateBy(input.date, 2) },
       id: input.excludeShiftId ? { not: input.excludeShiftId } : undefined,
     },
-    select: { date: true, startTime: true, endTime: true },
+    select: { date: true, startTime: true, endTime: true, breakMinutes: true },
   });
+
+  const overlap = findShiftOverlap(neighborShifts, candidate);
+
+  if (overlap) {
+    throw new Error(
+      `Schicht überschneidet sich zeitlich mit einer bestehenden Schicht am ${overlap.neighborDate} derselben Person.`,
+    );
+  }
 
   const violation = findRestPeriodViolation(neighborShifts, candidate, minRestHours);
 
@@ -1128,11 +1306,7 @@ async function assertArbzgCompliant(input: {
     );
   }
 
-  const age = input.employeeBirthDate
-    ? calculateAge(decryptField(input.employeeBirthDate), new Date(input.date))
-    : null;
-
-  if (age !== null && age < 18) {
+  if (isMinor) {
     if (overlapsNightWindow(candidate)) {
       throw new Error(
         "Schicht verstößt gegen die Nachtruhe für Jugendliche (§ 14 JArbSchG, keine Beschäftigung 20-6 Uhr).",
@@ -1142,6 +1316,77 @@ async function assertArbzgCompliant(input: {
     if (isSunday(candidate.date)) {
       throw new Error(
         "Schicht verstößt gegen die Sonntagsruhe für Jugendliche (§ 17/18 JArbSchG).",
+      );
+    }
+
+    if (netMinutes / 60 > 8) {
+      throw new Error(
+        "Schicht überschreitet die Höchstarbeitszeit für Jugendliche von 8h/Tag (§ 8 Abs. 1 JArbSchG).",
+      );
+    }
+
+    const isoWeek = getISOWeekFromDate(new Date(`${input.date}T00:00:00Z`));
+    const weekStart = formatDateValue(getISOWeekStart(isoWeek.year, isoWeek.week));
+    const weekEnd = shiftDateBy(weekStart, 6);
+    const weekShifts = await prisma.tenantShift.findMany({
+      where: {
+        tenantId: input.tenantId,
+        employeeId: input.employeeId,
+        date: { gte: weekStart, lte: weekEnd },
+        id: input.excludeShiftId ? { not: input.excludeShiftId } : undefined,
+      },
+      select: { date: true, startTime: true, endTime: true, breakMinutes: true },
+    });
+    const weeklyMinutes =
+      weekShifts.reduce((sum, shift) => sum + netWorkingMinutes(shift, shift.breakMinutes), 0) +
+      netMinutes;
+
+    if (weeklyMinutes / 60 > 40) {
+      throw new Error(
+        `Schicht überschreitet die Höchstarbeitszeit für Jugendliche von 40h/Woche (§ 8 Abs. 1 JArbSchG) — ` +
+          `bereits ${(weeklyMinutes / 60).toFixed(1)}h in dieser Kalenderwoche.`,
+      );
+    }
+  } else if (netMinutes / 60 > 8) {
+    // §3 Satz 2 ArbZG: eine Verlängerung über 8h/Tag ist nur zulässig, wenn
+    // der Durchschnitt innerhalb von 6 Kalendermonaten 8h/WERKTAG nicht
+    // überschreitet — vereinfacht geprüft über das Fenster endend am
+    // Schichttag, nicht über jedes beliebige 6-Monats-Fenster.
+    //
+    // Der Nenner ist die Zahl der Werktage im Fenster (Mo-Sa, ohne Sonntag —
+    // kein Bundesland-Feiertagskalender vorhanden, siehe Dateikommentar
+    // lib/arbzg-rules.ts), NICHT die Zahl der Tage, an denen zufällig eine
+    // Schicht EXISTIERT: eine erste, noch nie zuvor verplante 8,5h-Schicht
+    // hatte mit "Tage mit Schicht" als Nenner immer genau 1 Tag im Nenner und
+    // wurde dadurch IMMER als Verstoß abgelehnt, unabhängig von möglichen
+    // Ausgleichstagen — der ganze Ausgleichsmechanismus lief für neue/dünn
+    // verplante Zeitpläne leer (Audit-Finding M03/R08). Werktage ohne Schicht
+    // zählen im Nenner korrekt mit 0h und verdünnen den Schnitt.
+    const windowStart = shiftDateByMonths(input.date, -6);
+    const windowShifts = await prisma.tenantShift.findMany({
+      where: {
+        tenantId: input.tenantId,
+        employeeId: input.employeeId,
+        date: { gte: windowStart, lte: input.date },
+        id: input.excludeShiftId ? { not: input.excludeShiftId } : undefined,
+      },
+      select: { date: true, startTime: true, endTime: true, breakMinutes: true },
+    });
+    let workdayCount = 0;
+    for (let cursor = windowStart; cursor <= input.date; cursor = shiftDateBy(cursor, 1)) {
+      if (!isSunday(cursor)) {
+        workdayCount += 1;
+      }
+    }
+    const totalMinutes =
+      windowShifts.reduce((sum, shift) => sum + netWorkingMinutes(shift, shift.breakMinutes), 0) +
+      netMinutes;
+    const averageHours = totalMinutes / 60 / Math.max(1, workdayCount);
+
+    if (averageHours > 8) {
+      throw new Error(
+        `Verlängerung über 8h/Tag ohne ausreichenden Ausgleich: der Durchschnitt der letzten 6 Monate läge bei ` +
+          `${averageHours.toFixed(1)}h/Werktag (§3 Satz 2 ArbZG verlangt im Schnitt max. 8h innerhalb von 6 Monaten).`,
       );
     }
   }
@@ -1185,6 +1430,13 @@ export async function createTenantShift(input: {
         },
       })
     : null;
+
+  // Ein team-gescopter Schichtplaner darf nur Mitarbeiter des eigenen Teams
+  // einteilen, nicht mandantenweit (Audit-Finding H05).
+  if (employee) {
+    await assertEmployeeInScope(access, employee.id);
+  }
+
   const key = await createUniqueShiftKey({
     tenantId: access.tenantId,
     date: input.date,
@@ -1210,6 +1462,7 @@ export async function createTenantShift(input: {
       date: input.date,
       startTime: input.startTime,
       endTime: input.endTime,
+      breakMinutes: input.breakMinutes,
       employeeBirthDate: employee.birthDate,
       employeeMaternityProtectionActive: employee.maternityProtectionActive,
     });
@@ -1269,11 +1522,19 @@ export async function updateTenantShift(input: {
   const access = await requireShiftManager(input.tenantSlug);
   const current = await prisma.tenantShift.findFirst({
     where: { id: input.shiftId, tenantId: access.tenantId },
-    select: { id: true },
+    select: { id: true, employeeId: true },
   });
 
   if (!current) {
     throw new Error("Schicht nicht gefunden.");
+  }
+
+  // Ein team-gescopter Schichtplaner darf weder eine fremde Schicht ändern
+  // noch sie einem Mitarbeiter außerhalb des eigenen Teams zuweisen
+  // (Audit-Finding H05). Eine noch unbesetzte Schicht hat keinen
+  // Zielmitarbeiter, den der Scope einschränken könnte.
+  if (current.employeeId) {
+    await assertEmployeeInScope(access, current.employeeId);
   }
 
   const employee = input.employeeId
@@ -1288,6 +1549,22 @@ export async function updateTenantShift(input: {
         },
       })
     : null;
+
+  if (employee && employee.id !== current.employeeId) {
+    await assertEmployeeInScope(access, employee.id);
+  }
+
+  if (input.locationId) {
+    const location = await prisma.tenantLocation.findFirst({
+      where: { id: input.locationId, tenantId: access.tenantId },
+      select: { id: true },
+    });
+
+    if (!location) {
+      throw new Error("Standort nicht gefunden.");
+    }
+  }
+
   const key = await createUniqueShiftKey({
     tenantId: access.tenantId,
     date: input.date,
@@ -1303,6 +1580,7 @@ export async function updateTenantShift(input: {
       date: input.date,
       startTime: input.startTime,
       endTime: input.endTime,
+      breakMinutes: input.breakMinutes,
       excludeShiftId: input.shiftId,
       employeeBirthDate: employee.birthDate,
       employeeMaternityProtectionActive: employee.maternityProtectionActive,
@@ -1343,12 +1621,18 @@ export async function deleteTenantShift(input: {
       date: true,
       startTime: true,
       endTime: true,
+      employeeId: true,
       employee: { select: { name: true } },
     },
   });
 
   if (!current) {
     throw new Error("Schicht nicht gefunden.");
+  }
+
+  // Siehe updateTenantShift (Audit-Finding H05).
+  if (current.employeeId) {
+    await assertEmployeeInScope(access, current.employeeId);
   }
 
   // Löst bewusst nie selbst eine Benachrichtigung aus, siehe createTenantShift.
@@ -1383,12 +1667,82 @@ export async function deleteTenantShift(input: {
  * jeder bei jedem erneuten Klick auf "Veröffentlichen" wieder eine Mail,
  * auch wenn nur eine einzige andere Schicht betroffen war.
  */
+
+/**
+ * Revalidiert jede eingeteilte Schicht einer Woche gegen `assertArbzgCompliant`
+ * unmittelbar vor dem Veröffentlichen/Zurücksetzen (Audit-Finding M03) —
+ * bisher wurde beim Anlegen/Ändern einzelner Schichten geprüft, aber weder
+ * beim Veröffentlichen noch beim Zurücksetzen erneut, obwohl sich seither
+ * z. B. eine Mutterschutz-/Jugendschutz-relevante Eigenschaft geändert haben
+ * kann. Sammelt alle Verstöße statt beim ersten abzubrechen, damit HR alle
+ * betroffenen Schichten auf einmal sieht statt sie einzeln nacheinander zu
+ * entdecken.
+ */
+async function assertPublishedShiftsArbzgCompliant(
+  tenantId: string,
+  shifts: Array<{
+    id: string;
+    employeeId: string | null;
+    date: string;
+    startTime: string;
+    endTime: string;
+    breakMinutes: number;
+  }>,
+) {
+  const employeeIds = Array.from(
+    new Set(shifts.map((shift) => shift.employeeId).filter((id): id is string => Boolean(id))),
+  );
+
+  if (employeeIds.length === 0) {
+    return;
+  }
+
+  const employees = await prisma.tenantEmployee.findMany({
+    where: { id: { in: employeeIds }, tenantId },
+    select: { id: true, name: true, birthDate: true, maternityProtectionActive: true },
+  });
+  const employeeById = new Map(employees.map((employee) => [employee.id, employee]));
+
+  const violations: string[] = [];
+
+  for (const shift of shifts) {
+    if (!shift.employeeId) {
+      continue;
+    }
+
+    const employee = employeeById.get(shift.employeeId);
+
+    try {
+      await assertArbzgCompliant({
+        tenantId,
+        employeeId: shift.employeeId,
+        date: shift.date,
+        startTime: shift.startTime,
+        endTime: shift.endTime,
+        breakMinutes: shift.breakMinutes,
+        excludeShiftId: shift.id,
+        employeeBirthDate: employee?.birthDate,
+        employeeMaternityProtectionActive: employee?.maternityProtectionActive,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      violations.push(`${employee?.name ?? shift.employeeId} (${shift.date}): ${message}`);
+    }
+  }
+
+  if (violations.length > 0) {
+    throw new Error(
+      `Veröffentlichung abgebrochen — ${violations.length} Schicht(en) verstoßen gegen geltende Arbeitszeitregeln:\n` +
+        violations.join("\n"),
+    );
+  }
+}
 export async function publishShiftWeek(input: {
   tenantSlug: string;
   year: number;
   week: number;
 }) {
-  const access = await requireShiftManager(input.tenantSlug);
+  const access = await requireTenantWideShiftManager(input.tenantSlug);
   const days = buildWeekDays(input.year, input.week);
   const dayIds = days.map((day) => day.id);
 
@@ -1427,6 +1781,8 @@ export async function publishShiftWeek(input: {
       },
     }),
   ]);
+
+  await assertPublishedShiftsArbzgCompliant(access.tenantId, records);
 
   const wasPublished = existingWeek?.status === "published";
   const previousPublishedAt = existingWeek?.publishedAt ?? null;
@@ -1579,7 +1935,7 @@ export async function unpublishShiftWeek(input: {
   year: number;
   week: number;
 }) {
-  const access = await requireShiftManager(input.tenantSlug);
+  const access = await requireTenantWideShiftManager(input.tenantSlug);
 
   const weekRecord = await prisma.tenantShiftWeek.upsert({
     where: {
@@ -1622,7 +1978,7 @@ export async function resetShiftWeekToPublished(input: {
   year: number;
   week: number;
 }) {
-  const access = await requireShiftManager(input.tenantSlug);
+  const access = await requireTenantWideShiftManager(input.tenantSlug);
   const days = buildWeekDays(input.year, input.week);
   const dayIds = days.map((day) => day.id);
   const weekdayByDate = new Map(days.map((day, index) => [day.id, weekdays[index]]));
@@ -1673,6 +2029,14 @@ export async function resetShiftWeekToPublished(input: {
   const knownLocationIds = new Set(existingLocations.map((location) => location.id));
   const knownEmployeeIds = new Set(existingEmployees.map((employee) => employee.id));
 
+  // Bewusst KEINE ArbZG-Revalidierung hier (anders als publishShiftWeek):
+  // die wiederherzustellenden Schnappschuss-Einträge existieren zu diesem
+  // Zeitpunkt noch nicht als eigene Datenbankzeilen, während die aktuellen
+  // (gleich zu löschenden) Schichten der Woche noch da sind — eine Prüfung
+  // über dieselbe DB-Nachbarschaftsabfrage wie assertArbzgCompliant würde
+  // einen Eintrag fälschlich als Überschneidung mit seinem eigenen,
+  // gleich ersetzten Vorgänger melden. Verstöße, die erst NACH der letzten
+  // Veröffentlichung entstanden sind, fallen mit dem Zurücksetzen ohnehin weg.
   await prisma.$transaction([
     prisma.tenantShift.deleteMany({
       where: { tenantId: access.tenantId, date: { in: dayIds } },
@@ -1742,8 +2106,24 @@ export async function saveShiftTemplateFromWeek(input: {
 
   const days = buildWeekDays(input.year, input.week);
   const dayIds = days.map((day) => day.id);
+  // Anders als publish/unpublish/reset ist das hier eine reine Leseoperation
+  // ohne destruktiven Seiteneffekt auf fremde Teams — deshalb genügt eine
+  // echte scopesichere Teiloperation statt vollen Scopes zu verlangen: bei
+  // "own"/"team" fließen nur die eigenen bzw. Team-Schichten dieser Woche in
+  // die neue Vorlage ein (Audit-Finding H05/R08).
+  const scopeFilter = await resolveScopeFilter(access);
+  const scopeWhere =
+    scopeFilter.type === "all"
+      ? {}
+      : scopeFilter.type === "own"
+        ? { employeeId: scopeFilter.employeeId ?? "__none__" }
+        : scopeFilter.type === "team"
+          ? scopeFilter.team
+            ? { employee: { team: scopeFilter.team } }
+            : { employeeId: "__none__" }
+          : { employeeId: "__none__" };
   const records = await prisma.tenantShift.findMany({
-    where: { tenantId: access.tenantId, date: { in: dayIds } },
+    where: { tenantId: access.tenantId, date: { in: dayIds }, ...scopeWhere },
     select: {
       weekday: true,
       startTime: true,
@@ -1855,7 +2235,7 @@ export async function applyShiftTemplateToWeek(input: {
   year: number;
   week: number;
 }) {
-  const access = await requireShiftManager(input.tenantSlug);
+  const access = await requireTenantWideShiftManager(input.tenantSlug);
   const template = await prisma.tenantShiftTemplate.findFirst({
     where: { id: input.templateId, tenantId: access.tenantId },
   });

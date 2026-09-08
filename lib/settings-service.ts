@@ -215,6 +215,7 @@ export async function requireSettingsManager(tenantSlug: string) {
       tenantId: membership.tenant.id,
       tenantSlug: membership.tenant.slug,
       userId,
+      role,
     };
   }
 
@@ -401,21 +402,26 @@ export async function updateTenantSecurity(input: {
 }) {
   const access = await requireSettingsManager(input.tenantSlug);
 
+  // Session-Timeout ist noch nicht implementiert — die Session-Policy in
+  // lib/auth.ts kennt keine mandantenspezifische Laufzeit. Statt den
+  // Schalter stillschweigend zu speichern und eine nicht existierende
+  // Durchsetzung vorzutäuschen, lehnen wir ihn explizit ab (Sicherheitsaudit
+  // L04). twoFactorRequired wird dagegen tatsächlich durchgesetzt (siehe
+  // lib/tenant-access.ts).
+  if (input.sessionTimeout !== undefined) {
+    throw new Error(
+      "Ungültiger Wert: sessionTimeout wird derzeit nicht unterstützt und kann nicht gesetzt werden.",
+    );
+  }
+
   await ensureTenantSettings(access.tenantId);
 
   const updated = await prisma.tenantSettings.update({
     where: { tenantId: access.tenantId },
     data: {
-      // Session-Timeout ist noch nicht implementiert; die Spalte wird hier
-      // bewusst nicht überschrieben, solange die Oberfläche keinen Schalter
-      // dafür anbietet. twoFactorRequired wird dagegen tatsächlich
-      // durchgesetzt (siehe lib/tenant-access.ts).
       ...(input.twoFactorRequired === undefined
         ? {}
         : { twoFactorRequired: normalizeBool(input.twoFactorRequired) }),
-      ...(input.sessionTimeout === undefined
-        ? {}
-        : { sessionTimeout: normalizeBool(input.sessionTimeout) }),
       auditRetentionMonths: normalizeAuditRetentionMonths(input.auditRetentionMonths),
     },
   });
@@ -444,7 +450,16 @@ export async function createTenantInvitation(input: {
 }) {
   const access = await requireSettingsManager(input.tenantSlug);
   const email = normalizeEmail(input.email);
-  const role = input.role === "ADMIN" || input.role === "HR" ? input.role : "EMPLOYEE";
+  const requestedRole = input.role === "ADMIN" || input.role === "HR" ? input.role : "EMPLOYEE";
+  // "settings:write" allein darf niemanden mit mehr Macht einladen, als der
+  // Einladende selbst hat — sonst könnte eine Custom-Rolle mit bloßem
+  // settings:write sich über eine ADMIN/HR-Einladung selbst eskalieren
+  // (Audit-Finding H02). Nur der tatsächliche Tenant-Owner/-Administrator
+  // darf die mandantenweit privilegierten Legacy-Rollen vergeben.
+  const role =
+    requestedRole !== "EMPLOYEE" && access.role !== "OWNER" && access.role !== "ADMIN"
+      ? "EMPLOYEE"
+      : requestedRole;
 
   if (!email) {
     throw new Error("Gültige E-Mail ist erforderlich.");

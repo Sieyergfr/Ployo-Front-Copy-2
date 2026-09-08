@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { recordTenantAudit } from "@/lib/audit";
 import { fileFolders } from "@/lib/files";
@@ -9,8 +10,15 @@ import { createReadSignedUrl } from "@/lib/storage/signed-url";
 import { uploadObject } from "@/lib/storage/upload";
 import { prisma } from "@/lib/prisma";
 import { headers } from "next/headers";
-import { requireTenantAccess, type TenantPermissionArea } from "@/lib/tenant-access";
+import {
+  assertEmployeeInScope,
+  assertLocationInScope,
+  assertTeamInScope,
+  requireTenantAccess,
+  type TenantPermissionArea,
+} from "@/lib/tenant-access";
 import { requireFileAcl, requireTenantFileAreaAccess } from "@/lib/file-access";
+import { assertFileDeletionAllowed } from "@/lib/retention-service";
 
 export type FileOwnerType = "tenant" | "employee" | "location" | "team";
 
@@ -58,6 +66,44 @@ function normalizeFolderPath(value: string) {
 
 export function folderScope(ownerType: FileOwnerType, ownerId?: string) {
   return ownerType === "tenant" ? "tenant" : `${ownerType}:${ownerId ?? "unknown"}`;
+}
+
+function fileFolderScope(file: {
+  employeeId?: string | null;
+  locationId?: string | null;
+  teamId?: string | null;
+}) {
+  return file.employeeId
+    ? folderScope("employee", file.employeeId)
+    : file.locationId
+      ? folderScope("location", file.locationId)
+      : file.teamId
+        ? folderScope("team", file.teamId)
+        : "tenant";
+}
+
+/**
+ * Dieselbe Ordner-PIN-Sperre wie beim Lesen (`assertFolderPinAccess`,
+ * `GET /files`, `GET /files/[fileId]/signed-url`) — bislang ließen sich
+ * Version-Upload, Löschung und Sichtbarkeitswechsel ohne PIN durchführen,
+ * auch wenn der Ordner für den Aufrufer gesperrt war (Audit-Finding H06).
+ */
+async function assertFileFolderPinAccess(
+  tenantSlug: string,
+  file: {
+    folderSlug?: string | null;
+    employeeId?: string | null;
+    locationId?: string | null;
+    teamId?: string | null;
+  },
+  pin?: string | null,
+) {
+  await assertFolderPinAccess({
+    tenantSlug,
+    folderPath: file.folderSlug ?? "",
+    pin: pin ?? null,
+    scope: fileFolderScope(file),
+  });
 }
 
 function formatFileName(value: string) {
@@ -249,6 +295,32 @@ async function validateOwner(input: {
   return { ownerId: undefined, ownerName: "HR" };
 }
 
+/**
+ * `validateOwner` prüfte bisher nur, ob Mitarbeiter/Standort/Team im Tenant
+ * existiert — nicht, ob er im Scope des Aufrufers liegt. Ein team-gescopter
+ * Uploader konnte damit Dateien für beliebige Mitarbeiter/Standorte/Teams
+ * des Mandanten hochladen (Audit-Finding H06).
+ */
+async function assertOwnerInScope(
+  tenantSlug: string,
+  ownerType: FileOwnerType,
+  ownerId: string | undefined,
+  permissionArea?: TenantPermissionArea,
+) {
+  if (!ownerId) return;
+
+  if (ownerType === "employee") {
+    const areaAccess = await requireTenantAccess(tenantSlug, permissionArea ?? "employeeFiles", "write");
+    await assertEmployeeInScope(areaAccess, ownerId);
+  } else if (ownerType === "location") {
+    const areaAccess = await requireTenantAccess(tenantSlug, "locations", "read");
+    await assertLocationInScope(areaAccess, ownerId);
+  } else if (ownerType === "team") {
+    const areaAccess = await requireTenantAccess(tenantSlug, "teams", "read");
+    await assertTeamInScope(areaAccess, ownerId);
+  }
+}
+
 const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
 
 const allowedUploadExtensions = new Set([
@@ -287,10 +359,113 @@ export function validateUploadFile(file: File) {
   }
 }
 
-async function fileToBuffer(file: File) {
+/**
+ * Serverseitig ermittelter, sicherer MIME-Typ je erlaubter Erweiterung —
+ * wird jetzt IMMER statt des vom Client mitgeschickten `file.type`
+ * gespeichert/an S3 übergeben. Ein Client konnte bisher einer .pdf-Datei
+ * `Content-Type: text/html` mitgeben; das wurde unverändert übernommen und
+ * beim späteren Abruf ausgeliefert (Audit-Finding H08).
+ */
+const SAFE_MIME_TYPES_BY_EXTENSION: Record<string, string> = {
+  pdf: "application/pdf",
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  webp: "image/webp",
+  heic: "image/heic",
+  gif: "image/gif",
+  doc: "application/msword",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  xls: "application/vnd.ms-excel",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ppt: "application/vnd.ms-powerpoint",
+  pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  txt: "text/plain",
+  csv: "text/csv",
+  zip: "application/zip",
+};
+
+const ZIP_MAGIC = Buffer.from([0x50, 0x4b, 0x03, 0x04]);
+const OLE2_MAGIC = Buffer.from([0xd0, 0xcf, 0x11, 0xe0]);
+
+/**
+ * Magic-Bytes je Erweiterung, wo der Binärstandard das hergibt — reine
+ * Textformate (txt/csv) haben keine verlässliche Signatur und werden nur
+ * über `containsActiveContentMarkers` geprüft.
+ */
+const MAGIC_BYTE_CHECKS: Record<string, (buffer: Buffer) => boolean> = {
+  pdf: (buffer) => buffer.subarray(0, 5).toString("latin1") === "%PDF-",
+  png: (buffer) =>
+    buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])),
+  jpg: (buffer) => buffer.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff])),
+  jpeg: (buffer) => buffer.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff])),
+  gif: (buffer) => ["GIF87a", "GIF89a"].includes(buffer.subarray(0, 6).toString("latin1")),
+  webp: (buffer) =>
+    buffer.subarray(0, 4).toString("latin1") === "RIFF" &&
+    buffer.subarray(8, 12).toString("latin1") === "WEBP",
+  heic: (buffer) => buffer.subarray(4, 8).toString("latin1") === "ftyp",
+  zip: (buffer) => buffer.subarray(0, 4).equals(ZIP_MAGIC),
+  docx: (buffer) => buffer.subarray(0, 4).equals(ZIP_MAGIC),
+  xlsx: (buffer) => buffer.subarray(0, 4).equals(ZIP_MAGIC),
+  pptx: (buffer) => buffer.subarray(0, 4).equals(ZIP_MAGIC),
+  doc: (buffer) => buffer.subarray(0, 4).equals(OLE2_MAGIC) || buffer.subarray(0, 4).equals(ZIP_MAGIC),
+  xls: (buffer) => buffer.subarray(0, 4).equals(OLE2_MAGIC) || buffer.subarray(0, 4).equals(ZIP_MAGIC),
+  ppt: (buffer) => buffer.subarray(0, 4).equals(OLE2_MAGIC) || buffer.subarray(0, 4).equals(ZIP_MAGIC),
+};
+
+const ACTIVE_CONTENT_MARKERS = [
+  /<!doctype\s+html/i,
+  /<html[\s>]/i,
+  /<script[\s>]/i,
+  /<svg[\s>]/i,
+  /<\?php/i,
+];
+
+function containsActiveContentMarkers(buffer: Buffer) {
+  const head = buffer.subarray(0, 2048).toString("utf8");
+
+  return ACTIVE_CONTENT_MARKERS.some((marker) => marker.test(head));
+}
+
+/**
+ * Erkennt eine .pdf/.png/... benannte Datei, deren tatsächlicher Inhalt
+ * HTML/SVG/Skript ist (oder deren Bytes schlicht nicht zum erlaubten
+ * Binärformat passen) — Erweiterung und vom Client mitgeschickter MIME-Typ
+ * allein sagen nichts über den echten Inhalt aus (Audit-Finding H08).
+ */
+function validateUploadFileContent(buffer: Buffer, extension: string) {
+  if (containsActiveContentMarkers(buffer)) {
+    throw new Error(
+      "Diese Datei enthält aktive Inhalte (HTML/Skript) und kann nicht hochgeladen werden.",
+    );
+  }
+
+  const magicCheck = MAGIC_BYTE_CHECKS[extension];
+
+  if (magicCheck && !magicCheck(buffer)) {
+    throw new Error(
+      `Der Dateiinhalt entspricht nicht der Dateiendung ".${extension}".`,
+    );
+  }
+}
+
+/**
+ * Bewusst der EINZIGE Weg, aus einem Client-`File` Bytes + MIME-Typ für die
+ * Ablage zu gewinnen — jeder Upload-/Versions-Pfad (generisch, Self-Service,
+ * Info-Anfragen) muss ihn verwenden, sonst bleibt der clientseitige
+ * `file.type`/eine unbestätigte Endung wirksam (Audit-Finding H08/R04: der
+ * Self-Service-Upload rief bisher nur `validateUploadFile`, nicht diese
+ * Inhaltsprüfung, auf).
+ */
+export async function fileToBuffer(file: File) {
   validateUploadFile(file);
 
-  return Buffer.from(await file.arrayBuffer());
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const extension = getFileExtension(file.name);
+
+  validateUploadFileContent(buffer, extension);
+
+  return { buffer, mimeType: SAFE_MIME_TYPES_BY_EXTENSION[extension] ?? "application/octet-stream" };
 }
 
 export async function uploadTenantFile(input: UploadTenantFileInput) {
@@ -301,6 +476,7 @@ export async function uploadTenantFile(input: UploadTenantFileInput) {
     ownerType,
     ownerId: input.ownerId,
   });
+  await assertOwnerInScope(input.tenantSlug, ownerType, owner.ownerId, input.permissionArea);
   const scope = folderScope(ownerType, owner.ownerId);
   const bucketConfig = getStorageBucket(input.bucketId);
   const originalName = formatFileName(input.file.name);
@@ -342,11 +518,12 @@ export async function uploadTenantFile(input: UploadTenantFileInput) {
     ownerType,
     ownerId: owner.ownerId,
   });
+  const { buffer, mimeType } = await fileToBuffer(input.file);
   const uploaded = await uploadObject({
     bucketId: input.bucketId,
     key: storageKey,
-    body: await fileToBuffer(input.file),
-    contentType: input.file.type || "application/octet-stream",
+    body: buffer,
+    contentType: mimeType,
     metadata: {
       tenantId: access.tenantId,
       originalName,
@@ -363,7 +540,7 @@ export async function uploadTenantFile(input: UploadTenantFileInput) {
       storageKey: uploaded.key,
       originalName,
       displayName: originalName,
-      mimeType: input.file.type || "application/octet-stream",
+      mimeType,
       sizeBytes: input.file.size,
       extension: getFileExtension(originalName),
       folderSlug,
@@ -518,6 +695,7 @@ export async function createTenantFileFolder(input: {
     ownerType,
     ownerId: input.ownerId,
   });
+  await assertOwnerInScope(input.tenantSlug, ownerType, owner.ownerId);
   const scope = folderScope(ownerType, owner.ownerId);
 
   if (!name) {
@@ -760,6 +938,7 @@ export async function uploadTenantFileVersion(input: {
   tenantSlug: string;
   fileId: string;
   file: File;
+  pin?: string;
 }) {
   const access = await requireTenantFileAccess(input.tenantSlug);
   const current = await prisma.tenantFile.findFirst({
@@ -775,6 +954,55 @@ export async function uploadTenantFileVersion(input: {
   }
 
   const rootId = current.parentId ?? current.id;
+
+  // "files:write" allein autorisiert nur den Datei-Bereich generell — wer
+  // den Inhalt über ACL/Fachbereich/Eigentümer-Scope nicht lesen dürfte,
+  // darf ihn auch nicht durch eine neue Version ersetzen (Audit-Finding
+  // H06). Die Schutz-Metadaten (ACL, hiddenFromEmployee, documentType, ...)
+  // hängen am Wurzeldokument, nicht notwendigerweise an der zuletzt aktiven
+  // Version (Audit-Finding H07) — deshalb hier wie beim Lesepfad
+  // (`getTenantFileSignedUrl`) explizit dort nachschlagen UND anschließend
+  // vollständig auf die neue Version übertragen, statt sie auf die
+  // Schema-Defaults zurückfallen zu lassen.
+  // Fällt auf die aktuelle Version selbst zurück, falls das Wurzeldokument
+  // bereits (nach 30 Tagen) bereinigt wurde — ein vorzeitig gepurgtes
+  // Elternteil darf eine sonst aktive, weiterhin vollständig ausgestattete
+  // Version nicht unbedienbar machen (Audit-Finding H07).
+  const metadataSource =
+    (current.parentId
+      ? await prisma.tenantFile.findFirst({
+          where: { id: rootId, tenantId: access.tenantId, status: { not: "deleted" } },
+        })
+      : current) ?? current;
+
+  const fileAreaAccess = await requireTenantAccess(input.tenantSlug, "files", "read");
+  requireFileAcl(metadataSource, fileAreaAccess);
+  await requireTenantFileAreaAccess(fileAreaAccess, current);
+  await assertFileFolderPinAccess(input.tenantSlug, current, input.pin);
+
+  // Fachliche Vertrags-/Abrechnungs-/Krankheits-Verknüpfung: Ohne Umhängen
+  // bliebe der Verweis nach dem Ersetzen auf der jetzt "replaced" alten
+  // Version stehen — die neue Version wäre für requireTenantFileAreaAccess
+  // nicht mehr als Vertrag/Abrechnung/Krankmeldung erkennbar und fiele auf
+  // den allgemeineren "employeeFiles"-Bereich zurück (Audit-Finding H07).
+  // (`requireTenantFileAreaAccess` prüft zusätzlich den ganzen
+  // Versionenverbund, das hier ist trotzdem die maßgebliche, aktuelle
+  // Verknüpfung für Folgeaktionen wie Löschung/Anzeige der Krankmeldung.)
+  const [linkedContract, linkedPayroll, linkedSickness] = await Promise.all([
+    prisma.tenantEmployeeContract.findUnique({
+      where: { fileId: current.id },
+      select: { id: true },
+    }),
+    prisma.tenantPayrollStatement.findUnique({
+      where: { fileId: current.id },
+      select: { id: true },
+    }),
+    prisma.tenantSicknessReport.findFirst({
+      where: { attachmentFileId: current.id },
+      select: { id: true },
+    }),
+  ]);
+
   const nextVersion = current.version + 1;
   const originalName = formatFileName(input.file.name || current.originalName);
   const bucketConfig = getStorageBucket("hrDocuments");
@@ -793,10 +1021,11 @@ export async function uploadTenantFileVersion(input: {
     ownerId,
     version: nextVersion,
   });
+  const { buffer, mimeType } = await fileToBuffer(input.file);
   const uploaded = await uploadObject({
     key: storageKey,
-    body: await fileToBuffer(input.file),
-    contentType: input.file.type || current.mimeType,
+    body: buffer,
+    contentType: mimeType,
     metadata: {
       tenantId: access.tenantId,
       originalName,
@@ -810,7 +1039,7 @@ export async function uploadTenantFileVersion(input: {
       data: { status: "replaced", replacedAt: new Date() },
     });
 
-    return tx.tenantFile.create({
+    const created = await tx.tenantFile.create({
       data: {
         tenantId: access.tenantId,
         employeeId: current.employeeId,
@@ -821,7 +1050,7 @@ export async function uploadTenantFileVersion(input: {
         storageKey: uploaded.key,
         originalName,
         displayName: current.displayName || originalName,
-        mimeType: input.file.type || current.mimeType,
+        mimeType,
         sizeBytes: input.file.size,
         extension: getFileExtension(originalName),
         folderSlug: current.folderSlug,
@@ -830,20 +1059,92 @@ export async function uploadTenantFileVersion(input: {
         status: "active",
         version: nextVersion,
         provider: uploaded.provider,
+        // Schutz-/Lebenszyklus-Metadaten vollständig vom Wurzeldokument
+        // übernehmen statt sie auf die Schema-Defaults zurückfallen zu
+        // lassen (Audit-Finding H07).
+        documentType: metadataSource.documentType,
+        hiddenFromEmployee: metadataSource.hiddenFromEmployee,
+        description: metadataSource.description,
+        validFrom: metadataSource.validFrom,
+        expiresAt: metadataSource.expiresAt,
+        reminderAt: metadataSource.reminderAt,
+        tagsJson: metadataSource.tagsJson as Prisma.InputJsonValue,
+        assignedEmployeeId: metadataSource.assignedEmployeeId,
+        assignedEmployeeName: metadataSource.assignedEmployeeName,
+        assignedLocationId: metadataSource.assignedLocationId,
+        assignedLocationName: metadataSource.assignedLocationName,
+        accessRoleIdsJson: metadataSource.accessRoleIdsJson as Prisma.InputJsonValue,
+        accessRoleNamesJson: metadataSource.accessRoleNamesJson as Prisma.InputJsonValue,
+        accessUserIdsJson: metadataSource.accessUserIdsJson as Prisma.InputJsonValue,
+        accessUserNamesJson: metadataSource.accessUserNamesJson as Prisma.InputJsonValue,
       },
     });
+
+    // Siehe oben (Audit-Finding H07): Vertrags-/Abrechnungsverknüpfung auf
+    // die neue Version umhängen, statt sie auf der jetzt "replaced" alten
+    // Version stehen zu lassen.
+    if (linkedContract) {
+      await tx.tenantEmployeeContract.update({
+        where: { id: linkedContract.id },
+        data: { fileId: created.id },
+      });
+    }
+
+    if (linkedPayroll) {
+      await tx.tenantPayrollStatement.update({
+        where: { id: linkedPayroll.id },
+        data: { fileId: created.id },
+      });
+    }
+
+    if (linkedSickness) {
+      await tx.tenantSicknessReport.update({
+        where: { id: linkedSickness.id },
+        data: { attachmentFileId: created.id },
+      });
+    }
+
+    return created;
   });
 }
 
 export async function softDeleteTenantFile(input: {
   tenantSlug: string;
   fileId: string;
+  pin?: string;
 }) {
   const access = await requireTenantAccess(input.tenantSlug, "files", "read");
 
   if (!access.canDelete) {
     throw new Error("FORBIDDEN");
   }
+
+  const target = await prisma.tenantFile.findFirst({
+    where: { id: input.fileId, tenantId: access.tenantId, status: { not: "deleted" } },
+  });
+
+  if (!target) {
+    throw new Error("Datei nicht gefunden.");
+  }
+
+  // Siehe uploadTenantFileVersion (Audit-Finding H06): "files:read" +
+  // canDelete allein ist keine Freigabe für eine Datei, deren Inhalt der
+  // Aufrufer über ACL/Fachbereich/Eigentümer-Scope gar nicht lesen dürfte.
+  const rootId = target.parentId ?? target.id;
+  // Fällt auf die Datei selbst zurück, falls das Wurzeldokument bereits
+  // bereinigt wurde (Audit-Finding H07, siehe uploadTenantFileVersion).
+  const aclFile =
+    (target.parentId
+      ? await prisma.tenantFile.findFirst({
+          where: { id: rootId, tenantId: access.tenantId, status: { not: "deleted" } },
+          select: { accessRoleIdsJson: true, accessUserIdsJson: true },
+        })
+      : target) ?? target;
+
+  requireFileAcl(aclFile, access);
+  await requireTenantFileAreaAccess(access, target);
+  await assertFileFolderPinAccess(input.tenantSlug, target, input.pin);
+  await assertFileDeletionAllowed(access.tenantId, target);
 
   const deleted = await markObjectDeleted({
     tenantId: access.tenantId,
@@ -879,6 +1180,7 @@ export async function setTenantFileEmployeeVisibility(input: {
   tenantSlug: string;
   fileId: string;
   hidden: boolean;
+  pin?: string;
 }) {
   const access = await requireTenantFileAccess(input.tenantSlug, "employee");
   const file = await prisma.tenantFile.findFirst({
@@ -887,7 +1189,18 @@ export async function setTenantFileEmployeeVisibility(input: {
       tenantId: access.tenantId,
       status: { not: "deleted" },
     },
-    select: { id: true, parentId: true, displayName: true, employeeId: true },
+    select: {
+      id: true,
+      parentId: true,
+      displayName: true,
+      employeeId: true,
+      locationId: true,
+      teamId: true,
+      hiddenFromEmployee: true,
+      accessRoleIdsJson: true,
+      accessUserIdsJson: true,
+      folderSlug: true,
+    },
   });
 
   // Nur Dateien, die wirklich an einer Personalakte hängen — bei einer
@@ -898,6 +1211,23 @@ export async function setTenantFileEmployeeVisibility(input: {
   }
 
   const rootId = file.parentId ?? file.id;
+
+  // Siehe uploadTenantFileVersion (Audit-Finding H06/H07): wer die Datei über
+  // ACL/Fachbereich/Eigentümer-Scope nicht lesen dürfte, darf auch ihre
+  // Sichtbarkeit für den Mitarbeiter nicht umschalten; fällt auf die Datei
+  // selbst zurück, falls das Wurzeldokument bereits bereinigt wurde.
+  const aclFile =
+    (file.parentId
+      ? await prisma.tenantFile.findFirst({
+          where: { id: rootId, tenantId: access.tenantId, status: { not: "deleted" } },
+          select: { accessRoleIdsJson: true, accessUserIdsJson: true },
+        })
+      : file) ?? file;
+
+  const fileAreaAccess = await requireTenantAccess(input.tenantSlug, "files", "read");
+  requireFileAcl(aclFile, fileAreaAccess);
+  await requireTenantFileAreaAccess(fileAreaAccess, file);
+  await assertFileFolderPinAccess(input.tenantSlug, file, input.pin);
 
   await prisma.tenantFile.updateMany({
     where: {
@@ -945,6 +1275,7 @@ export async function setTenantFileFolderEmployeeVisibility(input: {
     ownerType: "employee",
     ownerId: input.employeeId,
   });
+  await assertOwnerInScope(input.tenantSlug, "employee", owner.ownerId);
   const scope = folderScope("employee", owner.ownerId);
   const path = normalizeFolderPath(input.path);
 
@@ -1013,14 +1344,17 @@ export async function getTenantFileSignedUrl(input: {
   }
 
   const rootId = baseFile.parentId ?? baseFile.id;
-  const aclFile = baseFile.parentId
-    ? await prisma.tenantFile.findFirst({
-        where: { id: rootId, tenantId: access.tenantId, status: { not: "deleted" } },
-        select: { accessRoleIdsJson: true, accessUserIdsJson: true },
-      })
-    : baseFile;
+  // Fällt auf die Datei selbst zurück, falls das Wurzeldokument bereits
+  // bereinigt wurde — ein vorzeitig gepurgtes Elternteil darf eine sonst
+  // aktive Version nicht unlesbar machen (Audit-Finding H07).
+  const aclFile =
+    (baseFile.parentId
+      ? await prisma.tenantFile.findFirst({
+          where: { id: rootId, tenantId: access.tenantId, status: { not: "deleted" } },
+          select: { accessRoleIdsJson: true, accessUserIdsJson: true },
+        })
+      : baseFile) ?? baseFile;
 
-  if (!aclFile) throw new Error("Datei nicht gefunden.");
   requireFileAcl(aclFile, access);
   await requireTenantFileAreaAccess(access, baseFile);
 

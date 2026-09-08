@@ -1,6 +1,6 @@
 import "server-only";
 
-import { canAccessFileAcl } from "@/lib/file-access";
+import { canAccessFileAcl, requireTenantFileAreaAccess } from "@/lib/file-access";
 import {
   formatUpdatedAt,
   mapTenantFileToFileItem,
@@ -10,7 +10,13 @@ import {
   type ReminderFileBrowserSource,
 } from "@/lib/files";
 import { prisma } from "@/lib/prisma";
-import { requireTenantAccess, resolveScopeFilter } from "@/lib/tenant-access";
+import {
+  assertEmployeeInScope,
+  assertLocationInScope,
+  assertTeamInScope,
+  requireTenantAccess,
+  resolveScopeFilter,
+} from "@/lib/tenant-access";
 
 type TenantFileFolderRecord = {
   id: string;
@@ -169,43 +175,78 @@ export async function getReminderFileBrowserData(
     }),
   ]);
 
-  const browserFiles = files.filter((file) => canAccessFileAcl(file.parent ?? file, tenant)).map((file) => {
-    const owner = getReminderFileOwner(file);
-    const item = mapTenantFileToFileItem(file);
+  const aclFilteredFiles = files.filter((file) => canAccessFileAcl(file.parent ?? file, tenant));
 
-    return {
-      id: file.id,
-      name: item.name,
-      type: item.type,
-      source: getReminderFileSource(file),
-      ownerId: owner.ownerId,
-      ownerName: owner.ownerName,
-      folderSlug: file.folderSlug,
-      folderName: file.folderName,
-      updatedAt: item.updatedAt,
-      size: item.size,
-    };
-  });
+  // Wie in `getOwnerFiles`: diese Liste umfasst ALLE aktiven Dateien des
+  // Mandanten, nicht nur zentrale — ohne Fachbereichsprüfung sah ein
+  // Aufrufer mit generischem "files:read" hier auch Personalakten-Dateien
+  // außerhalb seiner Fachbereichs-Berechtigung (Audit-Finding H15).
+  const areaAccessAllowed: boolean[] = [];
+  for (const file of aclFilteredFiles) {
+    try {
+      await requireTenantFileAreaAccess(tenant, file);
+      areaAccessAllowed.push(true);
+    } catch {
+      areaAccessAllowed.push(false);
+    }
+  }
 
-  const browserFolders = folders.map((folder) => {
-    const owner = getReminderFileOwner(folder);
-    const source = getReminderFileSource(folder);
+  const browserFiles = aclFilteredFiles
+    .filter((_file, index) => areaAccessAllowed[index])
+    .map((file) => {
+      const owner = getReminderFileOwner(file);
+      const item = mapTenantFileToFileItem(file);
 
-    return {
-      id: folder.id,
-      name: folder.name,
-      path: folder.path,
-      source,
-      ownerId: owner.ownerId,
-      ownerName: owner.ownerName,
-      fileCount: browserFiles.filter(
-        (file) =>
-          file.source === source &&
-          file.ownerId === owner.ownerId &&
-          file.folderSlug === folder.path,
-      ).length,
-    };
-  });
+      return {
+        id: file.id,
+        name: item.name,
+        type: item.type,
+        source: getReminderFileSource(file),
+        ownerId: owner.ownerId,
+        ownerName: owner.ownerName,
+        folderSlug: file.folderSlug,
+        folderName: file.folderName,
+        updatedAt: item.updatedAt,
+        size: item.size,
+      };
+    });
+
+  // Ordner durchliefen bisher KEINE Fachbereichsprüfung — anders als Dateien
+  // gaben sie Namen/Owner tenantweit preis, auch aus Bereichen ohne
+  // ausreichendes Fachrecht (z. B. Personalakten-Ordner ohne employeeFiles-
+  // Zugriff) oder als "vor dem Mitarbeiter verborgen" markiert
+  // (Audit-Finding H15).
+  const folderAreaAccessAllowed: boolean[] = [];
+  for (const folder of folders) {
+    try {
+      await requireTenantFileAreaAccess(tenant, folder);
+      folderAreaAccessAllowed.push(true);
+    } catch {
+      folderAreaAccessAllowed.push(false);
+    }
+  }
+
+  const browserFolders = folders
+    .filter((_folder, index) => folderAreaAccessAllowed[index])
+    .map((folder) => {
+      const owner = getReminderFileOwner(folder);
+      const source = getReminderFileSource(folder);
+
+      return {
+        id: folder.id,
+        name: folder.name,
+        path: folder.path,
+        source,
+        ownerId: owner.ownerId,
+        ownerName: owner.ownerName,
+        fileCount: browserFiles.filter(
+          (file) =>
+            file.source === source &&
+            file.ownerId === owner.ownerId &&
+            file.folderSlug === folder.path,
+        ).length,
+      };
+    });
 
   return {
     files: browserFiles,
@@ -347,7 +388,20 @@ export async function getOwnerFiles(input: {
         ? "locations"
         : "teams";
 
-  await requireTenantAccess(input.tenantSlug, area, "read");
+  const ownerAreaAccess = await requireTenantAccess(input.tenantSlug, area, "read");
+
+  // "employees/locations/teams:read" allein autorisiert nur den Bereich
+  // generell, nicht den konkreten `ownerId` — ein team-/own-gescopter
+  // Aufrufer konnte bisher über eine bekannte fremde ID trotzdem Datei-/
+  // Ordner-Metadaten (Name, Dokumentart, Ordnername, hiddenFromEmployee)
+  // außerhalb seines Scopes sehen (Audit-Finding H15).
+  if (input.ownerType === "employee") {
+    await assertEmployeeInScope(ownerAreaAccess, input.ownerId);
+  } else if (input.ownerType === "location") {
+    await assertLocationInScope(ownerAreaAccess, input.ownerId);
+  } else {
+    await assertTeamInScope(ownerAreaAccess, input.ownerId);
+  }
 
   const ownerFilter = {
     employeeId: input.ownerType === "employee" ? input.ownerId : undefined,
@@ -381,8 +435,25 @@ export async function getOwnerFiles(input: {
     }),
   ]);
 
-  const files = records
-    .filter((file) => canAccessFileAcl(file.parent ?? file, tenant))
+  const aclFilteredRecords = records.filter((file) => canAccessFileAcl(file.parent ?? file, tenant));
+
+  // Datei-ACL allein sagt nichts über den fachlichen Bereich aus (payroll/
+  // contracts/sickness/employeeFiles) — ohne diese Zweitprüfung sah ein
+  // Aufrufer mit generischem "files:read" bislang auch Metadaten von
+  // Personalakten-Dateien außerhalb seiner Fachbereichs-Berechtigung
+  // (Audit-Finding H15), analog zu `getTenantFileSignedUrl`.
+  const areaAccessAllowed: boolean[] = [];
+  for (const file of aclFilteredRecords) {
+    try {
+      await requireTenantFileAreaAccess(tenant, file);
+      areaAccessAllowed.push(true);
+    } catch {
+      areaAccessAllowed.push(false);
+    }
+  }
+
+  const files = aclFilteredRecords
+    .filter((_file, index) => areaAccessAllowed[index])
     .map((file) => ({
       id: file.id,
       name: file.displayName || file.originalName,
@@ -397,15 +468,31 @@ export async function getOwnerFiles(input: {
       hiddenFromEmployee: file.hiddenFromEmployee,
     }));
 
-  const folders = folderRecords.map((folder) => ({
-    id: folder.id,
-    name: folder.name,
-    slug: folder.path,
-    locked: folder.locked,
-    fileCount: files.filter((file) => file.folderSlug === folder.path).length,
-    updatedAt: (folder.updatedAt ?? folder.createdAt).toISOString(),
-    hiddenFromEmployee: folder.hiddenFromEmployee,
-  }));
+  // Wie bei Dateien oben: dieselbe Fachbereichs-/Sichtbarkeitsprüfung, statt
+  // sich allein auf den bereits geprüften `ownerFilter` zu verlassen — greift
+  // insbesondere `hiddenFromEmployee`, falls der Aufrufer selbst der
+  // betroffene Mitarbeiter ist (Audit-Finding H15).
+  const folderAreaAccessAllowed: boolean[] = [];
+  for (const folder of folderRecords) {
+    try {
+      await requireTenantFileAreaAccess(tenant, folder);
+      folderAreaAccessAllowed.push(true);
+    } catch {
+      folderAreaAccessAllowed.push(false);
+    }
+  }
+
+  const folders = folderRecords
+    .filter((_folder, index) => folderAreaAccessAllowed[index])
+    .map((folder) => ({
+      id: folder.id,
+      name: folder.name,
+      slug: folder.path,
+      locked: folder.locked,
+      fileCount: files.filter((file) => file.folderSlug === folder.path).length,
+      updatedAt: (folder.updatedAt ?? folder.createdAt).toISOString(),
+      hiddenFromEmployee: folder.hiddenFromEmployee,
+    }));
 
   return { files, folders };
 }

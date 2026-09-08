@@ -263,7 +263,6 @@ export default async function TeamDetailPage({
   const auditEntries = canViewAudit
     ? await getAuditLogsForEntity({
         tenantSlug: tenant,
-        area: "teams",
         entityType: "team",
         entityId: team.dbId ?? team.id,
       })

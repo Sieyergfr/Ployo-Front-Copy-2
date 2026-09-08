@@ -28,15 +28,29 @@ jobs:
       BETTER_AUTH_URL: "http://localhost:3000"
       CRON_SECRET: "ci-only-cron-secret-not-used-in-production"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Dependency-Vulnerabilitäts-Gate
+        # Bricht bei critical-Findings ab. Für High gilt eine benannte
+        # Ausnahmeliste statt eines pauschalen Warnhinweises für JEDEN
+        # High-Fund (Audit-Finding L02): aktuell nur deepmerge-ts <8.0.0
+        # (transitiv über @prisma/config -> prisma), deren einzige Behebung
+        # (npm audit fix --force) prisma auf 6.12.0 downgraden würde. Reines
+        # Dev-Tooling (Schema-Merging), kein Laufzeitpfad mit untrusted
+        # Input – akzeptiertes Restrisiko, siehe Sicherheitsaudit L02. Ein
+        # NEUER High-/Critical-Fund in einem anderen Paket bricht die
+        # Pipeline weiterhin ab, siehe scripts/check-audit-allowlist.mjs.
+        run: |
+          npm audit --audit-level=critical
+          node scripts/check-audit-allowlist.mjs
 
       - name: Apply migrations
         run: npx prisma migrate deploy
@@ -92,7 +106,7 @@ jobs:
 
       - name: Upload Playwright report on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: playwright-report
           path: test-results/

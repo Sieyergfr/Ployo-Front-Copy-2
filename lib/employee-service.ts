@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
-import { deleteUserAccessImmediately } from "@/lib/account-service";
 import { decryptField, encryptField } from "@/lib/encryption";
 import { isUniqueConstraintError } from "@/lib/prisma-errors";
 import {
@@ -43,6 +42,7 @@ import {
   requireTenantMembership,
   resolveScopeFilter,
   scopeAllowsTarget,
+  type TenantAccess,
 } from "@/lib/tenant-access";
 import type { PermissionLevel } from "@/lib/roles";
 import { canAccessFileAcl } from "@/lib/file-access";
@@ -51,6 +51,7 @@ import { isStripeConfigured } from "@/lib/stripe/client";
 import { checkEmployeeLimit, planEmployeeLimits } from "@/lib/stripe/plans";
 import { computeVacationAccount } from "@/lib/vacations";
 import { syncMembershipRoleFromEmployeeRole } from "@/lib/role-service";
+import { assertEmployeeDeletionAllowed } from "@/lib/retention-service";
 
 import { notifyEmployeeOfInfoRequest } from "@/lib/notifications/events";
 
@@ -789,7 +790,12 @@ async function employeeScopeWhere(tenantSlug: string, required: PermissionLevel 
   }
 
   if (scopeFilter.type === "team") {
-    return { tenantId: access.tenantId, team: scopeFilter.team };
+    // Kein eigenes Team (leerer String) darf nicht "alle Mitarbeiter ohne
+    // Team" bedeuten — sonst sähe ein Team-Scope ohne eigene Teamzuordnung
+    // plötzlich alle nicht zugeordneten Kolleg:innen (Audit-Finding H03).
+    return scopeFilter.team
+      ? { tenantId: access.tenantId, team: scopeFilter.team }
+      : { tenantId: access.tenantId, id: "__none__" };
   }
 
   // "employees" unterstützt (bisher) keinen "assigned"-Scope — sollte er
@@ -989,9 +995,12 @@ export async function getEmployeesForTenant(
   }
 
   const records = await prisma.tenantEmployee.findMany({
-    // Scope zuerst, Filter danach: beide landen als AND nebeneinander, ein
-    // Suchbegriff kann die Sichtbarkeitsgrenze also nicht überschreiben.
-    where: { ...where, ...(await employeeFilterWhere(where.tenantId, filters)) },
+    // Scope und Filter als eigene AND-Zweige, NICHT flach zusammengespreadet:
+    // beide können ein "id"-Feld setzen (Own-Scope vs. Standortfilter), ein
+    // flaches { ...where, ...filter } ließe das Filter-"id" das Scope-"id"
+    // stillschweigend überschreiben statt es zusätzlich einzuschränken
+    // (Audit-Finding H03).
+    where: { AND: [where, await employeeFilterWhere(where.tenantId, filters)] },
     orderBy: { createdAt: "asc" },
     include: {
       privateAddress: true,
@@ -1065,6 +1074,7 @@ export async function getEmployeesForTenant(
         contractVacation: employee.contractDetails.vacation,
         storedVacationTotal: employee.vacationTotal,
         approvedDaysThisYear: record.vacationRequests.reduce((sum, r) => sum + r.days, 0),
+        carryover: record.vacationCarryover,
       }),
       status: computeLiveEmployeeStatus({
         storedStatus: record.status,
@@ -1138,26 +1148,8 @@ export async function getEmployeeForTenant(tenantSlug: string, employeeHandle: s
     payrollScope !== null &&
     scopeAllowsTarget(payrollScope, { id: record.id, team: record.team });
 
-  const sensitiveDataAccess = await getOptionalTenantAccess(tenantSlug, "sensitiveData", "read");
-  const sensitiveDataScope = sensitiveDataAccess ? await resolveScopeFilter(sensitiveDataAccess) : null;
-  const canViewSensitiveData =
-    sensitiveDataScope !== null &&
-    scopeAllowsTarget(sensitiveDataScope, { id: record.id, team: record.team });
-
-  const contractsAccess = await getOptionalTenantAccess(tenantSlug, "contracts", "read");
-  const contractsScope = contractsAccess ? await resolveScopeFilter(contractsAccess) : null;
-  const canViewContracts =
-    contractsScope !== null &&
-    scopeAllowsTarget(contractsScope, { id: record.id, team: record.team });
-
-  // Mutterschutz ist ein eigener Berechtigungsbereich, nicht Teil von
-  // sensitiveData (siehe lib/roles.ts) — z. B. damit die Lohnbuchhaltung
-  // nicht automatisch mitsieht.
-  const mutterschutzAccess = await getOptionalTenantAccess(tenantSlug, "mutterschutz", "read");
-  const mutterschutzScope = mutterschutzAccess ? await resolveScopeFilter(mutterschutzAccess) : null;
-  const canViewMutterschutz =
-    mutterschutzScope !== null &&
-    scopeAllowsTarget(mutterschutzScope, { id: record.id, team: record.team });
+  const { canViewSensitiveData, canViewContracts, canViewMutterschutz } =
+    await employeeVisibilityFlags(tenantSlug, { id: record.id, team: record.team });
 
   const payrollStatements = canViewPayroll
     ? await prisma.tenantPayrollStatement.findMany({
@@ -1193,6 +1185,7 @@ export async function getEmployeeForTenant(tenantSlug: string, employeeHandle: s
       contractVacation: employee.contractDetails.vacation,
       storedVacationTotal: employee.vacationTotal,
       approvedDaysThisYear: record.vacationRequests.reduce((sum, r) => sum + r.days, 0),
+      carryover: record.vacationCarryover,
     }),
     status: computeLiveEmployeeStatus({
       storedStatus: record.status,
@@ -1517,11 +1510,13 @@ export async function createTenantEmployeeRecord({
     );
   }
 
-  await syncMembershipRoleFromEmployeeRole({
-    tenantId,
-    userId: record.userId,
-    roleName: record.role,
-  });
+  if (await canManageMembershipRoles(input.tenantSlug)) {
+    await syncMembershipRoleFromEmployeeRole({
+      tenantId,
+      userId: record.userId,
+      roleName: record.role,
+    });
+  }
 
   await recordTenantAudit({
     tenantId,
@@ -1534,7 +1529,13 @@ export async function createTenantEmployeeRecord({
     detail: record.name,
   });
 
-  return { ...toEmployee(record), locations };
+  const { canViewSensitiveData, canViewContracts, canViewMutterschutz } =
+    await employeeVisibilityFlags(input.tenantSlug, { id: record.id, team: record.team });
+
+  return {
+    ...toEmployee(record, canViewSensitiveData, canViewContracts, canViewMutterschutz),
+    locations,
+  };
 }
 
 export async function createTenantEmployee(input: EmployeeMutationInput) {
@@ -1699,14 +1700,16 @@ export async function linkOwnTenantEmployee(input: { tenantSlug: string; employe
     data: { userId: access.userId },
   });
 
-  // Falls HR vor der Verknüpfung bereits eine Berechtigungsrolle auf der
-  // Personalakte hinterlegt hat, jetzt auf die frisch entstandene
-  // TenantMembership anwenden (siehe syncMembershipRoleFromEmployeeRole).
-  await syncMembershipRoleFromEmployeeRole({
-    tenantId: access.tenantId,
-    userId: access.userId,
-    roleName: target.role,
-  });
+  // Absichtlich KEIN automatischer syncMembershipRoleFromEmployeeRole hier
+  // mehr (Audit-Finding H01/R02): `target.role` kann von jedem Aufrufer mit
+  // bloßem `employees:write` gesetzt worden sein, ohne `roles:write`. Ein
+  // Angreifer mit `employees:write` könnte sich sonst selbst eine noch nicht
+  // verknüpfte Akte mit einem privilegierten Rollennamen anlegen und beim
+  // Verknüpfen (hier, nur `requireTenantMembership` nötig) unautorisiert die
+  // echte `TenantMembership.roleId` erhalten. Eine vorab von HR hinterlegte
+  // Berechtigungsrolle wird erst wirksam, wenn jemand mit `roles:write` sie
+  // NACH der Verknüpfung ausdrücklich (erneut) über `updateTenantEmployee`
+  // bestätigt.
 
   await recordTenantAudit({
     tenantId: access.tenantId,
@@ -1819,6 +1822,48 @@ async function canWriteEmployeeSubarea(
   }
 
   return scopeAllowsTarget(await resolveScopeFilter(access), target);
+}
+
+/**
+ * Ob der Aufrufer echte Rollenverwaltung darf — Voraussetzung dafür, dass das
+ * freie "Berechtigungsrolle"-Feld auf der Personalakte tatsächlich die
+ * TenantMembership.roleId verändert (siehe syncMembershipRoleFromEmployeeRole
+ * in lib/role-service.ts). Ohne diese Prüfung genügte "employees:write" allein
+ * — auch im eigenen own-Scope —, um die eigene Berechtigungsrolle
+ * hochzustufen, indem einfach ein bekannter Rollenname eingetragen wurde
+ * (Audit-Finding H01).
+ */
+async function canManageMembershipRoles(tenantSlug: string) {
+  const access = await getOptionalTenantAccess(tenantSlug, "roles", "write");
+
+  return Boolean(access);
+}
+
+/**
+ * Dieselbe Sichtbarkeitsprüfung wie in `getEmployeeForTenant` (sensible
+ * Stammdaten/Verträge/Mutterschutz brauchen je eine eigene Leseberechtigung,
+ * "employees:read" allein reicht nicht) — hier zusätzlich für die
+ * Create-/Update-Antwort verwendet. Ohne das lieferten Anlegen und Bearbeiten
+ * diese Felder unabhängig von der tatsächlichen Leseberechtigung des
+ * Aufrufers immer entschlüsselt zurück (Audit-Finding H04).
+ */
+async function employeeVisibilityFlags(tenantSlug: string, target: { id: string; team: string }) {
+  const sensitiveDataAccess = await getOptionalTenantAccess(tenantSlug, "sensitiveData", "read");
+  const sensitiveDataScope = sensitiveDataAccess ? await resolveScopeFilter(sensitiveDataAccess) : null;
+  const canViewSensitiveData =
+    sensitiveDataScope !== null && scopeAllowsTarget(sensitiveDataScope, target);
+
+  const contractsAccess = await getOptionalTenantAccess(tenantSlug, "contracts", "read");
+  const contractsScope = contractsAccess ? await resolveScopeFilter(contractsAccess) : null;
+  const canViewContracts =
+    contractsScope !== null && scopeAllowsTarget(contractsScope, target);
+
+  const mutterschutzAccess = await getOptionalTenantAccess(tenantSlug, "mutterschutz", "read");
+  const mutterschutzScope = mutterschutzAccess ? await resolveScopeFilter(mutterschutzAccess) : null;
+  const canViewMutterschutz =
+    mutterschutzScope !== null && scopeAllowsTarget(mutterschutzScope, target);
+
+  return { canViewSensitiveData, canViewContracts, canViewMutterschutz };
 }
 
 export async function updateTenantEmployee(input: EmployeeMutationInput & { employeeId: string }) {
@@ -2123,7 +2168,9 @@ export async function updateTenantEmployee(input: EmployeeMutationInput & { empl
 
       throw error;
     });
-  const employee = toEmployee(record);
+  const { canViewSensitiveData, canViewContracts, canViewMutterschutz } =
+    await employeeVisibilityFlags(input.tenantSlug, { id: record.id, team: record.team });
+  const employee = toEmployee(record, canViewSensitiveData, canViewContracts, canViewMutterschutz);
 
   await syncTeamMemberSnapshots(employee);
   await syncLocationTeamSnapshots(employee);
@@ -2134,11 +2181,22 @@ export async function updateTenantEmployee(input: EmployeeMutationInput & { empl
     employeeName: record.name,
     locationNames: locations,
   });
-  await syncMembershipRoleFromEmployeeRole({
-    tenantId,
-    userId: record.userId,
-    roleName: record.role,
-  });
+  // Nur syncen, wenn DIESER Request ausdrücklich ein neues `role`-Feld
+  // mitgeschickt hat — niemals anhand von `record.role`/`current.role`, der
+  // auch ein zuvor unautorisiert eingetragener Altwert sein kann (z. B. weil
+  // dieser Aufruf nur ein anderes Formularfeld auf einem anderen Tab
+  // geändert hat). Ohne diese Einschränkung reichte eine spätere, mit
+  // `roles:write` autorisierte, aber fachlich unabhängige Bearbeitung (etwa
+  // Telefonnummer ändern) aus, um einen vorab von einem Unprivilegierten
+  // eingetragenen Rollennamen nachträglich wirksam werden zu lassen
+  // (Audit-Finding H01/R02).
+  if (input.role !== undefined && (await canManageMembershipRoles(input.tenantSlug))) {
+    await syncMembershipRoleFromEmployeeRole({
+      tenantId,
+      userId: record.userId,
+      roleName: role,
+    });
+  }
 
   const sensitiveChanges = [
     input.iban !== undefined && input.iban !== currentEmployee.iban ? "IBAN" : null,
@@ -2242,10 +2300,15 @@ export async function offboardEmployee(input: {
 }
 
 /**
- * Löscht ausschließlich den Konto-Zugang (Login) der mit dieser Personalakte
- * verknüpften Person — Zugangsdaten, Sitzungen, Social-Login-Verknüpfungen
- * und Push-Token, inkl. Widerruf der Apple-/Google-Tokens beim Provider.
- * Die Personalakte (Stammdaten) bleibt vollständig erhalten, s.
+ * Entzieht den Zugang zu GENAU DIESEM Mandanten: löscht die
+ * `TenantMembership` in diesem Tenant und hängt die Personalakte von der
+ * `userId` ab. Das globale Konto (Login, Passwort, Sitzungen,
+ * Social-Login-Verknüpfungen, Zugänge zu anderen Mandanten) bleibt
+ * unangetastet — eine Person kann Mitarbeiter in mehreren Mandanten sein,
+ * und ein Zugangsentzug in Mandant A darf niemals Mandant B betreffen.
+ * Die Personalakte (Stammdaten) in diesem Mandanten bleibt vollständig
+ * erhalten. Eine vollständige, globale Kontolöschung ist ausschließlich
+ * über den gesonderten Kontoinhaber-Self-Service möglich, s.
  * lib/account-service.ts `deleteUserAccessImmediately`.
  */
 export async function deleteEmployeeAccess(input: { tenantSlug: string; employeeId: string }) {
@@ -2266,31 +2329,47 @@ export async function deleteEmployeeAccess(input: { tenantSlug: string; employee
     throw new Error("EMPLOYEE_ACCESS_NOT_LINKED");
   }
 
-  const linkedUser = await prisma.user.findUnique({
-    where: { id: employee.userId },
-    select: { id: true },
-  });
+  const employeeUserId = employee.userId;
 
-  if (!linkedUser) {
-    // Konto wurde bereits anderweitig gelöscht (z. B. Self-Service) —
-    // verwaiste Verknüpfung trotzdem aufräumen.
-    await prisma.tenantEmployee.update({ where: { id: employee.id }, data: { userId: null } });
-    throw new Error("EMPLOYEE_ACCESS_NOT_LINKED");
-  }
+  await prisma.$transaction(async (tx) => {
+    // Sole-Owner-Schutz (Audit-Finding R01): Ein Zugangsentzug darf den
+    // Mandanten nicht ohne verbleibenden OWNER zurücklassen. Rolle und
+    // Owner-Anzahl werden innerhalb derselben Transaktion gelesen, damit ein
+    // gleichzeitiger zweiter Entzug nicht beide Prüfungen bestehen kann.
+    const membership = await tx.tenantMembership.findUnique({
+      where: { tenantId_userId: { tenantId: access.tenantId, userId: employeeUserId } },
+      select: { role: true },
+    });
 
-  await deleteUserAccessImmediately(employee.userId);
+    if (membership?.role === "OWNER") {
+      const otherOwners = await tx.tenantMembership.count({
+        where: { tenantId: access.tenantId, userId: { not: employeeUserId }, role: "OWNER" },
+      });
+      if (otherOwners === 0) {
+        throw new Error(
+          "Diese Person ist die/der einzige Inhaber/in dieses Mandanten. Bitte zuerst eine andere Person als Inhaber/in eintragen, bevor der Zugang entzogen wird.",
+        );
+      }
+    }
 
-  await prisma.tenantEmployee.update({
-    where: { id: employee.id },
-    data: {
-      timeline: {
-        create: {
-          title: "Konto-Zugang gelöscht",
-          tone: "danger",
-          tenant: { connect: { id: access.tenantId } },
+    // Nur die Mitgliedschaft in DIESEM Mandanten entfernen — Mitgliedschaften
+    // in anderen Mandanten desselben Users bleiben unangetastet.
+    await tx.tenantMembership.deleteMany({
+      where: { tenantId: access.tenantId, userId: employeeUserId },
+    });
+    await tx.tenantEmployee.update({
+      where: { id: employee.id },
+      data: {
+        userId: null,
+        timeline: {
+          create: {
+            title: "Konto-Zugang gelöscht",
+            tone: "danger",
+            tenant: { connect: { id: access.tenantId } },
+          },
         },
       },
-    },
+    });
   });
 
   await recordTenantAudit({
@@ -2362,6 +2441,13 @@ export async function deleteTenantEmployee(input: {
   if (!access.canDelete) {
     throw new Error("FORBIDDEN");
   }
+
+  await assertEmployeeInScope(access, input.employeeId);
+
+  // Vorher konnte dieser direkte Alles-Löschen-Pfad Legal Hold und
+  // gesetzliche Aufbewahrungsfristen (Lohn/SV, Gesundheits-Freitext)
+  // vollständig umgehen (Audit-Finding H12).
+  await assertEmployeeDeletionAllowed(access.tenantId, input.employeeId);
 
   const tenantId = access.tenantId;
 
@@ -2491,7 +2577,11 @@ async function infoRequestScopeWhere(tenantSlug: string) {
   }
 
   if (scopeFilter.type === "team") {
-    return { tenantId: access.tenantId, employee: { team: scopeFilter.team } };
+    // Siehe employeeScopeWhere: kein eigenes Team darf nicht "alle
+    // Info-Anfragen nicht zugeordneter Mitarbeiter" bedeuten.
+    return scopeFilter.team
+      ? { tenantId: access.tenantId, employee: { team: scopeFilter.team } }
+      : { tenantId: access.tenantId, employeeId: "__none__" };
   }
 
   // "employees" unterstützt (bisher) keinen "assigned"-Scope — sollte er
@@ -2550,6 +2640,8 @@ export async function createEmployeeInfoRequest(input: {
   if (!employee) {
     throw new Error("Mitarbeiter nicht gefunden.");
   }
+
+  await assertEmployeeInScope(access, employee.id);
 
   const dueAtIso = input.dueAt?.trim() ?? "";
   const dueTimeIso = /^\d{2}:\d{2}$/.test(input.dueTime?.trim() ?? "")
@@ -2610,6 +2702,8 @@ async function findTenantInfoRequest(tenantSlug: string, requestId: string) {
   if (!request) {
     throw new Error("Info-Anfrage nicht gefunden.");
   }
+
+  await assertEmployeeInScope(access, request.employee.id);
 
   return { access, request };
 }
@@ -2676,15 +2770,17 @@ export type EmergencyContactInput = {
   note?: string;
 };
 
-async function loadEmergencyContacts(tenantId: string, employeeId: string) {
+async function loadEmergencyContacts(access: TenantAccess, employeeId: string) {
   const employee = await prisma.tenantEmployee.findFirst({
-    where: { id: employeeId, tenantId },
+    where: { id: employeeId, tenantId: access.tenantId },
     select: { id: true, name: true, emergencyContactsJson: true },
   });
 
   if (!employee) {
     throw new Error("Mitarbeiter nicht gefunden.");
   }
+
+  await assertEmployeeInScope(access, employee.id);
 
   return {
     employee,
@@ -2722,7 +2818,7 @@ export async function addEmergencyContact(input: {
 }) {
   await requireEmployeeManager(input.tenantSlug);
   const access = await requireTenantAccess(input.tenantSlug, "employees", "write");
-  const { employee, contacts } = await loadEmergencyContacts(access.tenantId, input.employeeId);
+  const { employee, contacts } = await loadEmergencyContacts(access, input.employeeId);
 
   const name = input.contact.name.trim();
   const phone = input.contact.phone.trim();
@@ -2759,7 +2855,7 @@ export async function updateEmergencyContact(input: {
 }) {
   await requireEmployeeManager(input.tenantSlug);
   const access = await requireTenantAccess(input.tenantSlug, "employees", "write");
-  const { employee, contacts } = await loadEmergencyContacts(access.tenantId, input.employeeId);
+  const { employee, contacts } = await loadEmergencyContacts(access, input.employeeId);
 
   const name = input.contact.name.trim();
   const phone = input.contact.phone.trim();
@@ -2795,7 +2891,7 @@ export async function deleteEmergencyContact(input: {
 }) {
   await requireEmployeeManager(input.tenantSlug);
   const access = await requireTenantAccess(input.tenantSlug, "employees", "write");
-  const { employee, contacts } = await loadEmergencyContacts(access.tenantId, input.employeeId);
+  const { employee, contacts } = await loadEmergencyContacts(access, input.employeeId);
 
   const removed = contacts.find((contact) => contact.id === input.contactId);
   let nextContacts = contacts.filter((contact) => contact.id !== input.contactId);
@@ -2816,7 +2912,7 @@ export async function setPrimaryEmergencyContact(input: {
 }) {
   await requireEmployeeManager(input.tenantSlug);
   const access = await requireTenantAccess(input.tenantSlug, "employees", "write");
-  const { employee, contacts } = await loadEmergencyContacts(access.tenantId, input.employeeId);
+  const { employee, contacts } = await loadEmergencyContacts(access, input.employeeId);
 
   if (!contacts.some((contact) => contact.id === input.contactId)) {
     throw new Error("Notfallkontakt nicht gefunden.");

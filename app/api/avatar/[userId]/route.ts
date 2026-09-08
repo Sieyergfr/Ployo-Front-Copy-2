@@ -3,14 +3,17 @@ import { auth } from "@/lib/auth";
 import { avatarStorageKey } from "@/lib/avatar-service";
 import { getStorageBucket } from "@/lib/storage/buckets";
 import { getStorageClient } from "@/lib/storage/client";
+import { sharesTenantWith } from "@/lib/tenant-access";
 import { headers } from "next/headers";
 
 export const runtime = "nodejs";
 
 /**
  * Streamt das Profilbild eines Nutzers aus S3. Profilbilder gelten als
- * nicht sensibel (im Gegensatz zu HR-Dokumenten) — jeder angemeldete
- * Nutzer darf sie sehen, ohne mandanten-spezifische Berechtigungsprüfung.
+ * nicht sensibel (im Gegensatz zu HR-Dokumenten), sind aber an einen
+ * konkreten User gebunden — Sichtbarkeit setzt daher mindestens eine
+ * gemeinsame Tenant-Mitgliedschaft mit dem Zieluser voraus, nicht bloß eine
+ * beliebige Anmeldung (Sicherheitsaudit L03).
  */
 export async function GET(
   _request: Request,
@@ -23,6 +26,11 @@ export async function GET(
   }
 
   const { userId } = await params;
+
+  if (!(await sharesTenantWith(session.user.id, userId))) {
+    return new Response(null, { status: 404 });
+  }
+
   const bucket = getStorageBucket();
 
   try {

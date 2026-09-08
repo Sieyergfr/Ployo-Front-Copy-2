@@ -1549,7 +1549,8 @@
     "errorSignupFailed": "The account could not be created. Please try again.",
     "errorTermsRequired": "Please accept the terms of service.",
     "errorSigninFailed": "The account was created, but signing in failed. Please sign in on the login page.",
-    "errorUnexpected": "Something went wrong. Please try again."
+    "errorUnexpected": "Something went wrong. Please try again.",
+    "errorRateLimited": "Too many attempts. Please wait a moment and try again."
   },
   "CompanyCreateWizard": {
     "countryGermany": "Germany",

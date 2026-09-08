@@ -4,7 +4,7 @@ import { twoFactor } from "better-auth/plugins";
 import { expo } from "@better-auth/expo";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { nextCookies } from "better-auth/next-js";
-import { importPKCS8, SignJWT } from "jose";
+import { generateAppleClientSecret } from "@/lib/apple-client-secret";
 import {
   isEmailConfigured,
   sendChangeEmailConfirmationEmail,
@@ -12,6 +12,11 @@ import {
   sendVerificationEmail,
 } from "@/lib/email";
 import { prisma } from "@/lib/prisma";
+import { revokeProviderToken } from "@/lib/oauth-revocation";
+import {
+  assertNoOrphanedTenantOwnership,
+  unlinkAndCleanupBeforeUserDeletion,
+} from "@/lib/user-deletion-lifecycle";
 
 const DEV_FALLBACK_SECRET = "development-only-change-this-secret-before-production";
 
@@ -57,35 +62,6 @@ const configuredTrustedOrigins =
   process.env.BETTER_AUTH_TRUSTED_ORIGINS?.split(",")
     .map((origin) => origin.trim())
     .filter(Boolean) ?? [];
-
-/**
- * Auch außerhalb dieser Datei gebraucht (lib/oauth-revocation.ts), um beim
- * Löschen eines Konto-Zugangs ein frisches Apple-Client-Secret für den
- * Token-Widerruf (POST /auth/revoke) zu erzeugen.
- */
-export async function generateAppleClientSecret({
-  clientId,
-  teamId,
-  keyId,
-  privateKey,
-}: {
-  clientId: string;
-  teamId: string;
-  keyId: string;
-  privateKey: string;
-}) {
-  const key = await importPKCS8(privateKey.replace(/\\n/g, "\n"), "ES256");
-  const now = Math.floor(Date.now() / 1000);
-
-  return new SignJWT({})
-    .setProtectedHeader({ alg: "ES256", kid: keyId })
-    .setIssuer(teamId)
-    .setSubject(clientId)
-    .setAudience("https://appleid.apple.com")
-    .setIssuedAt(now)
-    .setExpirationTime(now + 180 * 24 * 60 * 60)
-    .sign(key);
-}
 
 /**
  * Social-Login legt von sich aus **kein** Konto mehr an: `disableImplicitSignUp`
@@ -178,14 +154,19 @@ export const auth = betterAuth({
     },
   },
   // Explizit statt implizit auf SDK-Defaults zu vertrauen: 7 Tage Sitzungsdauer,
-  // täglicher Refresh, 5-Minuten-Cookie-Cache (weniger DB-Lookups pro Request).
+  // täglicher Refresh. Cookie-Cache bewusst kurz (60s, vorher 5 Minuten) statt
+  // ganz deaktiviert: ein Session-Widerruf/Passwortwechsel kann so bis zu 60s
+  // verzögert wirken (der Cache antwortet dann noch aus dem signierten
+  // Cookie, ohne die DB erneut zu lesen) — ein bewusst akzeptiertes,
+  // dokumentiertes Restfenster statt eines DB-Reads bei jedem Request
+  // (Audit-Finding M09).
   session: {
     expiresIn: 60 * 60 * 24 * 7,
     updateAge: 60 * 60 * 24,
     freshAge: 60 * 60 * 24,
     cookieCache: {
       enabled: true,
-      maxAge: 5 * 60,
+      maxAge: 60,
     },
   },
   advanced: {
@@ -199,6 +180,33 @@ export const auth = betterAuth({
   user: {
     deleteUser: {
       enabled: true,
+      // Ohne diesen Hook kannte der generische SDK-Endpunkt weder die
+      // Sole-Owner-Sperre noch die App-eigenen Aufräumschritte noch den
+      // Provider-Token-Widerruf (Audit-Finding M07) — alle drei laufen jetzt
+      // auch hier, genau wie im eigenen Account-Service
+      // (lib/account-service.ts `deleteUserAccessImmediately`). Der frühere
+      // Zirkelbezug (lib/oauth-revocation.ts importierte
+      // `generateAppleClientSecret` aus `@/lib/auth`) ist aufgelöst: die
+      // Funktion liegt jetzt in lib/apple-client-secret.ts, einem eigenen
+      // blattförmigen Modul ohne Import von `@/lib/auth`.
+      //
+      // Kein gemeinsamer Transaktionsrahmen mit dem eigentlichen
+      // `prisma.user.delete()` (das führt better-auth selbst NACH diesem Hook
+      // aus, außerhalb unserer Kontrolle) — ein Fehler hier bricht die
+      // Löschung zwar ab (better-auth wirft weiter), aber es gibt kein
+      // atomares Rollback über beide Schritte hinweg. Bekannte, vom
+      // SDK-Hook-Modell vorgegebene Grenze.
+      beforeDelete: async (user) => {
+        await assertNoOrphanedTenantOwnership(user.id);
+
+        const accounts = await prisma.account.findMany({
+          where: { userId: user.id },
+          select: { providerId: true, accessToken: true, refreshToken: true },
+        });
+        await Promise.allSettled(accounts.map((account) => revokeProviderToken(account)));
+
+        await unlinkAndCleanupBeforeUserDeletion(user.id);
+      },
     },
     changeEmail: {
       enabled: true,

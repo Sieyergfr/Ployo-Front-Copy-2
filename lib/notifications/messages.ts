@@ -85,6 +85,13 @@ export type NotificationMessage =
       reason: "vacation" | "sickness";
       startDate: string;
       endDate: string | null;
+      /**
+       * Für Empfänger ohne `sickness`-Leserecht: Grund neutral als
+       * "Abwesenheit" statt konkret "Krankmeldung" ausgeben (Art.-9-Daten,
+       * Audit-Finding H14) — der schichtplanbezogene Konflikthinweis bleibt
+       * so trotzdem nützlich, ohne den Gesundheitsbezug offenzulegen.
+       */
+      redactReason?: boolean;
     }
   | {
       key: "newVacationRequest";
@@ -124,6 +131,13 @@ export type NotificationMessage =
       tenantName: string;
       /** `dueDate` ist hier bereits der gespeicherte Anzeigewert der Erinnerung. */
       reminders: Array<{ title: string; dueDate: string }>;
+    }
+  | {
+      key: "vacationCarryoverExpiring";
+      tenantName: string;
+      days: number;
+      /** ISO-Datum (YYYY-MM-DD) der gesetzlichen Verfallsfrist (default 31.03.). */
+      expiresAt: string;
     };
 
 export type RenderedNotification = {
@@ -239,13 +253,17 @@ export function renderNotification(
 
     case "absenceConflict": {
       const range = formatNotificationRange(message.startDate, message.endDate, locale);
-      const reason = isEn
-        ? message.reason === "vacation"
-          ? "approved vacation"
-          : "a sick leave report"
-        : message.reason === "vacation"
-          ? "genehmigten Urlaub"
-          : "eine Krankmeldung";
+      const reason = message.redactReason
+        ? isEn
+          ? "an absence"
+          : "eine Abwesenheit"
+        : isEn
+          ? message.reason === "vacation"
+            ? "approved vacation"
+            : "a sick leave report"
+          : message.reason === "vacation"
+            ? "genehmigten Urlaub"
+            : "eine Krankmeldung";
       const subject = isEn
         ? `Shift plan conflict: ${message.employeeName}`
         : `Schichtplan-Konflikt: ${message.employeeName}`;
@@ -403,6 +421,30 @@ export function renderNotification(
         text: `${intro}\n\n${lines.join("\n")}`,
         html: `${paragraph(escapeHtml(intro))}<ul style="font-size:14px;">${htmlLines}</ul>`,
       };
+    }
+
+    case "vacationCarryoverExpiring": {
+      const date = formatNotificationDate(message.expiresAt, locale);
+      const daysLabel = isEn
+        ? message.days === 1
+          ? "1 day"
+          : `${message.days} days`
+        : message.days === 1
+          ? "1 Tag"
+          : `${message.days} Tage`;
+      const subject = isEn ? "Remaining vacation days expiring soon" : "Resturlaub verfällt bald";
+      const text = isEn
+        ? `You still have ${daysLabel} of vacation carried over from last year at ${message.tenantName}. Please plan to use them before ${date}, or they will expire.`
+        : `Sie haben noch ${daysLabel} Resturlaub aus dem Vorjahr bei ${message.tenantName}. Bitte planen Sie diese vor dem ${date} ein — sonst verfallen sie.`;
+      const html = isEn
+        ? paragraph(
+            `You still have <strong>${escapeHtml(daysLabel)}</strong> of vacation carried over from last year at ${escapeHtml(message.tenantName)}. Please plan to use them before <strong>${escapeHtml(date)}</strong>, or they will expire.`,
+          )
+        : paragraph(
+            `Sie haben noch <strong>${escapeHtml(daysLabel)}</strong> Resturlaub aus dem Vorjahr bei ${escapeHtml(message.tenantName)}. Bitte planen Sie diese vor dem <strong>${escapeHtml(date)}</strong> ein — sonst verfallen sie.`,
+          );
+
+      return { subject, text, html };
     }
   }
 }

@@ -45,10 +45,14 @@ export default function DatenschutzPage() {
           Sitzungsverwaltung (Session-Cookies) sowie zur Speicherung Ihrer
           Cookie-Auswahl; hierfür ist keine Einwilligung erforderlich (§ 25
           Abs. 2 TDDDG). Es findet kein Tracking zu Werbezwecken statt und
-          es werden keine Werbe- oder Marketing-SDKs eingesetzt. Mit Ihrer
-          Einwilligung über den Cookie-Banner setzen wir zusätzlich Fehler-
-          und Performance-Monitoring (Sentry, siehe Ziffer 11) ein, das ohne
-          Ihre Zustimmung nicht aktiv ist. Sie können Ihre Auswahl jederzeit
+          es werden keine Werbe- oder Marketing-SDKs eingesetzt. Eine
+          Basis-Fehlererfassung (Sentry, ohne Session-Aufzeichnung und ohne
+          Performance-Tracing) läuft dabei unabhängig von Ihrer Einwilligung
+          zur Gewährleistung des sicheren Betriebs (Art. 6 Abs. 1 lit. f
+          DSGVO, siehe Ziffer 11). Mit Ihrer Einwilligung über den
+          Cookie-Banner aktivieren wir zusätzlich Session-Aufzeichnung und
+          Performance-Tracing (Sentry, siehe Ziffer 11); diese laufen ohne
+          Ihre Zustimmung nicht. Sie können Ihre Auswahl jederzeit
           über &bdquo;Cookie-Einstellungen&ldquo; im Seitenfuß ändern. In der
           mobilen App gibt es keine Cookies; die entsprechenden technischen
           Funktionen übernehmen Sitzungs-Token im gerätesicheren Speicher

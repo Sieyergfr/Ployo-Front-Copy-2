@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { recordTenantAudit } from "@/lib/audit";
-import { defaultPermissionRoles, permissionAreas } from "@/lib/roles";
+import { upsertTenantSystemRoleByKey } from "@/lib/role-service";
 import { requireTenantAccess } from "@/lib/tenant-access";
 import { headers } from "next/headers";
 
@@ -127,41 +127,21 @@ export async function acceptInvitation(
  * für jeden Bereich "none" und liefe überall auf FORBIDDEN.
  * Bewusst ohne requireTenantAccess: Der Annehmende ist noch kein Mitglied –
  * seine Autorisierung ist der Einladungs-Token selbst.
+ *
+ * Delegiert an `upsertTenantSystemRoleByKey`, damit hier exakt dasselbe
+ * vollständige Rollen-Template (inkl. scope/Fähigkeiten) verwendet wird wie
+ * bei der regulären Tenant-Initialisierung — siehe Audit-Finding C01.
  */
 async function ensureSystemRoleForInvitation(
   tenantId: string,
   invitationRole: string,
 ) {
-  const key = invitationRole === "EMPLOYEE" ? "employee" : null;
-  const template = key
-    ? defaultPermissionRoles.find((role) => role.key === key)
-    : null;
-
-  if (!key || !template) {
+  if (invitationRole !== "EMPLOYEE") {
     // ADMIN/HR sind über die Legacy-Rolle bereits Tenant-Manager.
     return null;
   }
 
-  const role = await prisma.tenantRole.upsert({
-    where: { tenantId_key: { tenantId, key } },
-    update: {},
-    create: {
-      tenantId,
-      key,
-      name: template.name,
-      description: template.description,
-      isSystem: template.isSystem,
-      permissions: {
-        create: permissionAreas.map((area) => ({
-          area: area.id,
-          level: template.permissions[area.id] ?? "none",
-        })),
-      },
-    },
-    select: { id: true },
-  });
-
-  return role.id;
+  return upsertTenantSystemRoleByKey(tenantId, "employee");
 }
 
 /**

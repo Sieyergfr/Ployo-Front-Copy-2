@@ -278,7 +278,6 @@ export default async function FilesPageContent({
 
     const auditEntries = await getAuditLogsForEntity({
       tenantSlug: tenant,
-      area: "files",
       entityType: "file",
       entityId: activeFile.storageFileId ?? activeFile.slug,
     });

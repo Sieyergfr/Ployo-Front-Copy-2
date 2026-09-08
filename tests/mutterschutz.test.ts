@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { prisma } from "@/lib/prisma";
+import { decryptField } from "@/lib/encryption";
 import {
   createTenantEmployee,
   createTenantEmployeeRecord,
@@ -203,11 +204,21 @@ describe("Berechtigungs-Gating — eigener Bereich \"mutterschutz\"", () => {
       phone: "+49 30 9999999",
     });
 
-    // Kein mutterschutz-Recht -> Feld bleibt unangetastet, andere Felder
-    // des selben Updates greifen trotzdem ganz normal.
-    expect(updated.maternityProtectionActive).toBe(true);
-    expect(updated.maternityProtectionNote).toBe("aktiv");
+    // Kein mutterschutz-Recht -> die Antwort blendet das Feld aus (Audit-
+    // Finding H04, siehe tests/security-audit-critical.test.ts), andere
+    // Felder des selben Updates greifen trotzdem ganz normal.
+    expect(updated.maternityProtectionActive).toBe(false);
+    expect(updated.maternityProtectionNote).toBe("");
     expect(updated.phone).toBe("+49 30 9999999");
+
+    // Der bestehende Wert selbst wurde durch den Reset-Versuch NICHT
+    // gelöscht — nachweisbar über den ungekürzten DB-Stand.
+    const stored = await prisma.tenantEmployee.findUniqueOrThrow({
+      where: { id: created.dbId! },
+      select: { maternityProtectionActive: true, maternityProtectionNote: true },
+    });
+    expect(stored.maternityProtectionActive).toBe(true);
+    expect(decryptField(stored.maternityProtectionNote)).toBe("aktiv");
   });
 });
 

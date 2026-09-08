@@ -2,7 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { recordTenantAudit } from "@/lib/audit";
 import { createSystemTenantReminder } from "@/lib/reminders";
-import { requireTenantAccess } from "@/lib/tenant-access";
+import { assertEmployeeInScope, requireTenantAccess } from "@/lib/tenant-access";
 import { purgeTenantFiles } from "@/lib/storage/delete";
 import { RETENTION_POLICIES, retentionCutoff, retentionExpiryDate, type RetentionCategory } from "@/lib/data-retention";
 
@@ -39,6 +39,7 @@ export async function findEmployeesDueForPersonaldatenAnonymisierung(now: Date =
       offboardedAt: true,
       privateAddressId: true,
       workAddressId: true,
+      userId: true,
     },
   });
 
@@ -49,7 +50,15 @@ export async function findEmployeesDueForPersonaldatenAnonymisierung(now: Date =
 
 /**
  * Anonymisiert die Kategorie-1-Stammdaten eines ehemaligen Mitarbeiters
- * (Name, Geburtsdaten, Kontaktdaten, Adresse, Notfallkontakte).
+ * (Name, Geburtsdaten, Kontaktdaten, Adresse, Notfallkontakte, Namens-Slug,
+ * Konto-Verknüpfung) sowie Namens-Schnappschüsse dieser Person in anderen
+ * Modellen (Standort-Leitung, zugewiesene Dateien) — vorher blieben diese
+ * über `key` (namensbasierter Slug), `userId` (verknüpftes Benutzerkonto)
+ * und in `TenantLocation`/`TenantFile` kopierte Namensfelder weiterhin
+ * zuordenbar (Audit-Finding M05). KEIN vollständiger Verarbeitungsgraph über
+ * alle Modelle — deckt nur die konkret im Finding genannten Fälle ab, siehe
+ * Umsetzungsstatus im Audit für den Rest.
+ *
  * Lohn-/SV-relevante Felder (taxId, socialSecurityNumber, healthInsurance,
  * iban) sowie Vertrags-/Gehaltsdatensätze bleiben unangetastet — die laufen
  * unter der eigenen, längeren Kategorie-"lohn_sozialversicherung"-Frist
@@ -61,14 +70,19 @@ export async function anonymizeFormerEmployeePii(employee: {
   employeeNumber: string;
   privateAddressId: string | null;
   workAddressId: string | null;
+  userId?: string | null;
 }) {
   const anonymizedName = `Ehemalige/r Mitarbeiter/in #${employee.employeeNumber}`;
+  const anonymizedKey = `anon-${employee.employeeNumber}`.toLowerCase();
 
   await prisma.$transaction(async (tx) => {
     await tx.tenantEmployee.update({
       where: { id: employee.id },
       data: {
         name: anonymizedName,
+        // Namensbasierter Slug (Routing/URLs) — bliebe sonst auch nach der
+        // Anonymisierung des Anzeigenamens zuordenbar (Audit-Finding M05).
+        key: anonymizedKey,
         initials: "EM",
         birthDate: "",
         birthPlace: "",
@@ -77,6 +91,10 @@ export async function anonymizeFormerEmployeePii(employee: {
         phone: "",
         email: "",
         emergencyContactsJson: "[]",
+        // Trennt die Verknüpfung zum Benutzerkonto — sonst bliebe die
+        // Personalakte über `userId` weiterhin einer echten, identifizierten
+        // Person zuordenbar (Audit-Finding M05).
+        userId: null,
         piiAnonymizedAt: new Date(),
       },
     });
@@ -94,6 +112,43 @@ export async function anonymizeFormerEmployeePii(employee: {
         data: ANONYMIZED_ADDRESS_FIELDS,
       });
     }
+
+    // Standort-Leitungs-Schnappschuss (name/Initialen/Telefon/E-Mail) wird
+    // laut Datenmodell nur beim Speichern des Standorts aufgefrischt, nicht
+    // automatisch bei Änderungen am Mitarbeiter — bliebe sonst dauerhaft mit
+    // dem alten Klarnamen stehen.
+    await tx.tenantLocation.updateMany({
+      where: { tenantId: employee.tenantId, leadEmployeeId: employee.id },
+      data: {
+        leadEmployeeId: null,
+        leadName: "Keine Leitung",
+        leadInitials: "--",
+        leadPhone: "",
+        leadEmail: "",
+      },
+    });
+
+    // Datei-Zuweisungs-Namensfeld (separat von der Datei-Eigentümerschaft
+    // über `employeeId`, siehe Schema) — derselbe Snapshot-Charakter.
+    await tx.tenantFile.updateMany({
+      where: { tenantId: employee.tenantId, assignedEmployeeId: employee.id },
+      data: { assignedEmployeeId: "", assignedEmployeeName: "" },
+    });
+
+    // Team-/Standort-Mitgliedslisten führen denselben Name/Initialen-
+    // Schnappschuss wie die Standort-Leitung oben (siehe
+    // syncTeamMemberSnapshots/syncLocationTeamSnapshots in
+    // employee-service.ts) — blieben bisher außen vor und zeigten den
+    // Klarnamen weiterhin in jeder Team-/Standort-Mitgliederliste
+    // (Audit-Finding M05).
+    await tx.tenantTeamMember.updateMany({
+      where: { employeeId: employee.id },
+      data: { name: anonymizedName, initials: "EM" },
+    });
+    await tx.tenantLocationMember.updateMany({
+      where: { employeeId: employee.id },
+      data: { name: anonymizedName, initials: "EM" },
+    });
   });
 
   await recordTenantAudit({
@@ -106,6 +161,19 @@ export async function anonymizeFormerEmployeePii(employee: {
     entityId: employee.id,
     detail: `Kategorie "personaldaten" (${RETENTION_POLICIES.personaldaten.months} Monate, ${RETENTION_POLICIES.personaldaten.legalBasis}) abgelaufen.`,
   });
+}
+
+/**
+ * Löscht abgelaufene Cookie-Consent-Nachweise (Kategorie "consent_nachweis")
+ * — bisher gar nicht automatisch bereinigt (Audit-Finding M05).
+ */
+export async function purgeExpiredConsentRecords(now: Date = new Date()) {
+  const cutoff = new Date(now);
+  cutoff.setMonth(cutoff.getMonth() - RETENTION_POLICIES.consent_nachweis.months);
+
+  const result = await prisma.consentRecord.deleteMany({ where: { createdAt: { lt: cutoff } } });
+
+  return { deleted: result.count };
 }
 
 /**
@@ -215,6 +283,18 @@ export async function getDeletionEligibilityForEmployee(
     });
   }
 
+  // Legal Hold sperrte bisher nur die Kategorie "personaldaten" — eine
+  // abgelaufene Gehaltsabrechnung/Krankmeldung ließ sich über die jeweils
+  // ANDERE Kategorie trotz Hold weiter löschen (Audit-Finding H12).
+  if (employee.legalHold) {
+    const reason = `Gesperrt durch Legal Hold: ${employee.legalHoldReason || "kein Grund angegeben"}.`;
+    results.push(
+      { category: "lohn_sozialversicherung", eligible: false, reason, blockedUntil: null },
+      { category: "gesundheit_freitext", eligible: false, reason, blockedUntil: null },
+    );
+    return results;
+  }
+
   const payrollStatements = await prisma.tenantPayrollStatement.findMany({
     where: { employeeId },
     select: { issuedAt: true },
@@ -265,6 +345,121 @@ export async function getDeletionEligibilityForEmployee(
 }
 
 /**
+ * Zentrale Löschprüfung für eine einzelne Datei — bislang konnten
+ * `softDeleteTenantFile` und der periodische Purge eine Datei direkt
+ * löschen, ohne Legal Hold des verknüpften Mitarbeiters oder die
+ * gesetzliche Aufbewahrungsfrist von Gehaltsabrechnungen/Krankmeldungs-
+ * Anhängen zu prüfen (Audit-Finding H12). Allgemeine Personalakten-
+ * Dokumente ohne eigene gesetzliche Frist (Kategorie "personaldaten")
+ * sind davon nicht betroffen.
+ */
+export async function assertFileDeletionAllowed(
+  tenantId: string,
+  file: { id: string; employeeId: string | null; parentId?: string | null },
+) {
+  if (!file.employeeId) {
+    return;
+  }
+
+  const employee = await prisma.tenantEmployee.findFirst({
+    where: { id: file.employeeId, tenantId },
+    select: { legalHold: true, legalHoldReason: true },
+  });
+
+  if (employee?.legalHold) {
+    throw new Error(
+      `Löschung gesperrt: Legal Hold (${employee.legalHoldReason || "kein Grund angegeben"}).`,
+    );
+  }
+
+  // Die Vertrags-/Abrechnungs-/Krankheits-FK zeigt nach einem Versionswechsel
+  // (uploadTenantFileVersion) nur noch auf die NEUE Version — eine bereits
+  // "replaced" alte Version verlöre ihre Gehalts-/Krankheits-Aufbewahrungs-
+  // frist, sobald sie (z. B. durch den periodischen Purge) direkt anhand
+  // ihrer eigenen ID geprüft wird. Deshalb hier über den ganzen
+  // Versionenverbund (Wurzeldokument + alle Versionen) nachschlagen, nicht
+  // nur `file.id` (Audit-Finding H12).
+  const rootId = file.parentId ?? file.id;
+  const family = await prisma.tenantFile.findMany({
+    where: { OR: [{ id: rootId }, { parentId: rootId }] },
+    select: { id: true },
+  });
+  const familyIds = family.length > 0 ? family.map((entry) => entry.id) : [file.id];
+
+  const [payroll, sickness] = await Promise.all([
+    prisma.tenantPayrollStatement.findFirst({
+      where: { fileId: { in: familyIds } },
+      select: { issuedAt: true },
+    }),
+    prisma.tenantSicknessReport.findFirst({
+      where: { attachmentFileId: { in: familyIds } },
+      select: { closedAt: true },
+    }),
+  ]);
+
+  if (payroll && !retentionCutoff("lohn_sozialversicherung", payroll.issuedAt)) {
+    throw new Error(
+      `Löschung gesperrt: Aufbewahrungsfrist für Gehaltsabrechnungen (${RETENTION_POLICIES.lohn_sozialversicherung.legalBasis}) noch nicht abgelaufen.`,
+    );
+  }
+
+  if (sickness?.closedAt && !retentionCutoff("gesundheit_freitext", sickness.closedAt)) {
+    throw new Error(
+      "Löschung gesperrt: Aufbewahrungsfrist für Krankmeldungs-Anhänge noch nicht abgelaufen.",
+    );
+  }
+}
+
+/**
+ * Wie `assertFileDeletionAllowed`, aber für den direkten
+ * Alles-löschen-Pfad (`deleteTenantEmployee`) — prüft Legal Hold und JEDE
+ * vorhandene Gehaltsabrechnung/Krankmeldungs-Freitext des Mitarbeiters,
+ * nicht nur eine einzelne Datei. Bewusst NICHT `getDeletionEligibilityForEmployee`
+ * wiederverwendet: dessen "eligible"-Flag bedeutet dort auch "Kategorie ist
+ * leer/nicht anwendbar" (z. B. keine Gehaltsabrechnungen vorhanden) — das
+ * wäre hier kein Löschgrund, sondern würde eine ansonsten zulässige
+ * Löschung fälschlich blockieren.
+ */
+export async function assertEmployeeDeletionAllowed(tenantId: string, employeeId: string) {
+  const employee = await prisma.tenantEmployee.findFirst({
+    where: { id: employeeId, tenantId },
+    select: { legalHold: true, legalHoldReason: true },
+  });
+
+  if (employee?.legalHold) {
+    throw new Error(
+      `Löschung gesperrt: Legal Hold (${employee.legalHoldReason || "kein Grund angegeben"}).`,
+    );
+  }
+
+  const payrollStatements = await prisma.tenantPayrollStatement.findMany({
+    where: { employeeId },
+    select: { issuedAt: true },
+  });
+
+  if (payrollStatements.some((s) => !retentionCutoff("lohn_sozialversicherung", s.issuedAt))) {
+    throw new Error(
+      `Löschung gesperrt: Aufbewahrungsfrist für mindestens eine Gehaltsabrechnung (${RETENTION_POLICIES.lohn_sozialversicherung.legalBasis}) noch nicht abgelaufen. Für teilweise Löschung „Kategorien-Löschantrag" verwenden.`,
+    );
+  }
+
+  const sicknessReports = await prisma.tenantSicknessReport.findMany({
+    where: { employeeId, status: "closed", note: { not: "" } },
+    select: { closedAt: true },
+  });
+
+  if (
+    sicknessReports.some(
+      (r) => r.closedAt && !retentionCutoff("gesundheit_freitext", r.closedAt),
+    )
+  ) {
+    throw new Error(
+      'Löschung gesperrt: Aufbewahrungsfrist für mindestens einen Krankmeldungs-Freitext noch nicht abgelaufen. Für teilweise Löschung „Kategorien-Löschantrag" verwenden.',
+    );
+  }
+}
+
+/**
  * Löscht/anonymisiert genau die angeforderten, tatsächlich löschfähigen
  * Kategorien für einen Mitarbeiter — nie mehr, als `getDeletionEligibilityForEmployee`
  * als löschfähig ausweist. Ersetzt das Alles-oder-nichts von
@@ -280,6 +475,12 @@ export async function deleteEmployeeDataByCategory(
   if (!access.canDelete) {
     throw new Error("FORBIDDEN");
   }
+
+  // Der Level-Guard (`canDelete`) allein prüft keinen Objektscope — ein
+  // own-/team-gescoptes Löschrecht konnte über eine mitgeschickte fremde
+  // `employeeId` trotzdem Kategorien beliebiger Mitarbeiter im Mandanten
+  // löschen (Audit-Finding H05).
+  await assertEmployeeInScope(access, employeeId);
 
   const eligibility = await getDeletionEligibilityForEmployee(tenantSlug, employeeId);
   const eligibilityByCategory = new Map(eligibility.map((entry) => [entry.category, entry]));
@@ -300,7 +501,14 @@ export async function deleteEmployeeDataByCategory(
     if (category === "personaldaten") {
       const employee = await prisma.tenantEmployee.findFirst({
         where: { id: employeeId, tenantId: access.tenantId },
-        select: { id: true, tenantId: true, employeeNumber: true, privateAddressId: true, workAddressId: true },
+        select: {
+          id: true,
+          tenantId: true,
+          employeeNumber: true,
+          privateAddressId: true,
+          workAddressId: true,
+          userId: true,
+        },
       });
       if (employee) {
         await anonymizeFormerEmployeePii(employee);

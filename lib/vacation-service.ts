@@ -2,6 +2,8 @@ import { auth } from "@/lib/auth";
 import { recordTenantAudit } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 import {
+  calculateVacationWorkDays,
+  parseVacationWorkDays,
   type VacationMetric,
   type VacationRequest,
   type VacationRequestStatus,
@@ -14,10 +16,17 @@ import {
   resolveScopeFilter,
 } from "@/lib/tenant-access";
 import {
+  notifyEmployeeOfExpiringVacationCarryover,
   notifyManagersOfNewVacationRequest,
   notifyVacationRequestDecided,
 } from "@/lib/notifications/events";
 import { notifyIfAbsenceConflictsWithPublishedShifts } from "@/lib/shift-service";
+import { createSystemTenantReminder } from "@/lib/reminders";
+import {
+  isCarryoverReminderDue,
+  rollOverVacationCarryover,
+  shouldForfeitCarryover,
+} from "@/lib/vacation-carryover";
 
 type VacationRecord = {
   id: string;
@@ -100,16 +109,56 @@ function daysLabel(days: number) {
   return days === 1 ? "1 Tag" : `${days} Tage`;
 }
 
-function calculateVacationDays(startDate: string, endDate: string) {
-  const start = new Date(`${startDate}T00:00:00`);
-  const end = new Date(`${endDate}T00:00:00`);
-  const diff = end.getTime() - start.getTime();
+/**
+ * Kalendertage zwischen zwei Datums-Strings (inklusive beider Enden), rein
+ * über UTC-komponierte Zeitstempel statt lokaler Millisekundendifferenz —
+ * eine lokale Mitternacht-zu-Mitternacht-Differenz ist über einen
+ * DST-Wechsel hinweg nicht exakt durch 86.400.000ms teilbar und hätte den
+ * Tagesbetrag je nach Serverzeitzone verfälscht (Audit-Finding M01, erster
+ * Teil). Reine Kalenderdauer-Anzeige — der tatsächliche Urlaubsverbrauch
+ * kommt seitdem aus `calculateVacationWorkDays` (lib/vacations.ts), das
+ * individuelle Arbeitstage und Feiertage berücksichtigt (M01, zweiter Teil).
+ */
+export function calculateVacationDays(startDate: string, endDate: string) {
+  const start = parseDateOnly(startDate);
+  const end = parseDateOnly(endDate);
 
-  if (!Number.isFinite(diff) || diff < 0) {
+  if (!start || !end) {
     return 1;
   }
 
-  return Math.max(1, Math.floor(diff / 86_400_000) + 1);
+  const startUtc = Date.UTC(start.getFullYear(), start.getMonth(), start.getDate());
+  const endUtc = Date.UTC(end.getFullYear(), end.getMonth(), end.getDate());
+  const diffDays = Math.round((endUtc - startUtc) / 86_400_000);
+
+  if (!Number.isFinite(diffDays) || diffDays < 0) {
+    return 1;
+  }
+
+  return Math.max(1, diffDays + 1);
+}
+
+/**
+ * Löst Arbeitstage-Muster und Standort-Bundesland eines Mitarbeiters auf,
+ * als Grundlage für `calculateVacationWorkDays`. `TenantEmployee.location`
+ * ist (wie überall in diesem Codebasis-Muster) der Standortname, kein
+ * Fremdschlüssel — daher die Suche über `name` statt `id`.
+ */
+async function resolveVacationWorkCalendar(tenantId: string, employeeId: string) {
+  const employee = await prisma.tenantEmployee.findUnique({
+    where: { id: employeeId },
+    select: { location: true, workDaysJson: true },
+  });
+
+  const workDays = parseVacationWorkDays(employee?.workDaysJson);
+  const location = employee?.location
+    ? await prisma.tenantLocation.findFirst({
+        where: { tenantId, name: employee.location },
+        select: { bundesland: true },
+      })
+    : null;
+
+  return { workDays, bundesland: location?.bundesland ?? null };
 }
 
 function parseDateOnly(value: string) {
@@ -141,6 +190,28 @@ function validateVacationDateRange(startDate: string, endDate: string) {
   if (parsedEndDate < parsedStartDate) {
     throw new Error("Das Enddatum darf nicht vor dem Startdatum liegen.");
   }
+}
+
+/**
+ * Wie `calculateVacationWorkDays`, lehnt aber einen Zeitraum ganz ohne
+ * individuellen Arbeitstag (z. B. ausschließlich arbeitsfreie Tage) mit
+ * einem fachlichen Fehler ab, statt ihn zu erlauben und dabei fälschlich 0
+ * Urlaubstage zu verbuchen (Audit-Finding M01).
+ */
+function calculateAndValidateVacationWorkDays(
+  startDate: string,
+  endDate: string,
+  calendar: Awaited<ReturnType<typeof resolveVacationWorkCalendar>>,
+): number {
+  const days = calculateVacationWorkDays(startDate, endDate, calendar.workDays, calendar.bundesland);
+
+  if (days === 0) {
+    throw new Error(
+      "Der gewählte Zeitraum enthält laut hinterlegtem Dienstplan keinen einzigen Arbeitstag — dafür ist kein Urlaubsantrag nötig.",
+    );
+  }
+
+  return days;
 }
 
 function toVacationRequest(record: VacationRecord): VacationRequest {
@@ -194,7 +265,11 @@ async function vacationScopeWhere(tenantSlug: string) {
   }
 
   if (scopeFilter.type === "team") {
-    return { tenantId: access.tenantId, employee: { team: scopeFilter.team } };
+    // Kein eigenes Team darf nicht "alle Urlaubsanträge nicht zugeordneter
+    // Kolleg:innen" bedeuten (Audit-Finding H03).
+    return scopeFilter.team
+      ? { tenantId: access.tenantId, employee: { team: scopeFilter.team } }
+      : { tenantId: access.tenantId, employeeId: "__none__" };
   }
 
   // "vacation" unterstützt (bisher) keinen "assigned"-Scope — sollte er
@@ -315,7 +390,7 @@ export async function requireVacationManager(tenantSlug: string) {
     permission === "write" ||
     permission === "admin"
   ) {
-    return { userId };
+    return { userId, role };
   }
 
   throw new Error("Keine Berechtigung zum Bearbeiten von Urlaub.");
@@ -363,6 +438,7 @@ export async function createTenantVacationRequest(input: {
     employeeName: employee.name,
     startDate: input.startDate,
   });
+  const calendar = await resolveVacationWorkCalendar(tenantId, employee.id);
 
   return prisma.tenantVacationRequest.create({
     data: {
@@ -371,7 +447,7 @@ export async function createTenantVacationRequest(input: {
       key,
       startDate: input.startDate,
       endDate: input.endDate,
-      days: calculateVacationDays(input.startDate, input.endDate),
+      days: calculateAndValidateVacationWorkDays(input.startDate, input.endDate, calendar),
       note: input.note.trim(),
       status: "pending",
     },
@@ -409,6 +485,7 @@ export async function createMyVacationRequest(input: {
     employeeName: employee.name,
     startDate: input.startDate,
   });
+  const calendar = await resolveVacationWorkCalendar(access.tenantId, employee.id);
 
   const request = await prisma.tenantVacationRequest.create({
     data: {
@@ -417,7 +494,7 @@ export async function createMyVacationRequest(input: {
       key,
       startDate: input.startDate,
       endDate: input.endDate,
-      days: calculateVacationDays(input.startDate, input.endDate),
+      days: calculateAndValidateVacationWorkDays(input.startDate, input.endDate, calendar),
       note: input.note.trim(),
       status: "pending",
     },
@@ -473,7 +550,7 @@ export async function setTenantVacationRequestStatus(input: {
       employeeId: true,
       startDate: true,
       endDate: true,
-      employee: { select: { name: true } },
+      employee: { select: { name: true, userId: true } },
     },
   });
 
@@ -481,21 +558,49 @@ export async function setTenantVacationRequestStatus(input: {
     throw new Error("Urlaubsantrag nicht gefunden.");
   }
 
-  // Über den eigenen Antrag entscheidet man nicht selbst: der Scope begrenzt
-  // sonst nur die Liste, nicht das Genehmigen/Ablehnen per requestId.
+  // Scope begrenzt sonst nur die Liste, nicht das Genehmigen/Ablehnen per
+  // requestId — ein team-/own-gescopter Genehmiger dürfte sonst über eine
+  // bekannte requestId auch außerhalb seines Scopes entscheiden.
   await assertEmployeeInScope(
     await requireTenantAccess(input.tenantSlug, "vacation", "write"),
     request.employeeId,
   );
 
-  await prisma.tenantVacationRequest.update({
-    where: { id: input.requestId },
+  // Über den eigenen Antrag entscheidet man nicht selbst — das gilt
+  // unabhängig vom Scope, auch für "vacation:write/all" (Audit-Finding H10):
+  // die Scope-Prüfung oben lässt "own" bewusst den eigenen Datensatz zu, das
+  // ist für Anlegen/Bearbeiten richtig, für eine Genehmigungsentscheidung
+  // aber genau der falsche Fall. Ausnahme: der Tenant-Owner hat niemanden
+  // über sich, der stattdessen entscheiden könnte — für ihn bleibt Self-
+  // Service sonst eine Sackgasse.
+  if (request.employee.userId === access.userId && access.role !== "OWNER") {
+    throw new Error("FORBIDDEN_SELF_APPROVAL");
+  }
+
+  // Compare-and-Set statt bedingungslosem Update: verhindert, dass zwei
+  // gleichzeitige Entscheidungen (z. B. zwei Tabs, zwei Genehmiger) beide
+  // durchgehen und der zweite Schreibvorgang den ersten unbemerkt
+  // überschreibt (Audit-Finding H10).
+  //
+  // Bedingung ist "Status ändert sich tatsächlich", nicht "Status ist noch
+  // pending": eine bereits getroffene Entscheidung muss sich nachträglich
+  // umkehren lassen (genehmigt und doch noch abgelehnt, oder umgekehrt) —
+  // genau dafür bietet `vacation-request/[id].tsx` in der App auch nach einer
+  // Entscheidung beide Buttons an. Nur ein Klick, der am Status nichts
+  // ändern würde (z. B. erneut "genehmigen" auf einem bereits genehmigten
+  // Antrag), bleibt ein "Bereits entschieden".
+  const { count } = await prisma.tenantVacationRequest.updateMany({
+    where: { id: input.requestId, status: { not: input.status } },
     data: {
       status: input.status,
       decidedAt: new Date(),
       decidedBy: access.userId,
     },
   });
+
+  if (count === 0) {
+    throw new Error("ALREADY_DECIDED");
+  }
 
   const tenantAccess = await requireTenantAccess(input.tenantSlug, "vacation", "write");
 
@@ -557,7 +662,14 @@ export async function updateTenantVacationRequest(input: {
 
   const request = await prisma.tenantVacationRequest.findFirst({
     where: { id: input.requestId, tenantId },
-    select: { id: true, employeeId: true, employee: { select: { name: true } } },
+    select: {
+      id: true,
+      employeeId: true,
+      startDate: true,
+      endDate: true,
+      status: true,
+      employee: { select: { name: true } },
+    },
   });
 
   if (!request) {
@@ -580,15 +692,41 @@ export async function updateTenantVacationRequest(input: {
     throw new Error("Das Enddatum darf nicht vor dem Startdatum liegen.");
   }
 
-  await prisma.tenantVacationRequest.update({
-    where: { id: input.requestId },
+  // Eine Änderung des Zeitraums an einem bereits entschiedenen Antrag darf
+  // dessen Genehmigungsstatus nicht einfach mitnehmen — sonst wäre ein
+  // genehmigter Zeitraum nachträglich frei erweiterbar, ohne dass das
+  // jemand erneut freigibt (Audit-Finding H10). Eine reine Notiz-Änderung
+  // löst dagegen keine erneute Prüfung aus.
+  const datesChanged =
+    input.startDate !== request.startDate || input.endDate !== request.endDate;
+  const needsReapproval = datesChanged && request.status !== "pending";
+  const calendar = await resolveVacationWorkCalendar(tenantId, request.employeeId);
+
+  // Compare-and-Set gegen den oben gelesenen Status, statt bedingungslos zu
+  // schreiben (Audit-Finding H10, Rest): ohne das konnte zwischen dem Lesen
+  // eines "pending"-Antrags (needsReapproval=false) und diesem Schreiben
+  // eine GLEICHZEITIGE Genehmigung dazwischenkommen — die neuen Datumswerte
+  // landeten dann auf einem inzwischen "approved" Antrag, ohne dass jemand
+  // GENAU diese Daten je freigegeben hätte. Schlägt die Bedingung fehl, war
+  // der Status zwischenzeitlich nicht mehr derselbe — dann lieber einen
+  // klaren Fehler werfen und die aktuelle Reapproval-Entscheidung erneut
+  // (gegen den jetzt echten Status) anfordern, statt still zu überschreiben.
+  const { count } = await prisma.tenantVacationRequest.updateMany({
+    where: { id: input.requestId, status: request.status },
     data: {
       startDate: input.startDate,
       endDate: input.endDate,
-      days: calculateVacationDays(input.startDate, input.endDate),
+      days: calculateAndValidateVacationWorkDays(input.startDate, input.endDate, calendar),
       note: input.note.trim(),
+      ...(needsReapproval ? { status: "pending", decidedAt: null, decidedBy: "" } : {}),
     },
   });
+
+  if (count === 0) {
+    throw new Error(
+      "Der Genehmigungsstatus dieses Antrags hat sich zwischenzeitlich geändert. Bitte die Seite neu laden und erneut versuchen.",
+    );
+  }
 
   await recordTenantAudit({
     tenantId,
@@ -619,14 +757,181 @@ export async function deleteTenantVacationRequest(input: {
       id: input.requestId,
       tenantId,
     },
-    select: { id: true },
+    select: { id: true, employeeId: true },
   });
 
   if (!request) {
     throw new Error("Urlaubsantrag nicht gefunden.");
   }
 
+  await assertEmployeeInScope(access, request.employeeId);
+
   await prisma.tenantVacationRequest.delete({
     where: { id: input.requestId },
   });
+}
+
+/**
+ * Verbucht Resturlaubs-Übertrag zum Jahreswechsel, versendet den gesetzlich
+ * erforderlichen Verfalls-Hinweis (BUrlG §7 Abs. 3) und lässt einen
+ * rechtzeitig hingewiesenen, abgelaufenen Carryover verfallen (Audit-Finding
+ * M02). Von `app/api/cron/cleanup/route.ts` täglich aufgerufen — jeder
+ * einzelne Schritt ist idempotent (siehe lib/vacation-carryover.ts), ein
+ * mehrfacher Lauf pro Tag/Jahr verändert den Zustand nicht erneut.
+ *
+ * Näherung mangels Historie: `vacationTotal` ist ein einziges, live
+ * gepflegtes Feld ohne Jahresbezug — als "Anspruch des abgelaufenen Jahres"
+ * wird hier der aktuelle Wert verwendet, weil kein historischer
+ * Jahresanspruch gespeichert ist. Ändert HR den Anspruch untermittig, wirkt
+ * sich das rückwirkend auf die Carryover-Berechnung aus.
+ *
+ * `tenantId` ist nur für gezielte Tests gegen die reale (geteilte) DB gedacht
+ * — der Cronjob selbst ruft ohne dieses Argument auf und verarbeitet
+ * mandantenübergreifend alle aktiven Mitarbeiter, wie die übrigen
+ * Cleanup-Teilschritte auch.
+ */
+export async function runVacationCarryoverRollover(now: Date = new Date(), tenantId?: string) {
+  const employees = await prisma.tenantEmployee.findMany({
+    where: { status: "active", ...(tenantId ? { tenantId } : {}) },
+    select: {
+      id: true,
+      name: true,
+      tenantId: true,
+      vacationTotal: true,
+      vacationCarryover: true,
+      vacationCarryoverExpiresAt: true,
+      vacationCarryoverRemindedAt: true,
+      tenant: { select: { name: true } },
+    },
+  });
+
+  let rolledOver = 0;
+  let remindersSent = 0;
+  let flaggedForReview = 0;
+
+  for (const employee of employees) {
+    const previousYear = now.getUTCFullYear() - 1;
+    let state = {
+      carryover: employee.vacationCarryover,
+      expiresAt: employee.vacationCarryoverExpiresAt,
+      remindedAt: employee.vacationCarryoverRemindedAt,
+    };
+
+    const alreadyRolledOverThisYear =
+      state.expiresAt !== null && state.expiresAt.getUTCFullYear() === now.getUTCFullYear();
+
+    // Bekannte Prüfgrenze (Audit-Finding R05, "Initialisierung"): ohne ein
+    // Jahres-Ledger für vacationTotal nimmt auch der allererste Lauf für
+    // einen Mitarbeiter dessen AKTUELLE vacationTotal als Vorjahresanspruch
+    // an. Für langjährig Beschäftigte mit stabilem Anspruch ist das in der
+    // Praxis eine vernünftige Näherung; bei einer erst dieses Jahr
+    // wirksamen Anspruchsänderung kann sie zu hoch/zu niedrig ausfallen.
+    // Eine zuverlässigere Lösung bräuchte eine echte Historie des
+    // Jahresanspruchs (nicht nur den aktuellen Wert) — das ist eine
+    // Produktentscheidung, keine reine Code-Korrektur, und deshalb hier
+    // bewusst nicht verändert.
+    if (!alreadyRolledOverThisYear) {
+      const previousYearTaken = await prisma.tenantVacationRequest.aggregate({
+        where: {
+          employeeId: employee.id,
+          status: "approved",
+          startDate: { gte: `${previousYear}-01-01`, lte: `${previousYear}-12-31` },
+        },
+        _sum: { days: true },
+      });
+
+      const rolled = rollOverVacationCarryover({
+        now,
+        currentState: state,
+        previousYearTotal: employee.vacationTotal,
+        previousYearTaken: previousYearTaken._sum.days ?? 0,
+      });
+
+      if (rolled !== state) {
+        state = rolled;
+        rolledOver += 1;
+      }
+    }
+
+    if (isCarryoverReminderDue(state, now)) {
+      // NUR bei tatsächlichem Zustellversuch (verknüpftes Konto vorhanden)
+      // `remindedAt` setzen — sonst könnte ein Mitarbeiter ohne Konto nie
+      // benachrichtigt werden und der Anspruch würde trotzdem unten als
+      // "rechtzeitig hingewiesen" verfallen (Audit-Finding R05).
+      const delivered = await notifyEmployeeOfExpiringVacationCarryover({
+        tenantId: employee.tenantId,
+        tenantName: employee.tenant.name,
+        employeeId: employee.id,
+        days: state.carryover,
+        expiresAt: state.expiresAt!.toISOString().slice(0, 10),
+      });
+
+      if (delivered) {
+        await createSystemTenantReminder({
+          tenantId: employee.tenantId,
+          title: `Resturlaub verfällt: ${employee.name} (${state.expiresAt!.getUTCFullYear()})`,
+          dueDate: state.expiresAt!.toISOString().slice(0, 10),
+          priority: "important",
+          subject: `${employee.name} hat noch ${state.carryover} Tag(e) Resturlaub aus dem Vorjahr`,
+          category: "Urlaub",
+          notes:
+            "Der/die Mitarbeiter:in wurde automatisch per Benachrichtigung auf den drohenden Verfall hingewiesen (BUrlG §7 Abs. 3). Bitte die Urlaubsplanung entsprechend abstimmen.",
+        });
+        state = { ...state, remindedAt: now };
+        remindersSent += 1;
+      } else {
+        await createSystemTenantReminder({
+          tenantId: employee.tenantId,
+          title: `Resturlaub-Hinweis nicht zustellbar: ${employee.name} (${state.expiresAt!.getUTCFullYear()})`,
+          dueDate: now.toISOString().slice(0, 10),
+          priority: "important",
+          subject: `${employee.name} hat noch ${state.carryover} Tag(e) Resturlaub aus dem Vorjahr, aber kein verknüpftes Konto`,
+          category: "Urlaub",
+          notes:
+            "Der gesetzlich erforderliche Verfalls-Hinweis (BUrlG §7 Abs. 3) konnte nicht automatisch zugestellt werden, weil kein Benutzerkonto verknüpft ist. Bitte manuell informieren, damit der Anspruch fristgerecht hinweisbar bleibt.",
+        });
+      }
+    }
+
+    if (shouldForfeitCarryover(state, now)) {
+      // Kein automatisches Nullsetzen mehr (Audit-Finding R05): Urlaubsverfall
+      // bei Krankheit oder abweichenden Anspruchsjahren ist rechtlich
+      // differenziert (u. a. BAG 9 AZR 245/19) und lässt sich nicht pauschal
+      // per Zeitstempelvergleich entscheiden. Der Fall geht stattdessen an
+      // HR zur bewussten Prüfung/Entscheidung; der Anspruch bleibt bis dahin
+      // technisch bestehen.
+      const { created } = await createSystemTenantReminder({
+        tenantId: employee.tenantId,
+        title: `Urlaubsverfall prüfen: ${employee.name} (${state.expiresAt!.getUTCFullYear()})`,
+        dueDate: now.toISOString().slice(0, 10),
+        priority: "important",
+        subject: `${employee.name}: ${state.carryover} Tag(e) Resturlaub aus dem Vorjahr sind laut Frist verfallbar`,
+        category: "Urlaub",
+        notes:
+          "Automatische Fristprüfung: rechtzeitiger Hinweis erfolgt, Frist (31.03.) abgelaufen. Vor einer Kürzung bitte prüfen, ob Krankheit oder ein abweichendes Anspruchsjahr den Verfall ausschließt (BAG 9 AZR 245/19). Der Anspruch wurde NICHT automatisch gestrichen.",
+      });
+
+      if (created) {
+        flaggedForReview += 1;
+      }
+    }
+
+    const changed =
+      state.carryover !== employee.vacationCarryover ||
+      state.expiresAt?.getTime() !== employee.vacationCarryoverExpiresAt?.getTime() ||
+      state.remindedAt?.getTime() !== employee.vacationCarryoverRemindedAt?.getTime();
+
+    if (changed) {
+      await prisma.tenantEmployee.update({
+        where: { id: employee.id },
+        data: {
+          vacationCarryover: state.carryover,
+          vacationCarryoverExpiresAt: state.expiresAt,
+          vacationCarryoverRemindedAt: state.remindedAt,
+        },
+      });
+    }
+  }
+
+  return { checked: employees.length, rolledOver, remindersSent, flaggedForReview };
 }

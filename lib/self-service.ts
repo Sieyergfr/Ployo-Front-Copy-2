@@ -14,7 +14,7 @@ import { getStorageBucket } from "@/lib/storage/buckets";
 import { buildStorageKey, getFileExtension } from "@/lib/storage/key-builder";
 import { createReadSignedUrl } from "@/lib/storage/signed-url";
 import { uploadObject } from "@/lib/storage/upload";
-import { validateUploadFile } from "@/lib/storage/storage.service";
+import { fileToBuffer } from "@/lib/storage/storage.service";
 
 /**
  * `emergencyContactsJson` ist eine `String`-Spalte (Migration
@@ -53,6 +53,8 @@ export type SelfServiceEmployee = {
   vacationRemaining: number;
   vacationTotal: number;
   vacationTaken: number;
+  /** Bereits in `vacationRemaining` enthalten — separat für eine Anzeige "davon X Tage Resturlaub". */
+  vacationCarryover: number;
 };
 
 /**
@@ -344,6 +346,7 @@ export async function getMySelfServiceOverview(
     contractVacation: employeeRecord.contractDetails?.vacation ?? "",
     storedVacationTotal: employeeRecord.vacationTotal,
     approvedDaysThisYear,
+    carryover: employeeRecord.vacationCarryover,
   });
 
   return {
@@ -359,6 +362,8 @@ export async function getMySelfServiceOverview(
       vacationRemaining: vacationAccount.vacationRemaining,
       vacationTotal: vacationAccount.vacationTotal,
       vacationTaken: vacationAccount.vacationTaken,
+      /** Bereits in `vacationRemaining` enthalten — separat für eine Anzeige "davon X Tage Resturlaub". */
+      vacationCarryover: vacationAccount.vacationCarryover,
     },
     vacationRequests: vacationRequests.map((request) => ({
       id: request.id,
@@ -447,11 +452,36 @@ export type SelfServiceTimelineEntry = {
   createdAt: string;
 };
 
+export type SelfServiceNotification = {
+  category: string;
+  title: string;
+  detail: string;
+  read: boolean;
+  createdAt: string;
+};
+
+export type SelfServiceConsentRecord = {
+  value: string;
+  bannerVersion: string;
+  ipAddress: string;
+  userAgent: string;
+  createdAt: string;
+};
+
 export type PersonalakteExport = SelfServiceOverview & {
   contracts: SelfServiceContract[];
   contractDetails: SelfServiceContractDetails | null;
   payrollStatements: SelfServicePayrollStatement[];
   timeline: SelfServiceTimelineEntry[];
+  /**
+   * Vorher komplett aus dem Export ausgeschlossen (Audit-Finding M06), obwohl
+   * `getMySelfServiceOverview` das Feld bereits lädt.
+   */
+  maternityProtection: { active: boolean; note: string } | null;
+  /** In-App-Posteingang (TenantEmployeeNotification) — vorher nicht Teil des Exports. */
+  notifications: SelfServiceNotification[];
+  /** Eigene Cookie-Consent-Nachweise (ConsentRecord) — vorher nicht Teil des Exports. */
+  consentRecords: SelfServiceConsentRecord[];
 };
 
 /**
@@ -461,31 +491,66 @@ export type PersonalakteExport = SelfServiceOverview & {
  * `getMyPayrollStatements` auf (gleiche ACL-Filterung: `hiddenFromEmployee`,
  * `canAccessFileAcl`, verborgene Ordner) und ergänzt strukturierte
  * Vertrags-/Verlaufsdaten, die dort nicht für die Bildschirmansicht
- * gebraucht werden. Bewusst ausgeschlossen: `TenantEmployeeContract.notes`
- * (interne HR-Vermerke, keine reine Selbstauskunft) und
- * `linkedFileName`/`linkedFileMeta` (UI-Metadaten, keine personenbezogenen
- * Daten).
+ * gebraucht werden — außerdem (Audit-Finding M06, vorher komplett
+ * ausgeschlossen): Mutterschutz-Kennzeichnung/-Notiz (entschlüsselt), der
+ * eigene In-App-Posteingang (`TenantEmployeeNotification`) und eigene
+ * Cookie-Consent-Nachweise (`ConsentRecord`). Bewusst weiterhin
+ * ausgeschlossen: `TenantEmployeeContract.notes` (interne HR-Vermerke,
+ * keine reine Selbstauskunft) und `linkedFileName`/`linkedFileMeta`
+ * (UI-Metadaten, keine personenbezogenen Daten). Weiterhin kein
+ * vollständiges DSAR-Datenmanifest mit Drittrechte-Prüfung — siehe
+ * Umsetzungsstatus im Audit für den Rest.
  */
 export async function getMyPersonalakteExport(tenantSlug: string): Promise<PersonalakteExport> {
+  const access = await requireTenantMembership(tenantSlug);
   const overview = await getMySelfServiceOverview(tenantSlug);
+  const consentRecords = await prisma.consentRecord.findMany({
+    where: { userId: access.userId },
+    orderBy: { createdAt: "desc" },
+  });
+  const mappedConsentRecords: SelfServiceConsentRecord[] = consentRecords.map((record) => ({
+    value: record.value,
+    bannerVersion: record.bannerVersion,
+    ipAddress: record.ipAddress,
+    userAgent: record.userAgent,
+    createdAt: record.createdAt.toISOString(),
+  }));
 
   if (!overview.employee) {
-    return { ...overview, contracts: [], contractDetails: null, payrollStatements: [], timeline: [] };
+    return {
+      ...overview,
+      contracts: [],
+      contractDetails: null,
+      payrollStatements: [],
+      timeline: [],
+      maternityProtection: null,
+      notifications: [],
+      consentRecords: mappedConsentRecords,
+    };
   }
 
   const employeeId = overview.employee.id;
-  const [contracts, contractDetails, payrollStatements, timeline] = await Promise.all([
-    prisma.tenantEmployeeContract.findMany({
-      where: { employeeId },
-      orderBy: { startDate: "desc" },
-    }),
-    prisma.tenantEmployeeContractDetails.findUnique({ where: { employeeId } }),
-    getMyPayrollStatements(tenantSlug),
-    prisma.tenantEmployeeTimeline.findMany({
-      where: { employeeId },
-      orderBy: { createdAt: "desc" },
-    }),
-  ]);
+  const [contracts, contractDetails, payrollStatements, timeline, employeeRecord, notifications] =
+    await Promise.all([
+      prisma.tenantEmployeeContract.findMany({
+        where: { employeeId },
+        orderBy: { startDate: "desc" },
+      }),
+      prisma.tenantEmployeeContractDetails.findUnique({ where: { employeeId } }),
+      getMyPayrollStatements(tenantSlug),
+      prisma.tenantEmployeeTimeline.findMany({
+        where: { employeeId },
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.tenantEmployee.findUnique({
+        where: { id: employeeId },
+        select: { maternityProtectionActive: true, maternityProtectionNote: true },
+      }),
+      prisma.tenantEmployeeNotification.findMany({
+        where: { tenantId: access.tenantId, userId: access.userId },
+        orderBy: { createdAt: "desc" },
+      }),
+    ]);
 
   return {
     ...overview,
@@ -500,7 +565,7 @@ export async function getMyPersonalakteExport(tenantSlug: string): Promise<Perso
       department: contract.department,
       workLocation: contract.workLocation,
       weeklyHours: contract.weeklyHours,
-      compensation: contract.compensation,
+      compensation: decryptField(contract.compensation),
       vacationDays: contract.vacationDays,
       terminationDate: contract.terminationDate,
       terminationReason: contract.terminationReason,
@@ -527,6 +592,20 @@ export async function getMyPersonalakteExport(tenantSlug: string): Promise<Perso
       tone: entry.tone,
       createdAt: entry.createdAt.toISOString(),
     })),
+    maternityProtection: employeeRecord
+      ? {
+          active: employeeRecord.maternityProtectionActive,
+          note: decryptField(employeeRecord.maternityProtectionNote),
+        }
+      : null,
+    notifications: notifications.map((notification) => ({
+      category: notification.category,
+      title: notification.title,
+      detail: notification.detail,
+      read: notification.read,
+      createdAt: notification.createdAt.toISOString(),
+    })),
+    consentRecords: mappedConsentRecords,
   };
 }
 
@@ -640,7 +719,10 @@ export async function uploadMyDocument(input: {
     throw new Error("Ungültiger Dokumenttyp.");
   }
 
-  validateUploadFile(input.file);
+  // Dieselbe Byte-/Signaturprüfung wie beim generischen Upload — der
+  // clientseitige `file.type` bzw. eine unbestätigte Endung wird NICHT
+  // übernommen (Audit-Finding H08/R04).
+  const { buffer, mimeType } = await fileToBuffer(input.file);
 
   const originalName = input.file.name.trim().replace(/[\\/]+/g, "-").slice(0, 240) || "Datei";
   const bucketConfig = getStorageBucket();
@@ -652,8 +734,8 @@ export async function uploadMyDocument(input: {
   });
   const uploaded = await uploadObject({
     key: storageKey,
-    body: Buffer.from(await input.file.arrayBuffer()),
-    contentType: input.file.type || "application/octet-stream",
+    body: buffer,
+    contentType: mimeType,
     metadata: { tenantId: access.tenantId, originalName },
   });
 
@@ -665,7 +747,7 @@ export async function uploadMyDocument(input: {
       storageKey: uploaded.key,
       originalName,
       displayName: originalName,
-      mimeType: input.file.type || "application/octet-stream",
+      mimeType,
       sizeBytes: input.file.size,
       extension: getFileExtension(originalName),
       folderSlug: slot ? slot.key : "eigene-uploads",
@@ -760,7 +842,10 @@ export async function submitInfoRequestResponse(input: {
   let uploadedFileId = infoRequest.responseFileId;
 
   if (input.file) {
-    validateUploadFile(input.file);
+    // Dieselbe Byte-/Signaturprüfung wie beim generischen Upload — der
+    // clientseitige `file.type` bzw. eine unbestätigte Endung wird NICHT
+    // übernommen (Audit-Finding H08/R04).
+    const { buffer, mimeType } = await fileToBuffer(input.file);
 
     const originalName =
       input.file.name.trim().replace(/[\\/]+/g, "-").slice(0, 240) || "Datei";
@@ -773,8 +858,8 @@ export async function submitInfoRequestResponse(input: {
     });
     const uploaded = await uploadObject({
       key: storageKey,
-      body: Buffer.from(await input.file.arrayBuffer()),
-      contentType: input.file.type || "application/octet-stream",
+      body: buffer,
+      contentType: mimeType,
       metadata: { tenantId: access.tenantId, originalName },
     });
 
@@ -786,7 +871,7 @@ export async function submitInfoRequestResponse(input: {
         storageKey: uploaded.key,
         originalName,
         displayName: originalName,
-        mimeType: input.file.type || "application/octet-stream",
+        mimeType,
         sizeBytes: input.file.size,
         extension: getFileExtension(originalName),
         folderSlug: "info-anfragen",

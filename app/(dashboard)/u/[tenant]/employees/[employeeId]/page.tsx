@@ -622,7 +622,6 @@ export default async function EmployeeDetailPage({
   const auditEntries = canViewEmployeeAudit
     ? await getAuditLogsForEntity({
         tenantSlug: tenant,
-        area: "employees",
         entityType: "employee",
         entityId: employee.dbId ?? employee.id,
         take: 10,

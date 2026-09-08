@@ -60,29 +60,75 @@ export async function deleteObjectFromStorage(input: {
   );
 }
 
+/** Objekt ist im Bucket bereits nicht (mehr) vorhanden — wie ein erfolgreiches Löschen behandeln. */
+function isObjectAlreadyGone(error: unknown): boolean {
+  const code =
+    (error as { name?: string; Code?: string; $metadata?: { httpStatusCode?: number } } | null)
+      ?.name ??
+    (error as { Code?: string } | null)?.Code ??
+    "";
+
+  if (code === "NoSuchKey" || code === "NotFound") {
+    return true;
+  }
+
+  const status = (error as { $metadata?: { httpStatusCode?: number } } | null)?.$metadata
+    ?.httpStatusCode;
+
+  return status === 404;
+}
+
 /**
  * Entfernt Datei-Datensätze samt S3-Objekten endgültig.
- * S3-Fehler brechen den Vorgang nicht ab (werden geloggt), damit
- * verwaiste Objekte einen späteren Purge-Lauf nicht blockieren.
+ *
+ * Metadaten werden je Datei NUR gelöscht, wenn das S3-Objekt nachweislich
+ * gelöscht wurde (oder bereits nicht mehr existierte) — vorher entfernte
+ * ein fehlgeschlagenes S3-Delete (z. B. Timeout/AccessDenied) trotzdem den
+ * DB-Verweis, sodass das Objekt dauerhaft verwaist im Bucket blieb und kein
+ * späterer Lauf ihn je wiederfand (Audit-Finding H11). Bei fehlgeschlagenen
+ * Dateien wird stattdessen `status: "deleted"` (mit frischem `deletedAt`)
+ * gesetzt — der reguläre periodische Cleanup-Lauf
+ * (`app/api/cron/cleanup/route.ts`) greift genau diesen Zustand nach der
+ * Karenzzeit automatisch wieder auf und versucht die Löschung erneut, ohne
+ * dass dafür eine gesonderte Warteschlangen-Tabelle nötig wäre.
  */
 export async function purgeTenantFiles(
   files: Array<{ id: string; bucket: string; storageKey: string }>,
 ) {
+  const succeededIds: string[] = [];
+  const failedIds: string[] = [];
+
   for (const file of files) {
     try {
       await deleteObjectFromStorage({ bucket: file.bucket, key: file.storageKey });
+      succeededIds.push(file.id);
     } catch (error) {
-      logger.error("S3-Objekt konnte nicht gelöscht werden.", {
+      if (isObjectAlreadyGone(error)) {
+        succeededIds.push(file.id);
+        continue;
+      }
+
+      logger.error("S3-Objekt konnte nicht gelöscht werden — Metadaten bleiben für Retry erhalten.", {
         bucket: file.bucket,
         key: file.storageKey,
         error: error instanceof Error ? error.message : String(error),
       });
+      failedIds.push(file.id);
     }
   }
 
-  if (files.length) {
+  if (succeededIds.length) {
     await prisma.tenantFile.deleteMany({
-      where: { id: { in: files.map((file) => file.id) } },
+      where: { id: { in: succeededIds } },
     });
   }
+
+  if (failedIds.length) {
+    await prisma.tenantFile.updateMany({
+      where: { id: { in: failedIds } },
+      data: { status: "deleted", deletedAt: new Date() },
+    });
+  }
+
+  return { succeededIds, failedIds };
 }

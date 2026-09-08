@@ -8,6 +8,7 @@ import {
   type InvitationView,
 } from "@/lib/invitation-service";
 import { prisma } from "@/lib/prisma";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 import { APIError } from "better-auth/api";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
@@ -103,6 +104,30 @@ export async function loginAndAcceptInvitationAction(formData: FormData) {
 
   if (!password) {
     redirect(invitePath(token, "invalid_password"));
+  }
+
+  // Dieser Passwortversuch läuft über auth.api.signInEmail direkt statt über
+  // die HTTP-Route — better-auths eigener Rate-Limiter hängt aber am
+  // Router-Pfad ("/sign-in/email") und greift bei einem direkten SDK-Aufruf
+  // nicht (Audit-Finding M08). Eigenes Limit an derselben Stelle, an Konto
+  // UND Client-IP gebunden (dieselben Schwellen wie better-auths
+  // "/sign-in/email"-Regel: 10 Versuche/60s), damit ein gültiger
+  // Einladungstoken nicht zum Umgehen der sonst geltenden Login-Begrenzung wird.
+  const [accountLimit, ipLimit] = await Promise.all([
+    checkRateLimit({
+      key: `invite-signin-account:${invitation.email.toLowerCase()}`,
+      limit: 10,
+      windowSeconds: 60,
+    }),
+    checkRateLimit({
+      key: `invite-signin-ip:${await getClientIp()}`,
+      limit: 10,
+      windowSeconds: 60,
+    }),
+  ]);
+
+  if (!accountLimit.allowed || !ipLimit.allowed) {
+    redirect(invitePath(token, "rate_limited"));
   }
 
   const requestHeaders = await headers();

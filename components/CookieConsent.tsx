@@ -49,8 +49,9 @@ function getServerSnapshot() {
 }
 
 function recordConsent(value: "granted" | "denied") {
-  // keepalive: die Anfrage muss den unmittelbar folgenden reload() bei
-  // "granted" überleben, statt vom Navigations-Abbruch gekillt zu werden.
+  // keepalive: die Anfrage muss den unmittelbar folgenden reload() (bei
+  // beiden Werten, siehe decide()) überleben, statt vom Navigations-Abbruch
+  // gekillt zu werden.
   fetch("/api/consent", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -68,12 +69,14 @@ function decide(value: "granted" | "denied") {
   document.cookie = `${CONSENT_COOKIE}=${value}; path=/; max-age=${maxAge}; SameSite=Lax`;
   recordConsent(value);
 
-  if (value === "granted") {
-    window.location.reload();
-    return;
-  }
-
-  notify();
+  // Ein Neuladen ist bei "granted" ohnehin nötig, damit Sentry Replay/Tracing
+  // erst jetzt aktiviert wird (instrumentation-client.ts liest den Consent
+  // nur beim Modul-Init). Bei "denied" war das bisher asymmetrisch: ein
+  // zuvor schon aktiviertes Replay lief bis zur nächsten Navigation einfach
+  // weiter (Audit-Finding M10) — deshalb auch hier neu laden, statt nur das
+  // Banner auszublenden. `instrumentation-client.ts` startet dann ohne
+  // Replay-Integration neu.
+  window.location.reload();
 }
 
 export function CookieConsent() {

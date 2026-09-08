@@ -1,7 +1,6 @@
-import { headers } from "next/headers";
 import { isEmailConfigured, sendContactRequestEmail } from "@/lib/email";
 import { logger } from "@/lib/logger";
-import { checkRateLimit, tooManyRequests } from "@/lib/rate-limit";
+import { checkRateLimit, getClientIp, tooManyRequests } from "@/lib/rate-limit";
 
 /**
  * Kontaktformular aus der Mobile-App (Fragezeichen auf dem Anmeldebildschirm,
@@ -27,30 +26,9 @@ const MAX_SOURCE_LENGTH = 60;
 // bestätigt sich ohnehin erst dadurch, dass eine Antwort ankommt.
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-/**
- * Absenderkennung für das Limit.
- *
- * `x-real-ip` zuerst, weil nginx den Header aus `$remote_addr` setzt und ein
- * Client ihn damit nicht selbst bestimmen kann. `x-forwarded-for` entsteht
- * dagegen aus `$proxy_add_x_forwarded_for`: der Client darf den Anfang des
- * Headers vorgeben, nginx hängt die echte Adresse nur hinten an — deshalb der
- * **letzte** Eintrag und nicht der erste. Fehlen beide, bleibt ein
- * gemeinsamer Eimer übrig; das Limit greift dann global.
- */
-async function clientKey() {
-  const headerList = await headers();
-  const realIp = headerList.get("x-real-ip")?.trim();
-  if (realIp) return realIp;
-
-  const forwarded = headerList.get("x-forwarded-for")?.split(",");
-  const lastHop = forwarded?.[forwarded.length - 1]?.trim();
-
-  return lastHop || "unknown";
-}
-
 export async function POST(request: Request) {
   const ipLimit = await checkRateLimit({
-    key: `contact-ip:${await clientKey()}`,
+    key: `contact-ip:${await getClientIp()}`,
     limit: 10,
     windowSeconds: 3600,
   });

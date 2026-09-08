@@ -546,6 +546,65 @@ export async function assertEmployeeInScope(
 }
 
 /**
+ * Wie `assertEmployeeInScope`, aber für den "assigned"-Team-Scope: prüft, ob
+ * die übergebene Team-ID zu den dem Aufrufer zugewiesenen Teams gehört.
+ * Mehrere Team-Mutationsservices hatten bisher nur den tenantweiten
+ * Level-Guard (`requireTeamManager`), aber keine Objektscope-Prüfung — ein
+ * Team-Verwalter mit "assigned"-Scope konnte damit über eine mitgeschickte
+ * fremde `teamId` auch andere Teams desselben Mandanten ändern
+ * (Audit-Finding H05).
+ */
+export async function assertTeamInScope(
+  access: TenantAccess,
+  teamId: string | null | undefined,
+) {
+  const scopeFilter = await resolveScopeFilter(access);
+
+  if (scopeFilter.type === "all") return;
+  if (!teamId) throw new Error("FORBIDDEN");
+
+  if (
+    scopeFilter.type === "assigned" &&
+    scopeFilter.area === "teams" &&
+    scopeFilter.teamIds.includes(teamId)
+  ) {
+    return;
+  }
+
+  throw new Error("FORBIDDEN");
+}
+
+/**
+ * Wie `assertTeamInScope`, aber für den "assigned"-Standort-Scope. Der
+ * Standort-Scope wird über den Namen aufgelöst (siehe `locationScopeWhere`
+ * in location-service.ts), daher hier ein zusätzlicher Lookup von der
+ * mitgeschickten ID auf den gespeicherten Namen.
+ */
+export async function assertLocationInScope(
+  access: TenantAccess,
+  locationId: string | null | undefined,
+) {
+  const scopeFilter = await resolveScopeFilter(access);
+
+  if (scopeFilter.type === "all") return;
+  if (!locationId) throw new Error("FORBIDDEN");
+
+  if (scopeFilter.type === "assigned" && scopeFilter.area === "locations") {
+    const { prisma } = await import("@/lib/prisma");
+    const location = await prisma.tenantLocation.findFirst({
+      where: { id: locationId, tenantId: access.tenantId },
+      select: { name: true },
+    });
+
+    if (location && scopeFilter.locationNames.includes(location.name)) {
+      return;
+    }
+  }
+
+  throw new Error("FORBIDDEN");
+}
+
+/**
  * Nicht werfende Variante von requireTenantAccess — für Stellen, an denen
  * ein optionaler Datenblock (z. B. Gehaltsabrechnungen in einem
  * Mitarbeiterprofil) nur bei ausreichender Berechtigung mitgeladen werden
@@ -562,6 +621,24 @@ export async function getOptionalTenantAccess(
     if (error instanceof Error && error.message === "FORBIDDEN") return null;
     throw error;
   }
+}
+
+/**
+ * Prüft, ob zwei User mindestens einen gemeinsamen Tenant teilen — z. B. für
+ * global (nicht tenantgebunden) gespeicherte Ressourcen wie Profilbilder, bei
+ * denen eine bloß bekannte User-ID allein keine Sichtberechtigung sein darf
+ * (Sicherheitsaudit L03).
+ */
+export async function sharesTenantWith(userIdA: string, userIdB: string): Promise<boolean> {
+  if (userIdA === userIdB) return true;
+
+  const { prisma } = await import("@/lib/prisma");
+  const shared = await prisma.tenantMembership.findFirst({
+    where: { userId: userIdA, tenant: { memberships: { some: { userId: userIdB } } } },
+    select: { id: true },
+  });
+
+  return shared !== null;
 }
 
 /**

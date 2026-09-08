@@ -56,6 +56,29 @@ enum LocationStatus {
   inactive
 }
 
+/// Für die Feiertagsberechnung (lib/german-holidays.ts) — welche
+/// länderspezifischen Feiertage zusätzlich zu den neun bundeseinheitlichen
+/// für einen Standort gelten. `null` (kein Bundesland hinterlegt) bedeutet
+/// nur die bundeseinheitlichen Feiertage, nie "keine Feiertage" (Audit-Finding M01/M03).
+enum Bundesland {
+  BW
+  BY
+  BE
+  BB
+  HB
+  HH
+  HE
+  MV
+  NI
+  NW
+  RP
+  SL
+  SN
+  ST
+  SH
+  TH
+}
+
 enum EmployeeStatus {
   active
   vacation
@@ -280,6 +303,34 @@ model AppRateLimit {
   @@index([resetAt])
 }
 
+/// Persistente Dedupliziertung verarbeiteter Stripe-Webhook-Events (Audit-
+/// Finding M14/R06) — Stripe kann dasselbe Event mehrfach zustellen (Retry
+/// ohne rechtzeitige 2xx-Antwort). `id` ist die Stripe-Event-ID.
+///
+/// Zwei Phasen statt eines einzelnen Inserts: die Zeile wird VOR dem
+/// eigentlichen Verarbeiten mit status=processing angelegt (beansprucht die
+/// Event-ID) und erst NACH erfolgreichem Verarbeiten auf status=completed
+/// gesetzt. Schlägt die Verarbeitung dazwischen fehl (z. B. kurzzeitiger
+/// DB-Fehler), bleibt die Zeile auf "processing" stehen — ein Stripe-Retry
+/// erkennt daran, dass die eigentliche Änderung NICHT abgeschlossen wurde,
+/// und wiederholt sie, statt fälschlich `{deduplicated:true}` zurückzugeben.
+/// Ein einzelnes Feld `processedAt` (immer beim Anlegen gesetzt) konnte diesen
+/// Unterschied nicht abbilden.
+model StripeWebhookEvent {
+  id          String                   @id
+  status      StripeWebhookEventStatus @default(processing)
+  createdAt   DateTime                 @default(now())
+  processedAt DateTime?
+
+  @@index([processedAt])
+  @@index([status])
+}
+
+enum StripeWebhookEventStatus {
+  processing
+  completed
+}
+
 model Verification {
   id         String    @id @default(cuid())
   identifier String
@@ -330,6 +381,11 @@ model Tenant {
   stripeSubscriptionStatus String?
   stripeCurrentPeriodEnd   DateTime?
   stripeCancelAtPeriodEnd  Boolean                         @default(false)
+  /// Erstellungszeitpunkt (`event.created`) des zuletzt tatsächlich
+  /// angewendeten Subscription-Webhook-Events — verhindert, dass ein
+  /// verspätet zugestelltes/außer der Reihe eintreffendes älteres Ereignis
+  /// einen bereits neueren lokalen Stand überschreibt (Audit-Finding M14).
+  stripeLastEventCreatedAt DateTime?
   createdAt                DateTime                        @default(now())
   updatedAt                DateTime                        @updatedAt
   invitations              TenantInvitation[]
@@ -578,6 +634,9 @@ model TenantLocation {
   /// ein Standort ohne eigene Einstellung automatisch an der zentralen
   /// Vorgabe haengen, statt sie beim Anlegen einmalig zu kopieren.
   shiftMinStaffing   Int?
+  /// Für die Feiertagsberechnung (lib/german-holidays.ts). `null` = nur die
+  /// neun bundeseinheitlichen Feiertage gelten für diesen Standort.
+  bundesland         Bundesland?
   utilization        String                   @default("0%")
   utilizationCaption String                   @default("")
   status             LocationStatus           @default(active)
@@ -642,81 +701,101 @@ model TenantLocationActivity {
 }
 
 model TenantEmployee {
-  id                    String                         @id @default(cuid())
-  key                   String
-  userId                String?
-  initials              String
-  name                  String
-  employeeNumber        String
-  birthDate             String                         @default("")
-  birthPlace            String                         @default("")
-  nationality           String                         @default("")
-  maritalStatus         String                         @default("")
-  privateAddressId      String?                        @unique
-  taxId                 String                         @default("")
-  socialSecurityNumber  String                         @default("")
-  healthInsurance       String                         @default("")
-  iban                  String                         @default("")
-  location              String                         @default("")
-  team                  String                         @default("")
-  role                  String                         @default("")
-  startDate             String                         @default("")
-  endDate               String                         @default("")
-  contract              String                         @default("Unbefristet")
-  weeklyHours           String                         @default("")
-  tenure                String                         @default("")
-  status                EmployeeStatus                 @default(active)
-  email                 String                         @default("")
-  phone                 String                         @default("")
-  workAddressId         String?                        @unique
-  vacationRemaining     Int                            @default(0)
-  vacationTotal         Int                            @default(30)
-  vacationTaken         Int                            @default(0)
+  id                          String                         @id @default(cuid())
+  key                         String
+  userId                      String?
+  initials                    String
+  name                        String
+  employeeNumber              String
+  birthDate                   String                         @default("")
+  birthPlace                  String                         @default("")
+  nationality                 String                         @default("")
+  maritalStatus               String                         @default("")
+  privateAddressId            String?                        @unique
+  taxId                       String                         @default("")
+  socialSecurityNumber        String                         @default("")
+  healthInsurance             String                         @default("")
+  iban                        String                         @default("")
+  location                    String                         @default("")
+  team                        String                         @default("")
+  role                        String                         @default("")
+  startDate                   String                         @default("")
+  endDate                     String                         @default("")
+  contract                    String                         @default("Unbefristet")
+  weeklyHours                 String                         @default("")
+  tenure                      String                         @default("")
+  status                      EmployeeStatus                 @default(active)
+  email                       String                         @default("")
+  phone                       String                         @default("")
+  workAddressId               String?                        @unique
+  vacationRemaining           Int                            @default(0)
+  vacationTotal               Int                            @default(30)
+  vacationTaken               Int                            @default(0)
+  /// Wochentage, an denen dieser Mitarbeiter regulär arbeitet — Grundlage für
+  /// die Urlaubsverbrauchsberechnung (lib/vacation-service.ts), die seitdem
+  /// individuelle Arbeitstage statt pauschal alle Kalendertage zählt (Audit-
+  /// Finding M01). Default 5-Tage-Woche (Mo-Fr), das bisherige De-facto-
+  /// Verhalten für alle noch nicht konfigurierten Mitarbeiter am nächsten.
+  workDaysJson                Json                           @default("[\"Mo\",\"Di\",\"Mi\",\"Do\",\"Fr\"]")
+  /// Aus dem Vorjahr übertragener, noch nicht verbrauchter Resturlaub (BUrlG
+  /// §7 Abs. 3) — getrennt von `vacationTotal` des laufenden Jahres geführt,
+  /// damit beim Jahreswechsel-Cronjob (lib/vacation-carryover.ts) nicht die
+  /// laufende Anspruchszahl überschrieben wird.
+  vacationCarryover           Int                            @default(0)
+  /// Frist, zu der `vacationCarryover` gesetzlich verfällt (default 31.03.
+  /// des Folgejahres) — greift nur, wenn `vacationCarryoverRemindedAt`
+  /// rechtzeitig vorher gesetzt wurde (BAG 9 AZR 541/15: ohne dokumentierten
+  /// Hinweis kein automatischer Verfall).
+  vacationCarryoverExpiresAt  DateTime?
+  /// Zeitpunkt, zu dem der/die Mitarbeiter:in nachweislich auf den drohenden
+  /// Verfall von `vacationCarryover` hingewiesen wurde. `null` = noch nicht
+  /// hingewiesen — der Cronjob darf dann NICHT automatisch verfallen lassen.
+  vacationCarryoverRemindedAt DateTime?
   /// String statt Json: Feldverschlüsselung (lib/encryption.ts) arbeitet nur
   /// auf Strings. Enthält weiterhin JSON (App-seitig via JSON.stringify/parse
   /// serialisiert), nur die Spalte selbst ist jetzt Text statt jsonb.
-  emergencyContactsJson String                         @default("[]")
+  emergencyContactsJson       String                         @default("[]")
   /// Zeitpunkt des Austritts (offboardEmployee), Startpunkt der Fristuhr für
   /// die Kategorie-1-Anonymisierung (lib/data-retention.ts). Getrennt von
   /// endDate (String, frei editierbar), damit die Frist nicht durch eine
   /// nachträgliche Korrektur von endDate verschoben werden kann. Bei
   /// reactivateEmployee wieder auf null gesetzt.
-  offboardedAt          DateTime?
+  offboardedAt                DateTime?
   /// Sperrt jede automatische Löschung/Anonymisierung für diesen Datensatz
   /// (z. B. laufender Rechtsstreit). Muss von Hand gesetzt/aufgehoben werden,
   /// beides mit Audit-Pflicht.
-  legalHold             Boolean                        @default(false)
-  legalHoldReason       String                         @default("")
+  legalHold                   Boolean                        @default(false)
+  legalHoldReason             String                         @default("")
   /// Mutterschutz-Kennzeichnung (§ 5/§ 6 MuSchG, Beschäftigungsverbote
   /// Nacht/Sonntag) — nur über den eigenen "mutterschutz"-Berechtigungs-
   /// bereich sicht-/bearbeitbar (lib/roles.ts), nicht über das allgemeine
   /// "sensitiveData". Muss wie legalHold von Hand gesetzt/aufgehoben werden,
   /// beides mit Audit-Pflicht — kein automatischer Fristablauf.
-  maternityProtectionActive Boolean                    @default(false)
+  maternityProtectionActive   Boolean                        @default(false)
   /// Verschlüsselt wie birthDate/legalHoldReason (lib/encryption.ts) — z. B.
   /// für ein handschriftliches "geschützt bis ca. TT.MM.JJJJ".
-  maternityProtectionNote   String                     @default("")
+  maternityProtectionNote     String                         @default("")
   /// Zeitpunkt, an dem Kategorie-1-Stammdaten automatisch anonymisiert wurden
   /// (siehe cron/cleanup). null = noch nicht anonymisiert.
-  piiAnonymizedAt       DateTime?
-  createdAt             DateTime                       @default(now())
-  updatedAt             DateTime                       @updatedAt
-  tenantId              String
-  privateAddress        EmployeeAddress?               @relation("TenantEmployeePrivateAddress", fields: [privateAddressId], references: [id], onDelete: SetNull)
-  workAddress           EmployeeAddress?               @relation("TenantEmployeeWorkAddress", fields: [workAddressId], references: [id], onDelete: SetNull)
-  tenant                Tenant                         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  vacationRequests      TenantVacationRequest[]
-  wishFreeRequests      TenantWishFreeRequest[]
-  shifts                TenantShift[]
-  storageFiles          TenantFile[]
-  storageFileFolders    TenantFileFolder[]
-  contracts             TenantEmployeeContract[]
-  payrollStatements     TenantPayrollStatement[]
-  sicknessReports       TenantSicknessReport[]
-  infoRequests          TenantEmployeeInfoRequest[]
-  timeline              TenantEmployeeTimeline[]
-  contractDetails       TenantEmployeeContractDetails?
-  locationsLed          TenantLocation[]               @relation("TenantLocationLead")
+  piiAnonymizedAt             DateTime?
+  createdAt                   DateTime                       @default(now())
+  updatedAt                   DateTime                       @updatedAt
+  tenantId                    String
+  privateAddress              EmployeeAddress?               @relation("TenantEmployeePrivateAddress", fields: [privateAddressId], references: [id], onDelete: SetNull)
+  workAddress                 EmployeeAddress?               @relation("TenantEmployeeWorkAddress", fields: [workAddressId], references: [id], onDelete: SetNull)
+  tenant                      Tenant                         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  vacationRequests            TenantVacationRequest[]
+  wishFreeRequests            TenantWishFreeRequest[]
+  shifts                      TenantShift[]
+  storageFiles                TenantFile[]
+  storageFileFolders          TenantFileFolder[]
+  contracts                   TenantEmployeeContract[]
+  payrollStatements           TenantPayrollStatement[]
+  sicknessReports             TenantSicknessReport[]
+  infoRequests                TenantEmployeeInfoRequest[]
+  timeline                    TenantEmployeeTimeline[]
+  contractDetails             TenantEmployeeContractDetails?
+  locationsLed                TenantLocation[]               @relation("TenantLocationLead")
 
   @@unique([tenantId, key])
   @@unique([tenantId, employeeNumber])

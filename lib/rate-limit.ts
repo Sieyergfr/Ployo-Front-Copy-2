@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
+import { headers } from "next/headers";
 
 /**
  * DB-gestütztes Rate-Limit für die eigenen API-Routen (better-auth deckt
@@ -8,6 +9,30 @@ import { prisma } from "@/lib/prisma";
  * nur pro Prozess. Das Fenster wird atomar per Upsert fortgeschrieben
  * (kein Read-then-write-Race zwischen parallelen Requests).
  */
+
+/**
+ * Client-Adresse für Rate-Limit-Schlüssel unauthentifizierter Endpunkte —
+ * bisher an mehreren Stellen (app/api/contact, app/api/consent) fast
+ * identisch dupliziert, hier zusammengeführt, damit die sicherheitsrelevante
+ * Kopfzeilen-Reihenfolge nicht auseinanderdriften kann.
+ *
+ * `x-real-ip` zuerst, weil nginx den Header aus `$remote_addr` setzt und ein
+ * Client ihn damit nicht selbst bestimmen kann. `x-forwarded-for` entsteht
+ * dagegen aus `$proxy_add_x_forwarded_for`: der Client darf den Anfang des
+ * Headers vorgeben, nginx hängt die echte Adresse nur hinten an — deshalb der
+ * **letzte** Eintrag und nicht der erste. Fehlen beide, bleibt ein
+ * gemeinsamer Eimer übrig; das Limit greift dann global statt gar nicht.
+ */
+export async function getClientIp(): Promise<string> {
+  const headerList = await headers();
+  const realIp = headerList.get("x-real-ip")?.trim();
+  if (realIp) return realIp;
+
+  const forwarded = headerList.get("x-forwarded-for")?.split(",");
+  const lastHop = forwarded?.[forwarded.length - 1]?.trim();
+
+  return lastHop || "unknown";
+}
 
 export type RateLimitResult = {
   allowed: boolean;

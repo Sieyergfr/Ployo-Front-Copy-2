@@ -43,20 +43,20 @@ async function loadAuthorizedFile(input: {
   }
 
   const rootId = baseFile.parentId ?? baseFile.id;
-  const aclFile = baseFile.parentId
-    ? await prisma.tenantFile.findFirst({
-        where: {
-          id: rootId,
-          tenantId: input.access.tenantId,
-          status: { not: "deleted" },
-        },
-        select: { accessRoleIdsJson: true, accessUserIdsJson: true },
-      })
-    : baseFile;
-
-  if (!aclFile) {
-    throw new Error("Datei nicht gefunden.");
-  }
+  // Fällt auf die Datei selbst zurück, falls das Wurzeldokument bereits
+  // bereinigt wurde — ein vorzeitig gepurgtes Elternteil darf eine sonst
+  // aktive Version nicht unlesbar machen (Audit-Finding H07).
+  const aclFile =
+    (baseFile.parentId
+      ? await prisma.tenantFile.findFirst({
+          where: {
+            id: rootId,
+            tenantId: input.access.tenantId,
+            status: { not: "deleted" },
+          },
+          select: { accessRoleIdsJson: true, accessUserIdsJson: true },
+        })
+      : baseFile) ?? baseFile;
 
   requireFileAcl(aclFile, input.access);
   await requireTenantFileAreaAccess(input.access, baseFile);
@@ -169,6 +169,28 @@ const CONTENT_TYPES_BY_EXTENSION: Record<string, string> = {
   txt: "text/plain; charset=utf-8",
   csv: "text/csv; charset=utf-8",
 };
+
+/**
+ * Content-Types, die ein Browser selbst ausführen/rendern kann, wenn er sie
+ * "inline" (statt als Download) bekommt — HTML/SVG-Skript vor allem
+ * (Audit-Finding H08/R04). Neue Uploads können das nicht mehr erreichen
+ * (`fileToBuffer`/`validateUploadFileContent` in storage.service.ts lehnen
+ * solche Bytes unabhängig vom Dateinamen ab), aber ein bereits vor diesem Fix
+ * gespeicherter Datensatz mit vergiftetem `mimeType` darf trotzdem niemals
+ * inline im Origin dieser App landen — als zweite, unabhängige Schutzschicht.
+ */
+const BROWSER_EXECUTABLE_CONTENT_TYPES = [
+  "text/html",
+  "application/xhtml+xml",
+  "image/svg+xml",
+  "application/xml",
+  "text/xml",
+];
+
+export function isBrowserExecutableContentType(contentType: string) {
+  const normalized = contentType.split(";")[0]!.trim().toLowerCase();
+  return BROWSER_EXECUTABLE_CONTENT_TYPES.includes(normalized);
+}
 
 export function resolveContentType(fileName: string, storedMimeType?: string | null) {
   const stored = storedMimeType?.trim().toLowerCase() ?? "";

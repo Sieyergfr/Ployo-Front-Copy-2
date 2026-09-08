@@ -5,6 +5,7 @@ import { readFileAccessToken } from "@/lib/storage/file-access-token";
 import {
   contentDispositionHeader,
   getTenantFileContentForUser,
+  isBrowserExecutableContentType,
 } from "@/lib/storage/file-stream";
 import { headers } from "next/headers";
 
@@ -69,10 +70,19 @@ export async function GET(
       pin: request.headers.get("x-folder-pin")?.trim() || query.get("pin")?.trim() || undefined,
     });
 
+    // Zweite, vom Upload-Pfad unabhängige Schutzschicht (Audit-Finding
+    // H08/R04): ein HTML-/SVG-artiger Content-Type wird NIE inline
+    // ausgeliefert, egal was der Client per `disposition`-Query anfragt oder
+    // was historisch als `mimeType` gespeichert wurde — sonst würde er im
+    // Origin dieser App ausgeführt statt heruntergeladen.
+    const safeDisposition = isBrowserExecutableContentType(content.contentType)
+      ? "attachment"
+      : disposition;
+
     return new Response(content.body, {
       headers: {
         "Content-Type": content.contentType,
-        "Content-Disposition": contentDispositionHeader(content.fileName, disposition),
+        "Content-Disposition": contentDispositionHeader(content.fileName, safeDisposition),
         // Sensible Inhalte gehören weder in einen Proxy- noch in den
         // Browser-Cache: der Link ist bewusst kurzlebig.
         "Cache-Control": "private, no-store",

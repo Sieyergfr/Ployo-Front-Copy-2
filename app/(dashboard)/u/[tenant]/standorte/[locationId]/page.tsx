@@ -428,7 +428,6 @@ export default async function LocationDetailPage({
   const auditEntries = canViewAudit
     ? await getAuditLogsForEntity({
         tenantSlug: tenant,
-        area: "locations",
         entityType: "location",
         entityId: location.dbId ?? location.id,
       })

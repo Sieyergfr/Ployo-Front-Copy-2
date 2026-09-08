@@ -7,6 +7,7 @@ import { isKnownTeamColor } from "@/lib/org-options";
 import { prisma } from "@/lib/prisma";
 import { type Team, type TeamFile, type TeamFileFolder, type TeamMember } from "@/lib/teams";
 import {
+  assertTeamInScope,
   requireTenantAccess,
   resolveScopeFilter,
   type TenantAccess,
@@ -560,6 +561,7 @@ export async function updateTenantTeam(input: {
   assertKnownTeamColor(input.colorClassName);
 
   const access = await requireTeamManager(input.tenantSlug);
+  await assertTeamInScope(access, input.teamId);
   await assertKnownLocations(access.tenantId, input.locations);
   const key = await createUniqueTeamKey({
     tenantId: access.tenantId,
@@ -609,6 +611,8 @@ export async function deleteTenantTeam(input: {
     throw new Error("FORBIDDEN");
   }
 
+  await assertTeamInScope(access, input.teamId);
+
   const team = await prisma.tenantTeam.delete({
     where: {
       id: input.teamId,
@@ -634,6 +638,7 @@ export async function setTenantTeamLead(input: {
   memberId: string;
 }) {
   const access = await requireTeamManager(input.tenantSlug);
+  await assertTeamInScope(access, input.teamId);
   const member = await prisma.tenantTeamMember.findFirst({
     where: {
       id: input.memberId,
@@ -668,6 +673,7 @@ export async function addTenantTeamMember(input: {
   role: string;
 }) {
   const access = await requireTeamManager(input.tenantSlug);
+  await assertTeamInScope(access, input.teamId);
   const employees = (await getEmployeesForTenant(input.tenantSlug)) ?? [];
   const employee = employees.find((item) => item.dbId === input.employeeId);
 
@@ -701,6 +707,7 @@ export async function removeTenantTeamMember(input: {
   memberId: string;
 }) {
   const access = await requireTeamManager(input.tenantSlug);
+  await assertTeamInScope(access, input.teamId);
   const member = await prisma.tenantTeamMember.findFirst({
     where: {
       id: input.memberId,
@@ -733,6 +740,7 @@ export async function updateTenantTeamMember(input: {
   isLead: boolean;
 }) {
   const access = await requireTeamManager(input.tenantSlug);
+  await assertTeamInScope(access, input.teamId);
   const member = await prisma.tenantTeamMember.findFirst({
     where: {
       id: input.memberId,

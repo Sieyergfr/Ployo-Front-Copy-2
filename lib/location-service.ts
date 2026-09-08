@@ -46,6 +46,7 @@ function todayDateId(): string {
   return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-${String(now.getUTCDate()).padStart(2, "0")}`;
 }
 import {
+  assertLocationInScope,
   requireTenantAccess,
   resolveScopeFilter,
   type TenantAccess,
@@ -392,7 +393,7 @@ export async function getLocationsForTenant(tenantSlug: string) {
       address: true,
       members: { orderBy: { createdAt: "asc" } },
       shifts: {
-        where: { date: { in: thisWeekDateIds() } },
+        where: { tenantId: access.tenantId, date: { in: thisWeekDateIds() } },
         select: { id: true, date: true, employeeId: true },
       },
       activities: { orderBy: { createdAt: "desc" } },
@@ -442,7 +443,7 @@ export async function getLocationForTenant(tenantSlug: string, locationHandle: s
       address: true,
       members: { orderBy: { createdAt: "asc" } },
       shifts: {
-        where: { date: { in: thisWeekDateIds() } },
+        where: { tenantId: access.tenantId, date: { in: thisWeekDateIds() } },
         select: { id: true, date: true, employeeId: true },
       },
       activities: { orderBy: { createdAt: "desc" } },
@@ -548,7 +549,7 @@ export function toLocationAdminPayload(location: Location) {
 }
 
 export async function requireLocationManager(tenantSlug: string) {
-  await requireTenantAccess(tenantSlug, "locations", "write");
+  const tenantAccess = await requireTenantAccess(tenantSlug, "locations", "write");
   const userId = await getSessionUserId();
 
   if (!userId) {
@@ -593,6 +594,7 @@ export async function requireLocationManager(tenantSlug: string) {
   }
 
   return {
+    ...tenantAccess,
     tenantId: membership.tenant.id,
     tenantSlug: membership.tenant.slug,
     userId,
@@ -722,6 +724,7 @@ export async function updateTenantLocation(input: {
   const address = assertRequiredAddress(input.address);
 
   const access = await requireLocationManager(input.tenantSlug);
+  await assertLocationInScope(access, input.locationId);
   const lead = input.leadEmployeeId
     ? await employeeLead({ tenantId: access.tenantId, employeeId: input.leadEmployeeId })
     : null;
@@ -816,6 +819,7 @@ export async function addEmployeesToTenantLocation(input: {
   employeeIds: string[];
 }) {
   const access = await requireLocationManager(input.tenantSlug);
+  await assertLocationInScope(access, input.locationId);
   const employeeIds = Array.from(
     new Set(input.employeeIds.map((id) => id.trim()).filter(Boolean)),
   );
@@ -923,6 +927,7 @@ export async function removeEmployeesFromTenantLocation(input: {
   employeeIds: string[];
 }) {
   const access = await requireLocationManager(input.tenantSlug);
+  await assertLocationInScope(access, input.locationId);
   const employeeIds = Array.from(
     new Set(input.employeeIds.map((id) => id.trim()).filter(Boolean)),
   );
@@ -1119,6 +1124,8 @@ export async function deleteTenantLocation(input: {
   if (!access.canDelete) {
     throw new Error("FORBIDDEN");
   }
+
+  await assertLocationInScope(access, input.locationId);
 
   const location = await prisma.tenantLocation.delete({
     where: {

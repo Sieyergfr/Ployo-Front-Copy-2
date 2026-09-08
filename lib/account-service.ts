@@ -5,6 +5,10 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { revokeProviderToken } from "@/lib/oauth-revocation";
 import { sendAccountDeletionRequestEmail } from "@/lib/email";
+import {
+  assertNoOrphanedTenantOwnership,
+  unlinkAndCleanupBeforeUserDeletion,
+} from "@/lib/user-deletion-lifecycle";
 import { headers } from "next/headers";
 
 async function requireSession() {
@@ -87,35 +91,6 @@ export async function changeAccountPassword(input: {
 export const ACCOUNT_DELETION_GRACE_DAYS = 30;
 
 /**
- * Verhindert, dass ein Konto gelöscht/vom Zugang getrennt wird, solange es
- * alleiniger Inhaber eines Mandanten ist — der Mandant würde sonst
- * verwaisen. Von `scheduleOwnAccountDeletion` und
- * `deleteUserAccessImmediately` genutzt.
- */
-async function assertNoOrphanedTenantOwnership(userId: string) {
-  const ownerships = await prisma.tenantMembership.findMany({
-    where: { userId, role: "OWNER" },
-    select: { tenantId: true, tenant: { select: { name: true } } },
-  });
-
-  for (const ownership of ownerships) {
-    const otherOwners = await prisma.tenantMembership.count({
-      where: {
-        tenantId: ownership.tenantId,
-        userId: { not: userId },
-        role: "OWNER",
-      },
-    });
-
-    if (otherOwners === 0) {
-      throw new Error(
-        `Diese Person ist alleinige/r Inhaber/in von „${ownership.tenant.name}“. Bitte zuerst eine andere Person als Inhaber/in eintragen oder den Mandanten löschen.`,
-      );
-    }
-  }
-}
-
-/**
  * Löscht sofort und vollständig den Konto-Zugang (Login) eines Nutzers:
  * widerruft zuerst dessen Social-Login-Tokens beim Provider (best-effort,
  * s. lib/oauth-revocation.ts), löscht dann den `User`-Datensatz — Sitzungen,
@@ -124,7 +99,10 @@ async function assertNoOrphanedTenantOwnership(userId: string) {
  * `TenantEmployee`-Personalakten (Stammdaten) werden NICHT gelöscht, nur
  * von der gelöschten `userId` abgehängt — sie haben keine harte
  * DB-Relation zu `User` und würden sonst auf eine nicht mehr existierende
- * ID verweisen.
+ * ID verweisen. `ConsentRecord` (Cookie-Consent-Nachweis) hat aus demselben
+ * Grund ebenfalls keine harte FK/Kaskade zu `User` — wird deshalb hier
+ * ausdrücklich mitgelöscht, sonst bliebe die IP-/User-Agent-Historie
+ * verwaist bestehen (Audit-Finding M05).
  *
  * Bewusst ein hartes Löschen statt nur Zugangsdaten/Sitzungen zu entfernen:
  * better-auths Passwort-Reset-Flow legt für einen weiterhin existierenden
@@ -142,11 +120,8 @@ export async function deleteUserAccessImmediately(userId: string) {
   });
 
   await Promise.allSettled(accounts.map((account) => revokeProviderToken(account)));
-
-  await prisma.$transaction([
-    prisma.tenantEmployee.updateMany({ where: { userId }, data: { userId: null } }),
-    prisma.user.delete({ where: { id: userId } }),
-  ]);
+  await unlinkAndCleanupBeforeUserDeletion(userId);
+  await prisma.user.delete({ where: { id: userId } });
 }
 
 /**

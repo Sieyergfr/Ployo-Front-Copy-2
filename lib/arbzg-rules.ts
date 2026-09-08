@@ -76,6 +76,58 @@ export function exceedsMaxShiftHours(shift: ShiftTimeRange, maxShiftHours: numbe
   return shiftDurationHours(shift) > maxShiftHours;
 }
 
+/**
+ * Zwei Schichten derselben Person überschneiden sich zeitlich (echte
+ * Intervallüberlappung über `shiftInterval`, damit auch Nachtschichten über
+ * Mitternacht korrekt erkannt werden) — anders als die bestehende
+ * `hasConflict()`-Anzeigefunktion in shift-service.ts, die nur exakt
+ * gleiche Kalendertage vergleicht und nirgends als Schreibsperre verwendet
+ * wird (Audit-Finding M03: Überschneidungen wurden bisher gespeichert).
+ */
+export function findShiftOverlap(
+  otherShifts: ShiftTimeRange[],
+  candidate: ShiftTimeRange,
+): { neighborDate: string } | null {
+  const candidateInterval = shiftInterval(candidate);
+
+  for (const other of otherShifts) {
+    const otherInterval = shiftInterval(other);
+
+    if (candidateInterval.start < otherInterval.end && candidateInterval.end > otherInterval.start) {
+      return { neighborDate: other.date };
+    }
+  }
+
+  return null;
+}
+
+/** Tatsächliche Arbeitszeit (Anwesenheit minus Pause) in Minuten — Basis für §3/§4 ArbZG statt der reinen Anwesenheitsspanne. */
+export function netWorkingMinutes(shift: ShiftTimeRange, breakMinutes: number): number {
+  return Math.max(0, shiftDurationHours(shift) * 60 - Math.max(0, breakMinutes));
+}
+
+/**
+ * Gesetzlich vorgeschriebene Mindestpause (Minuten) nach Anwesenheitsspanne
+ * (Start bis Ende, VOR Abzug der Pause selbst — wie schon die bestehende
+ * `calculateBreakMinutes` in lib/shift-break-rule.ts, hier nur zweistufig
+ * statt eines einzelnen Schwellenwerts). Erwachsene (§4 ArbZG): 30 Min. ab
+ * über 6h, 45 Min. ab über 9h. Jugendliche (§11 JArbSchG): eigene,
+ * niedrigere Schwellen — 30 Min. ab über 4,5h, 60 Min. ab über 6h.
+ */
+export function requiredBreakMinutes(grossSpanMinutes: number, isMinor: boolean): number {
+  const hours = grossSpanMinutes / 60;
+
+  if (isMinor) {
+    if (hours > 6) return 60;
+    if (hours > 4.5) return 30;
+    return 0;
+  }
+
+  if (hours > 9) return 45;
+  if (hours > 6) return 30;
+  return 0;
+}
+
 /** `dateIso` (YYYY-MM-DD) um `days` Tage verschieben, ebenfalls in lokaler Zeit wie `toTimestamp()` oben. */
 function addDays(dateIso: string, days: number): string {
   const [year, month, day] = dateIso.split("-").map(Number);

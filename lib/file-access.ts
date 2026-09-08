@@ -46,7 +46,22 @@ export type TenantFileAreaRecord = {
   locationId: string | null;
   teamId: string | null;
   hiddenFromEmployee: boolean;
+  /** Zur Auflösung des ganzen Versionenverbunds (Audit-Finding H07) — fehlt sie, wird nur `id` selbst betrachtet. */
+  parentId?: string | null;
+  /** Nur für zentrale Dateien (employeeId/locationId/teamId alle null) relevant — Uploader-Scope. */
+  uploadedById?: string;
+  accessRoleIdsJson?: unknown;
+  accessUserIdsJson?: unknown;
 };
+
+function isExplicitlySharedWithMe(
+  file: { accessRoleIdsJson?: unknown; accessUserIdsJson?: unknown },
+  access: TenantAccess,
+) {
+  const roleIds = parseIds(file.accessRoleIdsJson);
+  const userIds = parseIds(file.accessUserIdsJson);
+  return userIds.includes(access.userId) || Boolean(access.roleId && roleIds.includes(access.roleId));
+}
 
 /**
  * Bereichsspezifische Zweitprüfung für die generischen Datei-Ausgabe-Pfade
@@ -72,11 +87,25 @@ export async function requireTenantFileAreaAccess(
   const { prisma } = await import("@/lib/prisma");
 
   if (file.employeeId) {
+    // Die Vertrags-/Abrechnungs-/Krankheits-FK zeigt immer nur auf EINE
+    // konkrete Version (die aktuell aktive), nicht auf den ganzen
+    // Versionenverbund. Ohne die anderen Versionen (Wurzeldokument + ältere,
+    // "replaced" Stände) einzubeziehen, verliert eine bereits ersetzte, aber
+    // weiterhin abrufbare alte Version ihre eigentliche Fachkategorie und
+    // fällt auf das allgemeinere "employeeFiles" zurück — ebenso eine neue
+    // Version, deren FK (noch) nicht umgehängt wurde (Audit-Finding H07).
+    const rootId = file.parentId ?? file.id;
+    const family = await prisma.tenantFile.findMany({
+      where: { OR: [{ id: rootId }, { parentId: rootId }] },
+      select: { id: true },
+    });
+    const familyIds = family.length > 0 ? family.map((entry) => entry.id) : [file.id];
+
     const [payroll, contract, sickness] = await Promise.all([
-      prisma.tenantPayrollStatement.findUnique({ where: { fileId: file.id }, select: { id: true } }),
-      prisma.tenantEmployeeContract.findUnique({ where: { fileId: file.id }, select: { id: true } }),
+      prisma.tenantPayrollStatement.findFirst({ where: { fileId: { in: familyIds } }, select: { id: true } }),
+      prisma.tenantEmployeeContract.findFirst({ where: { fileId: { in: familyIds } }, select: { id: true } }),
       prisma.tenantSicknessReport.findFirst({
-        where: { attachmentFileId: file.id },
+        where: { attachmentFileId: { in: familyIds } },
         select: { id: true },
       }),
     ]);
@@ -133,7 +162,45 @@ export async function requireTenantFileAreaAccess(
     if (scopeFilter.type === "assigned" && scopeFilter.area === "teams" && !scopeFilter.teamIds.includes(file.teamId)) {
       throw new Error("FORBIDDEN");
     }
+    return;
   }
+
+  // Zentrale Datei (employeeId/locationId/teamId alle null): hier gilt der
+  // "files"-Scope selbst als Uploader-Scope — "own"/"team" darf nur
+  // Mutationen an selbst- bzw. vom eigenen Team hochgeladenen Dateien
+  // erlauben. Leselisten (`filesUploaderScopeWhere` in files-server.ts)
+  // filterten das bereits; über eine bekannte Datei-ID kam eine Mutation
+  // (neue Version, Löschen, Sichtbarkeit) bisher trotzdem durch
+  // (Audit-Finding H06). Eine ausdrückliche Freigabe (ACL) hebt den
+  // Uploader-Scope für genau diese Datei auf, analog zu `filesVisibilityWhere`.
+  if (isExplicitlySharedWithMe(file, fileAccess)) return;
+
+  const scopeFilter = await resolveScopeFilter(fileAccess);
+
+  if (scopeFilter.type === "all") return;
+
+  if (scopeFilter.type === "own") {
+    if (file.uploadedById !== fileAccess.userId) throw new Error("FORBIDDEN");
+    return;
+  }
+
+  if (scopeFilter.type === "team") {
+    if (!scopeFilter.team) throw new Error("FORBIDDEN");
+
+    const uploader = file.uploadedById
+      ? await prisma.tenantEmployee.findFirst({
+          where: { tenantId: fileAccess.tenantId, userId: file.uploadedById },
+          select: { team: true },
+        })
+      : null;
+
+    if (!uploader || uploader.team !== scopeFilter.team) throw new Error("FORBIDDEN");
+    return;
+  }
+
+  // "files" unterstützt (bisher) keinen "assigned"-Scope — sollte er dennoch
+  // auftreten, sicherheitshalber verweigern statt stillschweigend zuzulassen.
+  throw new Error("FORBIDDEN");
 }
 
 /**

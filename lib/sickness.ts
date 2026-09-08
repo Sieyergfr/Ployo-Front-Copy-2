@@ -105,13 +105,17 @@ export async function getSicknessForTenant(tenantSlug: string): Promise<Sickness
   const scopeFilter = await resolveScopeFilter(access);
   // "sickness" unterstützt (bisher) keinen "assigned"-Scope — sollte er
   // dennoch auftreten, nichts treffen statt stillschweigend alles zu zeigen.
+  // Kein eigenes Team darf nicht "alle nicht zugeordneten Kolleg:innen"
+  // bedeuten (Audit-Finding H03).
   const employeeWhere =
     scopeFilter.type === "all"
       ? { tenantId: access.tenantId }
       : scopeFilter.type === "own"
         ? { tenantId: access.tenantId, id: scopeFilter.employeeId ?? "__none__" }
         : scopeFilter.type === "team"
-          ? { tenantId: access.tenantId, team: scopeFilter.team }
+          ? scopeFilter.team
+            ? { tenantId: access.tenantId, team: scopeFilter.team }
+            : { tenantId: access.tenantId, id: "__none__" }
           : { tenantId: access.tenantId, id: "__none__" };
   const reportWhere =
     scopeFilter.type === "all"
@@ -119,23 +123,43 @@ export async function getSicknessForTenant(tenantSlug: string): Promise<Sickness
       : scopeFilter.type === "own"
         ? { tenantId: access.tenantId, employeeId: scopeFilter.employeeId ?? "__none__" }
         : scopeFilter.type === "team"
-          ? { tenantId: access.tenantId, employee: { team: scopeFilter.team } }
+          ? scopeFilter.team
+            ? { tenantId: access.tenantId, employee: { team: scopeFilter.team } }
+            : { tenantId: access.tenantId, employeeId: "__none__" }
           : { tenantId: access.tenantId, employeeId: "__none__" };
   const now = startOfUtcDay();
   const sixMonthsAgo = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 5, 1));
-  const records = await prisma.tenantSicknessReport.findMany({
-    where: { ...reportWhere, startDate: { gte: sixMonthsAgo } },
-    include: {
-      employee: { select: { initials: true, name: true, location: true } },
-      attachmentFile: { select: { id: true, displayName: true, originalName: true } },
-    },
-    orderBy: { startDate: "desc" },
-  });
   // `startDate` kann in der Zukunft liegen (z. B. "ab Montag krankgemeldet")
   // — ohne die Prüfung zählte ein noch nicht begonnener Krankheitsfall
   // schon heute als "aktuell krank".
-  const active = records.filter((record) => record.status === "open" && startOfUtcDay(record.startDate) <= now && (!record.endDate || startOfUtcDay(record.endDate) >= now));
-  const finished = records.filter((record) => !active.includes(record));
+  const isActiveRecord = (record: { status: string; startDate: Date; endDate: Date | null }) =>
+    record.status === "open" &&
+    startOfUtcDay(record.startDate) <= now &&
+    (!record.endDate || startOfUtcDay(record.endDate) >= now);
+  const sicknessInclude = {
+    employee: { select: { initials: true, name: true, location: true } },
+    attachmentFile: { select: { id: true, displayName: true, originalName: true } },
+  } as const;
+  const [records, currentlyOpenRecords] = await Promise.all([
+    prisma.tenantSicknessReport.findMany({
+      where: { ...reportWhere, startDate: { gte: sixMonthsAgo } },
+      include: sicknessInclude,
+      orderBy: { startDate: "desc" },
+    }),
+    // Ein durchgehend offener Fall kann vor dem 6-Monats-Chartfenster
+    // begonnen haben und heute noch andauern — ohne diese separate,
+    // startDate-unbeschränkte Abfrage verschwand er aus "Aktuell krank"
+    // (Audit-Finding M16). Statistik (Chart/Monat/Ø Dauer) bleibt bewusst
+    // auf das 6-Monats-Fenster begrenzt, nur die aktuelle operative Liste
+    // nicht.
+    prisma.tenantSicknessReport.findMany({
+      where: { ...reportWhere, status: "open" },
+      include: sicknessInclude,
+      orderBy: { startDate: "desc" },
+    }),
+  ]);
+  const active = currentlyOpenRecords.filter(isActiveRecord);
+  const finished = records.filter((record) => !isActiveRecord(record));
   const monthRecords = records.filter((record) => record.startDate.getUTCFullYear() === now.getUTCFullYear() && record.startDate.getUTCMonth() === now.getUTCMonth());
   const durations = records.map((record) => inclusiveDays(record.startDate, record.endDate ?? now));
   const average = durations.length ? durations.reduce((sum, days) => sum + days, 0) / durations.length : 0;

@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { getStripeClient, isStripeConfigured } from "@/lib/stripe/client";
 import { resolvePlanFromPriceId } from "@/lib/stripe/plans";
 import { logger, runWithRequestId } from "@/lib/logger";
+import { isUniqueConstraintError } from "@/lib/prisma-errors";
+import { isStaleEvent } from "@/lib/stripe/webhook-idempotency";
 import type Stripe from "stripe";
 
 export const runtime = "nodejs";
@@ -51,6 +53,58 @@ async function handleStripeWebhook(request: Request, requestId: string) {
 
   logger.info("Stripe-Webhook empfangen.", { eventType: event.type, eventId: event.id });
 
+  // Stripe kann dasselbe Event mehrfach zustellen (Retry ohne rechtzeitige
+  // 2xx-Antwort) — ohne diese Sperre würde ein zweiter Zustellversuch dieselbe
+  // Zustandsänderung erneut anwenden (Audit-Finding M14).
+  //
+  // Zwei Phasen statt eines einzelnen Inserts (Audit-Finding R06): die Zeile
+  // beansprucht die Event-ID VOR der Verarbeitung (status=processing) und
+  // wird erst NACH erfolgreichem Durchlauf des switch unten auf
+  // status=completed gesetzt. Schlug die Verarbeitung zuvor mit demselben
+  // Event bereits einmal fehl (Zeile existiert noch mit status=processing),
+  // wird sie hier erneut versucht statt fälschlich als erledigt zu gelten —
+  // vorher wurde die Zeile schon VOR dem eigentlichen Handler endgültig
+  // angelegt, sodass ein Zwischenfehler (z. B. kurzzeitige DB-Störung beim
+  // Tenant-Update) den nächsten Stripe-Retry auf den Unique-Constraint
+  // treffen und die eigentlich fehlgeschlagene Änderung endgültig verlieren
+  // ließ.
+  const existing = await prisma.stripeWebhookEvent.findUnique({
+    where: { id: event.id },
+    select: { status: true },
+  });
+
+  if (existing?.status === "completed") {
+    logger.info("Stripe-Webhook: Event bereits vollständig verarbeitet, übersprungen.", {
+      eventType: event.type,
+      eventId: event.id,
+    });
+
+    return Response.json({ status: "ok", deduplicated: true }, { headers: { "x-request-id": requestId } });
+  }
+
+  if (!existing) {
+    try {
+      await prisma.stripeWebhookEvent.create({ data: { id: event.id, status: "processing" } });
+    } catch (error) {
+      if (!isUniqueConstraintError(error, "id")) {
+        throw error;
+      }
+
+      // Race: ein gleichzeitiger zweiter Zustellversuch hat die Zeile
+      // zwischen unserem Lesen und Schreiben angelegt. Erneut lesen statt
+      // blind weiterzumachen — ist der andere Versuch inzwischen fertig
+      // (completed), ist das hier tatsächlich ein Duplikat.
+      const raced = await prisma.stripeWebhookEvent.findUnique({
+        where: { id: event.id },
+        select: { status: true },
+      });
+
+      if (raced?.status === "completed") {
+        return Response.json({ status: "ok", deduplicated: true }, { headers: { "x-request-id": requestId } });
+      }
+    }
+  }
+
   switch (event.type) {
     case "checkout.session.completed": {
       const session = event.data.object;
@@ -67,18 +121,26 @@ async function handleStripeWebhook(request: Request, requestId: string) {
 
     case "customer.subscription.created":
     case "customer.subscription.updated": {
-      await syncSubscriptionState(event.data.object);
+      await syncSubscriptionState(event.data.object, event.created);
       break;
     }
 
     case "customer.subscription.deleted": {
-      await clearSubscriptionState(event.data.object);
+      await clearSubscriptionState(event.data.object, event.created);
       break;
     }
 
     default:
       break;
   }
+
+  // Erst JETZT, nach vollständig durchlaufenem Handler, als erledigt
+  // markieren — ein Fehler oben (throw) erreicht diese Zeile nie, die
+  // Event-Zeile bleibt dann auf "processing" für den nächsten Retry stehen.
+  await prisma.stripeWebhookEvent.update({
+    where: { id: event.id },
+    data: { status: "completed", processedAt: new Date() },
+  });
 
   return Response.json({ status: "ok" }, { headers: { "x-request-id": requestId } });
 }
@@ -99,6 +161,7 @@ async function findTenantByCustomerId(customerId: string) {
       stripePriceId: true,
       stripeCurrentPeriodEnd: true,
       stripeCancelAtPeriodEnd: true,
+      stripeLastEventCreatedAt: true,
     },
   });
 
@@ -109,10 +172,19 @@ async function findTenantByCustomerId(customerId: string) {
   return tenant;
 }
 
-async function syncSubscriptionState(subscription: Stripe.Subscription) {
+async function syncSubscriptionState(subscription: Stripe.Subscription, eventCreated: number) {
   const tenant = await findTenantByCustomerId(resolveCustomerId(subscription.customer));
 
   if (!tenant) {
+    return;
+  }
+
+  if (isStaleEvent(tenant, eventCreated)) {
+    logger.warn("Stripe-Webhook: veraltetes Subscription-Event ignoriert.", {
+      tenantId: tenant.id,
+      eventCreated,
+      lastAppliedAt: tenant.stripeLastEventCreatedAt?.toISOString(),
+    });
     return;
   }
 
@@ -140,11 +212,38 @@ async function syncSubscriptionState(subscription: Stripe.Subscription) {
     nextState.plan !== tenant.plan ||
     nextState.billingCycle !== tenant.billingCycle;
 
-  if (!changed) {
+  const eventCreatedAt = new Date(eventCreated * 1000);
+
+  // Der obige `isStaleEvent`-Check ist ein reiner Vorab-Check auf einem
+  // bereits gelesenen Snapshot — zwei Events desselben Tenants können ihn
+  // beide bestehen und dann in falscher Reihenfolge schreiben (Audit-Finding
+  // R06). Die eigentliche Schreibbedingung deshalb zusätzlich atomar in der
+  // WHERE-Klausel erzwingen: nur anwenden, wenn seit dem Lesen oben kein
+  // bereits neueres Event angewendet wurde. `updateMany` statt `update`, weil
+  // die Bedingung über die reine ID hinausgeht.
+  const result = await prisma.tenant.updateMany({
+    where: {
+      id: tenant.id,
+      OR: [{ stripeLastEventCreatedAt: null }, { stripeLastEventCreatedAt: { lte: eventCreatedAt } }],
+    },
+    // Den Zeitstempel-Wasserstand auch bei inhaltlich unverändertem Zustand
+    // fortschreiben — sonst könnte ein nachfolgendes, tatsächlich verspätetes
+    // älteres Event später fälschlich als "nicht veraltet" durchgehen, weil
+    // der Wasserstand mangels Änderung nie mit fortgeschrieben wurde.
+    data: changed ? { ...nextState, stripeLastEventCreatedAt: eventCreatedAt } : { stripeLastEventCreatedAt: eventCreatedAt },
+  });
+
+  if (result.count === 0) {
+    logger.warn("Stripe-Webhook: durch gleichzeitig bereits angewendetes neueres Event überholt.", {
+      tenantId: tenant.id,
+      eventCreated,
+    });
     return;
   }
 
-  await prisma.tenant.update({ where: { id: tenant.id }, data: nextState });
+  if (!changed) {
+    return;
+  }
 
   await recordTenantAudit({
     tenantId: tenant.id,
@@ -158,22 +257,49 @@ async function syncSubscriptionState(subscription: Stripe.Subscription) {
   });
 }
 
-async function clearSubscriptionState(subscription: Stripe.Subscription) {
+async function clearSubscriptionState(subscription: Stripe.Subscription, eventCreated: number) {
   const tenant = await findTenantByCustomerId(resolveCustomerId(subscription.customer));
 
   if (!tenant || tenant.stripeSubscriptionId !== subscription.id) {
     return;
   }
 
-  await prisma.tenant.update({
-    where: { id: tenant.id },
+  if (isStaleEvent(tenant, eventCreated)) {
+    logger.warn("Stripe-Webhook: veraltetes Subscription-Deleted-Event ignoriert.", {
+      tenantId: tenant.id,
+      eventCreated,
+      lastAppliedAt: tenant.stripeLastEventCreatedAt?.toISOString(),
+    });
+    return;
+  }
+
+  // Wie in syncSubscriptionState: dieselbe Bedingung, unter der oben gelesen
+  // wurde, zusätzlich atomar in der WHERE-Klausel erzwingen (Audit-Finding
+  // R06) — ein zwischenzeitlich gleichzeitig verarbeitetes neueres Event
+  // (oder ein zwischenzeitlicher Subscription-Wechsel) darf hier nicht
+  // überschrieben werden.
+  const result = await prisma.tenant.updateMany({
+    where: {
+      id: tenant.id,
+      stripeSubscriptionId: subscription.id,
+      OR: [{ stripeLastEventCreatedAt: null }, { stripeLastEventCreatedAt: { lte: new Date(eventCreated * 1000) } }],
+    },
     data: {
       stripeSubscriptionId: null,
       stripePriceId: null,
       stripeSubscriptionStatus: "canceled",
       stripeCancelAtPeriodEnd: false,
+      stripeLastEventCreatedAt: new Date(eventCreated * 1000),
     },
   });
+
+  if (result.count === 0) {
+    logger.warn("Stripe-Webhook: Subscription-Deleted durch gleichzeitige Änderung überholt.", {
+      tenantId: tenant.id,
+      eventCreated,
+    });
+    return;
+  }
 
   await recordTenantAudit({
     tenantId: tenant.id,

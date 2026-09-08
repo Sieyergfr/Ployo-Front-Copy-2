@@ -63,19 +63,33 @@ type UserNotificationPreference = {
   language: string;
 } | null;
 
+/**
+ * Kanal-Schalter je Mandant (`TenantSettings.mailNotifications`/`mobilePush`/
+ * `inAppNotifications`) — jeder Schalter gilt nur für seinen eigenen Kanal.
+ * Vorher prüfte nur `mailNotifications`, und zwar als Vorfilter VOR
+ * `dispatchNotification` für ALLE Kanäle zugleich (Audit-Finding M11); ein
+ * deaktiviertes `mobilePush`/`inAppNotifications` wurde nirgends geprüft.
+ */
+type TenantChannelSettings = {
+  mailNotifications: boolean;
+  mobilePush: boolean;
+  inAppNotifications: boolean;
+};
+
 interface NotificationChannel {
   name: string;
   isEnabledFor(
     event: ResolvedNotificationEvent,
     preference: UserNotificationPreference,
+    tenantSettings: TenantChannelSettings,
   ): Promise<boolean>;
   send(event: ResolvedNotificationEvent): Promise<void>;
 }
 
 const emailChannel: NotificationChannel = {
   name: "email",
-  async isEnabledFor(event) {
-    return isEmailConfigured() && Boolean(event.email);
+  async isEnabledFor(event, _preference, tenantSettings) {
+    return tenantSettings.mailNotifications && isEmailConfigured() && Boolean(event.email);
   },
   async send(event) {
     if (!event.email) return;
@@ -91,8 +105,8 @@ const emailChannel: NotificationChannel = {
 
 const pushChannel: NotificationChannel = {
   name: "push",
-  async isEnabledFor(event, preference) {
-    if (!(preference?.pushEnabled ?? true)) {
+  async isEnabledFor(event, preference, tenantSettings) {
+    if (!tenantSettings.mobilePush || !(preference?.pushEnabled ?? true)) {
       return false;
     }
 
@@ -152,8 +166,8 @@ const pushChannel: NotificationChannel = {
 
 const inAppChannel: NotificationChannel = {
   name: "in-app",
-  async isEnabledFor() {
-    return true;
+  async isEnabledFor(_event, _preference, tenantSettings) {
+    return tenantSettings.inAppNotifications;
   },
   async send(event) {
     // `messagePayload` ist die eigentliche Quelle: title/detail sind in der
@@ -194,15 +208,26 @@ function isCategoryEnabledForUser(category: NotificationCategory, preference: Us
 }
 
 export async function dispatchNotification(event: NotificationEvent) {
-  const preference = await prisma.userPreference.findUnique({
-    where: { userId: event.userId },
-    select: {
-      notifyVacationEvents: true,
-      notifyShiftEvents: true,
-      pushEnabled: true,
-      language: true,
-    },
-  });
+  const [preference, settings] = await Promise.all([
+    prisma.userPreference.findUnique({
+      where: { userId: event.userId },
+      select: {
+        notifyVacationEvents: true,
+        notifyShiftEvents: true,
+        pushEnabled: true,
+        language: true,
+      },
+    }),
+    prisma.tenantSettings.findUnique({
+      where: { tenantId: event.tenantId },
+      select: { mailNotifications: true, mobilePush: true, inAppNotifications: true },
+    }),
+  ]);
+  const tenantSettings: TenantChannelSettings = {
+    mailNotifications: settings?.mailNotifications ?? true,
+    mobilePush: settings?.mobilePush ?? false,
+    inAppNotifications: settings?.inAppNotifications ?? true,
+  };
 
   if (!isCategoryEnabledForUser(event.category, preference)) {
     return;
@@ -216,7 +241,7 @@ export async function dispatchNotification(event: NotificationEvent) {
 
   for (const channel of channels) {
     try {
-      if (await channel.isEnabledFor(resolved, preference)) {
+      if (await channel.isEnabledFor(resolved, preference, tenantSettings)) {
         await channel.send(resolved);
       }
     } catch (error) {

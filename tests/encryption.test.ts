@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decryptField, encryptField } from "@/lib/encryption";
+import { DECRYPTION_FAILED_SENTINEL, decryptField, encryptField } from "@/lib/encryption";
 
 describe("encryptField / decryptField", () => {
   it("verschlüsselt und entschlüsselt einen Wert verlustfrei", () => {
@@ -37,7 +37,25 @@ describe("encryptField / decryptField", () => {
     );
   });
 
-  it("gibt bei beschädigter Nutzlast unter einer gültigen Version weiterhin leer zurück", () => {
-    expect(decryptField("enc:v1:nicht-valides-base64-oder-zu-kurz")).toBe("");
+  it("gibt bei beschädigter Nutzlast unter einer gültigen Version einen sichtbaren Fehler-Platzhalter zurück, nicht mehr still '' (Audit-Finding M12)", () => {
+    // '' wäre von echtem leerem Nutzereingang nicht zu unterscheiden — ein
+    // Formular, das diesen Wert unbemerkt zurückspeichert, würde die
+    // eigentlich noch vorhandenen (nur gerade nicht lesbaren) Originaldaten
+    // sonst dauerhaft überschreiben.
+    expect(decryptField("enc:v1:nicht-valides-base64-oder-zu-kurz")).toBe(
+      DECRYPTION_FAILED_SENTINEL,
+    );
+  });
+
+  it("R08 — weigert sich, den Entschlüsselungs-Platzhalter erneut zu verschlüsseln (kein stiller Datenverlust bei einem unabhängigen Speichern)", () => {
+    // Typisches Aufrufmuster: `encryptField(input.feld?.trim() ?? currentEmployee.feld)`
+    // — war `currentEmployee.feld` bereits der sichtbare Platzhalter (weil
+    // die Entschlüsselung zuvor fehlschlug), darf ein völlig unabhängiges
+    // Speichern (z. B. nur die Telefonnummer ändern) diesen Platzhalter
+    // nicht klaglos verschlüsseln und damit die ursprüngliche, noch
+    // vorhandene Nutzlast endgültig überschreiben (Audit-Finding M12).
+    expect(() => encryptField(DECRYPTION_FAILED_SENTINEL)).toThrow(
+      /REENCRYPT_DECRYPTION_FAILED_SENTINEL/,
+    );
   });
 });

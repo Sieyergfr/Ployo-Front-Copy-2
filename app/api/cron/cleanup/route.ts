@@ -3,9 +3,13 @@ import { purgeTenantFiles } from "@/lib/storage/delete";
 import { logger, runWithRequestId } from "@/lib/logger";
 import {
   anonymizeFormerEmployeePii,
+  assertFileDeletionAllowed,
   findEmployeesDueForPersonaldatenAnonymisierung,
+  purgeExpiredConsentRecords,
   remindHrAboutExpiredHealthDataFreetext,
 } from "@/lib/retention-service";
+import { runVacationCarryoverRollover } from "@/lib/vacation-service";
+import { unlinkAndCleanupBeforeUserDeletion } from "@/lib/user-deletion-lifecycle";
 
 export const runtime = "nodejs";
 
@@ -41,6 +45,12 @@ const PUSH_SUBSCRIPTION_STALE_DAYS = 90;
  *   der Frist (lib/data-retention.ts), erinnert HR an ablaufende
  *   Gesundheitsdaten-Freitexte statt sie automatisch zu löschen
  * - entfernt anonyme Pageview-Datensätze (lib/analytics.ts) nach 13 Monaten
+ * - schreibt den Resturlaubs-Übertrag zum Jahreswechsel fort, weist
+ *   Mitarbeiter rechtzeitig auf drohenden Verfall hin und lässt ihn nur nach
+ *   dokumentiertem Hinweis verfallen (lib/vacation-carryover.ts)
+ * - entfernt abgelaufene Cookie-Consent-Nachweise (ConsentRecord) und
+ *   bereinigt sie zusätzlich beim endgültigen Löschen eines Kontos (keine
+ *   harte FK/Kaskade zu User)
  */
 export async function GET(request: Request) {
   return runWithRequestId((requestId) => handleCleanup(request, requestId));
@@ -78,6 +88,10 @@ async function handleCleanup(request: Request, requestId: string) {
       prisma.appRateLimit.deleteMany({ where: { resetAt: { lt: now } } }),
       prisma.pageView.deleteMany({ where: { occurredAt: { lt: pageViewCutoff } } }),
     ]);
+  // Cookie-Consent-Nachweis (ConsentRecord) wurde bisher gar nicht
+  // automatisch bereinigt (Audit-Finding M05) — Frist analog zu
+  // "personaldaten" (§195/199 BGB, siehe lib/data-retention.ts).
+  const purgedConsentRecords = await purgeExpiredConsentRecords(now);
 
   const expiredInvitations = await prisma.tenantInvitation.updateMany({
     where: { status: "PENDING", expiresAt: { lt: now } },
@@ -123,11 +137,29 @@ async function handleCleanup(request: Request, requestId: string) {
         { status: "replaced", replacedAt: { lt: purgeCutoff } },
       ],
     },
-    select: { id: true, bucket: true, storageKey: true },
+    select: { id: true, bucket: true, storageKey: true, tenantId: true, employeeId: true, parentId: true },
     take: 200,
   });
 
-  await purgeTenantFiles(filesToPurge);
+  // Legal Hold bzw. eine noch laufende gesetzliche Aufbewahrungsfrist
+  // (Gehaltsabrechnungen/Krankmeldungs-Anhänge) darf der periodische Purge
+  // nicht übergehen, nur weil die 30-tägige Karenzzeit des Soft-Deletes
+  // abgelaufen ist (Audit-Finding H12) — betroffene Dateien bleiben liegen
+  // und werden beim nächsten Lauf erneut geprüft.
+  const purgeableFiles: typeof filesToPurge = [];
+  for (const file of filesToPurge) {
+    try {
+      await assertFileDeletionAllowed(file.tenantId, file);
+      purgeableFiles.push(file);
+    } catch (error) {
+      logger.warn("Purge übersprungen: Löschung gesperrt.", {
+        fileId: file.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  await purgeTenantFiles(purgeableFiles);
 
   // Löschkonzept (Datenschutz-Sicherheitsaudit-und-Umbauplan.md, Teil 4):
   // Kategorie 1 (Stammdaten) automatisch anonymisieren, sobald die Frist
@@ -139,6 +171,10 @@ async function handleCleanup(request: Request, requestId: string) {
   }
 
   const healthDataReminders = await remindHrAboutExpiredHealthDataFreetext(now);
+
+  // Resturlaubs-Übertrag zum Jahreswechsel, gesetzlicher Verfalls-Hinweis und
+  // -Verfall (BUrlG §7 Abs. 3, Audit-Finding M02).
+  const vacationCarryover = await runVacationCarryoverRollover(now);
 
   // Konten, deren 30-tägige Schutzfrist nach einer Selbst-Löschung
   // (siehe lib/account-service.ts) abgelaufen ist, endgültig löschen.
@@ -177,6 +213,11 @@ async function handleCleanup(request: Request, requestId: string) {
       continue;
     }
 
+    // Dieselben Aufräumschritte wie jeder andere endgültige Löschpfad
+    // (lib/account-service.ts, lib/auth.ts deleteUser-Hook) — TenantEmployee
+    // hat keine harte FK zu User (würde sonst auf eine gelöschte ID zeigen)
+    // und ConsentRecord gar keine FK/Kaskade (Audit-Finding M05/M07).
+    await unlinkAndCleanupBeforeUserDeletion(user.id);
     await prisma.user.delete({ where: { id: user.id } });
     accountsDeleted += 1;
   }
@@ -185,14 +226,16 @@ async function handleCleanup(request: Request, requestId: string) {
     sessions: expiredSessions.count,
     verifications: expiredVerifications.count,
     auditLogs: auditDeleted,
-    purgedFiles: filesToPurge.length,
+    purgedFiles: purgeableFiles.length,
     expiredInvitations: expiredInvitations.count,
     accounts: accountsDeleted,
     staleRateLimits: staleRateLimits.count,
     stalePushSubscriptions: stalePushSubscriptions.count,
     oldPageViews: oldPageViews.count,
+    oldConsentRecords: purgedConsentRecords.deleted,
     anonymizedFormerEmployees: dueForAnonymisierung.length,
     healthDataRemindersCreated: healthDataReminders.remindersCreated,
+    vacationCarryover,
   };
 
   logger.info("Cron cleanup abgeschlossen.", { deleted, accountDeletionsSkipped });

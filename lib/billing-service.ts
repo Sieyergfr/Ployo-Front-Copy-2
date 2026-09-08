@@ -83,16 +83,29 @@ export async function createBillingCheckoutSession(input: {
     });
   }
 
-  const session = await stripe.checkout.sessions.create({
-    mode: "subscription",
-    customer: customerId,
-    line_items: [{ price: priceId, quantity: 1 }],
-    success_url: input.successUrl,
-    cancel_url: input.cancelUrl,
-    client_reference_id: tenant.id,
-    metadata: { tenantId: tenant.id },
-    allow_promotion_codes: true,
-  });
+  // Idempotenzschlüssel gebunden an Mandant+Plan+Zyklus und ein grobes
+  // 5-Minuten-Zeitfenster: zwei parallele/kurz aufeinanderfolgende Klicks
+  // (Doppelklick, Netzwerk-Retry) bekommen dieselbe, bereits erzeugte
+  // Checkout-Session zurück statt einer zweiten — anders als bei
+  // `customers.create` fehlte das hier bisher (Audit-Finding M14). Ein
+  // echter neuer Versuch nach Ablauf des Zeitfensters bekommt weiterhin
+  // eine frische Session.
+  const checkoutIdempotencyWindow = Math.floor(Date.now() / (5 * 60 * 1000));
+  const session = await stripe.checkout.sessions.create(
+    {
+      mode: "subscription",
+      customer: customerId,
+      line_items: [{ price: priceId, quantity: 1 }],
+      success_url: input.successUrl,
+      cancel_url: input.cancelUrl,
+      client_reference_id: tenant.id,
+      metadata: { tenantId: tenant.id },
+      allow_promotion_codes: true,
+    },
+    {
+      idempotencyKey: `stripe-checkout-${tenant.id}-${input.plan}-${input.billingCycle}-${checkoutIdempotencyWindow}`,
+    },
+  );
 
   if (!session.url) {
     throw new Error("Stripe hat keine Checkout-URL zurückgegeben.");

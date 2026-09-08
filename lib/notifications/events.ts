@@ -9,14 +9,22 @@ import { dispatchNotification } from "@/lib/notifications/dispatch";
  * `dispatchNotification`).
  */
 
+/**
+ * Rein fachliche Kategorie-Schalter ("soll diese Art Ereignis überhaupt
+ * benachrichtigt werden") — bewusst OHNE `mailNotifications`/`mobilePush`/
+ * `inAppNotifications`: das sind Kanal-Schalter, keine Kategorie-Schalter,
+ * und werden seitdem ausschließlich in `dispatchNotification` je Kanal
+ * geprüft. Vorher fungierte `mailNotifications` hier fälschlich als
+ * Vorfilter für ALLE Kanäle (Audit-Finding M11) — ein deaktiviertes
+ * `mobilePush`/`inAppNotifications` wurde dagegen nirgends geprüft.
+ */
 async function getTenantNotificationFlags(tenantId: string) {
   const settings = await prisma.tenantSettings.findUnique({
     where: { tenantId },
-    select: { mailNotifications: true, absenceAlerts: true, shiftAlerts: true },
+    select: { absenceAlerts: true, shiftAlerts: true },
   });
 
   return {
-    mailNotifications: settings?.mailNotifications ?? true,
     absenceAlerts: settings?.absenceAlerts ?? true,
     shiftAlerts: settings?.shiftAlerts ?? true,
   };
@@ -63,7 +71,7 @@ export async function notifyVacationRequestDecided(input: {
 }) {
   const flags = await getTenantNotificationFlags(input.tenantId);
 
-  if (!flags.mailNotifications || !flags.absenceAlerts) {
+  if (!flags.absenceAlerts) {
     return;
   }
 
@@ -110,7 +118,7 @@ export async function notifyEmployeeOfShiftPlanPublished(input: {
 }) {
   const flags = await getTenantNotificationFlags(input.tenantId);
 
-  if (!flags.mailNotifications || !flags.shiftAlerts) {
+  if (!flags.shiftAlerts) {
     return;
   }
 
@@ -157,11 +165,11 @@ export async function notifyShiftPlanManagersOfAbsenceConflict(input: {
   reason: "vacation" | "sickness";
   startDate: string;
   endDate: string | null;
-  managers: Array<{ userId: string; email: string | null }>;
+  managers: Array<{ userId: string; email: string | null; canViewSicknessReason: boolean }>;
 }) {
   const flags = await getTenantNotificationFlags(input.tenantId);
 
-  if (!flags.mailNotifications || !flags.shiftAlerts) {
+  if (!flags.shiftAlerts) {
     return;
   }
 
@@ -177,6 +185,9 @@ export async function notifyShiftPlanManagersOfAbsenceConflict(input: {
           reason: input.reason,
           startDate: input.startDate,
           endDate: input.endDate,
+          // Krankheitsbezug (Art. 9 DSGVO) nur an Empfänger mit
+          // sickness:read ausliefern (Audit-Finding H14).
+          redactReason: input.reason === "sickness" && !manager.canViewSicknessReason,
         },
         tenantId: input.tenantId,
         category: "system",
@@ -201,7 +212,7 @@ export async function notifyManagersOfNewVacationRequest(input: {
 }) {
   const flags = await getTenantNotificationFlags(input.tenantId);
 
-  if (!flags.mailNotifications || !flags.absenceAlerts) {
+  if (!flags.absenceAlerts) {
     return;
   }
 
@@ -240,7 +251,7 @@ export async function notifyManagersOfNewSicknessReport(input: {
 }) {
   const flags = await getTenantNotificationFlags(input.tenantId);
 
-  if (!flags.mailNotifications || !flags.absenceAlerts) {
+  if (!flags.absenceAlerts) {
     return;
   }
 
@@ -280,12 +291,6 @@ export async function notifyEmployeeOfInfoRequest(input: {
   title: string;
   dueAt: Date | null;
 }) {
-  const flags = await getTenantNotificationFlags(input.tenantId);
-
-  if (!flags.mailNotifications) {
-    return;
-  }
-
   const account = await getEmployeeAccount(input.employeeId);
 
   if (!account) {
@@ -323,7 +328,7 @@ export async function notifyManagersOfNewWishFreeRequest(input: {
 }) {
   const flags = await getTenantNotificationFlags(input.tenantId);
 
-  if (!flags.mailNotifications || !flags.shiftAlerts) {
+  if (!flags.shiftAlerts) {
     return;
   }
 
@@ -362,7 +367,7 @@ export async function notifyWishFreeRequestDecided(input: {
 }) {
   const flags = await getTenantNotificationFlags(input.tenantId);
 
-  if (!flags.mailNotifications || !flags.shiftAlerts) {
+  if (!flags.shiftAlerts) {
     return;
   }
 
@@ -387,4 +392,54 @@ export async function notifyWishFreeRequestDecided(input: {
     entityType: "wish-free-request",
     entityId: input.requestId,
   });
+}
+
+/**
+ * Benachrichtigt einen Mitarbeiter über drohend verfallenden Resturlaub
+ * (BUrlG §7 Abs. 3, BAG 9 AZR 541/15) — der eigentliche rechtlich
+ * erforderliche Hinweis, nicht nur eine interne HR-Erinnerung. "system":
+ * eine gesetzliche Pflichtmitteilung, keine abbestellbare persönliche
+ * Statusmeldung (Audit-Finding M02).
+ */
+/**
+ * Liefert `true` nur, wenn ein tatsächlicher Zustellversuch unternommen
+ * wurde (verknüpftes Konto vorhanden, `dispatchNotification` ist nicht
+ * geworfen) — der Aufrufer (`runVacationCarryoverRollover`) darf
+ * `vacationCarryoverRemindedAt` NUR bei `true` setzen. Vorher lieferte diese
+ * Funktion bei fehlendem Konto stillschweigend `undefined` zurück, und der
+ * Aufrufer setzte den Hinweis-Zeitstempel trotzdem — ohne Konto kein
+ * Versand, aber `shouldForfeitCarryover` erlaubte den Verfall danach
+ * trotzdem (Audit-Finding R05). Kein Nachweis tatsächlicher Zustellung
+ * (E-Mail-Bounce, deaktivierter Kanal) — nur eine notwendige, keine
+ * hinreichende Bedingung.
+ */
+export async function notifyEmployeeOfExpiringVacationCarryover(input: {
+  tenantId: string;
+  tenantName: string;
+  employeeId: string;
+  days: number;
+  expiresAt: string;
+}): Promise<boolean> {
+  const account = await getEmployeeAccount(input.employeeId);
+
+  if (!account) {
+    return false;
+  }
+
+  await dispatchNotification({
+    userId: account.userId,
+    email: account.email,
+    message: {
+      key: "vacationCarryoverExpiring",
+      tenantName: input.tenantName,
+      days: input.days,
+      expiresAt: input.expiresAt,
+    },
+    tenantId: input.tenantId,
+    category: "system",
+    entityType: "vacation-carryover",
+    entityId: input.employeeId,
+  });
+
+  return true;
 }

@@ -3,8 +3,11 @@ import {
   calculateAge,
   exceedsMaxShiftHours,
   findRestPeriodViolation,
+  findShiftOverlap,
   isSunday,
+  netWorkingMinutes,
   overlapsNightWindow,
+  requiredBreakMinutes,
   shiftDurationHours,
 } from "@/lib/arbzg-rules";
 
@@ -108,5 +111,58 @@ describe("calculateAge", () => {
   it("liefert null bei leerem oder ungültigem Geburtsdatum", () => {
     expect(calculateAge("", new Date(2026, 8, 5))).toBeNull();
     expect(calculateAge("nicht-auswertbar", new Date(2026, 8, 5))).toBeNull();
+  });
+});
+
+/** Regressionstest für Sicherheitsaudit-Finding M03. */
+describe("findShiftOverlap", () => {
+  it("erkennt eine echte zeitliche Überschneidung derselben Person", () => {
+    const existing = { date: "2026-09-01", startTime: "08:00", endTime: "16:00" };
+    const candidate = { date: "2026-09-01", startTime: "12:00", endTime: "20:00" };
+    expect(findShiftOverlap([existing], candidate)).toEqual({ neighborDate: "2026-09-01" });
+  });
+
+  it("erkennt eine Überschneidung über Mitternacht hinweg (Nachtschicht trifft Frühschicht)", () => {
+    const nightShift = { date: "2026-09-01", startTime: "22:00", endTime: "06:00" }; // endet 02.09. 06:00
+    const candidate = { date: "2026-09-02", startTime: "05:00", endTime: "13:00" }; // beginnt vor Schichtende
+    expect(findShiftOverlap([nightShift], candidate)).toEqual({ neighborDate: "2026-09-01" });
+  });
+
+  it("meldet keine Überschneidung bei ausreichendem Ruheabstand", () => {
+    const existing = { date: "2026-09-01", startTime: "08:00", endTime: "16:00" };
+    const candidate = { date: "2026-09-02", startTime: "08:00", endTime: "16:00" };
+    expect(findShiftOverlap([existing], candidate)).toBeNull();
+  });
+
+  it("meldet keine Überschneidung, wenn eine Schicht exakt endet, wo die andere beginnt", () => {
+    const existing = { date: "2026-09-01", startTime: "08:00", endTime: "16:00" };
+    const candidate = { date: "2026-09-01", startTime: "16:00", endTime: "20:00" };
+    expect(findShiftOverlap([existing], candidate)).toBeNull();
+  });
+});
+
+describe("netWorkingMinutes", () => {
+  it("zieht die Pause von der Anwesenheitsspanne ab", () => {
+    expect(netWorkingMinutes({ date: "2026-09-01", startTime: "08:00", endTime: "16:00" }, 30)).toBe(450); // 8h - 30min
+  });
+
+  it("wird nie negativ, auch bei einer Pause länger als die Schicht", () => {
+    expect(netWorkingMinutes({ date: "2026-09-01", startTime: "08:00", endTime: "09:00" }, 90)).toBe(0);
+  });
+});
+
+describe("requiredBreakMinutes", () => {
+  it("Erwachsene (§4 ArbZG): keine Pause bis 6h, 30 Min. über 6h, 45 Min. über 9h", () => {
+    expect(requiredBreakMinutes(6 * 60, false)).toBe(0);
+    expect(requiredBreakMinutes(6 * 60 + 1, false)).toBe(30);
+    expect(requiredBreakMinutes(9 * 60, false)).toBe(30);
+    expect(requiredBreakMinutes(9 * 60 + 1, false)).toBe(45);
+  });
+
+  it("Jugendliche (§11 JArbSchG): niedrigere Schwellen — 30 Min. über 4,5h, 60 Min. über 6h", () => {
+    expect(requiredBreakMinutes(4 * 60 + 30, true)).toBe(0);
+    expect(requiredBreakMinutes(4 * 60 + 31, true)).toBe(30);
+    expect(requiredBreakMinutes(6 * 60, true)).toBe(30);
+    expect(requiredBreakMinutes(6 * 60 + 1, true)).toBe(60);
   });
 });

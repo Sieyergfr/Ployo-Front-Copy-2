@@ -24,6 +24,9 @@
 /out/
 # scripts/deploy.sh sichert den vorherigen Build hierher, scripts/rollback.sh nutzt ihn.
 /.next.backup/
+# scripts/deploy.sh baut hierhin (atomarer Release-Wechsel statt in-place),
+# .next ist ein Symlink auf das jeweils aktive Release-Verzeichnis darin.
+/.next-releases/
 
 # production
 /build

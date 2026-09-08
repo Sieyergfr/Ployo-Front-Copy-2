@@ -308,6 +308,33 @@ function deriveCapabilitiesFromLevels(permissions: Record<string, PermissionLeve
   return { canDelete, canUploadFiles, canEditFiles, canViewFiles, canViewAudit };
 }
 
+/**
+ * Einziger Ort, der aus einem `PermissionRole`-Template die
+ * `TenantRolePermission`-Zeilen für `prisma.tenantRole.create` baut.
+ * Wird für JEDE Rollenanlage verwendet (reguläre Tenant-Initialisierung wie
+ * auch die Einladungsannahme) — ein zweiter, unvollständiger Aufbau war
+ * genau die Ursache von C01 (Scope/Fähigkeiten fielen dabei unbemerkt auf
+ * den Prisma-Feld-Default statt auf das Template zurück).
+ */
+export function buildRolePermissionCreateData(
+  role: Pick<
+    PermissionRole,
+    "permissions" | "scopes" | "canDelete" | "canUploadFiles" | "canEditFiles" | "canViewFiles" | "canViewAudit" | "shiftsLevel"
+  >,
+) {
+  return permissionAreas.map((area) => ({
+    area: area.id,
+    level: role.permissions[area.id] ?? "none",
+    scope: role.scopes[area.id] ?? "all",
+    canDelete: role.canDelete[area.id] ?? false,
+    canUploadFiles: role.canUploadFiles[area.id] ?? false,
+    canEditFiles: role.canEditFiles[area.id] ?? false,
+    canViewFiles: role.canViewFiles[area.id] ?? false,
+    canViewAudit: role.canViewAudit[area.id] ?? false,
+    shiftsLevel: role.shiftsLevel[area.id] ?? null,
+  }));
+}
+
 /** Keine Default-Rolle bekommt vorab eine erweiterte Schichtberechtigung — das konfiguriert der Rollen-Editor gezielt. */
 export function emptyShiftsLevelSet(): Record<string, PermissionLevel | null> {
   return Object.fromEntries(permissionAreas.map((area) => [area.id, null]));

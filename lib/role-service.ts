@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import {
+  buildRolePermissionCreateData,
   emptyBooleanCapabilitySet,
   emptyPermissionSet,
   emptyShiftsLevelSet,
@@ -153,17 +154,7 @@ export async function ensureTenantDefaultRoles(tenantSlug: string) {
             isSystem: role.isSystem,
             appOverviewEnabled: role.appOverviewEnabled,
             permissions: {
-              create: permissionAreas.map((area) => ({
-                area: area.id,
-                level: role.permissions[area.id] ?? "none",
-                scope: role.scopes[area.id] ?? "all",
-                canDelete: role.canDelete[area.id] ?? false,
-                canUploadFiles: role.canUploadFiles[area.id] ?? false,
-                canEditFiles: role.canEditFiles[area.id] ?? false,
-                canViewFiles: role.canViewFiles[area.id] ?? false,
-                canViewAudit: role.canViewAudit[area.id] ?? false,
-                shiftsLevel: role.shiftsLevel[area.id] ?? null,
-              })),
+              create: buildRolePermissionCreateData(role),
             },
           },
         }),
@@ -172,6 +163,45 @@ export async function ensureTenantDefaultRoles(tenantSlug: string) {
   }
 
   return access.tenantId;
+}
+
+/**
+ * Upsert für GENAU EINE System-Rolle per `key`, ohne Tenant-Access-Prüfung —
+ * für Aufrufer, die ihre eigene Autorisierung mitbringen (z. B. die
+ * Einladungsannahme: der Einladungs-Token selbst ist dort die Autorisierung,
+ * der Einladende ist noch kein Tenant-Mitglied und `requireTenantAccess`
+ * würde fehlschlagen). Nutzt exakt dasselbe `permissionRoles`-Template und
+ * denselben Zeilenaufbau wie `ensureTenantDefaultRoles` — bewusst keine
+ * zweite, potenziell unvollständige Kopie mehr (siehe Audit-Finding C01:
+ * eine frühere separate Kopie in `invitation-service.ts` ließ dabei
+ * `scope`/Fähigkeiten weg und aktivierte so unbeabsichtigt den
+ * mandantenweiten Prisma-Feld-Default statt des Templates).
+ */
+export async function upsertTenantSystemRoleByKey(tenantId: string, key: string) {
+  const template = permissionRoles.find((role) => role.key === key);
+
+  if (!template) {
+    return null;
+  }
+
+  const role = await prisma.tenantRole.upsert({
+    where: { tenantId_key: { tenantId, key } },
+    update: {},
+    create: {
+      tenantId,
+      key: template.key,
+      name: template.name,
+      description: template.description,
+      isSystem: template.isSystem,
+      appOverviewEnabled: template.appOverviewEnabled,
+      permissions: {
+        create: buildRolePermissionCreateData(template),
+      },
+    },
+    select: { id: true },
+  });
+
+  return role.id;
 }
 
 export async function getRolesForTenant(tenantSlug: string) {

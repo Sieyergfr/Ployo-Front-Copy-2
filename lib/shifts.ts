@@ -23,6 +23,8 @@ export type Shift = {
   location?: string;
   team?: string;
   conflict?: boolean;
+  /** Grund des Konflikts, z. B. Überschneidung oder Abwesenheit — nur gesetzt, wenn `conflict` true ist. */
+  conflictReason?: string;
   note?: string;
 };
 

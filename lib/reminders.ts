@@ -218,6 +218,45 @@ async function reminderScopeWhere(access: {
   return { tenantId: access.tenantId };
 }
 
+/**
+ * Wie `assertEmployeeInScope`, aber für den own/team-Scope von Erinnerungen:
+ * "own" erlaubt nur selbst erstellte Erinnerungen, "team" nur die am eigenen
+ * Team hängenden (siehe `reminderScopeWhere`). `updateTenantReminder` und
+ * `completeTenantReminder` prüften bisher nur den tenantweiten Level
+ * ("reminders:write"/`canDelete`), nicht das Zielobjekt (Audit-Finding H05).
+ */
+async function assertReminderInScope(
+  access: { tenantId: string; userId: string; tenantAccess: TenantAccess },
+  reminderId: string,
+) {
+  const scopeFilter = await resolveScopeFilter(access.tenantAccess);
+
+  if (scopeFilter.type === "all") return;
+
+  const reminder = await prisma.tenantReminder.findFirst({
+    where: { id: reminderId, tenantId: access.tenantId },
+    select: { createdById: true, team: { select: { name: true } } },
+  });
+
+  if (!reminder) {
+    throw new Error("FORBIDDEN");
+  }
+
+  if (scopeFilter.type === "own" && reminder.createdById === access.userId) {
+    return;
+  }
+
+  if (
+    scopeFilter.type === "team" &&
+    scopeFilter.team &&
+    reminder.team?.name === scopeFilter.team
+  ) {
+    return;
+  }
+
+  throw new Error("FORBIDDEN");
+}
+
 async function createUniqueReminderKey(input: {
   tenantId: string;
   title: string;
@@ -492,6 +531,8 @@ export async function updateTenantReminder(input: {
     throw new Error("Erinnerung nicht gefunden.");
   }
 
+  await assertReminderInScope(access, input.reminderId);
+
   const title = input.title.trim();
   const dueDate = input.dueDate.trim();
 
@@ -533,6 +574,11 @@ export async function completeTenantReminder(input: {
   if (!access.canDelete) {
     throw new Error("FORBIDDEN");
   }
+
+  await assertReminderInScope(
+    { tenantId: access.tenantId, userId: access.userId, tenantAccess: access },
+    input.reminderId,
+  );
 
   const reminder = await prisma.tenantReminder.findFirst({
     where: { id: input.reminderId, tenantId: access.tenantId },

@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { isEmailConfigured, sendInvitationEmail } from "@/lib/email";
 import { buildInvitationUrl } from "@/lib/invitation-service";
 import { logger } from "@/lib/logger";
+import { buildRolePermissionCreateData, permissionRoles } from "@/lib/roles";
 import { slugify } from "@/lib/slug";
 import { isKnownTenantIndustry, isKnownTenantSize } from "@/lib/tenant-options";
 import { headers } from "next/headers";
@@ -307,6 +308,25 @@ export async function createTenantForOwner(input: CreateTenantInput) {
           userId: input.userId,
           role: tenantRoles.owner,
         },
+      },
+      // Atomar mit dem Tenant selbst anlegen — sonst existieren die
+      // System-Rollen bis zum ersten Rollen-Seitenaufruf oder zur ersten
+      // angenommenen Einladung nicht, und ein davon abweichender,
+      // unvollständiger Anlegepfad kann Scope/Fähigkeiten auf den
+      // Prisma-Feld-Default statt das Template fallen lassen (Audit-Finding
+      // C01). `permissionRoles`/`buildRolePermissionCreateData` sind das
+      // einzige kanonische Template für alle Rollen-Anlagepfade.
+      roles: {
+        create: permissionRoles.map((role) => ({
+          key: role.key,
+          name: role.name,
+          description: role.description,
+          isSystem: role.isSystem,
+          appOverviewEnabled: role.appOverviewEnabled,
+          permissions: {
+            create: buildRolePermissionCreateData(role),
+          },
+        })),
       },
     },
     include: {

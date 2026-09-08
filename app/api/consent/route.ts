@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { checkRateLimit, tooManyRequests } from "@/lib/rate-limit";
+import { checkRateLimit, getClientIp, tooManyRequests } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -9,26 +9,11 @@ export const runtime = "nodejs";
  * DSGVO). Wird von components/CookieConsent.tsx zusätzlich zum
  * Browser-Cookie aufgerufen. Funktioniert bewusst auch ohne Login, da die
  * Entscheidung schon vor jeder Anmeldung getroffen wird.
- *
- * `x-real-ip` zuerst, weil nginx den Header aus `$remote_addr` setzt und ein
- * Client ihn damit nicht selbst bestimmen kann. `x-forwarded-for` entsteht
- * dagegen aus `$proxy_add_x_forwarded_for`: der Client darf den Anfang des
- * Headers vorgeben, nginx hängt die echte Adresse nur hinten an — deshalb der
- * letzte Eintrag und nicht der erste.
  */
-function clientIp(requestHeaders: Headers): string {
-  const realIp = requestHeaders.get("x-real-ip")?.trim();
-  if (realIp) return realIp;
-
-  const forwarded = requestHeaders.get("x-forwarded-for")?.split(",");
-  const lastHop = forwarded?.[forwarded.length - 1]?.trim();
-
-  return lastHop || "";
-}
-
 export async function POST(request: Request) {
+  const clientIpAddress = await getClientIp();
   const limit = await checkRateLimit({
-    key: `consent:${clientIp(request.headers)}`,
+    key: `consent:${clientIpAddress}`,
     limit: 20,
     windowSeconds: 3600,
   });
@@ -56,7 +41,7 @@ export async function POST(request: Request) {
       userId: session?.user?.id ?? null,
       value,
       bannerVersion,
-      ipAddress: clientIp(request.headers),
+      ipAddress: clientIpAddress,
       userAgent: request.headers.get("user-agent") ?? "",
     },
   });

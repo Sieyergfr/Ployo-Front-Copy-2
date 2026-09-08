@@ -1,6 +1,6 @@
 import "server-only";
 
-import { generateAppleClientSecret } from "@/lib/auth";
+import { generateAppleClientSecret } from "@/lib/apple-client-secret";
 import { logger } from "@/lib/logger";
 
 type OAuthAccount = {
