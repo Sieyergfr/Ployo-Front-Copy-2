@@ -32,19 +32,9 @@
     "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
-    ".next/types/**/*.ts",
-    ".next/dev/types/**/*.ts",
     "**/*.mts",
-    ".next-probe/types/**/*.ts",
-    ".next-probe/dev/types/**/*.ts",
-    ".next-releases/20260907155952/types/**/*.ts",
-    ".next-releases/20260907155952/dev/types/**/*.ts",
-    "/tmp/claude-0/-opt-apps-ployo-front/b50925c4-abb7-4fb9-a7bd-91e1ee2ada17/scratchpad/probe-build/types/**/*.ts",
-    "/tmp/claude-0/-opt-apps-ployo-front/b50925c4-abb7-4fb9-a7bd-91e1ee2ada17/scratchpad/probe-build/dev/types/**/*.ts",
-    "/tmp/ployo-probe-build/types/**/*.ts",
-    "/tmp/ployo-probe-build/dev/types/**/*.ts",
-    ".probe-next/types/**/*.ts",
-    ".probe-next/dev/types/**/*.ts"
+    ".next-releases/20260908162129/types/**/*.ts",
+    ".next-releases/20260908162129/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"
