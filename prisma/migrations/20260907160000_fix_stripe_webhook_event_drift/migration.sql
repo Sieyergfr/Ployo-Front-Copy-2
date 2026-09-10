@@ -7,15 +7,27 @@
 -- Code (app/api/webhooks/stripe/route.ts) und schema.prisma voraussetzen.
 -- Per `prisma migrate diff --from-url <DB> --to-schema-datamodel
 -- prisma/schema.prisma` erzeugt, um exakt den fehlenden Rest nachzuziehen.
+--
+-- Jede Anweisung ist bewusst idempotent (IF NOT EXISTS / Exception-Guard):
+-- `prisma migrate deploy` spielt auf einer FRISCHEN Datenbank (z. B. CI) alle
+-- Migrationen chronologisch nacheinander ein — dort lief die vorherige
+-- Migration 20260906213000 bereits regulär durch und hat Typ/Spalten/Index
+-- schon angelegt. Ohne die Guards brach ein zweites CREATE TYPE dort mit
+-- "already exists" (42710) ab (siehe GitHub Actions: Apply migrations).
 
 -- CreateEnum
-CREATE TYPE "StripeWebhookEventStatus" AS ENUM ('processing', 'completed');
+DO $$ BEGIN
+  CREATE TYPE "StripeWebhookEventStatus" AS ENUM ('processing', 'completed');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AlterTable
-ALTER TABLE "StripeWebhookEvent" ADD COLUMN     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-ADD COLUMN     "status" "StripeWebhookEventStatus" NOT NULL DEFAULT 'processing',
-ALTER COLUMN "processedAt" DROP NOT NULL,
-ALTER COLUMN "processedAt" DROP DEFAULT;
+ALTER TABLE "StripeWebhookEvent"
+  ADD COLUMN IF NOT EXISTS "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  ADD COLUMN IF NOT EXISTS "status" "StripeWebhookEventStatus" NOT NULL DEFAULT 'processing',
+  ALTER COLUMN "processedAt" DROP NOT NULL,
+  ALTER COLUMN "processedAt" DROP DEFAULT;
 
 -- CreateIndex
-CREATE INDEX "StripeWebhookEvent_status_idx" ON "StripeWebhookEvent"("status");
+CREATE INDEX IF NOT EXISTS "StripeWebhookEvent_status_idx" ON "StripeWebhookEvent"("status");
