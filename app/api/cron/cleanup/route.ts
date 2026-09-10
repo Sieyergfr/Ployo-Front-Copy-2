@@ -3,15 +3,25 @@ import { purgeTenantFiles } from "@/lib/storage/delete";
 import { logger, runWithRequestId } from "@/lib/logger";
 import {
   anonymizeFormerEmployeePii,
-  assertFileDeletionAllowed,
+  assertFileDeletionAllowedBatch,
   findEmployeesDueForPersonaldatenAnonymisierung,
   purgeExpiredConsentRecords,
   remindHrAboutExpiredHealthDataFreetext,
 } from "@/lib/retention-service";
 import { runVacationCarryoverRollover } from "@/lib/vacation-service";
-import { unlinkAndCleanupBeforeUserDeletion } from "@/lib/user-deletion-lifecycle";
+import { unlinkAndCleanupBeforeUserDeletionBatch } from "@/lib/user-deletion-lifecycle";
 
 export const runtime = "nodejs";
+
+// Seitengröße für die Cursor-Paginierung der Mandanten-/Nutzer-Schleifen
+// unten — hält Speicher- und Abfragegröße pro Batch unabhängig von der
+// Gesamtzahl der Mandanten/fälligen Konten beschränkt.
+const TENANT_PAGE_SIZE = 500;
+const USER_PAGE_SIZE = 500;
+// Anzahl gleichzeitig laufender Anonymisierungs-Transaktionen (jede läuft in
+// ihrer eigenen `$transaction`, siehe anonymizeFormerEmployeePii) — begrenzt
+// statt unbegrenzt parallel, um den Verbindungs-Pool nicht zu sprengen.
+const ANONYMIZATION_CONCURRENCY = 10;
 
 const SOFT_DELETE_GRACE_DAYS = 30;
 /**
@@ -105,23 +115,49 @@ async function handleCleanup(request: Request, requestId: string) {
     where: { updatedAt: { lt: pushCutoff } },
   });
 
+  // Seitenweise statt eines einzigen `findMany` ohne `take` (skaliert sonst
+  // nicht mit wachsender Mandantenzahl). Pro Seite werden die Mandanten nach
+  // ihrer konfigurierten Aufbewahrungsdauer gruppiert und je Gruppe in EINER
+  // `deleteMany`-Abfrage bereinigt statt einer pro Mandant.
   let auditDeleted = 0;
-  const tenants = await prisma.tenant.findMany({
-    select: {
-      id: true,
-      settings: { select: { auditRetentionMonths: true } },
-    },
-  });
+  let tenantCursor: string | undefined;
 
-  for (const tenant of tenants) {
-    const months = tenant.settings?.auditRetentionMonths ?? 24;
-    const cutoff = new Date(now);
-    cutoff.setMonth(cutoff.getMonth() - months);
-
-    const result = await prisma.tenantAuditLog.deleteMany({
-      where: { tenantId: tenant.id, createdAt: { lt: cutoff } },
+  for (;;) {
+    const tenantPage = await prisma.tenant.findMany({
+      take: TENANT_PAGE_SIZE,
+      ...(tenantCursor ? { cursor: { id: tenantCursor }, skip: 1 } : {}),
+      orderBy: { id: "asc" },
+      select: {
+        id: true,
+        settings: { select: { auditRetentionMonths: true } },
+      },
     });
-    auditDeleted += result.count;
+
+    if (tenantPage.length === 0) break;
+    tenantCursor = tenantPage[tenantPage.length - 1]!.id;
+
+    const tenantIdsByRetentionMonths = new Map<number, string[]>();
+    for (const tenant of tenantPage) {
+      const months = tenant.settings?.auditRetentionMonths ?? 24;
+      const bucket = tenantIdsByRetentionMonths.get(months);
+      if (bucket) {
+        bucket.push(tenant.id);
+      } else {
+        tenantIdsByRetentionMonths.set(months, [tenant.id]);
+      }
+    }
+
+    for (const [months, tenantIds] of tenantIdsByRetentionMonths) {
+      const cutoff = new Date(now);
+      cutoff.setMonth(cutoff.getMonth() - months);
+
+      const result = await prisma.tenantAuditLog.deleteMany({
+        where: { tenantId: { in: tenantIds }, createdAt: { lt: cutoff } },
+      });
+      auditDeleted += result.count;
+    }
+
+    if (tenantPage.length < TENANT_PAGE_SIZE) break;
   }
 
   const purgeCutoff = new Date(
@@ -145,18 +181,17 @@ async function handleCleanup(request: Request, requestId: string) {
   // (Gehaltsabrechnungen/Krankmeldungs-Anhänge) darf der periodische Purge
   // nicht übergehen, nur weil die 30-tägige Karenzzeit des Soft-Deletes
   // abgelaufen ist (Audit-Finding H12) — betroffene Dateien bleiben liegen
-  // und werden beim nächsten Lauf erneut geprüft.
-  const purgeableFiles: typeof filesToPurge = [];
-  for (const file of filesToPurge) {
-    try {
-      await assertFileDeletionAllowed(file.tenantId, file);
-      purgeableFiles.push(file);
-    } catch (error) {
-      logger.warn("Purge übersprungen: Löschung gesperrt.", {
-        fileId: file.id,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
+  // und werden beim nächsten Lauf erneut geprüft. Gebündelt statt einer
+  // Prüfung pro Datei (bis zu vier Queries/Datei, siehe
+  // assertFileDeletionAllowedBatch).
+  const { allowed: purgeableFiles, blocked: blockedFiles } =
+    await assertFileDeletionAllowedBatch(filesToPurge);
+
+  for (const entry of blockedFiles) {
+    logger.warn("Purge übersprungen: Löschung gesperrt.", {
+      fileId: entry.file.id,
+      error: entry.reason,
+    });
   }
 
   await purgeTenantFiles(purgeableFiles);
@@ -166,8 +201,17 @@ async function handleCleanup(request: Request, requestId: string) {
   // abgelaufen ist. Kategorie 3/4/5 (Lohn/SV/Gesundheit) NIE automatisch
   // löschen — für Gesundheitsdaten stattdessen nur eine HR-Erinnerung.
   const dueForAnonymisierung = await findEmployeesDueForPersonaldatenAnonymisierung(now);
-  for (const employee of dueForAnonymisierung) {
-    await anonymizeFormerEmployeePii(employee);
+  // Jede Anonymisierung läuft in ihrer eigenen, auf genau diesen Mitarbeiter
+  // beschränkten Transaktion (siehe anonymizeFormerEmployeePii) — die
+  // einzelnen Datensätze überschneiden sich nicht, ein echtes Zusammenlegen
+  // in eine einzige Mehrzeilen-Schreiboperation würde die individuell
+  // berechneten Werte je Mitarbeiter (anonymisierter Name/Key aus der
+  // jeweiligen `employeeNumber`) und die Transaktionsgrenze aufgeben — bei
+  // Löschkonzept-Daten bewusst nicht angetastet. Begrenzt nebenläufig statt
+  // sequenziell ist der sichere Mittelweg.
+  for (let i = 0; i < dueForAnonymisierung.length; i += ANONYMIZATION_CONCURRENCY) {
+    const chunk = dueForAnonymisierung.slice(i, i + ANONYMIZATION_CONCURRENCY);
+    await Promise.all(chunk.map((employee) => anonymizeFormerEmployeePii(employee)));
   }
 
   const healthDataReminders = await remindHrAboutExpiredHealthDataFreetext(now);
@@ -178,48 +222,84 @@ async function handleCleanup(request: Request, requestId: string) {
 
   // Konten, deren 30-tägige Schutzfrist nach einer Selbst-Löschung
   // (siehe lib/account-service.ts) abgelaufen ist, endgültig löschen.
-  const dueForDeletion = await prisma.user.findMany({
-    where: { scheduledDeletionAt: { lte: now } },
-    select: {
-      id: true,
-      memberships: {
-        where: { role: "OWNER" },
-        select: { tenantId: true, tenant: { select: { name: true } } },
-      },
-    },
-  });
-
+  // Seitenweise (skaliert sonst nicht mit vielen fälligen Konten); pro Seite
+  // wird die Eigentümer-Prüfung für ALLE betroffenen Mandanten in einer
+  // Abfrage geholt statt einer COUNT-Query pro (Nutzer, Mandant)-Paar, und
+  // die eigentliche Löschung läuft gebündelt (siehe
+  // unlinkAndCleanupBeforeUserDeletionBatch + `deleteMany` unten).
   let accountsDeleted = 0;
   const accountDeletionsSkipped: string[] = [];
+  let userCursor: string | undefined;
 
-  for (const user of dueForDeletion) {
-    let orphansTenant = false;
+  for (;;) {
+    const userPage = await prisma.user.findMany({
+      where: { scheduledDeletionAt: { lte: now } },
+      take: USER_PAGE_SIZE,
+      ...(userCursor ? { cursor: { id: userCursor }, skip: 1 } : {}),
+      orderBy: { id: "asc" },
+      select: {
+        id: true,
+        memberships: {
+          where: { role: "OWNER" },
+          select: { tenantId: true, tenant: { select: { name: true } } },
+        },
+      },
+    });
 
-    for (const ownership of user.memberships) {
-      const otherOwners = await prisma.tenantMembership.count({
-        where: { tenantId: ownership.tenantId, userId: { not: user.id }, role: "OWNER" },
-      });
+    if (userPage.length === 0) break;
+    userCursor = userPage[userPage.length - 1]!.id;
 
-      if (otherOwners === 0) {
-        orphansTenant = true;
-        accountDeletionsSkipped.push(
-          `${user.id} (alleinige/r Inhaber/in von "${ownership.tenant.name}")`,
-        );
-        break;
+    const ownedTenantIds = [
+      ...new Set(userPage.flatMap((user) => user.memberships.map((m) => m.tenantId))),
+    ];
+    const owners = ownedTenantIds.length
+      ? await prisma.tenantMembership.findMany({
+          where: { tenantId: { in: ownedTenantIds }, role: "OWNER" },
+          select: { tenantId: true, userId: true },
+        })
+      : [];
+
+    const ownerUserIdsByTenant = new Map<string, string[]>();
+    for (const owner of owners) {
+      const bucket = ownerUserIdsByTenant.get(owner.tenantId);
+      if (bucket) {
+        bucket.push(owner.userId);
+      } else {
+        ownerUserIdsByTenant.set(owner.tenantId, [owner.userId]);
       }
     }
 
-    if (orphansTenant) {
-      continue;
+    const deletableUserIds: string[] = [];
+
+    for (const user of userPage) {
+      const orphanedOwnership = user.memberships.find((ownership) => {
+        const otherOwners = (ownerUserIdsByTenant.get(ownership.tenantId) ?? []).filter(
+          (userId) => userId !== user.id,
+        );
+        return otherOwners.length === 0;
+      });
+
+      if (orphanedOwnership) {
+        accountDeletionsSkipped.push(
+          `${user.id} (alleinige/r Inhaber/in von "${orphanedOwnership.tenant.name}")`,
+        );
+        continue;
+      }
+
+      deletableUserIds.push(user.id);
     }
 
-    // Dieselben Aufräumschritte wie jeder andere endgültige Löschpfad
-    // (lib/account-service.ts, lib/auth.ts deleteUser-Hook) — TenantEmployee
-    // hat keine harte FK zu User (würde sonst auf eine gelöschte ID zeigen)
-    // und ConsentRecord gar keine FK/Kaskade (Audit-Finding M05/M07).
-    await unlinkAndCleanupBeforeUserDeletion(user.id);
-    await prisma.user.delete({ where: { id: user.id } });
-    accountsDeleted += 1;
+    if (deletableUserIds.length > 0) {
+      // Dieselben Aufräumschritte wie jeder andere endgültige Löschpfad
+      // (lib/account-service.ts, lib/auth.ts deleteUser-Hook) — TenantEmployee
+      // hat keine harte FK zu User (würde sonst auf eine gelöschte ID zeigen)
+      // und ConsentRecord gar keine FK/Kaskade (Audit-Finding M05/M07).
+      await unlinkAndCleanupBeforeUserDeletionBatch(deletableUserIds);
+      const result = await prisma.user.deleteMany({ where: { id: { in: deletableUserIds } } });
+      accountsDeleted += result.count;
+    }
+
+    if (userPage.length < USER_PAGE_SIZE) break;
   }
 
   const deleted = {

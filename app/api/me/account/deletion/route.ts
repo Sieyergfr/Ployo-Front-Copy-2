@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { auth } from "@/lib/auth";
 import {
   cancelOwnAccountDeletion,
@@ -6,7 +7,12 @@ import {
 } from "@/lib/account-service";
 import { checkRateLimit, tooManyRequests } from "@/lib/rate-limit";
 import { mapSelfServiceError } from "@/lib/api/self-service-errors";
+import { invalidRequestResponse } from "@/lib/api/validation";
 import { headers } from "next/headers";
+
+const scheduleDeletionSchema = z.object({
+  password: z.string().min(1),
+});
 
 export async function GET() {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -56,14 +62,15 @@ export async function POST(request: Request) {
     return tooManyRequests(limit);
   }
 
-  const body = (await request.json().catch(() => null)) as { password?: string } | null;
+  const body = await request.json().catch(() => null);
+  const parsed = scheduleDeletionSchema.safeParse(body);
 
-  if (!body?.password) {
-    return Response.json({ error: "'password' ist erforderlich." }, { status: 400 });
+  if (!parsed.success) {
+    return invalidRequestResponse(parsed.error);
   }
 
   try {
-    const scheduledDeletionAt = await scheduleOwnAccountDeletion(body.password);
+    const scheduledDeletionAt = await scheduleOwnAccountDeletion(parsed.data.password);
 
     return Response.json({ scheduledDeletionAt });
   } catch (error) {

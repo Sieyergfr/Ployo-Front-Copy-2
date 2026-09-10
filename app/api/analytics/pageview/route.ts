@@ -1,8 +1,14 @@
 import { headers } from "next/headers";
+import { z } from "zod";
 import { checkRateLimit, tooManyRequests } from "@/lib/rate-limit";
+import { invalidRequestResponse } from "@/lib/api/validation";
 import { isTrackablePath, recordPageView, referrerHostFrom } from "@/lib/analytics";
 
 export const runtime = "nodejs";
+
+const pageviewSchema = z.object({
+  path: z.string().min(1),
+});
 
 /**
  * Eigenes, cookie-freies Pageview-Tracking (s. lib/analytics.ts) — wird per
@@ -33,10 +39,16 @@ export async function POST(request: Request) {
     return tooManyRequests(limit);
   }
 
-  const body = (await request.json().catch(() => null)) as { path?: unknown } | null;
-  const path = typeof body?.path === "string" ? body.path : "";
+  const body = await request.json().catch(() => null);
+  const parsed = pageviewSchema.safeParse(body);
 
-  if (!path || !isTrackablePath(path)) {
+  if (!parsed.success) {
+    return invalidRequestResponse(parsed.error);
+  }
+
+  const { path } = parsed.data;
+
+  if (!isTrackablePath(path)) {
     return new Response(null, { status: 204 });
   }
 

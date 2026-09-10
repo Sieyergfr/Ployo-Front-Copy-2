@@ -1,6 +1,7 @@
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { prisma } from "@/lib/prisma";
 import { logger, runWithRequestId } from "@/lib/logger";
+import { checkRateLimit, getClientIp, tooManyRequests } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -33,6 +34,16 @@ async function handleAppleNotification(request: Request, requestId: string) {
 
   if (!clientId) {
     return Response.json({ error: "Apple Sign-In ist nicht konfiguriert." }, { status: 503 });
+  }
+
+  const limit = await checkRateLimit({
+    key: `webhook-apple:${await getClientIp(request.headers)}`,
+    limit: 10,
+    windowSeconds: 60,
+  });
+
+  if (!limit.allowed) {
+    return tooManyRequests(limit);
   }
 
   const form = await request.formData();

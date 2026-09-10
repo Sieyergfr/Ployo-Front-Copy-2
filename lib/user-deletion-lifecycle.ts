@@ -73,3 +73,39 @@ export async function unlinkAndCleanupBeforeUserDeletion(userId: string) {
     });
   }
 }
+
+/**
+ * Batch-Variante von `unlinkAndCleanupBeforeUserDeletion` für den
+ * periodischen Cleanup-Cron (app/api/cron/cleanup/route.ts), der mehrere
+ * fällige Konten pro Lauf endgültig löscht — bündelt die beiden DB-Schritte
+ * über alle übergebenen Nutzer in je einer Abfrage statt zwei pro Nutzer. Die
+ * Profilbild-Löschung bleibt zwangsläufig ein S3-Aufruf pro Nutzer (kein
+ * "Lösche alle diese Keys"-Gegenstück in lib/storage/delete.ts), läuft aber
+ * nebenläufig statt sequenziell.
+ */
+export async function unlinkAndCleanupBeforeUserDeletionBatch(userIds: string[]) {
+  if (userIds.length === 0) {
+    return;
+  }
+
+  await prisma.$transaction([
+    prisma.tenantEmployee.updateMany({ where: { userId: { in: userIds } }, data: { userId: null } }),
+    prisma.consentRecord.deleteMany({ where: { userId: { in: userIds } } }),
+  ]);
+
+  await Promise.all(
+    userIds.map(async (userId) => {
+      try {
+        await deleteObjectFromStorage({
+          bucket: getStorageBucket("hrDocuments").bucket,
+          key: `avatars/${userId}`,
+        });
+      } catch (error) {
+        logger.warn("Profilbild-Löschung beim Konto-Löschen fehlgeschlagen.", {
+          userId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }),
+  );
+}

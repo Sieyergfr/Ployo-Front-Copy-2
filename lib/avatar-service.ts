@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { uploadObject } from "@/lib/storage/upload";
 import { headers } from "next/headers";
 
-const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
+export const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 // Avatare werden an vielen Stellen gleichzeitig angezeigt (Navigation,
 // Mitarbeiterlisten, Quick-View) — eine feste Kantenlänge + WebP hält jeden

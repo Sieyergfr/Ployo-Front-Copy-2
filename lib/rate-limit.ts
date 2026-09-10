@@ -23,8 +23,17 @@ import { headers } from "next/headers";
  * **letzte** Eintrag und nicht der erste. Fehlen beide, bleibt ein
  * gemeinsamer Eimer übrig; das Limit greift dann global statt gar nicht.
  */
-export async function getClientIp(): Promise<string> {
-  const headerList = await headers();
+/**
+ * `requestHeaders` optional: Route Handler haben mit `request.headers` schon
+ * die passenden Header zur Hand und sollten sie direkt übergeben — das macht
+ * die Funktion dort unabhängig vom Next.js-Request-Scope (`next/headers`
+ * wirft außerhalb eines echten Request-Kontexts, z. B. beim direkten Aufruf
+ * eines Route Handlers in einem Unit-Test). Ohne Argument (z. B. in Server
+ * Actions ohne eigenes `Request`-Objekt, siehe app/invite/[token]/actions.ts)
+ * bleibt der bisherige Rückgriff auf `next/headers()`.
+ */
+export async function getClientIp(requestHeaders?: Headers): Promise<string> {
+  const headerList = requestHeaders ?? (await headers());
   const realIp = headerList.get("x-real-ip")?.trim();
   if (realIp) return realIp;
 

@@ -1,8 +1,14 @@
+import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { getAccountOverview, updateAccountName } from "@/lib/account-service";
 import { checkRateLimit, tooManyRequests } from "@/lib/rate-limit";
 import { mapSelfServiceError } from "@/lib/api/self-service-errors";
+import { invalidRequestResponse } from "@/lib/api/validation";
 import { headers } from "next/headers";
+
+const updateAccountSchema = z.object({
+  name: z.string().trim().min(1),
+});
 
 /** Konto-Übersicht: Name/E-Mail/2FA-Status + Mitgliedschaften über ALLE Mandanten hinweg + aktive Sitzungen. */
 export async function GET() {
@@ -49,14 +55,15 @@ export async function PATCH(request: Request) {
     return tooManyRequests(limit);
   }
 
-  const body = (await request.json().catch(() => null)) as { name?: string } | null;
+  const body = await request.json().catch(() => null);
+  const parsed = updateAccountSchema.safeParse(body);
 
-  if (!body?.name) {
-    return Response.json({ error: "'name' ist erforderlich." }, { status: 400 });
+  if (!parsed.success) {
+    return invalidRequestResponse(parsed.error);
   }
 
   try {
-    await updateAccountName(body.name);
+    await updateAccountName(parsed.data.name);
 
     return Response.json({ status: true });
   } catch (error) {

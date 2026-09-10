@@ -5,6 +5,7 @@ import { resolvePlanFromPriceId } from "@/lib/stripe/plans";
 import { logger, runWithRequestId } from "@/lib/logger";
 import { isUniqueConstraintError } from "@/lib/prisma-errors";
 import { isStaleEvent } from "@/lib/stripe/webhook-idempotency";
+import { checkRateLimit, getClientIp, tooManyRequests } from "@/lib/rate-limit";
 import type Stripe from "stripe";
 
 export const runtime = "nodejs";
@@ -26,6 +27,16 @@ async function handleStripeWebhook(request: Request, requestId: string) {
 
   if (!isStripeConfigured() || !webhookSecret) {
     return Response.json({ error: "Stripe ist nicht konfiguriert." }, { status: 503 });
+  }
+
+  const limit = await checkRateLimit({
+    key: `webhook-stripe:${await getClientIp(request.headers)}`,
+    limit: 10,
+    windowSeconds: 60,
+  });
+
+  if (!limit.allowed) {
+    return tooManyRequests(limit);
   }
 
   const signature = request.headers.get("stripe-signature");

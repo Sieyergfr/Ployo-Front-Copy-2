@@ -1,5 +1,5 @@
 import { auth } from "@/lib/auth";
-import { uploadOwnAvatar } from "@/lib/avatar-service";
+import { MAX_AVATAR_BYTES, uploadOwnAvatar } from "@/lib/avatar-service";
 import { checkRateLimit, tooManyRequests } from "@/lib/rate-limit";
 import { mapSelfServiceError } from "@/lib/api/self-service-errors";
 import { headers } from "next/headers";
@@ -32,6 +32,10 @@ export async function POST(request: Request) {
 
   if (!formData || !(file instanceof File) || file.size === 0) {
     return Response.json({ error: "Bitte ein Bild auswählen." }, { status: 400 });
+  }
+
+  if (file.size > MAX_AVATAR_BYTES) {
+    return Response.json({ error: "Das Bild darf höchstens 2 MB groß sein." }, { status: 400 });
   }
 
   try {

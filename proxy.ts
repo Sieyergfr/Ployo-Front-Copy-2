@@ -16,6 +16,8 @@ import type { NextRequest } from "next/server";
  *    next.config.ts) kann keinen Nonce tragen.
  */
 
+const isDev = process.env.NODE_ENV === "development";
+
 const SESSION_COOKIE_NAMES = [
   "better-auth.session_token",
   "__Secure-better-auth.session_token",
@@ -114,7 +116,46 @@ function buildContentSecurityPolicy(nonce: string) {
   ].join("; ");
 }
 
+/**
+ * Erzwingt HTTPS anhand von `x-forwarded-proto`, nicht `url.protocol` — hinter
+ * so gut wie jedem Reverse Proxy (nginx hier, genauso Vercel/Cloudflare)
+ * kommt der Request intern immer über HTTP an, auch wenn der Browser per
+ * HTTPS verbunden war. 308 (statt 301/302) hält Methode UND Body bei
+ * POST/PUT/PATCH-Requests, die sonst auf dem Weg zu GET degradiert würden;
+ * Pfad + Query-String bleiben erhalten (kopiert aus `request.url`), damit
+ * OAuth-Callbacks und geteilte Links mit Tracking-Parametern nicht brechen.
+ * Nur in Produktion aktiv — lokal läuft `next dev` ohne vorgeschalteten
+ * TLS-Terminator und setzt den Header gar nicht erst.
+ */
+function httpsRedirect(request: NextRequest): NextResponse | null {
+  if (isDev) {
+    return null;
+  }
+
+  if (request.headers.get("x-forwarded-proto") !== "http") {
+    return null;
+  }
+
+  const httpsUrl = new URL(request.url);
+  httpsUrl.protocol = "https:";
+
+  return NextResponse.redirect(httpsUrl, 308);
+}
+
 export function proxy(request: NextRequest) {
+  const redirect = httpsRedirect(request);
+  if (redirect) {
+    return redirect;
+  }
+
+  // API-Routen bekommen weder die Seiten-CSP noch den optimistischen
+  // Login-Redirect (siehe Matcher unten, der sie inzwischen für den
+  // HTTPS-Redirect oben mit erfasst) — eigene Header/Autorisierung laufen
+  // dort pro Route.
+  if (request.nextUrl.pathname.startsWith("/api/")) {
+    return NextResponse.next();
+  }
+
   // Request-ID für die Log-Korrelation (lib/logger.ts) — vom Reverse Proxy
   // übernehmen, falls schon gesetzt, sonst hier erzeugen. Wird sowohl an
   // den Server (Request-Header) als auch an den Client (Response-Header)
@@ -156,13 +197,14 @@ export function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     /*
-     * Läuft jetzt auf praktisch jeder Seite (für die CSP), außer:
-     * - api (JSON-Antworten, kein HTML-Rendering-Kontext)
+     * Läuft auf praktisch jedem Request — inklusive api (siehe
+     * `httpsRedirect`/frühes `return` oben: nur der HTTPS-Redirect greift
+     * dort, keine CSP/kein Login-Redirect) —, außer:
      * - _next/static, _next/image (Assets, keine eigene CSP nötig)
      * - favicon.ico, robots.txt, sitemap.xml (keine HTML-Dokumente)
      */
     {
-      source: "/((?!api|_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml).*)",
+      source: "/((?!_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml).*)",
       missing: [
         { type: "header", key: "next-router-prefetch" },
         { type: "header", key: "purpose", value: "prefetch" },

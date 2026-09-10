@@ -1,8 +1,16 @@
+import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { changeAccountPassword } from "@/lib/account-service";
 import { checkRateLimit, tooManyRequests } from "@/lib/rate-limit";
 import { mapSelfServiceError } from "@/lib/api/self-service-errors";
+import { invalidRequestResponse } from "@/lib/api/validation";
 import { headers } from "next/headers";
+
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(1),
+  revokeOtherSessions: z.boolean().optional(),
+});
 
 /** Passwort ändern. Bewusst vage Fehlermeldung bei falschem `currentPassword` (kein Account-Enumeration-Leak). */
 export async function POST(request: Request) {
@@ -22,24 +30,18 @@ export async function POST(request: Request) {
     return tooManyRequests(limit);
   }
 
-  const body = (await request.json().catch(() => null)) as {
-    currentPassword?: string;
-    newPassword?: string;
-    revokeOtherSessions?: boolean;
-  } | null;
+  const body = await request.json().catch(() => null);
+  const parsed = changePasswordSchema.safeParse(body);
 
-  if (!body?.currentPassword || !body.newPassword) {
-    return Response.json(
-      { error: "'currentPassword' und 'newPassword' sind erforderlich." },
-      { status: 400 },
-    );
+  if (!parsed.success) {
+    return invalidRequestResponse(parsed.error);
   }
 
   try {
     await changeAccountPassword({
-      currentPassword: body.currentPassword,
-      newPassword: body.newPassword,
-      revokeOtherSessions: Boolean(body.revokeOtherSessions),
+      currentPassword: parsed.data.currentPassword,
+      newPassword: parsed.data.newPassword,
+      revokeOtherSessions: Boolean(parsed.data.revokeOtherSessions),
     });
 
     return Response.json({ status: true });

@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { auth } from "@/lib/auth";
 import {
   createAndLinkOwnTenantEmployee,
@@ -6,7 +7,23 @@ import {
 } from "@/lib/employee-service";
 import { checkRateLimit, tooManyRequests } from "@/lib/rate-limit";
 import { mapSelfServiceError } from "@/lib/api/self-service-errors";
+import { invalidRequestResponse } from "@/lib/api/validation";
 import { headers } from "next/headers";
+
+const employeeLinkSchema = z.discriminatedUnion("mode", [
+  z.object({
+    tenant: z.string().trim().min(1),
+    mode: z.literal("create"),
+    firstName: z.string().trim().min(1),
+    lastName: z.string().trim().min(1),
+    email: z.string().trim().min(1),
+  }),
+  z.object({
+    tenant: z.string().trim().min(1),
+    mode: z.literal("link"),
+    employeeId: z.string().trim().min(1),
+  }),
+]);
 
 /**
  * Verknüpfung des eingeloggten Kontos mit der eigenen Personalakte —
@@ -32,54 +49,30 @@ export async function POST(request: Request) {
     return tooManyRequests(limit);
   }
 
-  const body = (await request.json().catch(() => null)) as
-    | {
-        tenant?: string;
-        mode?: "create" | "link";
-        firstName?: string;
-        lastName?: string;
-        email?: string;
-        employeeId?: string;
-      }
-    | null;
+  const body = await request.json().catch(() => null);
+  const parsed = employeeLinkSchema.safeParse(body);
 
-  if (!body?.tenant || !body.mode) {
-    return Response.json({ error: "'tenant' und 'mode' sind erforderlich." }, { status: 400 });
+  if (!parsed.success) {
+    return invalidRequestResponse(parsed.error);
   }
 
   try {
-    if (body.mode === "create") {
-      if (!body.firstName || !body.lastName || !body.email) {
-        return Response.json(
-          { error: "'firstName', 'lastName' und 'email' sind für mode=create erforderlich." },
-          { status: 400 },
-        );
-      }
-
+    if (parsed.data.mode === "create") {
+      const { tenant, firstName, lastName, email } = parsed.data;
       const employee = await createAndLinkOwnTenantEmployee({
-        tenantSlug: body.tenant,
-        firstName: body.firstName,
-        lastName: body.lastName,
-        email: body.email,
+        tenantSlug: tenant,
+        firstName,
+        lastName,
+        email,
       });
 
       return Response.json({ employee }, { status: 201 });
     }
 
-    if (body.mode === "link") {
-      if (!body.employeeId) {
-        return Response.json(
-          { error: "'employeeId' ist für mode=link erforderlich." },
-          { status: 400 },
-        );
-      }
+    const { tenant, employeeId } = parsed.data;
+    await linkOwnTenantEmployee({ tenantSlug: tenant, employeeId });
 
-      await linkOwnTenantEmployee({ tenantSlug: body.tenant, employeeId: body.employeeId });
-
-      return Response.json({ status: true });
-    }
-
-    return Response.json({ error: "Ungültiger 'mode'." }, { status: 400 });
+    return Response.json({ status: true });
   } catch (error) {
     return mapSelfServiceError(error);
   }

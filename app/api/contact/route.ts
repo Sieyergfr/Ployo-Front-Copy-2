@@ -1,6 +1,8 @@
+import { z } from "zod";
 import { isEmailConfigured, sendContactRequestEmail } from "@/lib/email";
 import { logger } from "@/lib/logger";
 import { checkRateLimit, getClientIp, tooManyRequests } from "@/lib/rate-limit";
+import { invalidRequestResponse } from "@/lib/api/validation";
 
 /**
  * Kontaktformular aus der Mobile-App (Fragezeichen auf dem Anmeldebildschirm,
@@ -26,9 +28,25 @@ const MAX_SOURCE_LENGTH = 60;
 // bestätigt sich ohnehin erst dadurch, dass eine Antwort ankommt.
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+const contactSchema = z.object({
+  name: z.string().trim().min(1, "Bitte einen Namen angeben.").max(MAX_NAME_LENGTH),
+  email: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .max(MAX_EMAIL_LENGTH)
+    .regex(EMAIL_PATTERN, "Bitte eine gültige E-Mail-Adresse angeben."),
+  message: z
+    .string()
+    .trim()
+    .min(MIN_MESSAGE_LENGTH, "Bitte die Nachricht etwas ausführlicher formulieren.")
+    .max(MAX_MESSAGE_LENGTH, "Die Nachricht ist zu lang (maximal 5000 Zeichen)."),
+  source: z.string().trim().max(MAX_SOURCE_LENGTH).optional().default(""),
+});
+
 export async function POST(request: Request) {
   const ipLimit = await checkRateLimit({
-    key: `contact-ip:${await getClientIp()}`,
+    key: `contact-ip:${await getClientIp(request.headers)}`,
     limit: 10,
     windowSeconds: 3600,
   });
@@ -37,42 +55,14 @@ export async function POST(request: Request) {
     return tooManyRequests(ipLimit);
   }
 
-  const body = (await request.json().catch(() => null)) as {
-    name?: unknown;
-    email?: unknown;
-    message?: unknown;
-    source?: unknown;
-  } | null;
+  const body = await request.json().catch(() => null);
+  const parsed = contactSchema.safeParse(body);
 
-  const name = typeof body?.name === "string" ? body.name.trim() : "";
-  const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
-  const message = typeof body?.message === "string" ? body.message.trim() : "";
-  const source = typeof body?.source === "string" ? body.source.trim() : "";
-
-  if (!name || name.length > MAX_NAME_LENGTH) {
-    return Response.json({ error: "Bitte einen Namen angeben." }, { status: 400 });
+  if (!parsed.success) {
+    return invalidRequestResponse(parsed.error);
   }
 
-  if (!EMAIL_PATTERN.test(email) || email.length > MAX_EMAIL_LENGTH) {
-    return Response.json(
-      { error: "Bitte eine gültige E-Mail-Adresse angeben." },
-      { status: 400 },
-    );
-  }
-
-  if (message.length < MIN_MESSAGE_LENGTH) {
-    return Response.json(
-      { error: "Bitte die Nachricht etwas ausführlicher formulieren." },
-      { status: 400 },
-    );
-  }
-
-  if (message.length > MAX_MESSAGE_LENGTH) {
-    return Response.json(
-      { error: "Die Nachricht ist zu lang (maximal 5000 Zeichen)." },
-      { status: 400 },
-    );
-  }
+  const { name, email, message, source } = parsed.data;
 
   // Zweites Limit auf die angegebene Adresse: greift auch dann, wenn die
   // IP-Kennung fehlt oder wechselt (Mobilfunk, geteiltes NAT).

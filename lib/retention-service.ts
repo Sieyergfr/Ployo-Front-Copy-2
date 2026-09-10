@@ -410,6 +410,125 @@ export async function assertFileDeletionAllowed(
   }
 }
 
+type PurgeCandidateFile = {
+  id: string;
+  tenantId: string;
+  employeeId: string | null;
+  parentId?: string | null;
+};
+
+/**
+ * Batch-Variante von `assertFileDeletionAllowed` für den periodischen Purge
+ * (Audit-Finding aus dem Heimdall-Scan: der Cleanup-Cron rief die Einzel-
+ * prüfung bisher in einer Schleife auf — bis zu vier Queries PRO Datei. Hier
+ * werden Legal-Hold-, Versionsfamilien- und Gehalts-/Krankheits-Aufbewahrungs-
+ * Daten für alle übergebenen Dateien in je einer Abfrage geholt und die
+ * eigentliche Prüfung danach rein im Speicher durchgeführt — dieselbe Logik
+ * wie oben, nur gebündelt statt pro Datei.
+ */
+export async function assertFileDeletionAllowedBatch<T extends PurgeCandidateFile>(
+  files: T[],
+): Promise<{ allowed: T[]; blocked: Array<{ file: T; reason: string }> }> {
+  const employeeIds = [...new Set(files.flatMap((file) => (file.employeeId ? [file.employeeId] : [])))];
+  const employees = employeeIds.length
+    ? await prisma.tenantEmployee.findMany({
+        where: { id: { in: employeeIds } },
+        select: { id: true, tenantId: true, legalHold: true, legalHoldReason: true },
+      })
+    : [];
+  const employeeById = new Map(employees.map((employee) => [employee.id, employee]));
+
+  const rootIdByFileId = new Map(files.map((file) => [file.id, file.parentId ?? file.id]));
+  const rootIds = [...new Set(rootIdByFileId.values())];
+  const rootIdSet = new Set(rootIds);
+
+  const familyRows = rootIds.length
+    ? await prisma.tenantFile.findMany({
+        where: { OR: [{ id: { in: rootIds } }, { parentId: { in: rootIds } }] },
+        select: { id: true, parentId: true },
+      })
+    : [];
+
+  const familyIdsByRoot = new Map<string, string[]>();
+  for (const row of familyRows) {
+    if (rootIdSet.has(row.id)) {
+      familyIdsByRoot.set(row.id, [...(familyIdsByRoot.get(row.id) ?? []), row.id]);
+    }
+    if (row.parentId && rootIdSet.has(row.parentId)) {
+      familyIdsByRoot.set(row.parentId, [...(familyIdsByRoot.get(row.parentId) ?? []), row.id]);
+    }
+  }
+
+  const familyIdsByFileId = new Map(
+    files.map((file) => {
+      const rootId = rootIdByFileId.get(file.id)!;
+      const family = familyIdsByRoot.get(rootId);
+      return [file.id, family && family.length > 0 ? family : [file.id]];
+    }),
+  );
+
+  const allFamilyFileIds = [...new Set([...familyIdsByFileId.values()].flat())];
+
+  const [payrollRows, sicknessRows] = allFamilyFileIds.length
+    ? await Promise.all([
+        prisma.tenantPayrollStatement.findMany({
+          where: { fileId: { in: allFamilyFileIds } },
+          select: { fileId: true, issuedAt: true },
+        }),
+        prisma.tenantSicknessReport.findMany({
+          where: { attachmentFileId: { in: allFamilyFileIds } },
+          select: { attachmentFileId: true, closedAt: true },
+        }),
+      ])
+    : [[], []];
+
+  const payrollByFileId = new Map(payrollRows.map((row) => [row.fileId, row]));
+  const sicknessByFileId = new Map(
+    sicknessRows
+      .filter((row) => row.attachmentFileId !== null)
+      .map((row) => [row.attachmentFileId as string, row]),
+  );
+
+  const allowed: T[] = [];
+  const blocked: Array<{ file: T; reason: string }> = [];
+
+  for (const file of files) {
+    const employee = file.employeeId ? employeeById.get(file.employeeId) : undefined;
+
+    if (employee?.legalHold && employee.tenantId === file.tenantId) {
+      blocked.push({
+        file,
+        reason: `Löschung gesperrt: Legal Hold (${employee.legalHoldReason || "kein Grund angegeben"}).`,
+      });
+      continue;
+    }
+
+    const familyIds = familyIdsByFileId.get(file.id) ?? [file.id];
+    const payroll = familyIds.map((id) => payrollByFileId.get(id)).find(Boolean);
+    const sickness = familyIds.map((id) => sicknessByFileId.get(id)).find(Boolean);
+
+    if (payroll && !retentionCutoff("lohn_sozialversicherung", payroll.issuedAt)) {
+      blocked.push({
+        file,
+        reason: `Löschung gesperrt: Aufbewahrungsfrist für Gehaltsabrechnungen (${RETENTION_POLICIES.lohn_sozialversicherung.legalBasis}) noch nicht abgelaufen.`,
+      });
+      continue;
+    }
+
+    if (sickness?.closedAt && !retentionCutoff("gesundheit_freitext", sickness.closedAt)) {
+      blocked.push({
+        file,
+        reason: "Löschung gesperrt: Aufbewahrungsfrist für Krankmeldungs-Anhänge noch nicht abgelaufen.",
+      });
+      continue;
+    }
+
+    allowed.push(file);
+  }
+
+  return { allowed, blocked };
+}
+
 /**
  * Wie `assertFileDeletionAllowed`, aber für den direkten
  * Alles-löschen-Pfad (`deleteTenantEmployee`) — prüft Legal Hold und JEDE

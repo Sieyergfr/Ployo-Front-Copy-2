@@ -6,6 +6,11 @@ import { logger, runWithRequestId } from "@/lib/logger";
 
 export const runtime = "nodejs";
 
+// Seitengröße für die Cursor-Paginierung unten — hält den Speicherbedarf pro
+// Batch (Mandanten + deren Mitgliedschaften) unabhängig von der Gesamtzahl
+// der Mandanten beschränkt.
+const TENANT_PAGE_SIZE = 500;
+
 /**
  * Wöchentlicher E-Mail-Digest für fällige Erinnerungen/Fristen
  * ("deadlineAlerts"). Per externem Scheduler täglich aufrufen:
@@ -41,62 +46,89 @@ async function handleNotifications(request: Request, requestId: string) {
 
   logger.info("Cron notifications gestartet.");
   const now = new Date();
-  const tenants = await prisma.tenant.findMany({
-    select: {
-      id: true,
-      name: true,
-      settings: {
-        select: { mailNotifications: true, deadlineAlerts: true, digestTime: true },
-      },
-      memberships: {
-        where: { role: { in: ["OWNER", "ADMIN", "HR"] } },
-        select: { userId: true, user: { select: { email: true } } },
-      },
-    },
-  });
-
   let digestsSent = 0;
+  let cursor: string | undefined;
 
-  for (const tenant of tenants) {
-    const settings = tenant.settings;
-
-    if (!settings?.mailNotifications || !settings.deadlineAlerts) continue;
-    if (!isDigestDue(settings.digestTime, now)) continue;
-
-    const reminders = await prisma.tenantReminder.findMany({
-      where: { tenantId: tenant.id, status: "open" },
-      select: { title: true, dueDate: true },
+  // Seitenweise statt eines einzigen `findMany` ohne `take` (skaliert sonst
+  // nicht mit wachsender Mandantenzahl) — pro Seite werden die fälligen
+  // Erinnerungen ALLER darin fälligen Mandanten in einer einzigen Abfrage
+  // geholt statt einer pro Mandant (vorher N+1).
+  for (;;) {
+    const tenants = await prisma.tenant.findMany({
+      take: TENANT_PAGE_SIZE,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      orderBy: { id: "asc" },
+      select: {
+        id: true,
+        name: true,
+        settings: {
+          select: { mailNotifications: true, deadlineAlerts: true, digestTime: true },
+        },
+        memberships: {
+          where: { role: { in: ["OWNER", "ADMIN", "HR"] } },
+          select: { userId: true, user: { select: { email: true } } },
+        },
+      },
     });
 
-    const urgent = reminders
-      .filter((reminder) => daysUntil(reminder.dueDate) <= 7)
-      .sort((a, b) => daysUntil(a.dueDate) - daysUntil(b.dueDate))
-      .slice(0, 10);
+    if (tenants.length === 0) break;
+    cursor = tenants[tenants.length - 1]!.id;
 
-    if (urgent.length === 0 || tenant.memberships.length === 0) continue;
+    const dueTenants = tenants.filter((tenant) => {
+      const settings = tenant.settings;
+      return settings?.mailNotifications && settings.deadlineAlerts && isDigestDue(settings.digestTime, now);
+    });
 
-    await Promise.all(
-      tenant.memberships.map((manager) =>
-        dispatchNotification({
-          userId: manager.userId,
-          email: manager.user.email,
-          message: {
-            key: "reminderDigest",
-            tenantName: tenant.name,
-            reminders: urgent.map((reminder) => ({
-              title: reminder.title,
-              dueDate: reminder.dueDate,
-            })),
-          },
-          tenantId: tenant.id,
-          category: "system",
-          // Sammelmeldung über mehrere Erinnerungen — Ziel ist die Liste,
-          // nicht eine einzelne Zeile, deshalb ohne `entityId`.
-          entityType: "reminders",
-        }),
-      ),
-    );
-    digestsSent += tenant.memberships.length;
+    if (dueTenants.length > 0) {
+      const reminders = await prisma.tenantReminder.findMany({
+        where: { tenantId: { in: dueTenants.map((tenant) => tenant.id) }, status: "open" },
+        select: { tenantId: true, title: true, dueDate: true },
+      });
+
+      const remindersByTenant = new Map<string, typeof reminders>();
+      for (const reminder of reminders) {
+        const bucket = remindersByTenant.get(reminder.tenantId);
+        if (bucket) {
+          bucket.push(reminder);
+        } else {
+          remindersByTenant.set(reminder.tenantId, [reminder]);
+        }
+      }
+
+      for (const tenant of dueTenants) {
+        const urgent = (remindersByTenant.get(tenant.id) ?? [])
+          .filter((reminder) => daysUntil(reminder.dueDate) <= 7)
+          .sort((a, b) => daysUntil(a.dueDate) - daysUntil(b.dueDate))
+          .slice(0, 10);
+
+        if (urgent.length === 0 || tenant.memberships.length === 0) continue;
+
+        await Promise.all(
+          tenant.memberships.map((manager) =>
+            dispatchNotification({
+              userId: manager.userId,
+              email: manager.user.email,
+              message: {
+                key: "reminderDigest",
+                tenantName: tenant.name,
+                reminders: urgent.map((reminder) => ({
+                  title: reminder.title,
+                  dueDate: reminder.dueDate,
+                })),
+              },
+              tenantId: tenant.id,
+              category: "system",
+              // Sammelmeldung über mehrere Erinnerungen — Ziel ist die Liste,
+              // nicht eine einzelne Zeile, deshalb ohne `entityId`.
+              entityType: "reminders",
+            }),
+          ),
+        );
+        digestsSent += tenant.memberships.length;
+      }
+    }
+
+    if (tenants.length < TENANT_PAGE_SIZE) break;
   }
 
   logger.info("Cron notifications abgeschlossen.", { digestsSent });
