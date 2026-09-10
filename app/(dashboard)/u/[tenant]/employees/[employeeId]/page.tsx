@@ -1124,31 +1124,22 @@ export default async function EmployeeDetailPage({
 
             <DetailCard title={t("vacationTitle")}>
               {isEditing ? (
-                <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(160px,1fr))]">
-                  <EditableTextField
-                    id="employee-vacation-remaining"
-                    label={t("vacationRemainingField")}
-                    name="vacationRemaining"
-                    type="number"
-                    value={employee.vacationRemaining}
-                    min={0}
-                  />
-                  <EditableTextField
-                    id="employee-vacation-total"
-                    label={t("vacationTotalField")}
-                    name="vacationTotal"
-                    type="number"
-                    value={employee.vacationTotal}
-                    min={0}
-                  />
-                  <EditableTextField
-                    id="employee-vacation-taken"
-                    label={t("vacationTakenField")}
-                    name="vacationTaken"
-                    type="number"
-                    value={employee.vacationTaken}
-                    min={0}
-                  />
+                <div className="flex flex-col gap-3">
+                  <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(160px,1fr))]">
+                    <FieldValue label={t("vacationTotalField")} value={employee.vacationTotal} />
+                    <FieldValue label={t("vacationTakenField")} value={employee.vacationTaken} />
+                    <FieldValue label={t("vacationCarryoverField")} value={employee.vacationCarryover} />
+                    <EditableTextField
+                      id="employee-vacation-correction"
+                      label={t("vacationManualCorrectionField")}
+                      name="vacationManualCorrection"
+                      type="number"
+                      value={employee.vacationManualCorrection}
+                    />
+                  </div>
+                  <p className="text-[12px] text-muted -mt-1">
+                    {t("vacationManualCorrectionHint")}
+                  </p>
                 </div>
               ) : (
                 <>

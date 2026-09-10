@@ -34,7 +34,9 @@
     "**/*.tsx",
     "**/*.mts",
     ".next-releases/20260908162129/types/**/*.ts",
-    ".next-releases/20260908162129/dev/types/**/*.ts"
+    ".next-releases/20260908162129/dev/types/**/*.ts",
+    "/tmp/ployo-probe-build/types/**/*.ts",
+    "/tmp/ployo-probe-build/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

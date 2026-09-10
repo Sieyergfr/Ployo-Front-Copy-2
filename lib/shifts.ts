@@ -25,6 +25,8 @@ export type Shift = {
   conflict?: boolean;
   /** Grund des Konflikts, z. B. Überschneidung oder Abwesenheit — nur gesetzt, wenn `conflict` true ist. */
   conflictReason?: string;
+  /** Maschinenlesbare Art des Konflikts — erlaubt Clients z. B. Krankheit diskret als "Abwesend" zu zeigen. */
+  conflictKind?: "overlap" | "vacation" | "sickness";
   note?: string;
 };
 

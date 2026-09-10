@@ -251,6 +251,7 @@ export async function updateEmployeeAction(
       vacationRemaining: optionalString(formData, "vacationRemaining"),
       vacationTotal: optionalString(formData, "vacationTotal"),
       vacationTaken: optionalString(formData, "vacationTaken"),
+      vacationManualCorrection: optionalString(formData, "vacationManualCorrection"),
       contractDetailsSubmitted,
       contractType: fieldString(formData, "contractType"),
       entryDate: fieldString(formData, "entryDate"),

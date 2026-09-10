@@ -751,6 +751,12 @@ model TenantEmployee {
   /// Verfall von `vacationCarryover` hingewiesen wurde. `null` = noch nicht
   /// hingewiesen — der Cronjob darf dann NICHT automatisch verfallen lassen.
   vacationCarryoverRemindedAt DateTime?
+  /// Manuelle Korrektur des Resturlaubs (Tage, +/-) unabhängig von Vertrag,
+  /// genehmigten Anträgen und `vacationCarryover` — für Sonderfälle wie
+  /// Alt-Fehler oder Kulanz, ohne die gesetzlich relevante Übertragslogik
+  /// (BUrlG §7 Abs. 3) anzufassen. Geht additiv in `vacationRemaining` ein
+  /// (lib/vacations.ts, computeVacationAccount).
+  vacationManualCorrection    Int                            @default(0)
   /// String statt Json: Feldverschlüsselung (lib/encryption.ts) arbeitet nur
   /// auf Strings. Enthält weiterhin JSON (App-seitig via JSON.stringify/parse
   /// serialisiert), nur die Spalte selbst ist jetzt Text statt jsonb.

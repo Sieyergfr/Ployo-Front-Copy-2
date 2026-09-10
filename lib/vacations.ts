@@ -123,10 +123,25 @@ export function computeVacationAccount(input: {
    * verfallen ist.
    */
   carryover?: number;
-}): { vacationTotal: number; vacationTaken: number; vacationRemaining: number; vacationCarryover: number } {
+  /**
+   * Manuelle Korrektur (Tage, +/-, `TenantEmployee.vacationManualCorrection`)
+   * für Sonderfälle wie Alt-Fehler oder Kulanz, unabhängig von Vertrag,
+   * Anträgen und der gesetzlich relevanten Übertragslogik — geht additiv
+   * (auch negativ) in `vacationRemaining` ein, ohne `vacationCarryover` zu
+   * verändern.
+   */
+  manualCorrection?: number;
+}): {
+  vacationTotal: number;
+  vacationTaken: number;
+  vacationRemaining: number;
+  vacationCarryover: number;
+  vacationManualCorrection: number;
+} {
   const vacationTotal = parseContractVacationDays(input.contractVacation, input.storedVacationTotal);
   const vacationTaken = input.approvedDaysThisYear;
   const carryover = input.carryover ?? 0;
+  const manualCorrection = input.manualCorrection ?? 0;
 
   // Audit-Finding R05: `Math.max(0, vacationTotal - vacationTaken) + carryover`
   // klammerte das Basiskontingent-Defizit VOR der Addition des Übertrags auf
@@ -138,8 +153,9 @@ export function computeVacationAccount(input: {
   return {
     vacationTotal,
     vacationTaken,
-    vacationRemaining: Math.max(0, vacationTotal + carryover - vacationTaken),
+    vacationRemaining: Math.max(0, vacationTotal + carryover + manualCorrection - vacationTaken),
     vacationCarryover: carryover,
+    vacationManualCorrection: manualCorrection,
   };
 }
 

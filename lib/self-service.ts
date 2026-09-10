@@ -347,6 +347,7 @@ export async function getMySelfServiceOverview(
     storedVacationTotal: employeeRecord.vacationTotal,
     approvedDaysThisYear,
     carryover: employeeRecord.vacationCarryover,
+    manualCorrection: employeeRecord.vacationManualCorrection,
   });
 
   return {

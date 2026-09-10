@@ -608,6 +608,7 @@ export async function getShiftPlanForTenant(input: {
   const locationMinStaffing = await getLocationMinStaffing(tenantId, minStaffing);
   const conflictIds = new Set<string>();
   const conflictReasons = new Map<string, string>();
+  const conflictKinds = new Map<string, "overlap" | "vacation" | "sickness">();
   const employeeIds = Array.from(
     new Set(records.map((record) => record.employeeId).filter((id): id is string => Boolean(id))),
   );
@@ -626,11 +627,11 @@ export async function getShiftPlanForTenant(input: {
     const absenceReason = record.employeeId ? isAbsent(record.employeeId, record.date) : null;
 
     if (overlaps || absenceReason) {
+      const kind = overlaps ? "overlap" : (absenceReason as "vacation" | "sickness");
+
       conflictIds.add(record.id);
-      conflictReasons.set(
-        record.id,
-        CONFLICT_REASON_LABELS[overlaps ? "overlap" : (absenceReason as "vacation" | "sickness")],
-      );
+      conflictReasons.set(record.id, CONFLICT_REASON_LABELS[kind]);
+      conflictKinds.set(record.id, kind);
     }
   }
 
@@ -653,6 +654,7 @@ export async function getShiftPlanForTenant(input: {
       team: record.team || record.employee?.team || "",
       conflict: record.conflict || conflictIds.has(record.id),
       conflictReason: conflictReasons.get(record.id),
+      conflictKind: conflictKinds.get(record.id),
       note: record.note,
     };
     const dateShifts = shiftsByDate.get(record.date) ?? [];

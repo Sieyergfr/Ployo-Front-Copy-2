@@ -3691,6 +3691,69 @@ describe("M02 — Resturlaubs-Übertrag: Jahreswechsel, Hinweispflicht, Verfall 
     expect(reviewReminder).not.toBeNull();
   });
 
+  it("fingiert keinen Übertrag für ein Vorjahr vor FIRST_TRACKED_VACATION_YEAR, selbst mit vorhandenem Antrag", async () => {
+    // Regressionstest für den Live-Vorfall: der allererste Rollover-Lauf
+    // schrieb jedem Bestandsmitarbeiter den vollen aktuellen Jahresanspruch
+    // nochmal als Übertrag gut, weil für das (nicht durchgängig erfasste)
+    // Vorjahr 0 Anträge gefunden wurden — "keine Anträge" wurde fälschlich
+    // als "0 Tage genommen" statt als "keine Daten" gewertet.
+    const tenant = await prisma.tenant.create({
+      data: { slug: `m02d-tenant-${RUN_ID}`, name: `M02d Tenant ${RUN_ID}` },
+    });
+    tenantIds.push(tenant.id);
+
+    const owner = await prisma.user.create({
+      data: { email: `m02d-owner-${RUN_ID}@ployo.invalid`, name: "Owner", emailVerified: true },
+    });
+    userIds.push(owner.id);
+
+    await prisma.tenantMembership.create({
+      data: { tenantId: tenant.id, userId: owner.id, role: "OWNER" },
+    });
+
+    currentUserId = owner.id;
+    const employee = await createTenantEmployeeRecord({
+      tenantId: tenant.id,
+      actorId: owner.id,
+      actorName: "Owner",
+      input: {
+        tenantSlug: tenant.slug,
+        firstName: "Legacy",
+        lastName: "Employee",
+        email: `m02d-target-${RUN_ID}@ployo.invalid`,
+      },
+    });
+    await prisma.tenantEmployee.update({
+      where: { id: employee.dbId! },
+      data: { userId: owner.id, vacationTotal: 26 },
+    });
+
+    // Selbst mit einem (untypischen) erfassten 2025er-Antrag darf 2025 nicht
+    // als verlässliche Datengrundlage gelten — 2025 liegt vor
+    // FIRST_TRACKED_VACATION_YEAR (2026).
+    await prisma.tenantVacationRequest.create({
+      data: {
+        tenantId: tenant.id,
+        employeeId: employee.dbId!,
+        key: `m02d-2025-req-${RUN_ID}`,
+        startDate: "2025-06-01",
+        endDate: "2025-06-04",
+        days: 4,
+        status: "approved",
+      },
+    });
+
+    const rollover = await runVacationCarryoverRollover(new Date("2026-01-05T00:00:00Z"), tenant.id);
+    expect(rollover.rolledOver).toBe(1);
+
+    const afterRollover = await prisma.tenantEmployee.findUniqueOrThrow({
+      where: { id: employee.dbId! },
+      select: { vacationCarryover: true, vacationCarryoverExpiresAt: true },
+    });
+    expect(afterRollover.vacationCarryover).toBe(0);
+    expect(afterRollover.vacationCarryoverExpiresAt?.toISOString().slice(0, 10)).toBe("2026-03-31");
+  });
+
   it("lässt einen Carryover NICHT verfallen, wenn nie rechtzeitig hingewiesen wurde", async () => {
     const tenant = await prisma.tenant.create({
       data: { slug: `m02b-tenant-${RUN_ID}`, name: `M02b Tenant ${RUN_ID}` },

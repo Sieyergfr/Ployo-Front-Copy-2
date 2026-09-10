@@ -9,7 +9,7 @@ zwischen ihnen zu wechseln:
 
 * Backend/Web-Dashboard (dieses Projekt): `/opt/apps/ployo-front`
 * App: `/opt/apps/ployo-mobile`
-  Framework: Expo SDK 54 / expo-router. Konsumiert die API dieses Repos
+  Framework: Expo SDK 57 / expo-router. Konsumiert die API dieses Repos
   (Auth über better-auth-Cookies, kein Bearer-Token). Details:
   `/opt/apps/ployo-mobile/README.md`, `/opt/apps/ployo-mobile/app_info.md`.
 

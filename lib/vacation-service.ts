@@ -23,6 +23,7 @@ import {
 import { notifyIfAbsenceConflictsWithPublishedShifts } from "@/lib/shift-service";
 import { createSystemTenantReminder } from "@/lib/reminders";
 import {
+  FIRST_TRACKED_VACATION_YEAR,
   isCarryoverReminderDue,
   rollOverVacationCarryover,
   shouldForfeitCarryover,
@@ -831,20 +832,29 @@ export async function runVacationCarryoverRollover(now: Date = new Date(), tenan
     // Produktentscheidung, keine reine Code-Korrektur, und deshalb hier
     // bewusst nicht verändert.
     if (!alreadyRolledOverThisYear) {
-      const previousYearTaken = await prisma.tenantVacationRequest.aggregate({
-        where: {
-          employeeId: employee.id,
-          status: "approved",
-          startDate: { gte: `${previousYear}-01-01`, lte: `${previousYear}-12-31` },
-        },
-        _sum: { days: true },
-      });
+      // Vor FIRST_TRACKED_VACATION_YEAR wurden Urlaubsanträge nicht
+      // durchgängig erfasst — "0 Anträge gefunden" hieße dort "keine Daten",
+      // nicht "0 Tage genommen". Für ein solches Vorjahr keinen Übertrag
+      // fingieren (0/0 statt echter Werte), sonst bekäme jeder
+      // Bestandsmitarbeiter beim ersten Lauf seinen vollen Jahresanspruch
+      // nochmal gutgeschrieben.
+      const previousYearIsTracked = previousYear >= FIRST_TRACKED_VACATION_YEAR;
+      const previousYearTaken = previousYearIsTracked
+        ? await prisma.tenantVacationRequest.aggregate({
+            where: {
+              employeeId: employee.id,
+              status: "approved",
+              startDate: { gte: `${previousYear}-01-01`, lte: `${previousYear}-12-31` },
+            },
+            _sum: { days: true },
+          })
+        : null;
 
       const rolled = rollOverVacationCarryover({
         now,
         currentState: state,
-        previousYearTotal: employee.vacationTotal,
-        previousYearTaken: previousYearTaken._sum.days ?? 0,
+        previousYearTotal: previousYearIsTracked ? employee.vacationTotal : 0,
+        previousYearTaken: previousYearIsTracked ? previousYearTaken?._sum.days ?? 0 : 0,
       });
 
       if (rolled !== state) {

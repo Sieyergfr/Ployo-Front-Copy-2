@@ -210,6 +210,8 @@ export type Employee = {
   vacationRemaining: number;
   vacationTotal: number;
   vacationTaken: number;
+  vacationCarryover: number;
+  vacationManualCorrection: number;
   fileFolders: EmployeeFileFolder[];
   files: EmployeeFile[];
   emergencyContacts: EmergencyContact[];

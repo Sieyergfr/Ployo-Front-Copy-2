@@ -102,6 +102,8 @@ type EmployeeRecord = {
   vacationRemaining: number;
   vacationTotal: number;
   vacationTaken: number;
+  vacationCarryover: number;
+  vacationManualCorrection: number;
   emergencyContactsJson: string;
   infoRequests?: InfoRequestRecord[];
   timeline?: TimelineRecord[];
@@ -238,6 +240,7 @@ type EmployeeMutationInput = {
   vacationRemaining?: string;
   vacationTotal?: string;
   vacationTaken?: string;
+  vacationManualCorrection?: string;
   contractType?: string;
   entryDate?: string;
   exitDate?: string;
@@ -468,6 +471,13 @@ function toInt(value: number | string | undefined, fallback = 0) {
   const parsed = Number.parseInt(String(value ?? ""), 10);
 
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+/** Wie `toInt`, aber erlaubt negative Werte — für vorzeichenbehaftete Korrekturen (z. B. `vacationManualCorrection`). */
+function toSignedInt(value: number | string | undefined, fallback = 0) {
+  const parsed = Number.parseInt(String(value ?? ""), 10);
+
+  return Number.isFinite(parsed) ? parsed : fallback;
 }
 
 function buildName(input: Pick<EmployeeMutationInput, "firstName" | "lastName" | "name" | "email">) {
@@ -709,6 +719,8 @@ function toEmployee(
     vacationRemaining: record.vacationRemaining,
     vacationTotal: record.vacationTotal,
     vacationTaken: record.vacationTaken,
+    vacationCarryover: record.vacationCarryover,
+    vacationManualCorrection: record.vacationManualCorrection,
     fileFolders,
     files,
     emergencyContacts: parseEmergencyContacts(record.emergencyContactsJson),
@@ -1075,6 +1087,7 @@ export async function getEmployeesForTenant(
         storedVacationTotal: employee.vacationTotal,
         approvedDaysThisYear: record.vacationRequests.reduce((sum, r) => sum + r.days, 0),
         carryover: record.vacationCarryover,
+        manualCorrection: record.vacationManualCorrection,
       }),
       status: computeLiveEmployeeStatus({
         storedStatus: record.status,
@@ -1186,6 +1199,7 @@ export async function getEmployeeForTenant(tenantSlug: string, employeeHandle: s
       storedVacationTotal: employee.vacationTotal,
       approvedDaysThisYear: record.vacationRequests.reduce((sum, r) => sum + r.days, 0),
       carryover: record.vacationCarryover,
+      manualCorrection: record.vacationManualCorrection,
     }),
     status: computeLiveEmployeeStatus({
       storedStatus: record.status,
@@ -2122,6 +2136,7 @@ export async function updateTenantEmployee(input: EmployeeMutationInput & { empl
       vacationRemaining: toInt(input.vacationRemaining, current.vacationRemaining),
       vacationTotal: toInt(input.vacationTotal, current.vacationTotal),
       vacationTaken: toInt(input.vacationTaken, current.vacationTaken),
+      vacationManualCorrection: toSignedInt(input.vacationManualCorrection, current.vacationManualCorrection),
       contractDetails: {
         upsert: {
           create: {
