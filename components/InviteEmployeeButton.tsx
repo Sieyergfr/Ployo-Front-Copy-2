@@ -82,26 +82,13 @@ function InviteEmployeeForm({
       <div className="grid gap-3 sm:grid-cols-2">
         <LocationMultiSelectDropdown defaultLocations={[]} options={locations} />
 
-        <div className="field">
-          <label htmlFor="invite-team" className="label">
-            {t("team")}
-          </label>
-          <select
-            id="invite-team"
-            name="team"
-            className="input cursor-pointer bg-bg"
-            defaultValue=""
-          >
-            <option value="" disabled>
-              {t("select")}
-            </option>
-            {teams.map((team) => (
-              <option key={team} value={team}>
-                {team}
-              </option>
-            ))}
-          </select>
-        </div>
+        <LocationMultiSelectDropdown
+          defaultLocations={[]}
+          options={teams}
+          name="teams"
+          label={t("team")}
+          placeholder={t("selectTeams")}
+        />
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">

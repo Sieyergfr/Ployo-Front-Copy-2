@@ -187,7 +187,16 @@ export type Employee = {
    * `getEmployeesForTenant`), befüllen es.
    */
   locations?: string[];
+  /** Primäres Team — abgeleitet aus `teams[0]`, für Stellen (u. a. die own/team-Berechtigungsscopes), die weiterhin nur einen String erwarten. */
   team: string;
+  /**
+   * Alle zugeordneten Teams (`TenantTeamMember`) — "Mehrere Teams pro
+   * Mitarbeiter", analog zu `locations`. Optional statt Pflichtfeld, damit
+   * nicht jede `Employee`-Konstruktion im Code sofort brechen muss: nur die
+   * Stellen, die tatsächlich die Mitgliedschaften abfragen
+   * (`getEmployeeForTenant`, `getEmployeesForTenant`), befüllen es.
+   */
+  teams?: string[];
   role: string;
   startDate: string;
   endDate: string;

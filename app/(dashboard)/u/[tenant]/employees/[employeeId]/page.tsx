@@ -695,7 +695,8 @@ export default async function EmployeeDetailPage({
             )}
           </h1>
           <div className="mt-[7px] text-[14px] text-muted-2">
-            {employee.role} {"\u00b7"} {employee.team} {"\u00b7"}{" "}
+            {employee.role} {"\u00b7"}{" "}
+            {employee.teams?.length ? employee.teams.join(", ") : employee.team} {"\u00b7"}{" "}
             {employee.locations?.length ? employee.locations.join(", ") : employee.location}
           </div>
           <div className="mt-[11px] flex flex-wrap items-center gap-3">
@@ -1081,12 +1082,12 @@ export default async function EmployeeDetailPage({
                     name="tenure"
                     value={employee.tenure}
                   />
-                  <EditableSelectField
-                    id="employee-team"
-                    label={t("team")}
-                    name="team"
-                    value={employee.team}
+                  <LocationMultiSelectDropdown
+                    defaultLocations={employee.teams?.length ? employee.teams : employee.team ? [employee.team] : []}
                     options={teamOptions}
+                    name="teams"
+                    label={t("team")}
+                    placeholder={t("selectTeams")}
                   />
                   <EditableSelectField
                     id="employee-role"
@@ -1116,7 +1117,10 @@ export default async function EmployeeDetailPage({
                     label={t("employedSince")}
                     value={employee.tenure}
                   />
-                  <FieldValue label={t("team")} value={employee.team} />
+                  <FieldValue
+                    label={t("team")}
+                    value={employee.teams?.length ? employee.teams.join(", ") : employee.team}
+                  />
                   <FieldValue label={t("permissionRole")} value={employee.role} />
                 </div>
               )}

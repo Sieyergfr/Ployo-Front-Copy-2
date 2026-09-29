@@ -69,7 +69,10 @@ function getColumns(
       header: t("columns.teamRole"),
       width: "1.3fr",
       render: (employee) => (
-        <DataTableStack title={employee.team} subtitle={employee.role} />
+        <DataTableStack
+          title={employee.teams?.length ? employee.teams.join(", ") : employee.team}
+          subtitle={employee.role}
+        />
       ),
     },
     {

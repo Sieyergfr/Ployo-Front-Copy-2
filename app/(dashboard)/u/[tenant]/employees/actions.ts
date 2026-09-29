@@ -149,14 +149,16 @@ export async function createEmployeeAction(
     return parsed.state;
   }
 
-  // Mehrfachauswahl kommt als wiederholtes `locations`-Feld — `Object.fromEntries`
-  // oben würde davon nur den letzten Wert behalten, daher separat mit `getAll`.
+  // Mehrfachauswahl kommt als wiederholtes `locations`-/`teams`-Feld —
+  // `Object.fromEntries` oben würde davon nur den letzten Wert behalten,
+  // daher separat mit `getAll`.
   const locations = formStrings(formData, "locations");
+  const teams = formStrings(formData, "teams");
   const { tenant, ...employeeInput } = parsed.data;
   let employee: Awaited<ReturnType<typeof createTenantEmployee>>;
 
   try {
-    employee = await createTenantEmployee({ tenantSlug: tenant, ...employeeInput, locations });
+    employee = await createTenantEmployee({ tenantSlug: tenant, ...employeeInput, locations, teams });
   } catch (error) {
     return {
       error:
@@ -232,6 +234,9 @@ export async function updateEmployeeAction(
       // nicht "Feld nicht angetastet".
       locations: formStrings(formData, "locations"),
       team: optionalString(formData, "team"),
+      // Wie `locations`: immer explizit mitgeschickt, da das Bearbeiten-
+      // Formular den Mehrfachauswahl-Team-Bereich immer mit rendert.
+      teams: formStrings(formData, "teams"),
       role: optionalString(formData, "role"),
       startDate: optionalString(formData, "startDate"),
       contract: optionalString(formData, "contract"),

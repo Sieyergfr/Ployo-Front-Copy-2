@@ -56,12 +56,15 @@ export function LocationMultiSelectDropdown({
   options,
   name = "locations",
   label,
+  placeholder,
 }: {
   defaultLocations: string[];
   options?: string[];
   /** Feldname der versteckten Inputs — mehrere Inputs mit demselben Namen, serverseitig per `formData.getAll(name)` gelesen. */
   name?: string;
   label?: string;
+  /** Platzhaltertext, wenn nichts ausgewählt ist — Default passt nur für Standorte, andere Verwendungen (z. B. Teams) sollten das überschreiben. */
+  placeholder?: string;
 }) {
   const t = useTranslations("TeamEditControls");
   const [isOpen, setIsOpen] = useState(false);
@@ -76,11 +79,11 @@ export function LocationMultiSelectDropdown({
   const locationOptions = options ?? ["München", "Berlin", "Hamburg"];
   const summary = useMemo(() => {
     if (selectedLocations.length === 0) {
-      return t("selectLocations");
+      return placeholder ?? t("selectLocations");
     }
 
     return selectedLocations.join(", ");
-  }, [selectedLocations, t]);
+  }, [selectedLocations, t, placeholder]);
 
   useEffect(() => {
     if (!isOpen) {

@@ -227,7 +227,10 @@ type EmployeeMutationInput = {
   location?: string;
   /** "Mehrere Standorte pro Mitarbeiter" — hat Vorrang vor `location`, wenn beide gesetzt sind. */
   locations?: string[];
+  /** Primärteam — nur wirksam, wenn `teams` nicht mitgeschickt wird. */
   team?: string;
+  /** "Mehrere Teams pro Mitarbeiter" — hat Vorrang vor `team`, wenn beide gesetzt sind. */
+  teams?: string[];
   role?: string;
   startDate?: string;
   contract?: string;
@@ -420,16 +423,25 @@ export function buildEditTimelineEntries(
  */
 async function assertKnownOrgReferences(
   tenantId: string,
-  refs: { location?: string; locations?: string[]; team?: string; role?: string },
+  refs: {
+    location?: string;
+    locations?: string[];
+    team?: string;
+    teams?: string[];
+    role?: string;
+  },
 ) {
   const location = refs.location?.trim();
   const locations = Array.from(
     new Set((refs.locations ?? []).map((name) => name.trim()).filter(Boolean)),
   );
   const team = refs.team?.trim();
+  const teams = Array.from(
+    new Set((refs.teams ?? []).map((name) => name.trim()).filter(Boolean)),
+  );
   const role = refs.role?.trim();
 
-  const [locationExists, knownLocations, teamExists, roleExists] = await Promise.all([
+  const [locationExists, knownLocations, teamExists, knownTeams, roleExists] = await Promise.all([
     location
       ? prisma.tenantLocation.findFirst({ where: { tenantId, name: location }, select: { id: true } })
       : null,
@@ -442,6 +454,12 @@ async function assertKnownOrgReferences(
     team
       ? prisma.tenantTeam.findFirst({ where: { tenantId, name: team }, select: { id: true } })
       : null,
+    teams.length
+      ? prisma.tenantTeam.findMany({
+          where: { tenantId, name: { in: teams } },
+          select: { name: true },
+        })
+      : [],
     role
       ? prisma.tenantRole.findFirst({ where: { tenantId, name: role }, select: { id: true } })
       : null,
@@ -460,6 +478,13 @@ async function assertKnownOrgReferences(
 
   if (team && !teamExists) {
     throw new Error(`Unbekanntes Team: "${team}".`);
+  }
+
+  const knownTeamNames = new Set(knownTeams.map((entry) => entry.name));
+  const unknownTeams = teams.filter((name) => !knownTeamNames.has(name));
+
+  if (unknownTeams.length > 0) {
+    throw new Error(`Unbekannte Teams: ${unknownTeams.join(", ")}.`);
   }
 
   if (role && !roleExists) {
@@ -1057,6 +1082,10 @@ export async function getEmployeesForTenant(
     where.tenantId,
     records.map((record) => record.id),
   );
+  const teamNamesByEmployeeId = await getEmployeeTeamNamesMap(
+    where.tenantId,
+    records.map((record) => record.id),
+  );
   const today = todayIso();
   const sickEmployeeIds = await getEmployeeIdsSickToday(records.map((record) => record.id));
   const statusFilter = filters.status;
@@ -1095,6 +1124,7 @@ export async function getEmployeesForTenant(
         sickToday: sickEmployeeIds.has(record.id),
       }),
       locations: locationNamesByEmployeeId.get(record.id) ?? [],
+      teams: teamNamesByEmployeeId.get(record.id) ?? [],
     };
   }).filter((employee) => !statusFilter || employee.status === statusFilter);
 }
@@ -1173,6 +1203,7 @@ export async function getEmployeeForTenant(tenantSlug: string, employeeHandle: s
     : [];
 
   const locations = await getEmployeeLocationNames(where.tenantId, record.id);
+  const teams = await getEmployeeTeamNames(where.tenantId, record.id);
   const employee = toEmployee(
     {
       ...record,
@@ -1207,6 +1238,7 @@ export async function getEmployeeForTenant(tenantSlug: string, employeeHandle: s
       sickToday,
     }),
     locations,
+    teams,
   };
 }
 
@@ -1307,6 +1339,121 @@ async function syncLocationTeamSnapshots(employee: Employee) {
   });
 }
 
+/** Alle Teamnamen, denen ein Mitarbeiter aktuell zugeordnet ist (`TenantTeamMember`). */
+async function getEmployeeTeamNames(tenantId: string, employeeId: string): Promise<string[]> {
+  const memberships = await prisma.tenantTeamMember.findMany({
+    where: { employeeId, team: { tenantId } },
+    select: { team: { select: { name: true } } },
+    orderBy: { team: { name: "asc" } },
+  });
+
+  return memberships.map((membership) => membership.team.name);
+}
+
+/** Teamnamen für mehrere Mitarbeiter auf einmal (Mitarbeiterliste), gruppiert nach `employeeId`. */
+async function getEmployeeTeamNamesMap(
+  tenantId: string,
+  employeeIds: string[],
+): Promise<Map<string, string[]>> {
+  if (employeeIds.length === 0) {
+    return new Map();
+  }
+
+  const memberships = await prisma.tenantTeamMember.findMany({
+    where: { employeeId: { in: employeeIds }, team: { tenantId } },
+    select: { employeeId: true, team: { select: { name: true } } },
+    orderBy: { team: { name: "asc" } },
+  });
+
+  const map = new Map<string, string[]>();
+
+  for (const membership of memberships) {
+    const list = map.get(membership.employeeId) ?? [];
+    list.push(membership.team.name);
+    map.set(membership.employeeId, list);
+  }
+
+  return map;
+}
+
+/**
+ * Bringt die Team-Mitgliedschaften (`TenantTeamMember`) eines Mitarbeiters auf
+ * exakt die übergebene Menge von Teamnamen — Pendant zu
+ * `syncEmployeeLocationMemberships` (location-service.ts) für "Mehrere Teams
+ * pro Mitarbeiter". Vorher setzte das Anlegen/Bearbeiten über das
+ * Mitarbeiterprofil nur die Freitext-Spalte `TenantEmployee.team`, ohne eine
+ * `TenantTeamMember`-Zeile anzulegen — der Mitarbeiter tauchte dadurch nicht
+ * auf der eigentlichen Team-Detailseite auf. Bestehende Mitgliedschaften
+ * (inkl. `isLead`) außerhalb der Menge werden entfernt, fehlende ergänzt.
+ * Lebt hier statt in team-service.ts, damit kein Importzyklus entsteht:
+ * team-service.ts importiert bereits `getEmployeesForTenant` von hier.
+ */
+async function syncEmployeeTeamMemberships(input: {
+  tenantId: string;
+  employeeId: string;
+  employeeInitials: string;
+  employeeName: string;
+  employeeLocation: string;
+  employeeRole: string;
+  employeeContract: string;
+  employeeStatus: EmployeeStatus;
+  teamNames: string[];
+}) {
+  const names = Array.from(
+    new Set(input.teamNames.map((name) => name.trim()).filter(Boolean)),
+  );
+
+  const [targetTeams, currentMemberships] = await Promise.all([
+    names.length
+      ? prisma.tenantTeam.findMany({
+          where: { tenantId: input.tenantId, name: { in: names } },
+          select: { id: true },
+        })
+      : Promise.resolve([]),
+    prisma.tenantTeamMember.findMany({
+      where: { employeeId: input.employeeId, team: { tenantId: input.tenantId } },
+      select: { id: true, teamId: true },
+    }),
+  ]);
+
+  const targetTeamIds = new Set(targetTeams.map((team) => team.id));
+  const currentTeamIds = new Set(currentMemberships.map((member) => member.teamId));
+  const toRemove = currentMemberships.filter((member) => !targetTeamIds.has(member.teamId));
+  const toAddTeamIds = targetTeams
+    .map((team) => team.id)
+    .filter((id) => !currentTeamIds.has(id));
+
+  if (toRemove.length === 0 && toAddTeamIds.length === 0) {
+    return;
+  }
+
+  await prisma.$transaction([
+    ...(toRemove.length
+      ? [
+          prisma.tenantTeamMember.deleteMany({
+            where: { id: { in: toRemove.map((member) => member.id) } },
+          }),
+        ]
+      : []),
+    ...(toAddTeamIds.length
+      ? [
+          prisma.tenantTeamMember.createMany({
+            data: toAddTeamIds.map((teamId) => ({
+              teamId,
+              employeeId: input.employeeId,
+              initials: input.employeeInitials,
+              name: input.employeeName,
+              location: input.employeeLocation,
+              role: input.employeeRole,
+              contract: input.employeeContract,
+              status: input.employeeStatus === "vacation" ? "vacation" : "on-duty",
+            })),
+          }),
+        ]
+      : []),
+  ]);
+}
+
 type CreateEmployeeRecordOptions = {
   tenantId: string;
   actorId: string;
@@ -1336,7 +1483,6 @@ export async function createTenantEmployeeRecord({
   const contract = input.contract?.trim() || "Unbefristet";
   const startDate = input.startDate?.trim() || "";
   const role = input.role?.trim() || "Mitarbeiter";
-  const team = input.team?.trim() || "";
   const weeklyHours = input.weeklyHours?.trim() || "38 Std/Woche";
   const explicitEmployeeNumber = input.employeeNumber?.trim() || "";
   const locations = input.locations?.length
@@ -1344,10 +1490,16 @@ export async function createTenantEmployeeRecord({
     : input.location?.trim()
       ? [input.location.trim()]
       : [];
+  const teams = input.teams?.length
+    ? Array.from(new Set(input.teams.map((value) => value.trim()).filter(Boolean)))
+    : input.team?.trim()
+      ? [input.team.trim()]
+      : [];
+  const team = teams[0] ?? "";
 
   await assertKnownOrgReferences(tenantId, {
     locations,
-    team: input.team,
+    teams,
     role: input.role,
   });
 
@@ -1504,6 +1656,20 @@ export async function createTenantEmployeeRecord({
     });
   }
 
+  if (teams.length > 0) {
+    await syncEmployeeTeamMemberships({
+      tenantId,
+      employeeId: record.id,
+      employeeInitials: record.initials,
+      employeeName: record.name,
+      employeeLocation: record.location,
+      employeeRole: record.role,
+      employeeContract: record.contract,
+      employeeStatus: record.status,
+      teamNames: teams,
+    });
+  }
+
   // Ordnervorlagen (`TenantEmployeeFolderTemplate`) automatisch anwenden —
   // jeder neue Mitarbeiter bekommt dieselben Ordner wie alle bestehenden.
   const folderTemplates = await prisma.tenantEmployeeFolderTemplate.findMany({
@@ -1549,6 +1715,7 @@ export async function createTenantEmployeeRecord({
   return {
     ...toEmployee(record, canViewSensitiveData, canViewContracts, canViewMutterschutz),
     locations,
+    teams,
   };
 }
 
@@ -1564,7 +1731,10 @@ export async function createTenantEmployee(input: EmployeeMutationInput) {
   // "employees:write" deckt nur Name/Team/Standort/Kontakt ab — sensible
   // Stammdaten und Vertragsfelder beim Anlegen brauchen zusätzlich die
   // jeweils eigene Berechtigung, sonst werden sie aus der Eingabe verworfen.
-  const newEmployeeTarget = { id: "", team: input.team?.trim() || "" };
+  const newEmployeeTarget = {
+    id: "",
+    team: (input.teams?.length ? input.teams[0] : input.team)?.trim() || "",
+  };
   const canEditSensitiveData = await canWriteEmployeeSubarea(
     input.tenantSlug,
     "sensitiveData",
@@ -1990,9 +2160,28 @@ export async function updateTenantEmployee(input: EmployeeMutationInput & { empl
           : []
         : currentLocationNames;
 
+  // Anders als bei `locations` NICHT unbedingt auf die bestehenden
+  // `TenantTeamMember`-Mitgliedschaften zurückfallen, wenn dieser Request gar
+  // kein Team-Feld mitschickt: bis zu diesem Fix wurde `TenantEmployee.team`
+  // nie mit `TenantTeamMember` synchronisiert (siehe `syncEmployeeTeamMemberships`
+  // unten), Bestandsdaten können also munter auseinanderlaufen. Ein
+  // unbeteiligtes Feld zu ändern (z. B. Telefonnummer) darf dadurch weder die
+  // Team-Zuordnung stillschweigend leeren noch überraschend Mitgliedschaften
+  // anlegen/entfernen — nur ein Request, der `team`/`teams` ausdrücklich
+  // mitschickt, fasst die Zuordnung an.
+  const teamsProvided = input.teams !== undefined || input.team !== undefined;
+  const currentTeamNames = teamsProvided ? [] : await getEmployeeTeamNames(tenantId, input.employeeId);
+  const teams = input.teams !== undefined
+    ? Array.from(new Set(input.teams.map((value) => value.trim()).filter(Boolean)))
+    : input.team !== undefined
+      ? input.team.trim()
+        ? [input.team.trim()]
+        : []
+      : currentTeamNames;
+
   await assertKnownOrgReferences(tenantId, {
     locations,
-    team: input.team,
+    teams: teamsProvided ? teams : undefined,
     role: input.role,
   });
 
@@ -2001,7 +2190,7 @@ export async function updateTenantEmployee(input: EmployeeMutationInput & { empl
   const contract = input.contract?.trim() || current.contract;
   const startDate = input.startDate?.trim() || current.startDate;
   const role = input.role?.trim() || current.role;
-  const team = input.team?.trim() || current.team;
+  const team = teamsProvided ? (teams[0] ?? "") : current.team;
   const weeklyHours = input.weeklyHours?.trim() || current.weeklyHours;
   const location = locations[0] ?? "";
   const status = normalizeStatus(input.status ?? current.status);
@@ -2196,6 +2385,24 @@ export async function updateTenantEmployee(input: EmployeeMutationInput & { empl
     employeeName: record.name,
     locationNames: locations,
   });
+  // Nur syncen, wenn DIESER Request ausdrücklich `team`/`teams` mitgeschickt
+  // hat (siehe `teamsProvided` oben) — sonst würde jede unbeteiligte
+  // Bearbeitung (z. B. Telefonnummer) Bestandsdaten anfassen, bei denen
+  // `TenantEmployee.team` und `TenantTeamMember` bislang (vor diesem Fix)
+  // munter auseinanderlaufen konnten.
+  if (teamsProvided) {
+    await syncEmployeeTeamMemberships({
+      tenantId,
+      employeeId: record.id,
+      employeeInitials: record.initials,
+      employeeName: record.name,
+      employeeLocation: record.location,
+      employeeRole: record.role,
+      employeeContract: record.contract,
+      employeeStatus: record.status,
+      teamNames: teams,
+    });
+  }
   // Nur syncen, wenn DIESER Request ausdrücklich ein neues `role`-Feld
   // mitgeschickt hat — niemals anhand von `record.role`/`current.role`, der
   // auch ein zuvor unautorisiert eingetragener Altwert sein kann (z. B. weil
@@ -2245,7 +2452,7 @@ export async function updateTenantEmployee(input: EmployeeMutationInput & { empl
       : record.name,
   });
 
-  return { ...employee, locations };
+  return { ...employee, locations, teams };
 }
 
 /**

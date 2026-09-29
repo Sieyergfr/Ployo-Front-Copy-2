@@ -33,6 +33,8 @@ export type EmployeeApiInput = {
   /** "Mehrere Standorte pro Mitarbeiter" — hat Vorrang vor `location`, wenn beide gesetzt sind. */
   locations?: string[];
   team?: string;
+  /** "Mehrere Teams pro Mitarbeiter" — hat Vorrang vor `team`, wenn beide gesetzt sind. */
+  teams?: string[];
   role?: string;
   startDate?: string;
   contract?: string;
@@ -135,6 +137,10 @@ export function pickEmployeeInput(body: Record<string, unknown>): EmployeeApiInp
 
   if (Array.isArray(body.locations)) {
     input.locations = body.locations.filter((value): value is string => typeof value === "string");
+  }
+
+  if (Array.isArray(body.teams)) {
+    input.teams = body.teams.filter((value): value is string => typeof value === "string");
   }
 
   if (Array.isArray(body.emergencyContacts)) {

@@ -5,6 +5,7 @@ import {
   getEmployeesForTenant,
   updateTenantEmployee,
 } from "@/lib/employee-service";
+import { getTeamsForTenant } from "@/lib/team-service";
 
 /**
  * Integrationstest gegen die echte Test-DB für die Kern-Schreibpfade der
@@ -140,6 +141,39 @@ describe("createTenantEmployeeRecord", () => {
     expect(stored.timeline).toHaveLength(1);
     expect(stored.contractDetails).not.toBeNull();
   });
+
+  it("ordnet einen Mitarbeiter mit mehreren Teams auch den echten Team-Rostern (TenantTeamMember) zu", async () => {
+    const employee = await createTenantEmployeeRecord({
+      tenantId,
+      actorId: "test-actor",
+      actorName: "Test Actor",
+      input: {
+        tenantSlug,
+        // Bewusst kein Name, der mit anderen Testfällen im File kollidiert
+        // (z. B. "Mar..." aus dem Standortfilter-Block unten, der exakte
+        // Ergebnislisten erwartet).
+        firstName: "Dorothy",
+        lastName: "Vaughan",
+        email: `dorothy-teams-${RUN_ID}@ployo.invalid`,
+        teams: ["Labor", "Krypto"],
+        role: "",
+      },
+    });
+
+    // Primärteam (Freitext-Spalte, für own/team-Scopes) ist das erste
+    // ausgewählte Team.
+    expect(employee.team).toBe("Labor");
+    expect(employee.teams).toEqual(["Labor", "Krypto"]);
+
+    const teams = await getTeamsForTenant(tenantSlug);
+    const teamsWithEmployee = teams.filter((team) =>
+      team.members.some((member) => member.employeeId === employee.dbId),
+    );
+    expect(teamsWithEmployee.map((team) => team.name).sort()).toEqual([
+      "Krypto",
+      "Labor",
+    ]);
+  });
 });
 
 describe("updateTenantEmployee", () => {
@@ -206,6 +240,71 @@ describe("updateTenantEmployee", () => {
     expect(secondUpdate.contractDetails.position).toBe("Mathematikerin");
     expect(secondUpdate.contractDetails.department).toBe("Forschung");
     expect(secondUpdate.phone).toBe("+49 30 1234567");
+  });
+
+  it("synchronisiert TenantTeamMember bei Teamänderung, lässt sie aber bei unbeteiligten Feldern unangetastet", async () => {
+    const created = await createTenantEmployeeRecord({
+      tenantId,
+      actorId: "test-actor",
+      actorName: "Test Actor",
+      input: {
+        tenantSlug,
+        // Kein "...mar..."-Substring im Namen (siehe Kommentar oben) — sonst
+        // taucht die Fixtur im Standortfilter-Block unten in der
+        // "Mar"-Suche auf.
+        firstName: "Annie",
+        lastName: "Easley",
+        email: `annie-${RUN_ID}@ployo.invalid`,
+      },
+    });
+
+    const membershipsOf = () =>
+      prisma.tenantTeamMember.findMany({ where: { employeeId: created.dbId! } });
+
+    expect(await membershipsOf()).toHaveLength(0);
+
+    // Team(s) explizit setzen — muss die echten Team-Roster treffen (der
+    // gemeldete Bug: bisher landete das nur in `TenantEmployee.team`).
+    const withTeams = await updateTenantEmployee({
+      tenantSlug,
+      employeeId: created.dbId!,
+      teams: ["Labor", "Krypto"],
+    });
+
+    expect(withTeams.team).toBe("Labor");
+    expect(withTeams.teams?.slice().sort()).toEqual(["Krypto", "Labor"]);
+    expect((await membershipsOf()).map((m) => m.teamId).sort()).toEqual(
+      (
+        await prisma.tenantTeam.findMany({
+          where: { tenantId, name: { in: ["Labor", "Krypto"] } },
+          select: { id: true },
+        })
+      )
+        .map((t) => t.id)
+        .sort(),
+    );
+
+    // Ein unbeteiligtes Feld ändern (weder `team` noch `teams` mitgeschickt)
+    // darf die Team-Zuordnung weder leeren noch sonst anfassen.
+    const unrelatedUpdate = await updateTenantEmployee({
+      tenantSlug,
+      employeeId: created.dbId!,
+      phone: "+49 30 9876543",
+    });
+
+    expect(unrelatedUpdate.team).toBe("Labor");
+    expect(await membershipsOf()).toHaveLength(2);
+
+    // Alle Teams explizit entfernen (leeres Array) muss die Roster-Zeilen
+    // wirklich löschen, nicht nur die Freitext-Spalte leeren.
+    const cleared = await updateTenantEmployee({
+      tenantSlug,
+      employeeId: created.dbId!,
+      teams: [],
+    });
+
+    expect(cleared.team).toBe("");
+    expect(await membershipsOf()).toHaveLength(0);
   });
 });
 
