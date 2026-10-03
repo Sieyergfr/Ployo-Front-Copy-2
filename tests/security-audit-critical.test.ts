@@ -764,8 +764,8 @@ describe("H02 — settings:write vergibt keine höheren Rechte, als es selbst ha
         firstName: "Max",
         lastName: "Muster",
         email: `h02b-emp-${RUN_ID}@ployo.invalid`,
-        taxId: "DE123456789",
-        iban: "DE1234000000000000",
+        taxId: "12345678910",
+        iban: "DE41370400440000000001",
         birthDate: "1990-01-01",
       },
     });
@@ -830,8 +830,8 @@ describe("H02 — settings:write vergibt keine höheren Rechte, als es selbst ha
     currentUserId = owner.id;
     const fullExport = await buildTenantExport(tenant.slug);
     const fullEmployee = fullExport.employees.find((e) => e.id === employee.dbId);
-    expect(fullEmployee?.taxId).toBe("DE123456789");
-    expect(fullEmployee?.iban).toBe("DE1234000000000000");
+    expect(fullEmployee?.taxId).toBe("12345678910");
+    expect(fullEmployee?.iban).toBe("DE41370400440000000001");
     expect(fullExport.payrollStatements).toHaveLength(1);
     expect(fullExport.contracts).toHaveLength(1);
     expect(fullExport.sicknessReports).toHaveLength(1);
@@ -894,7 +894,7 @@ describe("H02 — settings:write vergibt keine höheren Rechte, als es selbst ha
         lastName: "Self",
         email: `h02c-caller-emp-${RUN_ID}@ployo.invalid`,
         team: "Team A",
-        taxId: "DE000000001",
+        taxId: "10000000001",
       },
     });
     await prisma.tenantEmployee.update({
@@ -912,7 +912,7 @@ describe("H02 — settings:write vergibt keine höheren Rechte, als es selbst ha
         lastName: "Mate",
         email: `h02c-teammate-${RUN_ID}@ployo.invalid`,
         team: "Team A",
-        taxId: "DE000000002",
+        taxId: "10000000002",
       },
     });
 
@@ -926,7 +926,7 @@ describe("H02 — settings:write vergibt keine höheren Rechte, als es selbst ha
         lastName: "Team",
         email: `h02c-outsider-${RUN_ID}@ployo.invalid`,
         team: "Team B",
-        taxId: "DE000000003",
+        taxId: "10000000003",
       },
     });
 
@@ -964,8 +964,8 @@ describe("H02 — settings:write vergibt keine höheren Rechte, als es selbst ha
     const callerRow = scopedExport.employees.find((e) => e.id === callerEmployee.dbId);
     const teammateRow = scopedExport.employees.find((e) => e.id === teammate.dbId);
     const outsiderRow = scopedExport.employees.find((e) => e.id === outsider.dbId);
-    expect(callerRow?.taxId).toBe("DE000000001");
-    expect(teammateRow?.taxId).toBe("DE000000002");
+    expect(callerRow?.taxId).toBe("10000000001");
+    expect(teammateRow?.taxId).toBe("10000000002");
     expect(outsiderRow?.taxId).toBe("•••");
     expect(scopedExport.hinweis).toContain("Gehaltsabrechnungen");
   });
@@ -1161,8 +1161,8 @@ describe("H04 — Create-/Update-Antwort blendet sensible Felder ohne Leserecht 
         firstName: "Jane",
         lastName: "Doe",
         email: `h04-emp-${RUN_ID}@ployo.invalid`,
-        taxId: "DE999888777",
-        iban: "DE1111000000000000",
+        taxId: "19998887770",
+        iban: "DE14370400440000000002",
         maternityProtectionActive: true,
         maternityProtectionNote: "Schutzfrist aktiv",
       },
@@ -1190,8 +1190,8 @@ describe("H04 — Create-/Update-Antwort blendet sensible Felder ohne Leserecht 
       employeeId: employee.dbId!,
       phone: "+49 30 5551234",
     });
-    expect(asOwner.taxId).toBe("DE999888777");
-    expect(asOwner.iban).toBe("DE1111000000000000");
+    expect(asOwner.taxId).toBe("19998887770");
+    expect(asOwner.iban).toBe("DE14370400440000000002");
     expect(asOwner.maternityProtectionActive).toBe(true);
     expect(asOwner.maternityProtectionNote).toBe("Schutzfrist aktiv");
   });
@@ -2363,7 +2363,7 @@ describe("H10 — Urlaubsentscheidung: kein Selbst-Approval, Compare-and-Set, er
         requestId: ownRequest.id,
         status: "approved",
       }),
-    ).rejects.toThrow("FORBIDDEN_SELF_APPROVAL");
+    ).rejects.toThrow("Über den eigenen Urlaubsantrag kann nicht selbst entschieden werden.");
 
     // Ein anderer Genehmiger darf ganz normal entscheiden.
     currentUserId = owner.id;
@@ -2389,7 +2389,7 @@ describe("H10 — Urlaubsentscheidung: kein Selbst-Approval, Compare-and-Set, er
         requestId: ownRequest.id,
         status: "approved",
       }),
-    ).rejects.toThrow("ALREADY_DECIDED");
+    ).rejects.toThrow("Der Genehmigungsstatus dieses Antrags hat sich zwischenzeitlich geändert.");
 
     // Eine abweichende Entscheidung — nachträglich doch noch ablehnen — ist
     // dagegen ausdrücklich erlaubt: ein bereits genehmigter Urlaub muss sich

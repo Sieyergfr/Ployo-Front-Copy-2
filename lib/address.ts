@@ -38,6 +38,21 @@ export function normalizeAddressInput(input: AddressInput = {}) {
   };
 }
 
+const GERMAN_POSTAL_CODE_PATTERN = /^\d{5}$/;
+
+/**
+ * Reine Formatprüfung der PLZ (QA-Bug BUG-008) — nur für Deutschland
+ * durchgesetzt (5 Ziffern), da andere Länder abweichende Formate haben
+ * (z. B. Buchstaben in Großbritannien/Niederlande) und dieses Feld bewusst
+ * für alle Länder freigegeben ist. Greift nur, wenn eine PLZ angegeben
+ * wurde — ein komplett leeres (optionales) Adressfeld bleibt erlaubt.
+ */
+export function assertValidAddressFormat(input: AddressShape) {
+  if (input.postalCode && input.country === "DE" && !GERMAN_POSTAL_CODE_PATTERN.test(input.postalCode)) {
+    throw new Error("Bitte eine gültige deutsche Postleitzahl (5 Ziffern) angeben.");
+  }
+}
+
 /** Wirft, wenn eines der im Formular als Pflichtfeld markierten Adressfelder fehlt. */
 export function assertRequiredAddress(input: AddressInput = {}) {
   const normalized = normalizeAddressInput(input);
@@ -50,6 +65,8 @@ export function assertRequiredAddress(input: AddressInput = {}) {
   ) {
     throw new Error("Bitte die vollständige Adresse angeben.");
   }
+
+  assertValidAddressFormat(normalized);
 
   return normalized;
 }
@@ -69,7 +86,10 @@ export function hasAddressInput(input: AddressInput = {}) {
 export function formatAddress(
   address?: AddressShape | null,
 ) {
-  if (!address) {
+  // Ohne echte Adressdaten (nur der `country`-Default "DE") nicht "DE" als
+  // vermeintliche Adresse anzeigen (QA-Bug BUG-028, Teil 1 — betraf u. a.
+  // die "Standort-Adresse" in der Personalakte, wenn nichts eingetragen war).
+  if (!address || !hasAddressInput(address)) {
     return "";
   }
 

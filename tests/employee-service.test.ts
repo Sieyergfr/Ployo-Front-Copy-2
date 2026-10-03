@@ -174,6 +174,76 @@ describe("createTenantEmployeeRecord", () => {
       "Labor",
     ]);
   });
+
+  it("lehnt eine bereits vergebene E-Mail case-insensitiv ab (QA-Bug BUG-005)", async () => {
+    const email = `duplicate-check-${RUN_ID}@ployo.invalid`;
+
+    await createTenantEmployeeRecord({
+      tenantId,
+      actorId: "test-actor",
+      actorName: "Test Actor",
+      input: {
+        tenantSlug,
+        firstName: "Grace",
+        lastName: "Hopper",
+        email,
+        location: "",
+        team: "",
+        role: "",
+      },
+    });
+
+    await expect(
+      createTenantEmployeeRecord({
+        tenantId,
+        actorId: "test-actor",
+        actorName: "Test Actor",
+        input: {
+          tenantSlug,
+          firstName: "Grace",
+          lastName: "Hopper-Zweite",
+          email: email.toUpperCase(),
+          location: "",
+          team: "",
+          role: "",
+        },
+      }),
+    ).rejects.toThrow(/bereits/i);
+
+    // Leere E-Mail bleibt weiterhin mehrfach erlaubt.
+    await expect(
+      createTenantEmployeeRecord({
+        tenantId,
+        actorId: "test-actor",
+        actorName: "Test Actor",
+        input: {
+          tenantSlug,
+          firstName: "Ohne",
+          lastName: `Email-${RUN_ID}-1`,
+          email: "",
+          location: "",
+          team: "",
+          role: "",
+        },
+      }),
+    ).resolves.toBeTruthy();
+    await expect(
+      createTenantEmployeeRecord({
+        tenantId,
+        actorId: "test-actor",
+        actorName: "Test Actor",
+        input: {
+          tenantSlug,
+          firstName: "Ohne",
+          lastName: `Email-${RUN_ID}-2`,
+          email: "",
+          location: "",
+          team: "",
+          role: "",
+        },
+      }),
+    ).resolves.toBeTruthy();
+  });
 });
 
 describe("updateTenantEmployee", () => {
@@ -306,6 +376,49 @@ describe("updateTenantEmployee", () => {
     expect(cleared.team).toBe("");
     expect(await membershipsOf()).toHaveLength(0);
   });
+
+  it("lehnt beim Bearbeiten die E-Mail eines anderen Mitarbeiters ab, erlaubt aber die eigene unveränderte (QA-Bug BUG-005)", async () => {
+    const first = await createTenantEmployeeRecord({
+      tenantId,
+      actorId: "test-actor",
+      actorName: "Test Actor",
+      input: {
+        tenantSlug,
+        firstName: "Emmy",
+        lastName: `Noether-${RUN_ID}`,
+        email: `emmy-email-update-${RUN_ID}@ployo.invalid`,
+      },
+    });
+    const second = await createTenantEmployeeRecord({
+      tenantId,
+      actorId: "test-actor",
+      actorName: "Test Actor",
+      input: {
+        tenantSlug,
+        firstName: "Barbara",
+        lastName: `McClintock-${RUN_ID}`,
+        email: `barbara-email-update-${RUN_ID}@ployo.invalid`,
+      },
+    });
+
+    await expect(
+      updateTenantEmployee({
+        tenantSlug,
+        employeeId: second.dbId!,
+        email: first.email.toUpperCase(),
+      }),
+    ).rejects.toThrow(/bereits/i);
+
+    // Die eigene, unveränderte E-Mail erneut mitschicken darf nicht an sich selbst scheitern.
+    await expect(
+      updateTenantEmployee({
+        tenantSlug,
+        employeeId: second.dbId!,
+        email: second.email,
+        phone: "+49 30 1111111",
+      }),
+    ).resolves.toBeTruthy();
+  });
 });
 
 describe("getEmployeesForTenant — Suche und Standortfilter", () => {
@@ -392,5 +505,19 @@ describe("getEmployeesForTenant — Suche und Standortfilter", () => {
 
   it("liefert eine leere Liste statt eines Fehlers, wenn nichts passt", async () => {
     expect(await namesOf({ search: "gibtesnicht-xyz" })).toEqual([]);
+  });
+
+  it("behandelt % und _ als literale Zeichen statt als SQL-LIKE-Wildcards (QA-Bug BUG-012)", async () => {
+    // Kein Mitarbeiter-Fixture enthält ein literales "%" oder "_" im Namen —
+    // eine buchstäbliche Suche danach darf daher 0 Treffer liefern, nicht
+    // "alle" (wie bei einem unescaped ILIKE-Wildcard).
+    expect(await namesOf({ search: "%" })).toEqual([]);
+    expect(await namesOf({ search: "_" })).toEqual([]);
+    // "L%a" bzw. "L_na" dürfen nicht als Muster ("L" + irgendwas + "a"/"na")
+    // interpretiert werden und z. B. "Alan Turing" treffen.
+    expect(await namesOf({ search: "L%a" })).toEqual([]);
+    expect(await namesOf({ search: "L_na" })).toEqual([]);
+    // Ein normaler Teiltreffer funktioniert daneben weiterhin.
+    expect(await namesOf({ search: "Alan" })).toEqual(["Alan Turing"]);
   });
 });

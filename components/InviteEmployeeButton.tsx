@@ -47,6 +47,7 @@ function InviteEmployeeForm({
             className="input"
             placeholder="Sophie"
             autoComplete="given-name"
+            maxLength={80}
           />
         </div>
 
@@ -60,6 +61,7 @@ function InviteEmployeeForm({
             className="input"
             placeholder="Wagner"
             autoComplete="family-name"
+            maxLength={80}
           />
         </div>
       </div>
@@ -100,7 +102,13 @@ function InviteEmployeeForm({
             id="invite-role"
             name="role"
             className="input cursor-pointer bg-bg"
-            defaultValue={permissionRoles[0] ?? "Mitarbeiter"}
+            // Least Privilege statt der zufälligen DB-Sortierreihenfolge der
+            // Systemrollen (QA-Bug BUG-014 — bisher stand hier faktisch
+            // "HR-Leitung" vorbelegt, Vollzugriff inkl. sensibler Daten,
+            // sofern niemand das Feld bewusst umstellt).
+            defaultValue={
+              permissionRoles.includes("Mitarbeiter") ? "Mitarbeiter" : permissionRoles[0] ?? "Mitarbeiter"
+            }
           >
             {permissionRoles.map((role) => (
               <option key={role} value={role}>

@@ -16,6 +16,7 @@ import type { OpeningHoursDay } from "@/lib/opening-hours";
 import type { ShiftPreset } from "@/lib/shift-presets";
 import {
   createReminderAction,
+  deleteReminderAction,
   updateReminderAction,
 } from "@/app/(dashboard)/u/[tenant]/erinnerungen/actions";
 import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
@@ -29,7 +30,7 @@ import type {
 } from "@/lib/files";
 import type { Reminder } from "@/lib/reminders";
 import type { CurrentSickness, SicknessHistoryItem } from "@/lib/sickness";
-import type { VacationRequest } from "@/lib/vacations";
+import { getVacationStatusConfig, type VacationRequest } from "@/lib/vacations";
 import {
   BellPlus,
   Check,
@@ -95,6 +96,20 @@ export function RightDrawer({
     setMounted(true);
   }, []);
 
+  // Esc schließt den Drawer nicht (QA-Bug BUG-021) — Standardverhalten für
+  // modale Elemente (`role="dialog"` weiter unten trägt das Versprechen
+  // bereits, ohne dass es bisher eingelöst wurde).
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
   if (!mounted) {
     return null;
   }
@@ -128,7 +143,7 @@ export function RightDrawer({
           </div>
           <button
             type="button"
-            aria-label={t("closeSidebar")}
+            aria-label={t("closeDrawer")}
             title={t("close")}
             className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-[9px] border border-border bg-white text-muted transition-colors hover:border-muted hover:text-ink"
             onClick={onClose}
@@ -448,6 +463,7 @@ function ReminderFields({
   fileBrowserData,
   onCancel,
   canManage = true,
+  canDelete = canManage,
 }: {
   tenant: string;
   returnPath: string;
@@ -462,77 +478,98 @@ function ReminderFields({
   fileBrowserData?: ReminderFileBrowserData;
   onCancel: () => void;
   canManage?: boolean;
+  canDelete?: boolean;
 }) {
   const t = useTranslations("ActionDrawers");
   const [linkedFiles, setLinkedFiles] = useState<string[]>(defaultLinkedFiles);
   const [, formAction] = useActionStateWithToast(
     reminderId ? updateReminderAction : createReminderAction,
   );
+  const [, deleteFormAction] = useActionStateWithToast(deleteReminderAction);
+  const deleteFormId = `reminder-delete-${reminderId ?? "new"}`;
 
   return (
-    <form className="flex flex-col gap-4" action={formAction}>
-      <input type="hidden" name="tenant" value={tenant} />
-      <input type="hidden" name="returnPath" value={returnPath} />
-      <input type="hidden" name="reminderId" value={reminderId ?? ""} />
-      {linkedFiles.map((fileId) => (
-        <input key={fileId} type="hidden" name="linkedFiles" value={fileId} />
-      ))}
-      <fieldset disabled={!canManage} className="flex flex-col gap-4 border-0 p-0">
-        <Field label={t("titleLabel")}>
-          <input name="title" className="input" defaultValue={defaultTitle} required />
-        </Field>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label={t("dueDateLabel")}>
-            <DatePickerField
-              name="dueDate"
-              defaultValue={defaultDueDate}
-              placeholder={t("pickDatePlaceholder")}
+    <>
+      <form className="flex flex-col gap-4" action={formAction}>
+        <input type="hidden" name="tenant" value={tenant} />
+        <input type="hidden" name="returnPath" value={returnPath} />
+        <input type="hidden" name="reminderId" value={reminderId ?? ""} />
+        {linkedFiles.map((fileId) => (
+          <input key={fileId} type="hidden" name="linkedFiles" value={fileId} />
+        ))}
+        <fieldset disabled={!canManage} className="flex flex-col gap-4 border-0 p-0">
+          <Field label={t("titleLabel")}>
+            <input name="title" className="input" defaultValue={defaultTitle} required />
+          </Field>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label={t("dueDateLabel")}>
+              <DatePickerField
+                name="dueDate"
+                defaultValue={defaultDueDate}
+                placeholder={t("pickDatePlaceholder")}
+              />
+            </Field>
+            <Field label={t("priorityLabel")}>
+              <select
+                name="priority"
+                className="input cursor-pointer bg-bg"
+                defaultValue={defaultPriority}
+              >
+                <option value="urgent">{t("priorityUrgent")}</option>
+                <option value="important">{t("priorityImportant")}</option>
+                <option value="normal">{t("priorityNormal")}</option>
+              </select>
+            </Field>
+          </div>
+          <Field label={t("subjectLabel")}>
+            <input name="subject" className="input" defaultValue={defaultContext} />
+          </Field>
+          <Field label={t("categoryLabel")}>
+            <input name="category" className="input" defaultValue={defaultCategory} />
+          </Field>
+          <Field label={t("notesLabel")}>
+            <textarea
+              name="notes"
+              className="input min-h-28 resize-none"
+              placeholder={t("notesPlaceholder")}
+              defaultValue={defaultNotes}
             />
           </Field>
-          <Field label={t("priorityLabel")}>
-            <select
-              name="priority"
-              className="input cursor-pointer bg-bg"
-              defaultValue={defaultPriority}
-            >
-              <option value="urgent">{t("priorityUrgent")}</option>
-              <option value="important">{t("priorityImportant")}</option>
-              <option value="normal">{t("priorityNormal")}</option>
-            </select>
-          </Field>
-        </div>
-        <Field label={t("subjectLabel")}>
-          <input name="subject" className="input" defaultValue={defaultContext} />
-        </Field>
-        <Field label={t("categoryLabel")}>
-          <input name="category" className="input" defaultValue={defaultCategory} />
-        </Field>
-        <Field label={t("notesLabel")}>
-          <textarea
-            name="notes"
-            className="input min-h-28 resize-none"
-            placeholder={t("notesPlaceholder")}
-            defaultValue={defaultNotes}
+          <LinkedFileBrowser
+            selectedIds={linkedFiles}
+            setSelectedIds={setLinkedFiles}
+            fileBrowserData={fileBrowserData}
           />
-        </Field>
-        <LinkedFileBrowser
-          selectedIds={linkedFiles}
-          setSelectedIds={setLinkedFiles}
-          fileBrowserData={fileBrowserData}
-        />
-      </fieldset>
-      <div className="mt-1 flex justify-end gap-2.5 border-t border-border-soft pt-4">
-        <button type="button" className="btn btn-secondary" onClick={onCancel}>
-          {canManage ? t("cancel") : t("close")}
-        </button>
-        {canManage && (
-          <button type="submit" className="btn btn-primary">
-            <Save size={15} />
-            {t("save")}
+        </fieldset>
+        <div className="mt-1 flex flex-wrap justify-end gap-2.5 border-t border-border-soft pt-4">
+          {reminderId && canDelete && (
+            <ConfirmSubmitButton
+              form={deleteFormId}
+              className="btn btn-secondary btn-sm border-danger/25 text-danger hover:border-danger/40 hover:bg-danger/5 mr-auto"
+              description={t("deleteReminderDescription", { title: defaultTitle })}
+            >
+              {t("delete")}
+            </ConfirmSubmitButton>
+          )}
+          <button type="button" className="btn btn-secondary" onClick={onCancel}>
+            {canManage ? t("cancel") : t("close")}
           </button>
-        )}
-      </div>
-    </form>
+          {canManage && (
+            <button type="submit" className="btn btn-primary">
+              <Save size={15} />
+              {t("save")}
+            </button>
+          )}
+        </div>
+      </form>
+      {reminderId && canDelete && (
+        <form id={deleteFormId} action={deleteFormAction}>
+          <input type="hidden" name="tenant" value={tenant} />
+          <input type="hidden" name="returnPath" value={returnPath} />
+          <input type="hidden" name="reminderId" value={reminderId} />
+        </form>
+      )}
+    </>
   );
 }
 
@@ -596,6 +633,7 @@ export function ReminderRowButton({
   className,
   children,
   canManage = true,
+  canDelete = canManage,
 }: {
   reminder: Reminder;
   tenant: string;
@@ -604,6 +642,7 @@ export function ReminderRowButton({
   className: string;
   children: ReactNode;
   canManage?: boolean;
+  canDelete?: boolean;
 }) {
   const t = useTranslations("ActionDrawers");
   const [isOpen, setIsOpen] = useState(false);
@@ -633,6 +672,7 @@ export function ReminderRowButton({
             fileBrowserData={fileBrowserData}
             onCancel={() => setIsOpen(false)}
             canManage={canManage}
+            canDelete={canDelete}
           />
         </RightDrawer>
       )}
@@ -715,6 +755,12 @@ export function SicknessDrawerButton({
   const t = useTranslations("ActionDrawers");
   const [isOpen, setIsOpen] = useState(false);
   const isCurrent = "since" in item;
+  // Nur eine explizit über "closeTenantSicknessReport" abgeschlossene Meldung
+  // ist wirklich gesperrt — ein Zeitraum, der bloß in der Vergangenheit liegt
+  // (z. B. nachträglich erfasst, nie geschlossen), bleibt korrigierbar
+  // (QA-Bug BUG-015: bisher sperrte allein "Zeitraum vorbei" jede Bearbeitung,
+  // ohne Korrektur- oder Stornomöglichkeit).
+  const isLocked = item.status === "closed";
   const [, updateFormAction] = useActionStateWithToast(updateSicknessReportAction);
   const [, closeFormAction] = useActionStateWithToast(closeSicknessReportAction);
 
@@ -739,13 +785,13 @@ export function SicknessDrawerButton({
                 {t("statusLabel")}
               </div>
               <div className="mt-2 text-[14px] font-semibold text-ink">
-                {isCurrent ? t("sicknessOngoing") : t("sicknessClosed")}
+                {isCurrent ? t("sicknessOngoing") : isLocked ? t("sicknessClosed") : t("sicknessPastOpen")}
               </div>
               <div className="mt-1 text-[12px] text-muted">
                 {item.location} · {isCurrent ? t("sinceDate", { date: item.since }) : t("dateRange", { start: item.startDate, end: item.endDate })}
               </div>
             </div>
-            {isCurrent && canManage ? (
+            {!isLocked && canManage ? (
               <form action={updateFormAction} className="flex flex-col gap-4">
                 <input type="hidden" name="tenant" value={tenant} />
                 <input type="hidden" name="reportId" value={item.id} />
@@ -811,9 +857,7 @@ export function SicknessDrawerButton({
               </form>
             ) : (
               <div className="rounded-xl border border-border bg-bg p-4 text-[13px] leading-[1.55] text-muted-2">
-                {isCurrent
-                  ? t("noSicknessEditPermission")
-                  : t("sicknessClosedHint")}
+                {!canManage ? t("noSicknessEditPermission") : t("sicknessClosedHint")}
               </div>
             )}
           </div>
@@ -835,12 +879,19 @@ export function VacationDrawerButton({
   canDelete?: boolean;
 }) {
   const t = useTranslations("ActionDrawers");
+  const tStatus = useTranslations("VacationStatus");
   const [isOpen, setIsOpen] = useState(false);
   const deleteFormId = `vacation-delete-${request.dbId ?? request.id}`;
+  const decideFormId = `vacation-decide-${request.dbId ?? request.id}`;
   const [, updateFormAction] = useActionStateWithToast(updateVacationRequestAction);
   const [, approveFormAction] = useActionStateWithToast(approveVacationRequestAction);
   const [, rejectFormAction] = useActionStateWithToast(rejectVacationRequestAction);
   const [, deleteFormAction] = useActionStateWithToast(deleteVacationRequestAction);
+  // Bereits entschiedene Anträge zeigten bisher gar keinen Status und boten
+  // "Genehmigen"/"Ablehnen" ohne Rückfrage an, obwohl ein Klick die
+  // bestehende Entscheidung stillschweigend umkehrte (QA-Bug BUG-027).
+  const statusConfig = getVacationStatusConfig(tStatus)[request.status];
+  const alreadyDecided = request.status !== "pending";
 
   return (
     <>
@@ -857,6 +908,16 @@ export function VacationDrawerButton({
           title={request.name}
           onClose={() => setIsOpen(false)}
         >
+          <div className="mb-4 rounded-xl border border-border bg-bg p-4">
+            <div className="font-mono text-[10px] uppercase tracking-[0.06em] text-muted">
+              {t("statusLabel")}
+            </div>
+            <span
+              className={`mt-2 inline-flex items-center rounded-[7px] px-[9px] py-[3px] font-mono text-[11px] ${statusConfig.className}`}
+            >
+              {statusConfig.badge}
+            </span>
+          </div>
           {!canManage && (
             <div className="mb-4 rounded-xl border border-border bg-bg p-4 text-[13px] leading-[1.55] text-muted-2">
               {t("noVacationEditPermission")}
@@ -894,21 +955,51 @@ export function VacationDrawerButton({
             </fieldset>
             {canManage && (
               <div className="flex flex-wrap gap-2 border-t border-border-soft pt-4">
-                <FormSubmitButton
-                  formAction={approveFormAction}
-                  Icon={Check}
-                  className="btn btn-primary btn-sm"
-                  pendingLabel={t("working")}
-                >
-                  {t("approve")}
-                </FormSubmitButton>
-                <FormSubmitButton
-                  formAction={rejectFormAction}
-                  className="btn btn-secondary btn-sm border-danger/25 text-danger hover:border-danger/40 hover:bg-danger/5"
-                  pendingLabel={t("working")}
-                >
-                  {t("reject")}
-                </FormSubmitButton>
+                {!alreadyDecided && (
+                  <>
+                    <FormSubmitButton
+                      formAction={approveFormAction}
+                      Icon={Check}
+                      className="btn btn-primary btn-sm"
+                      pendingLabel={t("working")}
+                    >
+                      {t("approve")}
+                    </FormSubmitButton>
+                    <FormSubmitButton
+                      formAction={rejectFormAction}
+                      className="btn btn-secondary btn-sm border-danger/25 text-danger hover:border-danger/40 hover:bg-danger/5"
+                      pendingLabel={t("working")}
+                    >
+                      {t("reject")}
+                    </FormSubmitButton>
+                  </>
+                )}
+                {request.status === "rejected" && (
+                  <ConfirmSubmitButton
+                    form={decideFormId}
+                    formAction={approveFormAction}
+                    className="btn btn-primary btn-sm"
+                    description={t("reverseDecisionDescription", {
+                      name: request.name,
+                      status: tStatus("approvedLabel"),
+                    })}
+                  >
+                    {t("approve")}
+                  </ConfirmSubmitButton>
+                )}
+                {request.status === "approved" && (
+                  <ConfirmSubmitButton
+                    form={decideFormId}
+                    formAction={rejectFormAction}
+                    className="btn btn-secondary btn-sm border-danger/25 text-danger hover:border-danger/40 hover:bg-danger/5"
+                    description={t("reverseDecisionDescription", {
+                      name: request.name,
+                      status: tStatus("rejectedLabel"),
+                    })}
+                  >
+                    {t("reject")}
+                  </ConfirmSubmitButton>
+                )}
                 {canDelete && (
                   <ConfirmSubmitButton
                     form={deleteFormId}
@@ -937,6 +1028,12 @@ export function VacationDrawerButton({
           </form>
           {canDelete && (
             <form id={deleteFormId} action={deleteFormAction}>
+              <input type="hidden" name="tenant" value={tenant} />
+              <input type="hidden" name="requestId" value={request.dbId ?? ""} />
+            </form>
+          )}
+          {canManage && alreadyDecided && (
+            <form id={decideFormId} action={approveFormAction}>
               <input type="hidden" name="tenant" value={tenant} />
               <input type="hidden" name="requestId" value={request.dbId ?? ""} />
             </form>

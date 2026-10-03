@@ -743,6 +743,20 @@ export async function createTenantFileFolder(input: {
       ? `${parentPath}/${slug}`
       : slug;
 
+  // Der `upsert` unten dient eigentlich dazu, einen zuvor gelöschten
+  // (soft-deleted) Ordner beim erneuten Anlegen unter demselben Namen
+  // wiederzubeleben — ein bereits AKTIVER Ordner an diesem Pfad ist dagegen
+  // ein echtes Namenskollisions und wurde bisher klaglos (ohne neuen Ordner,
+  // ohne Meldung) verworfen (QA-Bug BUG-024).
+  const existingActive = await prisma.tenantFileFolder.findFirst({
+    where: { tenantId: access.tenantId, scope, path, status: "active" },
+    select: { id: true },
+  });
+
+  if (existingActive) {
+    throw new Error(`Ein Ordner mit dem Namen "${name}" existiert bereits.`);
+  }
+
   return prisma.tenantFileFolder.upsert({
     where: {
       tenantId_scope_path: {

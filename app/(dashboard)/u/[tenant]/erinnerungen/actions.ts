@@ -3,6 +3,7 @@
 import {
   completeTenantReminder,
   createTenantReminder,
+  deleteTenantReminder,
   updateTenantReminder,
 } from "@/lib/reminders";
 import { type ActionState, withActionErrorHandling } from "@/lib/action-state";
@@ -117,4 +118,24 @@ export async function completeReminderAction(
     revalidateReminderAreas(tenant, returnPath);
     redirect(returnPath);
   }, "Erinnerung erledigen");
+}
+
+export async function deleteReminderAction(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  return withActionErrorHandling(async () => {
+    const tenant = formString(formData, "tenant");
+    const reminderId = formString(formData, "reminderId");
+    const returnPath = formString(formData, "returnPath") || remindersPath(tenant);
+
+    if (!tenant || !reminderId) {
+      throw new Error("Erinnerung konnte nicht gelöscht werden.");
+    }
+
+    await deleteTenantReminder({ tenantSlug: tenant, reminderId });
+
+    revalidateReminderAreas(tenant, returnPath);
+    redirect(returnPath);
+  }, "Erinnerung löschen");
 }

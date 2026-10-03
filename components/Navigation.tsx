@@ -171,6 +171,33 @@ function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
 
+type NavigationFetchedData = {
+  tenant: string;
+  notifications: NotificationItem[];
+  usage: NavigationUsageInfo | null;
+};
+
+/** Geteilt zwischen dem Mandanten-Mount-Fetch und dem Öffnen-der-Glocke-Refetch (QA-Bug BUG-019). */
+function fetchNavigationNotifications(
+  tenant: string,
+  onData: (data: NavigationFetchedData) => void,
+) {
+  fetch(`/api/me/notifications?tenant=${encodeURIComponent(tenant)}`)
+    .then((response) => (response.ok ? response.json() : null))
+    .then(
+      (data: { notifications?: NotificationItem[]; usage?: NavigationUsageInfo | null } | null) => {
+        if (data) {
+          onData({
+            tenant,
+            notifications: data.notifications ?? [],
+            usage: data.usage ?? null,
+          });
+        }
+      },
+    )
+    .catch(() => {});
+}
+
 const DIGEST_WEEKDAYS = [
   { value: "monday", label: "Montag" },
   { value: "tuesday", label: "Dienstag" },
@@ -1412,11 +1439,7 @@ export default function NavigationSidebar({
   const [readNotificationIds, setReadNotificationIds] = useState<string[]>([]);
   // Antwort inkl. Mandant, damit beim Mandantenwechsel nicht kurz die Daten
   // des vorherigen Mandanten stehen bleiben.
-  const [fetchedData, setFetchedData] = useState<{
-    tenant: string;
-    notifications: NotificationItem[];
-    usage: NavigationUsageInfo | null;
-  } | null>(null);
+  const [fetchedData, setFetchedData] = useState<NavigationFetchedData | null>(null);
   const tenantSelectorRef = useRef<HTMLDivElement>(null);
   const notificationRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
@@ -1481,29 +1504,38 @@ export default function NavigationSidebar({
     }
 
     let cancelled = false;
-
-    fetch(`/api/me/notifications?tenant=${encodeURIComponent(tenant)}`)
-      .then((response) => (response.ok ? response.json() : null))
-      .then(
-        (data: {
-          notifications?: NotificationItem[];
-          usage?: NavigationUsageInfo | null;
-        } | null) => {
-          if (!cancelled && data) {
-            setFetchedData({
-              tenant,
-              notifications: data.notifications ?? [],
-              usage: data.usage ?? null,
-            });
-          }
-        },
-      )
-      .catch(() => {});
+    fetchNavigationNotifications(tenant, (data) => {
+      if (!cancelled) {
+        setFetchedData(data);
+      }
+    });
 
     return () => {
       cancelled = true;
     };
   }, [tenant]);
+
+  // Zusätzlich beim Öffnen der Glocke neu laden (QA-Bug BUG-019 — Badge und
+  // Liste teilten sich zwar schon dieselbe Datenquelle, die aber nur einmal
+  // pro Tenant-Wechsel geholt wurde: eine seither entstandene/entfernte
+  // Benachrichtigung konnte den Badge-Stand veralten lassen, bis der nächste
+  // Tenant-Wechsel neu lädt). Frisch laden, sobald tatsächlich hingesehen wird.
+  useEffect(() => {
+    if (!isNotificationsOpen || !tenant) {
+      return;
+    }
+
+    let cancelled = false;
+    fetchNavigationNotifications(tenant, (data) => {
+      if (!cancelled) {
+        setFetchedData(data);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isNotificationsOpen, tenant]);
 
   useEffect(() => {
     if (!isTenantMenuOpen) {

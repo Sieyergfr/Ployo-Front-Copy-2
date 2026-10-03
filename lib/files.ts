@@ -207,11 +207,16 @@ function formatBytes(bytes: number) {
 }
 
 export function formatUpdatedAt(value: Date) {
+  // Ohne `timeZone` formatiert `Intl.DateTimeFormat` in der Zeitzone des
+  // Servers (UTC in Produktion), nicht der des Nutzers/Tenants — Uploads
+  // erschienen dadurch 2h (Sommerzeit) bzw. 1h zu früh (QA-Bug BUG-016).
+  // Gleiche Zeitzone wie das bereits korrekte Audit-Log (lib/audit.ts).
   return new Intl.DateTimeFormat("de-DE", {
     day: "2-digit",
     month: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: "Europe/Berlin",
   }).format(value);
 }
 

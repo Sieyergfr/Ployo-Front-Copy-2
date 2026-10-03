@@ -9,6 +9,8 @@ import {
 } from "@/lib/tenant-access";
 import { notifyManagersOfNewSicknessReport } from "@/lib/notifications/events";
 import { notifyIfAbsenceConflictsWithPublishedShifts } from "@/lib/shift-service";
+import { calculateVacationWorkDays, parseVacationWorkDays } from "@/lib/vacations";
+import type { Bundesland } from "@/lib/german-holidays";
 
 export type SicknessMetric = { label: string; value: string; caption: string; tone?: "danger" };
 export type CurrentSickness = {
@@ -20,6 +22,8 @@ export type CurrentSickness = {
   location: string;
   since: string;
   days: string;
+  /** Immer "open" — nur offene Meldungen erscheinen in `current` (siehe `isActiveRecord`). */
+  status: "open" | "closed";
   /** ISO-Werte + Detailfelder für das Bearbeitungsformular im Drawer. */
   startDateIso: string;
   endDateIso: string;
@@ -50,6 +54,12 @@ export type SicknessHistoryItem = {
   days: string;
   /** Dieselbe Zahl wie in `days`, aber ohne Einheit — die App hängt sie in ihrer Sprache an. */
   dayCount: number;
+  /**
+   * "open" heißt hier: der Zeitraum liegt zwar in der Vergangenheit, aber
+   * niemand hat die Meldung je explizit abgeschlossen (`closeTenantSicknessReport`)
+   * — im Unterschied zu "closed" ist das noch korrigierbar (QA-Bug BUG-015).
+   */
+  status: "open" | "closed";
   /** Detailfelder wie bei `CurrentSickness` — abgeschlossene Meldungen sind in der App genauso anklickbar. */
   startDateIso: string;
   endDateIso: string;
@@ -76,6 +86,35 @@ function startOfUtcDay(value = new Date()) {
 
 function inclusiveDays(start: Date, end: Date) {
   return Math.max(1, Math.floor((startOfUtcDay(end).getTime() - startOfUtcDay(start).getTime()) / dayMs) + 1);
+}
+
+/**
+ * Begrenzt eine Krankmeldung auf die tatsächliche Beschäftigungsdauer
+ * (QA-Bug BUG-009), analog zu `validateVacationDateRange` in
+ * lib/vacation-service.ts. `endDate` ist nur beim Status "former" ein
+ * echtes, autoritatives Austrittsdatum (siehe `offboardEmployee`).
+ */
+function assertWithinEmployment(
+  startDate: Date,
+  endDate: Date | null,
+  employment: { startDate: string; endDate: string; status: string },
+) {
+  const employmentStart = employment.startDate
+    ? startOfUtcDay(new Date(`${employment.startDate}T00:00:00.000Z`))
+    : null;
+
+  if (employmentStart && startOfUtcDay(startDate) < employmentStart) {
+    throw new Error("Krankmeldung darf nicht vor dem Eintrittsdatum liegen.");
+  }
+
+  const employmentEnd =
+    employment.status === "former" && employment.endDate
+      ? startOfUtcDay(new Date(`${employment.endDate}T00:00:00.000Z`))
+      : null;
+
+  if (employmentEnd && startOfUtcDay(endDate ?? startDate) > employmentEnd) {
+    throw new Error("Krankmeldung darf nicht nach dem Austrittsdatum liegen.");
+  }
 }
 
 const certificateStatuses = ["pending", "received", "not-required"] as const;
@@ -137,7 +176,7 @@ export async function getSicknessForTenant(tenantSlug: string): Promise<Sickness
     startOfUtcDay(record.startDate) <= now &&
     (!record.endDate || startOfUtcDay(record.endDate) >= now);
   const sicknessInclude = {
-    employee: { select: { initials: true, name: true, location: true } },
+    employee: { select: { initials: true, name: true, location: true, workDaysJson: true } },
     attachmentFile: { select: { id: true, displayName: true, originalName: true } },
   } as const;
   const [records, currentlyOpenRecords] = await Promise.all([
@@ -163,10 +202,76 @@ export async function getSicknessForTenant(tenantSlug: string): Promise<Sickness
   const monthRecords = records.filter((record) => record.startDate.getUTCFullYear() === now.getUTCFullYear() && record.startDate.getUTCMonth() === now.getUTCMonth());
   const durations = records.map((record) => inclusiveDays(record.startDate, record.endDate ?? now));
   const average = durations.length ? durations.reduce((sum, days) => sum + days, 0) / durations.length : 0;
-  // Ohne `status`-Filter: das Feld wird nirgends automatisch synchron
-  // gehalten (z. B. bleibt es "active", während jemand krankgemeldet ist) —
-  // als Nenner der Krankenquote zählt daher die gesamte Belegschaft im Scope.
-  const employeeCount = await prisma.tenantEmployee.count({ where: employeeWhere });
+
+  // Krankenquote = Krankheitstage / Soll-Arbeitstage diesen Monat, nicht
+  // "aktuell krank / Belegschaft" (QA-Bug BUG-011 — letzteres zeigte an den
+  // meisten Tagen 0,0%, obwohl es im Monat durchaus Krankmeldungen gab, da
+  // es nur den Status GENAU JETZT abbildete). Ausgeschiedene Mitarbeiter
+  // zählen nicht mit (gleiche Definition wie BUG-002); Soll-Arbeitstage
+  // berücksichtigen individuelle Arbeitstage + Feiertage, exakt wie beim
+  // Urlaubsverbrauch (lib/vacations.ts calculateVacationWorkDays).
+  const monthStartIso = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-01`;
+  const todayIso = now.toISOString().slice(0, 10);
+  const employeesForRate = await prisma.tenantEmployee.findMany({
+    where: { ...employeeWhere, status: { not: "former" } },
+    select: { id: true, location: true, workDaysJson: true, startDate: true },
+  });
+  const locationNames = Array.from(
+    new Set(employeesForRate.map((employee) => employee.location).filter(Boolean)),
+  );
+  const bundeslandByLocation = new Map(
+    locationNames.length
+      ? (
+          await prisma.tenantLocation.findMany({
+            where: { tenantId: access.tenantId, name: { in: locationNames } },
+            select: { name: true, bundesland: true },
+          })
+        ).map((location) => [location.name, location.bundesland as Bundesland | null])
+      : [],
+  );
+  const workCalendarByEmployeeId = new Map(
+    employeesForRate.map((employee) => [
+      employee.id,
+      {
+        workDays: parseVacationWorkDays(employee.workDaysJson),
+        bundesland: employee.location ? bundeslandByLocation.get(employee.location) ?? null : null,
+      },
+    ]),
+  );
+  const expectedWorkDaysThisMonth = employeesForRate.reduce((sum, employee) => {
+    const rangeStart = employee.startDate && employee.startDate > monthStartIso ? employee.startDate : monthStartIso;
+
+    if (rangeStart > todayIso) {
+      return sum;
+    }
+
+    const calendar = workCalendarByEmployeeId.get(employee.id)!;
+
+    return sum + calculateVacationWorkDays(rangeStart, todayIso, calendar.workDays, calendar.bundesland);
+  }, 0);
+  const sickWorkDaysThisMonth = monthRecords.reduce((sum, record) => {
+    const recordEnd = record.endDate && record.endDate < now ? record.endDate : now;
+
+    if (recordEnd < record.startDate) {
+      return sum;
+    }
+
+    const calendar = workCalendarByEmployeeId.get(record.employeeId);
+
+    if (!calendar) {
+      // Mitarbeiter außerhalb des heutigen Scopes/inzwischen ausgeschieden —
+      // fällt aus dem Nenner, soll den Zähler dann auch nicht verzerren.
+      return sum;
+    }
+
+    return sum + calculateVacationWorkDays(
+      record.startDate.toISOString().slice(0, 10),
+      recordEnd.toISOString().slice(0, 10),
+      calendar.workDays,
+      calendar.bundesland,
+    );
+  }, 0);
+  const sicknessRate = expectedWorkDaysThisMonth > 0 ? (sickWorkDaysThisMonth / expectedWorkDaysThisMonth) * 100 : 0;
   const chart = Array.from({ length: 6 }, (_, index) => {
     const date = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 5 + index, 1));
     const count = records.filter((record) => record.startDate.getUTCFullYear() === date.getUTCFullYear() && record.startDate.getUTCMonth() === date.getUTCMonth()).length;
@@ -184,7 +289,7 @@ export async function getSicknessForTenant(tenantSlug: string): Promise<Sickness
       { label: "Aktuell krank", value: String(active.length), caption: "Mitarbeiter abwesend", tone: active.length ? "danger" : undefined },
       { label: "Diesen Monat", value: String(monthRecords.length), caption: "Krankmeldungen gesamt" },
       { label: "Ø Dauer", value: average.toFixed(1), caption: "Tage je Krankmeldung" },
-      { label: "Krankenquote", value: `${employeeCount ? ((active.length / employeeCount) * 100).toFixed(1) : "0.0"}%`, caption: "aller Mitarbeiter" },
+      { label: "Krankenquote", value: `${sicknessRate.toFixed(1)}%`, caption: "Krankheitstage / Soll-Arbeitstage, diesen Monat" },
     ],
     current: active.map((record) => ({
       id: record.id,
@@ -194,6 +299,7 @@ export async function getSicknessForTenant(tenantSlug: string): Promise<Sickness
       location: record.employee.location,
       since: dateFormatter.format(record.startDate),
       days: String(inclusiveDays(record.startDate, now)),
+      status: "open" as const,
       startDateIso: record.startDate.toISOString().slice(0, 10),
       endDateIso: record.endDate ? record.endDate.toISOString().slice(0, 10) : "",
       certificateStatus: record.certificateStatus,
@@ -215,6 +321,7 @@ export async function getSicknessForTenant(tenantSlug: string): Promise<Sickness
       endDate: dateFormatter.format(record.endDate ?? record.updatedAt),
       days: `${inclusiveDays(record.startDate, record.endDate ?? record.updatedAt)} Tage`,
       dayCount: inclusiveDays(record.startDate, record.endDate ?? record.updatedAt),
+      status: record.status as "open" | "closed",
       startDateIso: record.startDate.toISOString().slice(0, 10),
       endDateIso: record.endDate ? record.endDate.toISOString().slice(0, 10) : "",
       certificateStatus: record.certificateStatus,
@@ -230,12 +337,15 @@ export async function getSicknessForTenant(tenantSlug: string): Promise<Sickness
 
 export async function createTenantSicknessReport(input: { tenantSlug: string; employeeId: string; startDate: string; endDate?: string; certificateStatus?: string; reportChannel?: string; note?: string }) {
   const access = await requireTenantAccess(input.tenantSlug, "sickness", "write");
-  const employee = await prisma.tenantEmployee.findFirst({ where: { tenantId: access.tenantId, OR: [{ id: input.employeeId }, { key: input.employeeId }] }, select: { id: true, name: true } });
+  const employee = await prisma.tenantEmployee.findFirst({ where: { tenantId: access.tenantId, OR: [{ id: input.employeeId }, { key: input.employeeId }] }, select: { id: true, name: true, startDate: true, endDate: true, status: true } });
   if (!employee) throw new Error("EMPLOYEE_NOT_FOUND");
   await assertEmployeeInScope(access, employee.id);
   const startDate = new Date(`${input.startDate}T00:00:00.000Z`);
   const endDate = input.endDate ? new Date(`${input.endDate}T00:00:00.000Z`) : null;
-  if (Number.isNaN(startDate.getTime()) || (endDate && endDate < startDate)) throw new Error("INVALID_SICKNESS_DATES");
+  if (Number.isNaN(startDate.getTime()) || (endDate && endDate < startDate)) {
+    throw new Error("Das Enddatum darf nicht vor dem Startdatum liegen.");
+  }
+  assertWithinEmployment(startDate, endDate, employee);
   const notePlain = input.note?.trim() ?? "";
   const report = await prisma.tenantSicknessReport.create({ data: { tenantId: access.tenantId, employeeId: employee.id, startDate, endDate, certificateStatus: normalizeCertificateStatus(input.certificateStatus), reportChannel: normalizeReportChannel(input.reportChannel), note: encryptField(notePlain), reportedById: access.userId, reportedByName: access.userName } });
   await recordTenantAudit({ tenantId: access.tenantId, actorId: access.userId, actorName: access.userName, action: "Krankmeldung erfasst", source: "Krankheit", entityType: "sickness", entityId: report.id, detail: employee.name });
@@ -270,7 +380,7 @@ export async function createMySicknessReport(input: {
   const access = await requireTenantMembership(input.tenantSlug);
   const employee = await prisma.tenantEmployee.findFirst({
     where: { tenantId: access.tenantId, userId: access.userId },
-    select: { id: true, name: true },
+    select: { id: true, name: true, startDate: true, endDate: true, status: true },
   });
 
   if (!employee) {
@@ -283,8 +393,9 @@ export async function createMySicknessReport(input: {
   const endDate = input.endDate ? new Date(`${input.endDate}T00:00:00.000Z`) : null;
 
   if (Number.isNaN(startDate.getTime()) || (endDate && endDate < startDate)) {
-    throw new Error("INVALID_SICKNESS_DATES");
+    throw new Error("Das Enddatum darf nicht vor dem Startdatum liegen.");
   }
+  assertWithinEmployment(startDate, endDate, employee);
 
   let attachmentFileId: string | undefined;
 
@@ -382,7 +493,9 @@ export async function updateTenantSicknessReport(input: {
   const { access, report } = await requireSicknessReport(input.tenantSlug, input.reportId);
   const startDate = new Date(`${input.startDate}T00:00:00.000Z`);
   const endDate = input.endDate ? new Date(`${input.endDate}T00:00:00.000Z`) : null;
-  if (Number.isNaN(startDate.getTime()) || (endDate && endDate < startDate)) throw new Error("INVALID_SICKNESS_DATES");
+  if (Number.isNaN(startDate.getTime()) || (endDate && endDate < startDate)) {
+    throw new Error("Das Enddatum darf nicht vor dem Startdatum liegen.");
+  }
 
   const updated = await prisma.tenantSicknessReport.update({
     where: { id: report.id },
@@ -413,7 +526,9 @@ export async function closeTenantSicknessReport(input: {
   }
 
   const endDate = input.endDate ? new Date(`${input.endDate}T00:00:00.000Z`) : startOfUtcDay();
-  if (Number.isNaN(endDate.getTime()) || endDate < startOfUtcDay(report.startDate)) throw new Error("INVALID_SICKNESS_DATES");
+  if (Number.isNaN(endDate.getTime()) || endDate < startOfUtcDay(report.startDate)) {
+    throw new Error("Das Enddatum darf nicht vor dem Beginn der Krankmeldung liegen.");
+  }
 
   const updated = await prisma.tenantSicknessReport.update({
     where: { id: report.id },

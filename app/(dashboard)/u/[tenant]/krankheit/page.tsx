@@ -77,12 +77,22 @@ function CurrentSicknessRow({
 function SicknessHistoryRow({
   item,
   tenant,
+  canManage,
+  canDelete,
   t,
 }: {
   item: SicknessHistoryItem;
   tenant: string;
+  canManage: boolean;
+  canDelete: boolean;
   t: T;
 }) {
+  // Nur eine explizit abgeschlossene Meldung gilt als "Genesen" — ein
+  // Zeitraum, der bloß in der Vergangenheit liegt, aber nie geschlossen
+  // wurde, zeigt das nicht (QA-Bug BUG-015: bisher stand hier für beide
+  // Fälle "✓ Genesen", obwohl niemand die Genesung je bestätigt hatte).
+  const isClosed = item.status === "closed";
+
   return (
     <div className="flex flex-wrap items-center gap-4 border-t border-border-soft px-6 py-3.5">
       <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#B9B9B4] text-[12px] font-semibold text-white">
@@ -98,10 +108,16 @@ function SicknessHistoryRow({
       <div className="shrink-0 font-mono text-[12px] text-muted">
         {item.days}
       </div>
-      <SicknessDrawerButton tenant={tenant} item={item} />
-      <span className="inline-flex shrink-0 rounded-[7px] bg-success/10 px-[9px] py-0.5 font-mono text-[10.5px] text-success">
-        {t("recoveredBadge")}
-      </span>
+      <SicknessDrawerButton tenant={tenant} item={item} canManage={canManage} canDelete={canDelete} />
+      {isClosed ? (
+        <span className="inline-flex shrink-0 rounded-[7px] bg-success/10 px-[9px] py-0.5 font-mono text-[10.5px] text-success">
+          {t("recoveredBadge")}
+        </span>
+      ) : (
+        <span className="inline-flex shrink-0 rounded-[7px] bg-warning/10 px-[9px] py-0.5 font-mono text-[10.5px] text-[#7A4E00]">
+          {t("periodEndedBadge")}
+        </span>
+      )}
     </div>
   );
 }
@@ -120,11 +136,15 @@ export default async function SicknessPage({ params }: PageProps<"/u/[tenant]/kr
   const currentSickness = sickness.current;
   const sicknessChart = sickness.chart;
   const sicknessHistory = sickness.history;
-  const employeeOptions = (employees ?? []).map((employee) => ({
-    id: employee.dbId ?? employee.id,
-    name: employee.name,
-    location: employee.location,
-  }));
+  // Ausgeschiedene Mitarbeiter können keine neue Krankmeldung mehr erhalten
+  // (QA-Bug BUG-009, gleiche Definition wie BUG-002).
+  const employeeOptions = (employees ?? [])
+    .filter((employee) => employee.status !== "former")
+    .map((employee) => ({
+      id: employee.dbId ?? employee.id,
+      name: employee.name,
+      location: employee.location,
+    }));
   return (
     <>
       <PageHeader eyebrow={t("eyebrow")} title={t("title")}>
@@ -213,7 +233,14 @@ export default async function SicknessPage({ params }: PageProps<"/u/[tenant]/kr
         </div>
 
         {sicknessHistory.map((item) => (
-          <SicknessHistoryRow key={item.id} item={item} tenant={tenant} t={t} />
+          <SicknessHistoryRow
+            key={item.id}
+            item={item}
+            tenant={tenant}
+            canManage={canManage}
+            canDelete={canDelete}
+            t={t}
+          />
         ))}
       </section>
     </>

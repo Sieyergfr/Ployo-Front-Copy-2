@@ -174,7 +174,19 @@ function parseDateOnly(value: string) {
   return new Date(Number(year), Number(month) - 1, Number(day));
 }
 
-function validateVacationDateRange(startDate: string, endDate: string) {
+/**
+ * `employment` begrenzt den erlaubten Zeitraum auf die tatsächliche
+ * Beschäftigungsdauer (QA-Bug BUG-009): ein Antrag vor dem Eintrittsdatum
+ * oder nach dem Austrittsdatum eines bereits ausgeschiedenen Mitarbeiters
+ * wird abgelehnt. `endDate` ist nur beim Status "former" ein echtes,
+ * autoritatives Austrittsdatum (siehe `offboardEmployee`) — bei aktiven
+ * Mitarbeitern bleibt das Feld unberücksichtigt.
+ */
+function validateVacationDateRange(
+  startDate: string,
+  endDate: string,
+  employment?: { startDate: string; endDate: string; status: string },
+) {
   const parsedStartDate = parseDateOnly(startDate);
   const parsedEndDate = parseDateOnly(endDate);
   const now = new Date();
@@ -190,6 +202,53 @@ function validateVacationDateRange(startDate: string, endDate: string) {
 
   if (parsedEndDate < parsedStartDate) {
     throw new Error("Das Enddatum darf nicht vor dem Startdatum liegen.");
+  }
+
+  const employmentStart = employment?.startDate ? parseDateOnly(employment.startDate) : null;
+
+  if (employmentStart && parsedStartDate < employmentStart) {
+    throw new Error("Urlaubsantrag darf nicht vor dem Eintrittsdatum liegen.");
+  }
+
+  const employmentEnd =
+    employment?.status === "former" && employment.endDate
+      ? parseDateOnly(employment.endDate)
+      : null;
+
+  if (employmentEnd && parsedEndDate > employmentEnd) {
+    throw new Error("Urlaubsantrag darf nicht nach dem Austrittsdatum liegen.");
+  }
+}
+
+/**
+ * Lehnt einen Urlaubsantrag ab, der sich mit einem bereits offenen oder
+ * genehmigten Antrag derselben Person überschneidet (QA-Bug BUG-001 —
+ * bisher wurden zwei identische Anträge klaglos angenommen und beide
+ * genehmigt, was den Resturlaub doppelt abzog). Abgelehnte Anträge blockieren
+ * nichts. Intervall-Überschneidung: `a.start <= b.end && a.end >= b.start`,
+ * per lexikographischem String-Vergleich korrekt für `YYYY-MM-DD`.
+ */
+async function assertNoVacationOverlap(input: {
+  employeeId: string;
+  startDate: string;
+  endDate: string;
+  excludeRequestId?: string;
+}) {
+  const overlapping = await prisma.tenantVacationRequest.findFirst({
+    where: {
+      employeeId: input.employeeId,
+      status: { in: ["pending", "approved"] },
+      startDate: { lte: input.endDate },
+      endDate: { gte: input.startDate },
+      id: input.excludeRequestId ? { not: input.excludeRequestId } : undefined,
+    },
+    select: { id: true },
+  });
+
+  if (overlapping) {
+    throw new Error(
+      "Für diesen Zeitraum besteht bereits ein offener oder genehmigter Urlaubsantrag.",
+    );
   }
 }
 
@@ -417,7 +476,7 @@ export async function createTenantVacationRequest(input: {
       tenantId,
       id: input.employeeId,
     },
-    select: { id: true, name: true },
+    select: { id: true, name: true, startDate: true, endDate: true, status: true },
   });
 
   if (!employee) {
@@ -432,7 +491,12 @@ export async function createTenantVacationRequest(input: {
     employee.id,
   );
 
-  validateVacationDateRange(input.startDate, input.endDate);
+  validateVacationDateRange(input.startDate, input.endDate, employee);
+  await assertNoVacationOverlap({
+    employeeId: employee.id,
+    startDate: input.startDate,
+    endDate: input.endDate,
+  });
 
   const key = await createUniqueVacationKey({
     tenantId,
@@ -470,7 +534,7 @@ export async function createMyVacationRequest(input: {
   const access = await requireTenantMembership(input.tenantSlug);
   const employee = await prisma.tenantEmployee.findFirst({
     where: { tenantId: access.tenantId, userId: access.userId },
-    select: { id: true, name: true },
+    select: { id: true, name: true, startDate: true, endDate: true, status: true },
   });
 
   if (!employee) {
@@ -479,7 +543,12 @@ export async function createMyVacationRequest(input: {
     );
   }
 
-  validateVacationDateRange(input.startDate, input.endDate);
+  validateVacationDateRange(input.startDate, input.endDate, employee);
+  await assertNoVacationOverlap({
+    employeeId: employee.id,
+    startDate: input.startDate,
+    endDate: input.endDate,
+  });
 
   const key = await createUniqueVacationKey({
     tenantId: access.tenantId,
@@ -575,7 +644,7 @@ export async function setTenantVacationRequestStatus(input: {
   // über sich, der stattdessen entscheiden könnte — für ihn bleibt Self-
   // Service sonst eine Sackgasse.
   if (request.employee.userId === access.userId && access.role !== "OWNER") {
-    throw new Error("FORBIDDEN_SELF_APPROVAL");
+    throw new Error("Über den eigenen Urlaubsantrag kann nicht selbst entschieden werden.");
   }
 
   // Compare-and-Set statt bedingungslosem Update: verhindert, dass zwei
@@ -600,7 +669,7 @@ export async function setTenantVacationRequestStatus(input: {
   });
 
   if (count === 0) {
-    throw new Error("ALREADY_DECIDED");
+    throw new Error("Der Genehmigungsstatus dieses Antrags hat sich zwischenzeitlich geändert. Bitte die Seite neu laden.");
   }
 
   const tenantAccess = await requireTenantAccess(input.tenantSlug, "vacation", "write");
@@ -701,6 +770,16 @@ export async function updateTenantVacationRequest(input: {
   const datesChanged =
     input.startDate !== request.startDate || input.endDate !== request.endDate;
   const needsReapproval = datesChanged && request.status !== "pending";
+
+  if (datesChanged) {
+    await assertNoVacationOverlap({
+      employeeId: request.employeeId,
+      startDate: input.startDate,
+      endDate: input.endDate,
+      excludeRequestId: request.id,
+    });
+  }
+
   const calendar = await resolveVacationWorkCalendar(tenantId, request.employeeId);
 
   // Compare-and-Set gegen den oben gelesenen Status, statt bedingungslos zu

@@ -18,11 +18,14 @@ export const metadata = {
 function searchParamNumber(
   value: string | string[] | undefined,
   fallback: number,
+  max?: number,
 ) {
   const raw = Array.isArray(value) ? value[0] : value;
   const parsed = Number.parseInt(raw ?? "", 10);
 
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+  return Number.isFinite(parsed) && parsed > 0 && (max === undefined || parsed <= max)
+    ? parsed
+    : fallback;
 }
 
 export default async function ShiftPlanningPage({
@@ -33,7 +36,10 @@ export default async function ShiftPlanningPage({
   const query = await searchParams;
   const currentWeek = getISOWeekFromDate(new Date());
   const year = searchParamNumber(query.year, currentWeek.year);
-  const week = searchParamNumber(query.week, currentWeek.week);
+  // Eine gültige ISO-Kalenderwoche liegt zwischen 1 und 53 — ein Wert wie
+  // "99" (QA-Bug BUG-026) landete bisher unnormalisiert direkt in der
+  // Datumsberechnung und ergab ein KW-Etikett aus einem völlig anderen Jahr.
+  const week = searchParamNumber(query.week, currentWeek.week, 53);
   const [plan, options, shiftSettings, templates] = await withAccessRedirect(tenant, () =>
     Promise.all([
       getShiftPlanForTenant({ tenantSlug: tenant, year, week }),

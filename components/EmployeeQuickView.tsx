@@ -5,7 +5,7 @@ import { employeeStatusConfig, type Employee } from "@/lib/employees";
 import { AlertTriangle, CalendarClock, Eye, FileText, Phone, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export default function EmployeeQuickView({
   employee,
@@ -20,6 +20,22 @@ export default function EmployeeQuickView({
     employee.emergencyContacts.find((contact) => contact.isPrimary) ??
     employee.emergencyContacts[0];
   const t = useTranslations("EmployeeQuickView");
+
+  // Esc schließt den Dialog nicht (QA-Bug BUG-021).
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setIsOpen(false);
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen]);
 
   return (
     <>

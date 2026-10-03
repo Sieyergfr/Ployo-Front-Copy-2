@@ -36,9 +36,6 @@ type RoleRecord = {
     canViewAudit: boolean;
     shiftsLevel: string | null;
   }>;
-  _count: {
-    memberships: number;
-  };
 };
 
 function toPermissionMap(
@@ -92,23 +89,13 @@ function toShiftsLevelMap(
   return map;
 }
 
-/**
- * `_count.memberships` zählt nur `TenantMembership`-Zeilen mit gesetztem
- * `roleId` — bei der Einladung wird das aber ausschließlich für die
- * "employee"-Systemrolle gesetzt (`ensureSystemRoleForInvitation`: "ADMIN/HR
- * sind über die Legacy-Rolle bereits Tenant-Manager"). Mitglieder mit
- * `MembershipRole.EMPLOYEE`, aber `roleId: null` (z. B. vor Einführung der
- * granularen Rollen eingeladen), fehlten dadurch komplett in der
- * "Mitarbeiter"-Mitgliederzahl. `extraMembers` trägt diese zusätzlich zählten
- * Mitgliedschaften nach.
- */
-function toPermissionRole(role: RoleRecord, extraMembers = 0): PermissionRole {
+function toPermissionRole(role: RoleRecord, memberCount: number): PermissionRole {
   return {
     id: role.id,
     key: role.key,
     name: role.name,
     description: role.description,
-    members: role._count.memberships + extraMembers,
+    members: memberCount,
     isSystem: role.isSystem,
     appOverviewEnabled: role.appOverviewEnabled,
     permissions: toPermissionMap(role.permissions),
@@ -216,25 +203,95 @@ export async function getRolesForTenant(tenantSlug: string) {
     orderBy: [{ isSystem: "desc" }, { createdAt: "asc" }],
     include: {
       permissions: true,
-      _count: {
-        select: {
-          memberships: true,
-        },
-      },
     },
   });
-  const unlinkedEmployeeCount = await countUnlinkedEmployeeMemberships(tenantId);
+  const memberCounts = await countRoleMembersForTenant(tenantId, roles);
 
-  return roles.map((role) =>
-    toPermissionRole(role, role.key === "employee" ? unlinkedEmployeeCount : 0),
-  );
+  return roles.map((role) => toPermissionRole(role, memberCounts.get(role.id) ?? 0));
 }
 
-/** Siehe `toPermissionRole` — Mitgliedschaften mit `role: EMPLOYEE`, aber ohne `roleId`. */
-async function countUnlinkedEmployeeMemberships(tenantId: string) {
-  return prisma.tenantMembership.count({
-    where: { tenantId, role: "EMPLOYEE", roleId: null },
-  });
+/**
+ * Wie viele reale Personen einer Rolle zugeordnet sind — nicht nur
+ * `TenantMembership`-Zeilen mit gesetztem `roleId` (das erfasst nur Personen
+ * mit verknüpftem Konto), sondern auch Mitarbeiter ohne Konto, deren
+ * "Berechtigungsrolle"-Feld auf der Personalakte (`TenantEmployee.role`) zu
+ * dieser Rolle passt (QA-Bug BUG-004: die reine Konto-Zählung zeigte "0
+ * zugewiesene Mitarbeiter" für Rollen, die laut Mitarbeiterliste klar
+ * mehreren Personen zugewiesen waren — in dieser Demo hat kaum ein
+ * Mitarbeiter ein verknüpftes Konto). Ausgeschiedene Mitarbeiter zählen nicht
+ * mit (gleiche Definition wie BUG-002). Legacy-Sonderfall bleibt erhalten:
+ * Mitgliedschaften mit `role: EMPLOYEE`, aber `roleId: null` (vor Einführung
+ * der granularen Rollen eingeladen, kein passender Mitarbeiterdatensatz)
+ * zählen weiterhin zur "Mitarbeiter"-Systemrolle.
+ *
+ * Ein `TenantMembership.roleId`-Treffer ist immer autoritativ (echte
+ * Berechtigung) und wird IMMER gezählt, auch wenn das Rollenfeld der
+ * verknüpften Personalakte (noch) abweicht. Zusätzlich zählt jeder aktive
+ * Mitarbeiter mit passendem Rollenfeld, unabhängig davon, ob dessen
+ * Mitgliedschaft (sofern vorhanden) schon dieselbe `roleId` trägt.
+ */
+async function countRoleMembersForTenant(
+  tenantId: string,
+  roles: Array<{ id: string; key: string; name: string }>,
+): Promise<Map<string, number>> {
+  const [memberships, employees, legacyUnlinkedEmployeeMemberships] = await Promise.all([
+    prisma.tenantMembership.findMany({
+      where: { tenantId, roleId: { not: null } },
+      select: { userId: true, roleId: true },
+    }),
+    prisma.tenantEmployee.findMany({
+      where: { tenantId, status: { not: "former" } },
+      select: { id: true, userId: true, role: true },
+    }),
+    prisma.tenantMembership.findMany({
+      where: { tenantId, role: "EMPLOYEE", roleId: null },
+      select: { userId: true },
+    }),
+  ]);
+
+  const employeeByUserId = new Map(
+    employees.filter((employee) => employee.userId).map((employee) => [employee.userId as string, employee]),
+  );
+
+  const memberKeysByRoleId = new Map<string, Set<string>>();
+
+  function addMember(roleId: string, key: string) {
+    const set = memberKeysByRoleId.get(roleId) ?? new Set<string>();
+    set.add(key);
+    memberKeysByRoleId.set(roleId, set);
+  }
+
+  for (const membership of memberships) {
+    const employee = employeeByUserId.get(membership.userId);
+    addMember(membership.roleId!, employee ? `e:${employee.id}` : `u:${membership.userId}`);
+  }
+
+  for (const employee of employees) {
+    const roleName = employee.role.trim();
+
+    if (!roleName) {
+      continue;
+    }
+
+    const matchingRole = roles.find(
+      (role) => role.name.trim().toLowerCase() === roleName.toLowerCase(),
+    );
+
+    if (matchingRole) {
+      addMember(matchingRole.id, `e:${employee.id}`);
+    }
+  }
+
+  const employeeSystemRole = roles.find((role) => role.key === "employee");
+
+  if (employeeSystemRole) {
+    for (const membership of legacyUnlinkedEmployeeMemberships) {
+      const employee = employeeByUserId.get(membership.userId);
+      addMember(employeeSystemRole.id, employee ? `e:${employee.id}` : `u:${membership.userId}`);
+    }
+  }
+
+  return new Map([...memberKeysByRoleId.entries()].map(([roleId, keys]) => [roleId, keys.size]));
 }
 
 /**
@@ -303,11 +360,6 @@ export async function getRoleForTenant(tenantSlug: string, roleId: string) {
     },
     include: {
       permissions: true,
-      _count: {
-        select: {
-          memberships: true,
-        },
-      },
     },
   });
 
@@ -315,10 +367,9 @@ export async function getRoleForTenant(tenantSlug: string, roleId: string) {
     return null;
   }
 
-  const extraMembers =
-    role.key === "employee" ? await countUnlinkedEmployeeMemberships(tenantId) : 0;
+  const memberCounts = await countRoleMembersForTenant(tenantId, [role]);
 
-  return toPermissionRole(role, extraMembers);
+  return toPermissionRole(role, memberCounts.get(role.id) ?? 0);
 }
 
 export function permissionsFromFormData(formData: FormData) {
@@ -446,6 +497,32 @@ function permissionRowsFromInput(
   }));
 }
 
+/** Verhindert doppelte Rollennamen pro Mandant, case-insensitiv (QA-Bug BUG-006, siehe lib/location-service.ts). */
+async function assertUniqueRoleName(input: {
+  tenantId: string;
+  name: string;
+  excludeRoleId?: string;
+}) {
+  const name = input.name.trim();
+
+  if (!name) {
+    return;
+  }
+
+  const existing = await prisma.tenantRole.findFirst({
+    where: {
+      tenantId: input.tenantId,
+      name: { equals: name, mode: "insensitive" },
+      id: input.excludeRoleId ? { not: input.excludeRoleId } : undefined,
+    },
+    select: { id: true },
+  });
+
+  if (existing) {
+    throw new Error(`Eine Rolle mit dem Namen "${name}" existiert bereits.`);
+  }
+}
+
 export async function createTenantRole(
   input: {
     tenantSlug: string;
@@ -457,6 +534,7 @@ export async function createTenantRole(
   } & RoleCapabilitiesInput,
 ) {
   const access = await requireRoleManager(input.tenantSlug);
+  await assertUniqueRoleName({ tenantId: access.tenantId, name: input.name });
   const keyBase = normalizeRoleKey(input.name) || "rolle";
   let key = keyBase;
   let suffix = 2;
@@ -518,6 +596,12 @@ export async function updateTenantRole(
     throw new Error("ROLE_NOT_FOUND");
   }
 
+  await assertUniqueRoleName({
+    tenantId: access.tenantId,
+    name: input.name,
+    excludeRoleId: input.roleId,
+  });
+
   // Vorher: 1 Update + 12 einzelne upsert()-Aufrufe (einer je Bereich) in
   // einer Transaktion — 13 sequentielle Round-Trips bei jedem Speichern.
   // deleteMany + createMany ersetzt das Bereich-für-Bereich-Upserten durch
@@ -567,13 +651,9 @@ export async function deleteTenantRole(input: {
     },
     select: {
       id: true,
+      key: true,
       name: true,
       isSystem: true,
-      _count: {
-        select: {
-          memberships: true,
-        },
-      },
     },
   });
 
@@ -585,7 +665,12 @@ export async function deleteTenantRole(input: {
     throw new Error("SYSTEM_ROLE");
   }
 
-  if (role._count.memberships > 0) {
+  // Nicht nur Konto-Mitgliedschaften prüfen, sonst ließe sich eine Rolle
+  // löschen, die laut Personalakten noch Mitarbeitern zugewiesen ist (QA-Bug
+  // BUG-004 — dieselbe Zählung wie auf der Rollenübersicht).
+  const memberCounts = await countRoleMembersForTenant(access.tenantId, [role]);
+
+  if ((memberCounts.get(role.id) ?? 0) > 0) {
     throw new Error("ROLE_IN_USE");
   }
 

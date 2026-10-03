@@ -34,7 +34,9 @@
     "**/*.tsx",
     "**/*.mts",
     ".next-releases/20260929194652/types/**/*.ts",
-    ".next-releases/20260929194652/dev/types/**/*.ts"
+    ".next-releases/20260929194652/dev/types/**/*.ts",
+    ".next-probe-qa/types/**/*.ts",
+    ".next-probe-qa/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

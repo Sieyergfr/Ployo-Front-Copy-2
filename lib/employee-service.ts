@@ -5,6 +5,7 @@ import { decryptField, encryptField } from "@/lib/encryption";
 import { isUniqueConstraintError } from "@/lib/prisma-errors";
 import {
   addressDefaults,
+  assertValidAddressFormat,
   formatAddress,
   normalizeAddressInput,
   type AddressInput,
@@ -353,6 +354,112 @@ async function createUniqueEmployeeKey(input: {
   }
 
   return key;
+}
+
+/**
+ * Verhindert doppelte E-Mail-Adressen pro Mandant, case-insensitiv (QA-Bug
+ * BUG-005) — bisher ließen sich beliebig viele Personalakten mit identischer
+ * (bzw. nur in Groß-/Kleinschreibung abweichender) E-Mail anlegen, was
+ * Konto-Verknüpfung (`acceptInvitationForUser` matcht per E-Mail) und
+ * Einladungen mehrdeutig machte. Eine leere E-Mail ist erlaubt und mehrfach
+ * vorkommbar (viele Mitarbeiter haben noch keine hinterlegt).
+ */
+async function assertUniqueEmployeeEmail(input: {
+  tenantId: string;
+  email: string;
+  excludeEmployeeId?: string;
+}) {
+  const email = input.email.trim();
+
+  if (!email) {
+    return;
+  }
+
+  const existing = await prisma.tenantEmployee.findFirst({
+    where: {
+      tenantId: input.tenantId,
+      email: { equals: email, mode: "insensitive" },
+      id: input.excludeEmployeeId ? { not: input.excludeEmployeeId } : undefined,
+    },
+    select: { id: true },
+  });
+
+  if (existing) {
+    throw new Error("Diese E-Mail-Adresse ist bereits einer anderen Personalakte zugeordnet.");
+  }
+}
+
+/** Maximale Namenslänge — ein ca. 250 Zeichen langer Name zerlegte bisher den Kopf der Personalakte (QA-Bug BUG-008). */
+const EMPLOYEE_NAME_MAX_LENGTH = 100;
+
+function assertValidEmployeeName(name: string) {
+  if (name.length > EMPLOYEE_NAME_MAX_LENGTH) {
+    throw new Error(`Der Name darf höchstens ${EMPLOYEE_NAME_MAX_LENGTH} Zeichen lang sein.`);
+  }
+}
+
+/**
+ * Erlaubt Ziffern sowie die international üblichen Trennzeichen (+, Klammern,
+ * Leerzeichen, Bindestrich, Schrägstrich) — lehnt Buchstaben/Sonderzeichen ab
+ * (QA-Bug BUG-008, Beispiel aus dem Report: "abc!!"). Leer bleibt erlaubt
+ * (optionales Feld).
+ */
+const PHONE_ALLOWED_CHARS_PATTERN = /^[+()\d\s/-]+$/;
+
+function assertValidPhone(phone: string) {
+  if (!phone) {
+    return;
+  }
+
+  const digitCount = phone.replace(/\D/g, "").length;
+
+  if (!PHONE_ALLOWED_CHARS_PATTERN.test(phone) || digitCount < 6 || digitCount > 15) {
+    throw new Error("Bitte eine gültige Telefonnummer angeben.");
+  }
+}
+
+/**
+ * Nur Formatprüfung (11 Ziffern, erste Ziffer ≠ 0 — laut BZSt nie 0) statt der
+ * vollständigen Prüfziffer-Berechnung der Steuer-Identifikationsnummer: die
+ * exakte Prüfziffernregel ist fehleranfällig ohne offizielle Testvektoren,
+ * das Format allein deckt den gemeldeten Fall ("123" als Steuer-ID) bereits ab
+ * (QA-Bug BUG-008). Leer bleibt erlaubt (optionales Feld).
+ */
+const TAX_ID_PATTERN = /^[1-9]\d{10}$/;
+
+function assertValidTaxId(taxId: string) {
+  if (taxId && !TAX_ID_PATTERN.test(taxId)) {
+    throw new Error("Bitte eine gültige 11-stellige Steuer-Identifikationsnummer angeben.");
+  }
+}
+
+/**
+ * IBAN-Prüfsumme nach ISO 7064 (MOD 97-10) — dieselbe Prüfziffer-Berechnung,
+ * die jede Bank beim Zahlungsverkehr anwendet (QA-Bug BUG-008: bisher wurde
+ * "DE00 1234" klaglos gespeichert). Leer bleibt erlaubt (optionales Feld).
+ */
+function isValidIbanChecksum(compactIban: string): boolean {
+  const rearranged = compactIban.slice(4) + compactIban.slice(0, 4);
+  const numeric = rearranged.replace(/[A-Z]/g, (letter) => String(letter.charCodeAt(0) - 55));
+  let remainder = 0;
+
+  for (const chunk of numeric.match(/\d{1,7}/g) ?? []) {
+    remainder = Number(`${remainder}${chunk}`) % 97;
+  }
+
+  return remainder === 1;
+}
+
+function assertValidIban(iban: string) {
+  if (!iban) {
+    return;
+  }
+
+  const compact = iban.replace(/\s+/g, "").toUpperCase();
+
+  if (!/^[A-Z]{2}\d{2}[A-Z0-9]{11,30}$/.test(compact) || !isValidIbanChecksum(compact)) {
+    throw new Error("Bitte eine gültige IBAN angeben.");
+  }
 }
 
 function normalizeStatus(value?: string): EmployeeStatus {
@@ -780,7 +887,12 @@ function toEmployee(
     shifts,
     timeline: (record.timeline ?? []).map((entry) => ({
       title: entry.title,
-      date: new Intl.DateTimeFormat("de-DE").format(entry.createdAt),
+      // `timeZone` verhindert, dass ein kurz vor/nach Mitternacht (Ortszeit)
+      // erzeugter Eintrag auf den falschen Kalendertag fällt (gleicher
+      // Fehler wie BUG-016, lib/files.ts formatUpdatedAt).
+      date: new Intl.DateTimeFormat("de-DE", { timeZone: "Europe/Berlin" }).format(
+        entry.createdAt,
+      ),
       tone: entry.tone as EmployeeTimelineItem["tone"],
     })),
     contractDetails,
@@ -899,6 +1011,19 @@ export type EmployeeListFilters = {
 const EMPLOYEE_SEARCH_MAX_LENGTH = 100;
 
 /**
+ * Escaped `%`, `_` und `\` (Postgres-ILIKE-Metazeichen) in einem
+ * Suchbegriff, bevor er an Prismas `contains` übergeben wird — Prisma
+ * escaped diese selbst nicht (kein SQLi-Risiko, der Wert bleibt
+ * parametrisiert, aber `%`/`_` innerhalb des Suchbegriffs wirkten bisher wie
+ * SQL-LIKE-Wildcards statt als literale Zeichen gesucht zu werden, z. B.
+ * lieferte die Suche nach "%" oder "L_na" Treffer nach Muster statt 0/1
+ * exakten Treffern). QA-Bug BUG-012.
+ */
+function escapeLikePattern(value: string): string {
+  return value.replace(/[\\%_]/g, (match) => `\\${match}`);
+}
+
+/**
  * Übersetzt die Freitextsuche in eine Prisma-Bedingung über die drei Felder,
  * die das Suchfeld laut Platzhalter verspricht ("Name, Personal-Nr. oder Team").
  *
@@ -908,7 +1033,7 @@ const EMPLOYEE_SEARCH_MAX_LENGTH = 100;
  * werden, ist der Austausch auf diese eine Funktion beschraenkt.
  */
 function employeeSearchWhere(search: string): Prisma.TenantEmployeeWhereInput {
-  const term = search.slice(0, EMPLOYEE_SEARCH_MAX_LENGTH);
+  const term = escapeLikePattern(search.slice(0, EMPLOYEE_SEARCH_MAX_LENGTH));
 
   return {
     OR: [
@@ -1502,6 +1627,13 @@ export async function createTenantEmployeeRecord({
     teams,
     role: input.role,
   });
+  await assertUniqueEmployeeEmail({ tenantId, email: input.email ?? "" });
+  assertValidEmployeeName(name);
+  assertValidPhone(input.phone?.trim() ?? "");
+  assertValidTaxId(input.taxId?.trim() ?? "");
+  assertValidIban(input.iban?.trim() ?? "");
+  assertValidAddressFormat(normalizeAddressInput(input.privateAddress));
+  assertValidAddressFormat(normalizeAddressInput(input.address));
 
   const settings = await prisma.tenantSettings.findUnique({
     where: { tenantId },
@@ -2184,9 +2316,38 @@ export async function updateTenantEmployee(input: EmployeeMutationInput & { empl
     teams: teamsProvided ? teams : undefined,
     role: input.role,
   });
+  await assertUniqueEmployeeEmail({
+    tenantId,
+    email: input.email?.trim() ?? current.email,
+    excludeEmployeeId: input.employeeId,
+  });
 
   const currentEmployee = toEmployee(current);
   const name = buildName({ name: input.name || current.name, email: input.email });
+
+  // Nur tatsächlich mitgeschickte Felder validieren, nicht den (ggf. schon
+  // vor dieser Validierung gespeicherten) Bestandswert — sonst würde jede
+  // Speicherung eines unbeteiligten Felds an einer Alt-Personalakte mit
+  // ungültigem Format (z. B. der im QA-Report genannte Name mit ~250
+  // Zeichen) plötzlich fehlschlagen (QA-Bug BUG-008).
+  if (input.name || input.firstName || input.lastName) {
+    assertValidEmployeeName(name);
+  }
+  if (input.phone !== undefined) {
+    assertValidPhone(input.phone.trim());
+  }
+  if (input.taxId !== undefined) {
+    assertValidTaxId(input.taxId.trim());
+  }
+  if (input.iban !== undefined) {
+    assertValidIban(input.iban.trim());
+  }
+  if (input.privateAddress !== undefined) {
+    assertValidAddressFormat(normalizeAddressInput(input.privateAddress));
+  }
+  if (input.address !== undefined) {
+    assertValidAddressFormat(normalizeAddressInput(input.address));
+  }
   const contract = input.contract?.trim() || current.contract;
   const startDate = input.startDate?.trim() || current.startDate;
   const role = input.role?.trim() || current.role;

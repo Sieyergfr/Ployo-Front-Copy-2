@@ -284,11 +284,14 @@ function EditableColorField({ value, t }: { value: string; t: T }) {
 function searchParamNumber(
   value: string | string[] | undefined,
   fallback: number,
+  max?: number,
 ) {
   const raw = Array.isArray(value) ? value[0] : value;
   const parsed = Number.parseInt(raw ?? "", 10);
 
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+  return Number.isFinite(parsed) && parsed > 0 && (max === undefined || parsed <= max)
+    ? parsed
+    : fallback;
 }
 
 function TeamChip({ member }: { member: Location["team"][number] }) {
@@ -383,7 +386,8 @@ export default async function LocationDetailPage({
   const tAddress = await getTranslations("AddressFields");
   const currentWeek = getISOWeekFromDate(new Date());
   const year = searchParamNumber(query.year, currentWeek.year);
-  const week = searchParamNumber(query.week, currentWeek.week);
+  // Gültige ISO-Kalenderwochen liegen zwischen 1 und 53 (QA-Bug BUG-026).
+  const week = searchParamNumber(query.week, currentWeek.week, 53);
   const [location, employees, shiftPlan, shiftOptions, uploadOptions, shiftSettings] =
     await withAccessRedirect(tenant, () =>
       Promise.all([
@@ -641,8 +645,8 @@ export default async function LocationDetailPage({
                 <DetailMetricCard
                   label={t("openPositions")}
                   value={location.openPositions}
-                  caption={t("earlyShiftThu")}
-                  tone="danger"
+                  caption={t("thisWeek")}
+                  tone={location.openPositions > 0 ? "danger" : "muted"}
                 />
                 <DetailMetricCard
                   label={t("utilization")}

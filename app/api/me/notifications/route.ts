@@ -82,8 +82,12 @@ export async function GET(request: Request) {
     });
   }
 
+  // `getRemindersForTenant` liefert seit BUG-013 auch bereits erledigte
+  // Erinnerungen (deren `daysLeft` weiterhin nur aus dem Fälligkeitsdatum
+  // berechnet wird) — eine erledigte Erinnerung soll keine "Frist läuft ab"-
+  // Benachrichtigung mehr auslösen.
   for (const reminder of (deadlineAlerts ? reminders ?? [] : [])
-    .filter((item) => item.daysLeft <= 7)
+    .filter((item) => item.status !== "done" && item.daysLeft <= 7)
     .slice(0, 3)) {
     notifications.push({
       id: `reminder-${reminder.id}`,

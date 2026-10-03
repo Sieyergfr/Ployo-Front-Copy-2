@@ -157,7 +157,10 @@ export default function FilesBrowser({
 }) {
   const t = useTranslations("FilesBrowser");
   const router = useRouter();
-  const resolvedEmptyFilesLabel = emptyFilesLabel ?? t("emptyFiles");
+  // "Keine Dateien in diesem Ordner" passt nicht auf der Wurzelebene, wo gar
+  // kein bestimmter Ordner gemeint ist (QA-Bug BUG-025, zweiter Teil).
+  const resolvedEmptyFilesLabel =
+    emptyFilesLabel ?? (activeFolder ? t("emptyFiles") : t("emptyFilesRoot"));
   const currentReturnPath = activeFolder
     ? `${baseHref}/${activeFolder.path ?? activeFolder.slug}`
     : baseHref;

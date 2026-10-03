@@ -66,9 +66,13 @@ export default async function VacationPage({
   const canManage = hasPermissionLevel(capabilities.vacation.level, "write");
   const canDelete = capabilities.vacation.canDelete;
 
-  const vacationMetrics = getVacationMetrics(vacationRequests, employees, t);
+  // Ausgeschiedene Mitarbeiter sind nicht mehr antragsberechtigt und sollen
+  // weder in der Auswahl noch im "durchschnittlicher Resturlaub"-Schnitt
+  // auftauchen (QA-Bug BUG-009, gleiche Definition wie BUG-002).
+  const activeEmployees = employees.filter((employee) => employee.status !== "former");
+  const vacationMetrics = getVacationMetrics(vacationRequests, activeEmployees, t);
   const page = paginate(vacationRequests, searchParamPage(query.page), PAGE_SIZE);
-  const employeeOptions = employees
+  const employeeOptions = activeEmployees
     .filter((employee) => employee.dbId)
     .map((employee) => ({
       id: employee.dbId ?? employee.id,

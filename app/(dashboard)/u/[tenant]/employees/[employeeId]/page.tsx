@@ -689,6 +689,7 @@ export default async function EmployeeDetailPage({
                 defaultValue={employee.name}
                 aria-label={t("nameAriaLabel")}
                 required
+                maxLength={100}
               />
             ) : (
               employee.name

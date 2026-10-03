@@ -173,6 +173,38 @@ async function createUniqueLocationKey(input: {
   return key;
 }
 
+/**
+ * Verhindert doppelte Standortnamen pro Mandant, case-insensitiv (QA-Bug
+ * BUG-006) — bisher unterschied sich bei einem Namenskonflikt nur der
+ * technische Slug (z. B. `berlin-office-2`), der angezeigte Name blieb
+ * identisch und war dadurch in Auswahllisten/Löschdialogen nicht mehr
+ * eindeutig zuordenbar.
+ */
+async function assertUniqueLocationName(input: {
+  tenantId: string;
+  name: string;
+  excludeLocationId?: string;
+}) {
+  const name = input.name.trim();
+
+  if (!name) {
+    return;
+  }
+
+  const existing = await prisma.tenantLocation.findFirst({
+    where: {
+      tenantId: input.tenantId,
+      name: { equals: name, mode: "insensitive" },
+      id: input.excludeLocationId ? { not: input.excludeLocationId } : undefined,
+    },
+    select: { id: true },
+  });
+
+  if (existing) {
+    throw new Error(`Ein Standort mit dem Namen "${name}" existiert bereits.`);
+  }
+}
+
 function normalizeStatus(value: string): LocationStatus {
   return value === "inactive" ? "inactive" : "active";
 }
@@ -335,11 +367,14 @@ function toLocation(
       actor: entry.actor,
       text: entry.text,
       tone: entry.tone as LocationActivity["tone"],
+      // Ohne `timeZone` formatiert in Serverzeit (UTC) statt Ortszeit,
+      // gleicher Fehler wie BUG-016 (lib/files.ts formatUpdatedAt).
       time: new Intl.DateTimeFormat("de-DE", {
         day: "2-digit",
         month: "2-digit",
         hour: "2-digit",
         minute: "2-digit",
+        timeZone: "Europe/Berlin",
       }).format(entry.createdAt),
     })),
     fileFolders: Array.from(folderMap.values()),
@@ -645,6 +680,7 @@ export async function createTenantLocation(input: {
   const address = assertRequiredAddress(input.address);
 
   const access = await requireLocationManager(input.tenantSlug);
+  await assertUniqueLocationName({ tenantId: access.tenantId, name: input.name });
   const key = await createUniqueLocationKey({
     tenantId: access.tenantId,
     name: input.name,
@@ -734,6 +770,11 @@ export async function updateTenantLocation(input: {
   const leadEmail = lead?.leadEmail ?? input.leadEmail ?? "";
 
   assertValidLocationEmail(leadEmail.trim());
+  await assertUniqueLocationName({
+    tenantId: access.tenantId,
+    name: input.name,
+    excludeLocationId: input.locationId,
+  });
   const key = await createUniqueLocationKey({
     tenantId: access.tenantId,
     name: input.name,

@@ -3,6 +3,10 @@
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+
+/** Popover-Breite — muss mit der `w-[…]`-Klasse am Panel weiter unten übereinstimmen. */
+const PANEL_WIDTH = 280;
 
 type T = ReturnType<typeof useTranslations>;
 
@@ -107,6 +111,8 @@ type DatePickerFieldProps = {
   min?: string;
   placeholder?: string;
   className?: string;
+  /** Optional — z. B. um den `min`-Wert eines abhängigen zweiten Felds (Bis-Datum) live nachzuführen. */
+  onChange?: (value: string) => void;
 };
 
 export default function DatePickerField({
@@ -116,6 +122,7 @@ export default function DatePickerField({
   min,
   placeholder,
   className = "",
+  onChange,
 }: DatePickerFieldProps) {
   const t = useTranslations("DatePickerField");
   const monthLabels = getMonthLabels(t);
@@ -135,9 +142,15 @@ export default function DatePickerField({
     () => visibleMonth.getFullYear() - 5,
   );
   const [isOpen, setIsOpen] = useState(false);
-  const [openUpward, setOpenUpward] = useState(false);
+  const [panelPosition, setPanelPosition] = useState<{ top: number; left: number } | null>(null);
+  const [mounted, setMounted] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setMounted(true);
+  }, []);
   const selectedValue = selectedDate ? dateToInputValue(selectedDate) : "";
   const selectedLabel = selectedDate ? dateToDisplayValue(selectedDate) : effectivePlaceholder;
   const calendarDays = useMemo(() => {
@@ -178,6 +191,14 @@ export default function DatePickerField({
     setYearsWindowStart((current) => current + direction * YEARS_WINDOW_SIZE);
   }
 
+  // Fixed statt absolut positioniert und per Portal nach `document.body`
+  // gerendert (QA-Bug BUG-022): innerhalb eines Dialogs/Drawers schnitt der
+  // bisher relativ zum Eingabefeld positionierte Kalender am rechten Rand
+  // ab (erzwang einen horizontalen Scrollbalken) — ein Vorfahre mit
+  // begrenzter Breite/`overflow` kann `position: absolute` nicht umgehen.
+  // `position: fixed` positioniert dagegen relativ zum Viewport, mit
+  // eigener Kollisionserkennung sowohl vertikal (schon vorher vorhanden)
+  // als auch jetzt zusätzlich horizontal.
   useLayoutEffect(() => {
     if (!isOpen || !containerRef.current || !panelRef.current) {
       return;
@@ -187,8 +208,16 @@ export default function DatePickerField({
     const panelHeight = panelRef.current.offsetHeight;
     const spaceBelow = window.innerHeight - containerRect.bottom;
     const spaceAbove = containerRect.top;
+    const shouldOpenUpward = spaceBelow < panelHeight + 8 && spaceAbove > spaceBelow;
 
-    setOpenUpward(spaceBelow < panelHeight + 8 && spaceAbove > spaceBelow);
+    const margin = 8;
+    const maxLeft = window.innerWidth - PANEL_WIDTH - margin;
+    const left = Math.min(Math.max(containerRect.left, margin), Math.max(maxLeft, margin));
+    const top = shouldOpenUpward
+      ? containerRect.top - panelHeight - margin
+      : containerRect.bottom + margin;
+
+    setPanelPosition({ top, left });
   }, [isOpen, mode]);
 
   useEffect(() => {
@@ -246,12 +275,17 @@ export default function DatePickerField({
         <CalendarDays size={16} className="shrink-0 text-muted" />
       </button>
 
-      {isOpen && (
+      {isOpen &&
+        mounted &&
+        createPortal(
         <div
           ref={panelRef}
-          className={`absolute left-0 z-[60] w-[280px] rounded-xl border border-border bg-white p-3 shadow-[0_14px_40px_rgba(0,0,0,0.14)] ${
-            openUpward ? "bottom-[calc(100%+8px)]" : "top-[calc(100%+8px)]"
-          }`}
+          className="fixed z-[60] w-[280px] rounded-xl border border-border bg-white p-3 shadow-[0_14px_40px_rgba(0,0,0,0.14)]"
+          style={
+            panelPosition
+              ? { top: panelPosition.top, left: panelPosition.left }
+              : { visibility: "hidden", top: 0, left: 0 }
+          }
         >
           <div className="mb-3 flex items-center justify-between gap-2">
             <button
@@ -337,6 +371,7 @@ export default function DatePickerField({
                             new Date(date.getFullYear(), date.getMonth(), 1),
                           );
                           setIsOpen(false);
+                          onChange?.(dateToInputValue(date));
                         }}
                       >
                         {date.getDate()}
@@ -403,8 +438,9 @@ export default function DatePickerField({
               </div>
             )}
           </div>
-        </div>
-      )}
+        </div>,
+        document.body,
+        )}
     </div>
   );
 }

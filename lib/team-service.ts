@@ -182,6 +182,32 @@ async function createUniqueTeamKey(input: {
   return key;
 }
 
+/** Verhindert doppelte Teamnamen pro Mandant, case-insensitiv (QA-Bug BUG-006, siehe lib/location-service.ts). */
+async function assertUniqueTeamName(input: {
+  tenantId: string;
+  name: string;
+  excludeTeamId?: string;
+}) {
+  const name = input.name.trim();
+
+  if (!name) {
+    return;
+  }
+
+  const existing = await prisma.tenantTeam.findFirst({
+    where: {
+      tenantId: input.tenantId,
+      name: { equals: name, mode: "insensitive" },
+      id: input.excludeTeamId ? { not: input.excludeTeamId } : undefined,
+    },
+    select: { id: true },
+  });
+
+  if (existing) {
+    throw new Error(`Ein Team mit dem Namen "${name}" existiert bereits.`);
+  }
+}
+
 function formStatus(value: string): TeamMember["status"] {
   return value === "vacation" ? "vacation" : "on-duty";
 }
@@ -516,6 +542,7 @@ export async function createTenantTeam(input: {
 
   const access = await requireTeamManager(input.tenantSlug);
   await assertKnownLocations(access.tenantId, input.locations);
+  await assertUniqueTeamName({ tenantId: access.tenantId, name: input.name });
   const key = await createUniqueTeamKey({
     tenantId: access.tenantId,
     name: input.name,
@@ -563,6 +590,11 @@ export async function updateTenantTeam(input: {
   const access = await requireTeamManager(input.tenantSlug);
   await assertTeamInScope(access, input.teamId);
   await assertKnownLocations(access.tenantId, input.locations);
+  await assertUniqueTeamName({
+    tenantId: access.tenantId,
+    name: input.name,
+    excludeTeamId: input.teamId,
+  });
   const key = await createUniqueTeamKey({
     tenantId: access.tenantId,
     name: input.name,

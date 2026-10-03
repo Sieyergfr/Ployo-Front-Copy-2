@@ -5,6 +5,7 @@ import {
   reportMySicknessAction,
   requestMyVacationAction,
   updateMyProfileAction,
+  type VacationActionState,
 } from "@/app/(dashboard)/u/[tenant]/mein-bereich/actions";
 import AddressFields from "@/components/AddressFields";
 import DatePickerField from "@/components/DatePickerField";
@@ -71,26 +72,57 @@ const healthInsuranceOptions = [
 
 export function MyVacationRequestForm({ tenant }: { tenant: string }) {
   const t = useTranslations("SelfServiceForms");
-  const [state, formAction] = useActionState(requestMyVacationAction, initialState);
+  const [state, formAction] = useActionState<VacationActionState, FormData>(
+    requestMyVacationAction,
+    initialState,
+  );
   const today = todayInputValue();
+  // Nach JEDER Server-Action-Auflösung (auch bei einem Fehler, nicht nur bei
+  // Erfolg) setzt React unkontrollierte Formularfelder zurück — ohne dieses
+  // Echo verlor die Notiz ihren Inhalt, sobald ein Fehler zurückkam
+  // (QA-Bug BUG-018). `key` erzwingt zusätzlich einen frischen Mount pro
+  // Server-Antwort, damit die neuen `defaultValue`s wirklich übernommen
+  // werden (ein reiner Re-Render ignoriert `defaultValue`-Änderungen).
+  const [startDate, setStartDate] = useState(state.values?.startDate ?? "");
+  const [endDate, setEndDate] = useState(state.values?.endDate ?? "");
+  // Der allgemeine Fehlerbanner (z. B. "Enddatum vor Startdatum") bezieht
+  // sich auf die zuletzt ABGESENDETEN Werte — sobald eines der beiden Daten
+  // sich seither geändert hat, ist er nicht mehr zutreffend (BUG-018).
+  const datesChangedSinceError =
+    startDate !== (state.values?.startDate ?? "") || endDate !== (state.values?.endDate ?? "");
 
   return (
-    <form action={formAction} className="flex flex-col gap-3">
+    <form key={JSON.stringify(state)} action={formAction} className="flex flex-col gap-3">
       <input type="hidden" name="tenant" value={tenant} />
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="field">
           <label htmlFor="my-vacation-start" className="label">
             {t("fromLabel")}
           </label>
-          <DatePickerField id="my-vacation-start" name="startDate" min={today} />
-          <FieldErrors errors={state.fieldErrors?.startDate} />
+          <DatePickerField
+            id="my-vacation-start"
+            name="startDate"
+            defaultValue={state.values?.startDate}
+            min={today}
+            onChange={setStartDate}
+          />
+          {/* Sobald ein Datum gewählt ist, ist "Bitte ein Startdatum wählen"
+              gegenstandslos — bisher blieb die Meldung bis zum nächsten
+              Absenden unverändert stehen (QA-Bug BUG-018). */}
+          {!startDate && <FieldErrors errors={state.fieldErrors?.startDate} />}
         </div>
         <div className="field">
           <label htmlFor="my-vacation-end" className="label">
             {t("toLabel")}
           </label>
-          <DatePickerField id="my-vacation-end" name="endDate" min={today} />
-          <FieldErrors errors={state.fieldErrors?.endDate} />
+          <DatePickerField
+            id="my-vacation-end"
+            name="endDate"
+            defaultValue={state.values?.endDate}
+            min={startDate || today}
+            onChange={setEndDate}
+          />
+          {!endDate && <FieldErrors errors={state.fieldErrors?.endDate} />}
         </div>
       </div>
       <div className="field">
@@ -101,10 +133,11 @@ export function MyVacationRequestForm({ tenant }: { tenant: string }) {
           id="my-vacation-note"
           name="note"
           className="input"
+          defaultValue={state.values?.note}
           placeholder={t("vacationNotePlaceholder")}
         />
       </div>
-      <FormErrorBanner message={state.error} />
+      <FormErrorBanner message={datesChangedSinceError ? undefined : state.error} />
       <FormSubmitButton Icon={CalendarPlus} pendingLabel={t("submittingVacation")} className="btn btn-primary w-fit">
         {t("requestVacation")}
       </FormSubmitButton>

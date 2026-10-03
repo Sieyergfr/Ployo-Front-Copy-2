@@ -161,7 +161,16 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
   const shiftsTeamWide = shiftsAccess !== null && shiftsAccess.scope !== "own";
   const canInviteEmployees = hasPermissionLevel(permissions.employees, "write");
 
-  const employeeList = employees ?? [];
+  // "Aktive Belegschaft" für alle Dashboard-Kennzahlen: ausgeschiedene
+  // (status "former") und noch nicht gestartete Mitarbeiter (startDate in
+  // der Zukunft) zählen nicht mit (QA-Bug BUG-002) — employee.status selbst
+  // wird sonst live weiter unten aus Urlaub/Krankheit abgeleitet.
+  const todayIsoForWorkforce = new Date().toISOString().slice(0, 10);
+  const employeeList = (employees ?? []).filter(
+    (employee) =>
+      employee.status !== "former" &&
+      (!employee.startDate || employee.startDate <= todayIsoForWorkforce),
+  );
   const vacationList = vacationRequests ?? [];
   const reminderList = reminders ?? [];
   const locationList = locations ?? [];
@@ -211,14 +220,18 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
   const pendingVacations = vacationList.filter(
     (request) => request.status === "pending",
   );
+  // `reminderList` enthält seit BUG-013 auch bereits erledigte Erinnerungen
+  // (deren `daysLeft` weiterhin nur aus dem Fälligkeitsdatum berechnet wird) —
+  // für "dringend" zählen nur die noch offenen.
   const urgentReminders = reminderList.filter(
-    (reminder) => reminder.daysLeft <= 7,
+    (reminder) => reminder.status !== "done" && reminder.daysLeft <= 7,
   );
-  const openShiftCount = shiftDays.reduce(
-    (total, day) =>
-      total + day.shifts.filter((shift) => !shift.assignee).length,
-    0,
-  );
+  // Eine unbesetzte Schicht von GESTERN ist kein Risiko mehr, das sich noch
+  // beheben ließe — nur heutige/künftige Tage der aktuellen Woche zählen
+  // als "Schicht-Risiko" (QA-Bug BUG-017, zweiter Teil).
+  const openShiftCount = shiftDays
+    .filter((day) => day.id >= todayIso)
+    .reduce((total, day) => total + day.shifts.filter((shift) => !shift.assignee).length, 0);
   const activeLocations = locationList.filter(
     (location) => location.status === "active",
   );

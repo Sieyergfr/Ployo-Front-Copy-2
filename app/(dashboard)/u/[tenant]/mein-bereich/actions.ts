@@ -135,14 +135,31 @@ const vacationRequestSchema = z.object({
   note: z.string().trim().default(""),
 });
 
+/**
+ * `values` reicht die zuletzt eingegebenen Werte an das Formular zurück
+ * (QA-Bug BUG-018): React setzt unkontrollierte Formularfelder nach JEDER
+ * Server-Action-Auflösung zurück — nicht nur bei Erfolg, auch bei einem
+ * fachlichen Fehler ("Enddatum vor Startdatum") oder einem stehen
+ * gebliebenen Feldfehler. Ohne dieses Echo verlor die Notiz dadurch ihren
+ * Inhalt, sobald irgendein Fehler zurückkam.
+ */
+export type VacationActionState = ActionState & {
+  values?: { startDate: string; endDate: string; note: string };
+};
+
 export async function requestMyVacationAction(
-  _prevState: ActionState,
+  _prevState: VacationActionState,
   formData: FormData,
-): Promise<ActionState> {
+): Promise<VacationActionState> {
+  const values = {
+    startDate: formString(formData, "startDate"),
+    endDate: formString(formData, "endDate"),
+    note: formString(formData, "note"),
+  };
   const parsed = parseAction(vacationRequestSchema, Object.fromEntries(formData));
 
   if (!parsed.success) {
-    return parsed.state;
+    return { ...parsed.state, values };
   }
 
   try {
@@ -158,6 +175,7 @@ export async function requestMyVacationAction(
         error instanceof Error
           ? error.message
           : "Urlaubsantrag konnte nicht gestellt werden.",
+      values,
     };
   }
 

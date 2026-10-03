@@ -592,10 +592,11 @@
     "employeeCountBadge": "{count} MA",
     "daysUnit": "Tage",
     "locationSince": "{location} · seit {since}",
-    "rateTitle": "Krankenquote",
-    "rateSubtitle": "Letzte 6 Monate",
+    "rateTitle": "Krankmeldungen je Monat",
+    "rateSubtitle": "Letzte 6 Monate, Anzahl Meldungen",
     "historyTitle": "Verlauf · letzte 30 Tage",
-    "recoveredBadge": "✓ Genesen"
+    "recoveredBadge": "✓ Genesen",
+    "periodEndedBadge": "Zeitraum abgelaufen"
   },
   "RemindersPage": {
     "eyebrow": "Aufgaben & Fristen",
@@ -607,6 +608,8 @@
     "daysUnit": "Tage",
     "overdueUnit": "überfällig",
     "emptyState": "Keine offenen Erinnerungen.",
+    "emptyStateDone": "Noch keine erledigten Erinnerungen.",
+    "emptyStateFiltered": "Keine Erinnerungen für diesen Filter.",
     "priorityUrgent": "Dringend",
     "priorityImportant": "Wichtig",
     "priorityNormal": "Normal",
@@ -709,6 +712,7 @@
     "filesInFolder": "Dateien in diesem Ordner",
     "recentlyChanged": "Zuletzt geändert",
     "emptyFiles": "Keine Dateien in diesem Ordner.",
+    "emptyFilesRoot": "Noch keine Dateien hochgeladen.",
     "home": "Home"
   },
   "FilesPageContent": {
@@ -921,7 +925,7 @@
     "fileHint": "JPEG, PNG oder WebP, max. 2 MB."
   },
   "ActionDrawers": {
-    "closeSidebar": "Sidebar schließen",
+    "closeDrawer": "Dialog schließen",
     "close": "Schließen",
     "cancel": "Abbrechen",
     "save": "Speichern",
@@ -950,6 +954,7 @@
     "categoryLabel": "Kategorie",
     "notesPlaceholder": "Interne Hinweise, nächste Schritte oder Kontext ergänzen",
     "reminderEyebrow": "Erinnerung",
+    "deleteReminderDescription": "Die Erinnerung \"{title}\" wird endgültig gelöscht.",
     "createReminderTitle": "Erinnerung erstellen",
     "createReminderAria": "Erinnerung für {name} erstellen",
     "reminderButtonLabel": "Erinnerung",
@@ -959,6 +964,7 @@
     "statusLabel": "Status",
     "sicknessOngoing": "Laufende Krankmeldung",
     "sicknessClosed": "Abgeschlossen",
+    "sicknessPastOpen": "Zeitraum abgelaufen, noch nicht abgeschlossen",
     "sinceDate": "seit {date}",
     "dateRange": "{start}-{end}",
     "sickSinceLabel": "Arbeitsunfähig seit",
@@ -981,6 +987,7 @@
     "reject": "Ablehnen",
     "delete": "Löschen",
     "deleteVacationDescription": "Der Urlaubsantrag von {name} wird gelöscht.",
+    "reverseDecisionDescription": "Der Urlaubsantrag von {name} wird auf \"{status}\" umgestellt — die bisherige Entscheidung wird ersetzt.",
     "saveVacationRange": "Zeitraum speichern",
     "shiftSettingsTitle": "Schichtplanung Einstellungen",
     "settingsLabel": "Einstellungen",
@@ -1183,7 +1190,7 @@
     "shiftsThisWeek": "Schichten diese Woche",
     "contactTitle": "Kontakt",
     "contactFieldsHint": "E-Mail und Telefon werden unter „Stamminformationen“ bearbeitet.",
-    "locationAddress": "Standort-Adresse",
+    "locationAddress": "Arbeitsadresse",
     "historyTitle": "Verlauf",
     "retentionTitle": "Gezielte Löschung",
     "retentionDescription": "Wählen Sie die Datenkategorien aus, die für diesen ehemaligen Mitarbeiter gelöscht werden sollen. Nur löschfähige Kategorien lassen sich auswählen.",
@@ -1423,7 +1430,6 @@
     "shiftsActive": "Schichten aktiv",
     "thisWeek": "diese Woche",
     "openPositions": "Offene Stellen",
-    "earlyShiftThu": "Frühschicht Do.",
     "utilization": "Auslastung",
     "leadershipAndTeam": "Leitung & Team",
     "locationLead": "Standortleitung",

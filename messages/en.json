@@ -592,10 +592,11 @@
     "employeeCountBadge": "{count} EE",
     "daysUnit": "Days",
     "locationSince": "{location} · since {since}",
-    "rateTitle": "Sick rate",
-    "rateSubtitle": "Last 6 months",
+    "rateTitle": "Sick reports per month",
+    "rateSubtitle": "Last 6 months, number of reports",
     "historyTitle": "History · last 30 days",
-    "recoveredBadge": "✓ Recovered"
+    "recoveredBadge": "✓ Recovered",
+    "periodEndedBadge": "Period ended"
   },
   "RemindersPage": {
     "eyebrow": "Tasks & deadlines",
@@ -607,6 +608,8 @@
     "daysUnit": "Days",
     "overdueUnit": "overdue",
     "emptyState": "No open reminders.",
+    "emptyStateDone": "No completed reminders yet.",
+    "emptyStateFiltered": "No reminders match this filter.",
     "priorityUrgent": "Urgent",
     "priorityImportant": "Important",
     "priorityNormal": "Normal",
@@ -709,6 +712,7 @@
     "filesInFolder": "Files in this folder",
     "recentlyChanged": "Recently changed",
     "emptyFiles": "No files in this folder.",
+    "emptyFilesRoot": "No files uploaded yet.",
     "home": "Home"
   },
   "FilesPageContent": {
@@ -921,7 +925,7 @@
     "fileHint": "JPEG, PNG, or WebP, max. 2 MB."
   },
   "ActionDrawers": {
-    "closeSidebar": "Close sidebar",
+    "closeDrawer": "Close dialog",
     "close": "Close",
     "cancel": "Cancel",
     "save": "Save",
@@ -950,6 +954,7 @@
     "categoryLabel": "Category",
     "notesPlaceholder": "Add internal notes, next steps, or context",
     "reminderEyebrow": "Reminder",
+    "deleteReminderDescription": "The reminder \"{title}\" will be permanently deleted.",
     "createReminderTitle": "Create reminder",
     "createReminderAria": "Create reminder for {name}",
     "reminderButtonLabel": "Reminder",
@@ -959,6 +964,7 @@
     "statusLabel": "Status",
     "sicknessOngoing": "Ongoing sick leave",
     "sicknessClosed": "Closed",
+    "sicknessPastOpen": "Period ended, not yet closed",
     "sinceDate": "since {date}",
     "dateRange": "{start}-{end}",
     "sickSinceLabel": "Unfit for work since",
@@ -981,6 +987,7 @@
     "reject": "Reject",
     "delete": "Delete",
     "deleteVacationDescription": "The vacation request from {name} will be deleted.",
+    "reverseDecisionDescription": "The vacation request from {name} will be changed to \"{status}\" — this replaces the previous decision.",
     "saveVacationRange": "Save date range",
     "shiftSettingsTitle": "Shift planning settings",
     "settingsLabel": "Settings",
@@ -1183,7 +1190,7 @@
     "shiftsThisWeek": "Shifts this week",
     "contactTitle": "Contact",
     "contactFieldsHint": "Email and phone are edited under \"Master data\".",
-    "locationAddress": "Location address",
+    "locationAddress": "Work address",
     "historyTitle": "History",
     "retentionTitle": "Targeted deletion",
     "retentionDescription": "Select the data categories to delete for this former employee. Only eligible categories can be selected.",
@@ -1423,7 +1430,6 @@
     "shiftsActive": "Active shifts",
     "thisWeek": "this week",
     "openPositions": "Open positions",
-    "earlyShiftThu": "Early shift Thu.",
     "utilization": "Utilization",
     "leadershipAndTeam": "Management & team",
     "locationLead": "Location manager",

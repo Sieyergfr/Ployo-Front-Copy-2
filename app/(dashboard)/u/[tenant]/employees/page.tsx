@@ -135,27 +135,6 @@ export default async function EmployeesPage({
     );
   }
 
-  // Such-/Standortfilter werden serverseitig angewandt (Prisma-`where`), nicht
-  // erst im Browser — die Antwort enthält damit nur noch die Treffer. Der
-  // Statusfilter wirkt erst nach der Live-Berechnung (siehe getEmployeesForTenant).
-  const search = searchParamString(query.search);
-  const locationFilter = searchParamString(query.location);
-  const rawStatusFilter = searchParamString(query.status);
-  const statusFilter = (
-    ["active", "vacation", "absent", "former"] as const
-  ).includes(rawStatusFilter as EmployeeStatus)
-    ? (rawStatusFilter as EmployeeStatus)
-    : undefined;
-  const isFiltered = Boolean(search || locationFilter || statusFilter);
-
-  const employees = await withAccessRedirect(tenant, () =>
-    getEmployeesForTenant(tenant, { search, location: locationFilter, status: statusFilter }),
-  );
-
-  if (!employees) {
-    notFound();
-  }
-
   // Standorte/Teams/Rollen sind hier nur Zusatzinfo für Filter und Dropdowns —
   // fehlt dafür die Berechtigung (z. B. "Rollen" ist admin-only), wird das
   // tolerant übergangen statt die ganze Mitarbeiterliste zu sperren.
@@ -171,6 +150,34 @@ export default async function EmployeesPage({
 
   const columns = getColumns(tenant, t);
   const locationNames = locations.map((location) => location.name);
+
+  // Such-/Standortfilter werden serverseitig angewandt (Prisma-`where`), nicht
+  // erst im Browser — die Antwort enthält damit nur noch die Treffer. Der
+  // Statusfilter wirkt erst nach der Live-Berechnung (siehe getEmployeesForTenant).
+  const search = searchParamString(query.search);
+  const rawLocationFilter = searchParamString(query.location);
+  // Ein unbekannter Standortname (z. B. per manipulierter URL) lieferte
+  // bisher "0 Treffer", ohne dass das Dropdown den (nicht existierenden)
+  // Filter überhaupt anzeigte — analog zum bereits ignorierten unbekannten
+  // status-Wert jetzt ebenfalls verwerfen statt eine leere Liste zu zeigen
+  // (QA-Bug BUG-020).
+  const locationFilter =
+    rawLocationFilter && locationNames.includes(rawLocationFilter) ? rawLocationFilter : "";
+  const rawStatusFilter = searchParamString(query.status);
+  const statusFilter = (
+    ["active", "vacation", "absent", "former"] as const
+  ).includes(rawStatusFilter as EmployeeStatus)
+    ? (rawStatusFilter as EmployeeStatus)
+    : undefined;
+  const isFiltered = Boolean(search || locationFilter || statusFilter);
+
+  const employees = await withAccessRedirect(tenant, () =>
+    getEmployeesForTenant(tenant, { search, location: locationFilter, status: statusFilter }),
+  );
+
+  if (!employees) {
+    notFound();
+  }
   const permissionRoleNames = roles.length > 0
     ? roles.map((role) => role.name)
     : [t("defaultRoleName")];

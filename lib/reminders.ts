@@ -4,63 +4,15 @@ import { prisma } from "@/lib/prisma";
 import { headers } from "next/headers";
 import { requireTenantAccess, resolveScopeFilter, type TenantAccess } from "@/lib/tenant-access";
 
-export type ReminderPriority = "urgent" | "important" | "normal";
-
-export type ReminderMetric = {
-  label: string;
-  value: string;
-  caption: string;
-  tone?: "danger" | "success";
-};
-
-export type Reminder = {
-  id: string;
-  daysLeft: number;
-  title: string;
-  subject: string;
-  category: string;
-  priority: ReminderPriority;
-  dueDate: string;
-  status: "open" | "done";
-  notes: string;
-  linkedFiles: string[];
-  createdByName: string;
-  teamId: string | null;
-  teamName: string | null;
-};
-
-export function getReminderPriorityConfig(
-  t: (key: string) => string,
-): Record<
-  ReminderPriority,
-  {
-    label: string;
-    daysClassName: string;
-    badgeClassName: string;
-    rowClassName: string;
-  }
-> {
-  return {
-    urgent: {
-      label: t("priorityUrgent"),
-      daysClassName: "text-danger",
-      badgeClassName: "bg-danger/10 text-danger font-semibold",
-      rowClassName: "border-danger/25",
-    },
-    important: {
-      label: t("priorityImportant"),
-      daysClassName: "text-[#7A4E00]",
-      badgeClassName: "bg-warning/10 text-[#7A4E00] font-semibold",
-      rowClassName: "border-border",
-    },
-    normal: {
-      label: t("priorityNormal"),
-      daysClassName: "text-muted-2",
-      badgeClassName: "bg-border-soft text-muted",
-      rowClassName: "border-border",
-    },
-  };
-}
+// Re-Export für bestehende Server-seitige Importe (`@/lib/reminders`) —
+// siehe lib/reminders-shared.ts für den Grund der Aufteilung.
+export {
+  getReminderPriorityConfig,
+  type Reminder,
+  type ReminderMetric,
+  type ReminderPriority,
+} from "@/lib/reminders-shared";
+import type { Reminder, ReminderMetric, ReminderPriority } from "@/lib/reminders-shared";
 
 function normalizeLinkedFiles(value?: string[]) {
   return Array.from(
@@ -306,32 +258,51 @@ async function getAllowedLinkedFileIds(input: {
   return linkedFiles.filter((fileId) => allowedIds.has(fileId));
 }
 
+/**
+ * Liefert offene UND erledigte Erinnerungen (QA-Bug BUG-013 — bisher wurde
+ * hart auf `status: "open"` gefiltert, wodurch "Erledigt"-Zähler/-Metriken
+ * immer 0 blieben und erledigte Erinnerungen nirgends mehr auffindbar waren,
+ * auch nicht über ein Archiv). Offene zuerst (nach Fälligkeit), danach
+ * erledigte (zuletzt erledigt zuerst) — der Seiten-Client filtert die
+ * Standardanzeige weiterhin auf "offen", "Erledigt" ist ein expliziter Filter.
+ */
 export async function getRemindersForTenant(tenantSlug: string) {
   const access = await requireTenantReminderAccess(tenantSlug);
   const where = await reminderScopeWhere(access);
-  const records = await prisma.tenantReminder.findMany({
-    where: { ...where, status: "open" },
-    orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
-    include: { team: { select: { id: true, name: true } } },
-  });
+  const [openRecords, doneRecords] = await Promise.all([
+    prisma.tenantReminder.findMany({
+      where: { ...where, status: "open" },
+      orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
+      include: { team: { select: { id: true, name: true } } },
+    }),
+    prisma.tenantReminder.findMany({
+      where: { ...where, status: "done" },
+      orderBy: [{ completedAt: "desc" }, { createdAt: "desc" }],
+      include: { team: { select: { id: true, name: true } } },
+    }),
+  ]);
 
-  return records.map(toReminder);
+  return [...openRecords, ...doneRecords].map(toReminder);
 }
 
 export function buildReminderMetrics(
   reminders: Reminder[],
   t: (key: string) => string,
 ): ReminderMetric[] {
-  const urgent = reminders.filter((reminder) => reminder.daysLeft <= 7);
-  const expired = reminders.filter((reminder) => reminder.daysLeft < 0);
+  // `reminders` enthält seit BUG-013 auch erledigte Einträge — für "offen"/
+  // "dringend"/"nächste Frist" zählen weiterhin nur die offenen; eine
+  // erledigte, überfällig gewesene Erinnerung ist nicht mehr "dringend".
+  const open = reminders.filter((reminder) => reminder.status !== "done");
+  const urgent = open.filter((reminder) => reminder.daysLeft <= 7);
+  const expired = open.filter((reminder) => reminder.daysLeft < 0);
   const done = reminders.filter((reminder) => reminder.status === "done");
-  const next = reminders[0];
+  const next = open[0];
   const nextIsExpired = Boolean(next && next.daysLeft < 0);
 
   return [
     {
       label: t("metricOpenTotalLabel"),
-      value: reminders.length.toString(),
+      value: open.length.toString(),
       caption: t("metricOpenTotalCaption"),
     },
     {
@@ -360,24 +331,6 @@ export function buildReminderMetrics(
         : t("metricNextDeadlineCaptionEmpty"),
       tone: next && next.daysLeft <= 7 ? "danger" : undefined,
     },
-  ];
-}
-
-export function buildReminderFilters(reminders: Reminder[], t: (key: string) => string) {
-  const urgentCount = reminders.filter((reminder) => reminder.daysLeft <= 7).length;
-  const expiredCount = reminders.filter((reminder) => reminder.daysLeft < 0).length;
-  const categories = Array.from(
-    new Set(reminders.map((reminder) => reminder.category).filter(Boolean)),
-  );
-
-  return [
-    `${t("filterAll")} (${reminders.length})`,
-    `${t("expiredBadge")} (${expiredCount})`,
-    `${t("priorityUrgent")} (${urgentCount})`,
-    ...categories.map(
-      (category) =>
-        `${category} (${reminders.filter((reminder) => reminder.category === category).length})`,
-    ),
   ];
 }
 
@@ -607,4 +560,47 @@ export async function completeTenantReminder(input: {
   }
 
   return result;
+}
+
+/**
+ * Löscht eine Erinnerung endgültig (QA-Bug BUG-013 — bisher gab es dafür gar
+ * keine Funktion, das Bearbeiten-Drawer bot nur "Abbrechen"/"Speichern" an).
+ * Gleiche Berechtigungslogik wie `completeTenantReminder`.
+ */
+export async function deleteTenantReminder(input: {
+  tenantSlug: string;
+  reminderId: string;
+}) {
+  const access = await requireTenantAccess(input.tenantSlug, "reminders", "read");
+
+  if (!access.canDelete) {
+    throw new Error("FORBIDDEN");
+  }
+
+  await assertReminderInScope(
+    { tenantId: access.tenantId, userId: access.userId, tenantAccess: access },
+    input.reminderId,
+  );
+
+  const reminder = await prisma.tenantReminder.findFirst({
+    where: { id: input.reminderId, tenantId: access.tenantId },
+    select: { id: true, title: true },
+  });
+
+  if (!reminder) {
+    throw new Error("Erinnerung nicht gefunden.");
+  }
+
+  await prisma.tenantReminder.delete({ where: { id: reminder.id } });
+
+  await recordTenantAudit({
+    tenantId: access.tenantId,
+    actorId: access.userId,
+    actorName: access.userName,
+    action: "Erinnerung gelöscht",
+    source: "Erinnerungen",
+    entityType: "reminder",
+    entityId: reminder.id,
+    detail: reminder.title,
+  });
 }

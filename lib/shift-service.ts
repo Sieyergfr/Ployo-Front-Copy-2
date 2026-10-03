@@ -828,6 +828,10 @@ export async function getMyShiftsForCurrentWeek(
   };
 }
 
+function todayIsoDate(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
 export async function getShiftFormOptions(tenantSlug: string) {
   const access = await requireTenantAccess(tenantSlug, "shifts", "read");
   const tenantId = access.tenantId;
@@ -840,7 +844,15 @@ export async function getShiftFormOptions(tenantSlug: string) {
 
   const [employeeRecords, locationRecords, tenantDefaultOpeningHours] = await Promise.all([
     prisma.tenantEmployee.findMany({
-      where: { tenantId },
+      // Ausgeschiedene (status "former") und noch nicht gestartete
+      // Mitarbeiter (startDate in der Zukunft) sind nicht einplanbar und
+      // sollen auch nicht in "X Mitarbeiter" mitgezählt werden (QA-Bug
+      // BUG-002, gleiche Definition wie auf dem Dashboard).
+      where: {
+        tenantId,
+        status: { not: "former" },
+        OR: [{ startDate: "" }, { startDate: { lte: todayIsoDate() } }],
+      },
       orderBy: { name: "asc" },
       select: {
         id: true,
@@ -1262,6 +1274,18 @@ async function assertArbzgCompliant(input: {
     ? calculateAge(decryptField(input.employeeBirthDate), new Date(input.date))
     : null;
   const isMinor = age !== null && age < 18;
+  const grossMinutes = shiftDurationHours(candidate) * 60;
+
+  // `netWorkingMinutes` klemmt ein zu langes Pausenfeld bisher stillschweigend
+  // auf 0 Nettoarbeitszeit, statt die offensichtlich fehlerhafte Eingabe
+  // abzulehnen (QA-Bug BUG-008 — z. B. 600 Min. Pause bei einer 60-Min.-Schicht
+  // wurde klaglos gespeichert).
+  if (input.breakMinutes > grossMinutes) {
+    throw new Error(
+      `Die Pause (${input.breakMinutes} Min.) darf nicht länger sein als die Schicht selbst (${grossMinutes} Min.).`,
+    );
+  }
+
   const netMinutes = netWorkingMinutes(candidate, input.breakMinutes);
 
   const requiredBreak = requiredBreakMinutes(shiftDurationHours(candidate) * 60, isMinor);

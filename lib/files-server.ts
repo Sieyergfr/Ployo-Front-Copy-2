@@ -615,9 +615,14 @@ export async function getFilesPageData(
         ).length,
       }
     : undefined;
+  // Ohne geöffneten Ordner zeigt die Ansicht "Zuletzt geändert" — über ALLE
+  // Ordner hinweg (storedFiles ist bereits nach `updatedAt desc` sortiert),
+  // nicht nur Dateien auf Wurzelebene. Eine in einen Unterordner hochgeladene
+  // Datei blieb hier bisher unsichtbar, obwohl die Dateien-Kachel sie schon
+  // mitzählte (QA-Bug BUG-025).
   const visibleFiles = activeFolder
     ? storedFiles.filter((file) => file.folderSlug === activeFolder.slug)
-    : storedFiles.filter((file) => file.folderSlug === "");
+    : storedFiles;
   const activeFileParentFolder =
     activeFile && activeFile.folderSlug
       ? tenantFolders.find((folder) => folder.path === activeFile.folderSlug)
