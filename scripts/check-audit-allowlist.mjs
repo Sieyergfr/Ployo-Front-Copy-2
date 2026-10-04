@@ -23,6 +23,7 @@ import { execSync } from "node:child_process";
 
 const ACCEPTED_ADVISORY_SOURCE_IDS = new Set([
   1145093, // GHSA-ggr8-5vv4-36mx — deepmerge-ts <8.0.0, Stack-Exhaustion (Dev-Tooling, kein untrusted Input)
+  1240992, // GHSA-vfj7-8cjw-p6xm — braces <=3.0.3 (kein Fix verfügbar), nur über eslint-config-next -> @next/eslint-plugin-next -> fast-glob -> micromatch; Lint-Tooling mit eigenen Glob-Mustern, kein untrusted Input
 ]);
 
 function runAudit() {
