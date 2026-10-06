@@ -9,13 +9,14 @@ Stand: 2026-09-05. Blocker, Sollte-behoben-werden, Responsive Design, Datenschut
 - **Verwaltung:** neuer Berechtigungsbereich `timeTracking` (own/team/all), Seite `/u/[tenant]/zeiterfassung` — Zeiten einsehen, korrigieren, nachtragen, löschen; jede Korrektur mit Pflicht-Grund + Audit-Log (vorher/nachher). System-Rollen per Migration nachgezogen (HR-Leitung admin, Teamleitung write/Team, Lohnbuchhaltung read).
 - **Push:** 5 Min. nach Schichtbeginn „bitte einstempeln“ (nicht bei Urlaub/Krankmeldung), 5 Min. nach Schichtende „bitte ausstempeln“, plus „automatisch ausgestempelt“. Nur Push (kein E-Mail-Spam), Duplikatschutz über `TenantTimeClockReminder`.
 - **Datenschutz:** Löschfrist „arbeitszeit“ (2 Jahre, § 16 ArbZG/§ 17 MiLoG) wird vom Cleanup-Cron automatisch angewendet (Legal Hold respektiert), Löschsperre für Personalakten mit aufbewahrungspflichtigen Zeiten, Zeiten in Personalakte- und Mandanten-Export, neuer Eintrag im Verarbeitungsverzeichnis. Kein GPS/Standort.
-- Verifiziert: `tsc`, `eslint`, volle Testsuite gegen isolierte DB (354/354, davon 30 neu), Probe-`next build`, Smoke-Test der Routen; `ployo-mobile` `typecheck` + `lint`. **Nicht committet/deployt.**
+- Verifiziert: `tsc`, `eslint`, volle Testsuite gegen isolierte DB (354/354, davon 30 neu), Probe-`next build`, Smoke-Test der Routen; `ployo-mobile` `typecheck` + `lint`. Committet + gepusht (Web `8b0bdfd0`, App `1a3bc3c`), Migration auf der Live-DB eingespielt (Backup vorher: `/var/backups/ployo/ployo-before-time-tracking-20261006181556.sql.gz`). **Web-Deploy noch offen** (siehe unten).
 
 Offen dazu:
-- Crontab-Eintrag für den 5-Minuten-Job setzen (darf ich nicht): `*/5 * * * * curl -fsS -X GET https://ployo.io/api/cron/time-tracking -H "Authorization: Bearer <CRON_SECRET>" >> /var/log/ployo-cron.log 2>&1` — **[Du]**
-- Commit + Deploy Web (`scripts/deploy.sh`, Migration `20261006120000_add_time_tracking`) und neuer App-Build — **[Du → Ich, nach deinem Go]**
+- ✅ Crontab-Eintrag für den 5-Minuten-Job gesetzt (2026-10-06).
+- Web-Deploy: `bash scripts/deploy.sh` ausführen (wurde für mich im Auto-Modus als Produktions-Deploy blockiert; Migration ist schon drin) — **[Du]**
+- Neuer App-Build + Store-Einreichung (`eas build --platform all --profile production`, danach `eas submit`) — EAS-CLI ist auf dem Server nicht eingerichtet — **[Du]**
 - Push-Erinnerungen brauchen zusätzlich „Mobile Push“ unter Einstellungen → Benachrichtigungen (Mandanten-Default ist aus) — **[Du, je Mandant]**
-- Datenschutzerklärung/DSFA um die Arbeitszeiterfassung ergänzen und anwaltlich prüfen lassen; Hinweis: Stempeluhr ist i. d. R. mitbestimmungspflichtig (§ 87 Abs. 1 Nr. 6 BetrVG), falls ein Betriebsrat existiert — **[Du]**
+- ✅ Datenschutzerklärung (Ziffer 5/6/13), DSFA (Abschnitt 5a), Verarbeitungsverzeichnis-Entwurf, Löschkonzept und BetrVG-Hinweise (Onboarding + Einstellungen) ergänzt. Anwaltliche Prüfung der neuen Passagen steht noch aus — **[Du]**
 
 ## ✅ Datenschutz-Umbauplan Phase 3 (2026-09-05)
 
