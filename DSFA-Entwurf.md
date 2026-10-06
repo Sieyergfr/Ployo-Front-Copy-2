@@ -32,6 +32,26 @@ Art. 35 Abs. 3 lit. b DSGVO verlangt eine DSFA insbesondere bei "umfangreicher V
 
 Die Verarbeitung erfüllt das Kriterium "besondere Kategorien" (Art. 9), aber der Umfang ist nach aktuellem Stand (wenige Mandanten, Stand 2026-09-03) noch nicht eindeutig "umfangreich" im Sinne der Aufsichtsbehörden-Leitlinien (WP248 rev.01: Kriterien sind u. a. Anzahl betroffener Personen, Datenvolumen, Dauer, geografische Ausdehnung). **Empfehlung:** Diese Erstbewertung jährlich oder bei signifikantem Kundenwachstum wiederholen; eine förmliche, vollständige DSFA vorbereiten, sobald die Mandanten-/Mitarbeiterzahl deutlich wächst oder ein Aufsichtsbehörden-Kontakt ansteht. Bereits jetzt sinnvoll: diese Erstbewertung als Nachweis vorhalten, dass die Frage aktiv geprüft wurde.
 
+## 5a. Ergänzung 2026-10-06: Arbeitszeiterfassung (Stempeluhr)
+
+- **Was:** Ein-/Ausstempel- und Pausenzeitpunkte je Mitarbeiter (`TenantTimeEntry`, `TenantTimeBreak`), Bezug zur geplanten Schicht, Korrekturen der Verwaltung inkl. Grund und Bearbeiter. Vom Mandanten pro Betrieb einschaltbar, standardmäßig aus.
+- **Keine besondere Kategorie (Art. 9)**, aber ein typisches Kriterium aus WP248 rev.01 berührt: systematische Überwachung von Beschäftigten (Machtungleichgewicht Arbeitgeber/Arbeitnehmer). Deshalb gesondert bewertet.
+- **Zweck/Rechtsgrundlage:** gesetzliche Pflicht zur Arbeitszeiterfassung (BAG 1 ABR 22/21, § 16 Abs. 2 ArbZG, § 17 MiLoG), Art. 6 Abs. 1 lit. b, c DSGVO.
+- **Datenminimierung:** kein GPS/Standort, keine Geräte-Kennungen am Stempel, keine automatisierte Leistungsbewertung oder Profilbildung; nur Zeitpunkte, die der Server setzt (manipulationssicher, keine clientseitigen Zeitangaben).
+- **Zugriff:** eigene Zeiten nur der Mitarbeiter selbst; fremde Zeiten nur mit eigenem Berechtigungsbereich „Zeiterfassung“ (Scope eigene/Team/alle); jede Korrektur mit Pflicht-Grund im Audit-Log (vorher/nachher).
+- **Speicherdauer:** automatische Löschung nach 2 Jahren (Kategorie `arbeitszeit`, `lib/retention-service.ts`), Legal Hold wird respektiert.
+- **Push-Erinnerungen** über Expo enthalten nur Betriebsname und Schichtzeiten, keine Ist-Zeiten.
+- **Mitbestimmung:** Hinweis auf § 87 Abs. 1 Nr. 6 BetrVG im Onboarding und direkt an der Einstellung.
+
+| Risiko | Eintrittswahrscheinlichkeit | Schwere | Gegenmaßnahme |
+|---|---|---|---|
+| Nutzung der Zeiten zur verdeckten Leistungs-/Verhaltenskontrolle | Mittel | Mittel | Keine Auswertungsfunktionen über Soll/Ist hinaus, Rollenbeschränkung, BetrVG-Hinweis |
+| Unberechtigte nachträgliche Änderung von Zeiten | Niedrig | Mittel | Nur mit Schreibrecht, Pflicht-Grund, Audit-Log mit Vorher/Nachher, Kennzeichnung „korrigiert/nachgetragen“ für den Mitarbeiter sichtbar |
+| Zu lange Aufbewahrung | Niedrig | Niedrig | Automatische Löschung nach Fristablauf |
+
+**Einschätzung:** Mit diesen Maßnahmen derzeit kein hohes Restrisiko; eine förmliche DSFA ist für die Zeiterfassung allein nicht zwingend, die Bewertung sollte aber zusammen mit der Gesamt-DSFA (siehe oben) bei Wachstum wiederholt werden.
+
 ## 6. Offene Punkte
 
+- Zeiterfassung (Abschnitt 5a) gemeinsam mit der Datenschutzerklärung (Ziffer 5/13) anwaltlich prüfen lassen.
 - Bei signifikantem Wachstum: externe Beratung für eine förmliche DSFA nach dem Kurzgutachten-Format der Aufsichtsbehörden einholen.

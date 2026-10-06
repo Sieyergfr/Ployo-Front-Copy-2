@@ -64,7 +64,8 @@ export const RETENTION_POLICIES = {
     fristBeginnAnchor: "exact",
     legalBasis: "§17 MiLoG, §16 Abs. 2 ArbZG",
     fristBeginn: "Erfassungsdatum",
-    beschreibung: "Arbeitszeit-/Schichtdokumentation (TenantShift).",
+    beschreibung:
+      "Arbeitszeit-/Schichtdokumentation (TenantShift) und gestempelte Arbeitszeiten der Zeiterfassung (TenantTimeEntry inkl. Pausen) — letztere löscht der Cleanup-Cron automatisch nach Ablauf.",
   },
   consent_nachweis: {
     months: 36,

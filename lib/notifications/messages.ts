@@ -138,6 +138,25 @@ export type NotificationMessage =
       days: number;
       /** ISO-Datum (YYYY-MM-DD) der gesetzlichen Verfallsfrist (default 31.03.). */
       expiresAt: string;
+    }
+  | {
+      key: "clockInReminder";
+      tenantName: string;
+      /** Ortszeit der Schicht ("HH:MM"), bereits in der Mandanten-Zeitzone. */
+      startTime: string;
+      endTime: string;
+    }
+  | {
+      key: "clockOutReminder";
+      tenantName: string;
+      endTime: string;
+    }
+  | {
+      key: "autoClockedOut";
+      tenantName: string;
+      /** Datum (YYYY-MM-DD) und Uhrzeit ("HH:MM") des gesetzten Ausstempelns, Ortszeit. */
+      date: string;
+      time: string;
     };
 
 export type RenderedNotification = {
@@ -445,6 +464,34 @@ export function renderNotification(
           );
 
       return { subject, text, html };
+    }
+
+    case "clockInReminder": {
+      const subject = isEn ? "Time to clock in" : "Bitte einstempeln";
+      const text = isEn
+        ? `Your shift at ${message.tenantName} (${message.startTime}–${message.endTime}) has started. Please clock in.`
+        : `Ihre Schicht bei ${message.tenantName} (${message.startTime}–${message.endTime}) hat begonnen. Bitte stempeln Sie sich ein.`;
+
+      return { subject, text, html: paragraph(escapeHtml(text)) };
+    }
+
+    case "clockOutReminder": {
+      const subject = isEn ? "Time to clock out" : "Bitte ausstempeln";
+      const text = isEn
+        ? `Your shift at ${message.tenantName} ended at ${message.endTime}. Please clock out.`
+        : `Ihre Schicht bei ${message.tenantName} ist um ${message.endTime} Uhr zu Ende gegangen. Bitte stempeln Sie sich aus.`;
+
+      return { subject, text, html: paragraph(escapeHtml(text)) };
+    }
+
+    case "autoClockedOut": {
+      const date = formatNotificationDate(message.date, locale);
+      const subject = isEn ? "Automatically clocked out" : "Automatisch ausgestempelt";
+      const text = isEn
+        ? `You were still clocked in at ${message.tenantName}. Your time entry was closed automatically at ${date}, ${message.time}. Please contact your manager if this is wrong.`
+        : `Sie waren bei ${message.tenantName} noch eingestempelt. Ihr Zeiteintrag wurde automatisch zum ${date}, ${message.time} Uhr geschlossen. Wenn das nicht stimmt, wenden Sie sich bitte an Ihre Vorgesetzten.`;
+
+      return { subject, text, html: paragraph(escapeHtml(text)) };
     }
   }
 }

@@ -6,6 +6,7 @@ import {
   assertFileDeletionAllowedBatch,
   findEmployeesDueForPersonaldatenAnonymisierung,
   purgeExpiredConsentRecords,
+  purgeExpiredTimeEntries,
   remindHrAboutExpiredHealthDataFreetext,
 } from "@/lib/retention-service";
 import { runVacationCarryoverRollover } from "@/lib/vacation-service";
@@ -102,6 +103,8 @@ async function handleCleanup(request: Request, requestId: string) {
   // automatisch bereinigt (Audit-Finding M05) — Frist analog zu
   // "personaldaten" (§195/199 BGB, siehe lib/data-retention.ts).
   const purgedConsentRecords = await purgeExpiredConsentRecords(now);
+  // Gestempelte Arbeitszeiten nach Ablauf von "arbeitszeit" (2 Jahre).
+  const purgedTimeEntries = await purgeExpiredTimeEntries(now);
 
   const expiredInvitations = await prisma.tenantInvitation.updateMany({
     where: { status: "PENDING", expiresAt: { lt: now } },
@@ -313,6 +316,7 @@ async function handleCleanup(request: Request, requestId: string) {
     stalePushSubscriptions: stalePushSubscriptions.count,
     oldPageViews: oldPageViews.count,
     oldConsentRecords: purgedConsentRecords.deleted,
+    expiredTimeEntries: purgedTimeEntries.deleted,
     anonymizedFormerEmployees: dueForAnonymisierung.length,
     healthDataRemindersCreated: healthDataReminders.remindersCreated,
     vacationCarryover,

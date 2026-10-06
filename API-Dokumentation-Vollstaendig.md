@@ -196,6 +196,16 @@ Das ist der **admin-seitige** Feed (pending Urlaubsanträge, fällige Fristen, S
 #### `POST /api/me/push-subscriptions` / `DELETE ...?token=<token>`
 Geräte-Token registrieren/entfernen. Body `{ token, platform? }` (`"ios"`/`"android"`, Default `"ios"`). `201`/`200 { status: true }`. **Wichtig:** Registrierung persistiert nur — tatsächlicher Push-Versand ist ein No-Op (Abschnitt 17).
 
+#### `GET /api/me/time-tracking?tenant=<slug>` / `POST /api/me/time-tracking` — Stempeluhr
+Zeiterfassung (nur wenn der Mandant sie aktiviert hat, `TenantSettings.timeTrackingEnabled`). Kein Bereichsrecht nötig — jedes Mitglied mit verknüpfter Personalakte (sonst `409`).
+- `GET` → `200 { status }` mit `{ enabled, settings: { breaksEnabled, autoBreakDeduction, clockInMode: "always"|"shift", clockInLeadMinutes }, state: "off"|"working"|"break", canClockIn, showClock, openEntry, currentBreakStartAt, clockableShift, nextShift, today: { date, workedMinutes, breakMinutes }, timeZone, serverTime }`. **`showClock: false`** heißt: Stempeluhr ausblenden (Modus „nur rund um Schichten" ohne veröffentlichte Schicht, die läuft oder innerhalb von `clockInLeadMinutes` beginnt). Rate-Limit 120/60s.
+- `POST` Body `{ tenant, action: "clockIn"|"clockOut"|"breakStart"|"breakEnd" }` → `200 { status }` (neuer Status). Den Zeitpunkt setzt **der Server**. Fehler (`{ error }`): `403` Zeiterfassung aus, `409` „Sie sind bereits eingestempelt." / „Sie sind nicht eingestempelt." / „Die Pause läuft bereits." / „Es läuft gerade keine Pause." / „Pausen werden in diesem Betrieb nicht gestempelt." / „Einstempeln ist nur kurz vor oder während einer geplanten Schicht möglich.", `400` ungültige Aktion. Ausstempeln ist immer möglich und beendet eine laufende Pause mit. Rate-Limit 30/60s.
+
+#### `GET /api/me/time-entries?tenant=<slug>&period=week|month&date=YYYY-MM-DD` (oder `&from=&to=`)
+„Meine Zeiten" — tageweise Soll (veröffentlichte Schichten) vs. Ist (gestempelt). `200 { entries: { from, to, previous, next, today, timeZone, autoBreakDeduction, days: [{ date, entries: [TimeEntry], shifts: [TimeShift], workedMinutes, breakMinutes, plannedMinutes }], totals: { workedMinutes, breakMinutes, plannedMinutes, entryCount } } }`. `TimeEntry`: `{ id, date, clockInAt, clockOutAt, clockInTime, clockOutTime, breaks[], grossMinutes, clockedBreakMinutes, breakMinutes, breakDeducted, workedMinutes, isOpen, autoClosed, corrected, breakMinutesOverride, note, source: "app"|"web"|"manual", shift }` — `*Time` sind bereits Ortszeit („HH:MM"). `from`/`to` max. 93 Tage, sonst `400`. Korrekturen/Nachträge macht die Verwaltung im Web (Bereich `timeTracking`), nicht über die App.
+
+**Push:** `entityType: "time-tracking"` — Erinnerung 5 Min. nach Schichtbeginn (nicht eingestempelt) bzw. -ende (noch eingestempelt) und „automatisch ausgestempelt". Cron: `GET /api/cron/time-tracking` alle 5 Minuten (Bearer `CRON_SECRET`).
+
 #### `GET /api/me/export`
 GDPR-Datenexport des **eigenen** Kontos (nicht des Mandanten — dafür Abschnitt 2). Rate-Limit 5/Stunde. `200`: Datei-Download, JSON `{ exportedAt, account, memberships, sessions, linkedEmployeeRecords, hinweis }` — HR-Personalakte-Daten **nicht** enthalten.
 

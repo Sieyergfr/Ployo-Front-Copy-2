@@ -2,6 +2,21 @@
 
 Stand: 2026-09-05. Blocker, Sollte-behoben-werden, Responsive Design, Datenschutz-Umbauplan Phase 0-2 und die komplette i18n-String-Extraktion (108 Dateien, 93 Namespaces, ~1635 Keys) sind vollständig umgesetzt, code-verifiziert, committet und gepusht. Die machbaren Teile von Phase 3 (Jugendarbeitsschutz, Mutterschutz, Betriebsrat-Hinweis, Verarbeitungsverzeichnis) sind ebenfalls umgesetzt und code-verifiziert, aber noch nicht gepusht/deployt (steht noch dein Go aus). Alles Weitere unten sind bewusst offene Punkte, die externe Schritte oder deine Entscheidung brauchen (siehe "Braucht weiterhin deine Aufmerksamkeit").
 
+## ✅ Zeiterfassung / Stempeluhr — App + Web (2026-10-06)
+
+- **Mitarbeiter:** Ein-/Ausstempeln und Pause starten/stoppen (Zeitpunkt setzt immer der Server), „Meine Zeiten“ mit Soll (veröffentlichte Schichten) vs. Ist je Tag, Woche/Monat. Web: `/u/[tenant]/zeiten` + Stempeluhr in „Mein Bereich“; App: `app/time-tracking.tsx` + Stempeluhr auf Home + Schnellaktion.
+- **Arbeitgeber-Einstellungen** (Einstellungen → „Zeiterfassung“): an/aus, Pausen stempeln, gesetzliche Mindestpause automatisch abziehen (§ 4 ArbZG), Einstempeln „jederzeit“ oder „nur X Min. vor/während einer Schicht“ (Stempel dann ausgeblendet), automatisches Schließen vergessener Einträge (X Min. nach Schichtende bzw. ohne Schicht nach Y Std.), Push-Erinnerungen.
+- **Verwaltung:** neuer Berechtigungsbereich `timeTracking` (own/team/all), Seite `/u/[tenant]/zeiterfassung` — Zeiten einsehen, korrigieren, nachtragen, löschen; jede Korrektur mit Pflicht-Grund + Audit-Log (vorher/nachher). System-Rollen per Migration nachgezogen (HR-Leitung admin, Teamleitung write/Team, Lohnbuchhaltung read).
+- **Push:** 5 Min. nach Schichtbeginn „bitte einstempeln“ (nicht bei Urlaub/Krankmeldung), 5 Min. nach Schichtende „bitte ausstempeln“, plus „automatisch ausgestempelt“. Nur Push (kein E-Mail-Spam), Duplikatschutz über `TenantTimeClockReminder`.
+- **Datenschutz:** Löschfrist „arbeitszeit“ (2 Jahre, § 16 ArbZG/§ 17 MiLoG) wird vom Cleanup-Cron automatisch angewendet (Legal Hold respektiert), Löschsperre für Personalakten mit aufbewahrungspflichtigen Zeiten, Zeiten in Personalakte- und Mandanten-Export, neuer Eintrag im Verarbeitungsverzeichnis. Kein GPS/Standort.
+- Verifiziert: `tsc`, `eslint`, volle Testsuite gegen isolierte DB (354/354, davon 30 neu), Probe-`next build`, Smoke-Test der Routen; `ployo-mobile` `typecheck` + `lint`. **Nicht committet/deployt.**
+
+Offen dazu:
+- Crontab-Eintrag für den 5-Minuten-Job setzen (darf ich nicht): `*/5 * * * * curl -fsS -X GET https://ployo.io/api/cron/time-tracking -H "Authorization: Bearer <CRON_SECRET>" >> /var/log/ployo-cron.log 2>&1` — **[Du]**
+- Commit + Deploy Web (`scripts/deploy.sh`, Migration `20261006120000_add_time_tracking`) und neuer App-Build — **[Du → Ich, nach deinem Go]**
+- Push-Erinnerungen brauchen zusätzlich „Mobile Push“ unter Einstellungen → Benachrichtigungen (Mandanten-Default ist aus) — **[Du, je Mandant]**
+- Datenschutzerklärung/DSFA um die Arbeitszeiterfassung ergänzen und anwaltlich prüfen lassen; Hinweis: Stempeluhr ist i. d. R. mitbestimmungspflichtig (§ 87 Abs. 1 Nr. 6 BetrVG), falls ein Betriebsrat existiert — **[Du]**
+
 ## ✅ Datenschutz-Umbauplan Phase 3 (2026-09-05)
 
 Auf Zuruf ("Ja phase 3") die vier machbaren Punkte aus Teil 7 des Umbauplans umgesetzt (echte Ist-Zeiterfassung bewusst zurückgestellt, siehe unten):
@@ -95,7 +110,7 @@ fertig, committet+gepusht:**
 
 ## 🙋 Braucht weiterhin deine Aufmerksamkeit
 
-- Phase 3 des Datenschutz-Umbauplans: nur noch die echte Ist-Zeiterfassung offen — bewusst zurückgestellt, das zugrundeliegende Gesetz ist noch Referentenentwurf, kein Regierungsentwurf. Die anderen vier Punkte (Jugendarbeitsschutz, Mutterschutz, Betriebsrat-Hinweis, Verzeichnis von Verarbeitungstätigkeiten) sind erledigt, siehe oben. — **[Du → Ich, sobald das Gesetz konkreter wird]**
+- Phase 3 des Datenschutz-Umbauplans: die echte Ist-Zeiterfassung ist inzwischen als Stempeluhr gebaut (siehe „Zeiterfassung / Stempeluhr“ oben). Falls das Arbeitszeitgesetz-Update konkrete Formvorgaben bringt (z. B. elektronisch, taggleich), nochmal abgleichen. — **[Du → Ich, sobald das Gesetz konkreter wird]**
 - Vier neue Rechtsdokument-Entwürfe (`AVV-Vorlage-Entwurf.md`, `Verzeichnis-von-Verarbeitungstaetigkeiten-Entwurf.md`, `DSFA-Entwurf.md`, `Loeschkonzept.md`) brauchen wie die bestehenden Rechtstexte eine Anwalts-/Steuerberater-Freigabe, bevor sie verbindlich verwendet werden. — **[Du]**
 - Solltest du beim Anlegen/Bearbeiten von Mitarbeitern weiterhin Fehler sehen: Browser-Reload machen — die "Failed to find Server Action"-Fehler in den PM2-Logs sind harmlos-erwartbar (Client-Bundles vor dem Reload zeigen noch auf die alte Deployment-Version) und verschwinden von selbst, sobald die Seite neu geladen wird.
 - AVV (Auftragsverarbeitungsvertrag) mit Sentry abschließen — externer Vertrag, braucht deine Unterschrift/deinen Sentry-Account. Solange offen: Sentry sendet mit Consent Fehler-/Replay-Daten ohne unterschriebenen AVV — rechtlich das größte verbleibende Risiko. — **[Du]**

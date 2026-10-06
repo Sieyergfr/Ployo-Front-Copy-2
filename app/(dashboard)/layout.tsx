@@ -111,6 +111,19 @@ export default async function AuthLayout ({
               sessionTimeout: membership.tenant.settings.sessionTimeout,
               auditRetentionMonths:
                 membership.tenant.settings.auditRetentionMonths,
+              timeTrackingEnabled: membership.tenant.settings.timeTrackingEnabled,
+              timeTrackingBreaksEnabled: membership.tenant.settings.timeTrackingBreaksEnabled,
+              timeTrackingAutoBreakDeduction:
+                membership.tenant.settings.timeTrackingAutoBreakDeduction,
+              timeTrackingClockInMode: membership.tenant.settings.timeTrackingClockInMode,
+              timeTrackingClockInLeadMinutes:
+                membership.tenant.settings.timeTrackingClockInLeadMinutes,
+              timeTrackingReminderPush: membership.tenant.settings.timeTrackingReminderPush,
+              timeTrackingAutoClockOut: membership.tenant.settings.timeTrackingAutoClockOut,
+              timeTrackingAutoClockOutAfterShiftMinutes:
+                membership.tenant.settings.timeTrackingAutoClockOutAfterShiftMinutes,
+              timeTrackingAutoClockOutMaxHours:
+                membership.tenant.settings.timeTrackingAutoClockOutMaxHours,
             }
           : undefined,
     }));

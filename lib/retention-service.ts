@@ -177,6 +177,29 @@ export async function purgeExpiredConsentRecords(now: Date = new Date()) {
 }
 
 /**
+ * Löscht gestempelte Arbeitszeiten (TenantTimeEntry inkl. Pausen) nach Ablauf
+ * der Kategorie "arbeitszeit" (§16 Abs. 2 ArbZG, §17 MiLoG: 2 Jahre ab
+ * Erfassung). Mitarbeiter mit Legal Hold bleiben unberührt. Außerdem das
+ * Versandprotokoll der Stempel-Erinnerungen (nur Duplikatschutz, nach einer
+ * Woche ohne Zweck).
+ */
+export async function purgeExpiredTimeEntries(now: Date = new Date()) {
+  const cutoff = new Date(now);
+  cutoff.setMonth(cutoff.getMonth() - RETENTION_POLICIES.arbeitszeit.months);
+
+  const [entries, reminders] = await Promise.all([
+    prisma.tenantTimeEntry.deleteMany({
+      where: { clockInAt: { lt: cutoff }, employee: { legalHold: false } },
+    }),
+    prisma.tenantTimeClockReminder.deleteMany({
+      where: { createdAt: { lt: new Date(now.getTime() - 7 * 86_400_000) } },
+    }),
+  ]);
+
+  return { deleted: entries.count, remindersDeleted: reminders.count };
+}
+
+/**
  * Abgeschlossene Krankmeldungen, deren Gesundheitsdaten-Frist für den
  * Freitext (`note`) abgelaufen ist. Löscht NICHTS automatisch (Art. 9
  * DSGVO-Daten, siehe Umbauplan) — legt stattdessen eine Erinnerung für HR an
@@ -559,6 +582,20 @@ export async function assertEmployeeDeletionAllowed(tenantId: string, employeeId
   if (payrollStatements.some((s) => !retentionCutoff("lohn_sozialversicherung", s.issuedAt))) {
     throw new Error(
       `Löschung gesperrt: Aufbewahrungsfrist für mindestens eine Gehaltsabrechnung (${RETENTION_POLICIES.lohn_sozialversicherung.legalBasis}) noch nicht abgelaufen. Für teilweise Löschung „Kategorien-Löschantrag" verwenden.`,
+    );
+  }
+
+  // Gestempelte Arbeitszeiten (§16 Abs. 2 ArbZG, §17 MiLoG) — ein Löschen
+  // der Personalakte würde sie per Kaskade mitnehmen.
+  const newestTimeEntry = await prisma.tenantTimeEntry.findFirst({
+    where: { employeeId },
+    orderBy: { clockInAt: "desc" },
+    select: { clockInAt: true },
+  });
+
+  if (newestTimeEntry && !retentionCutoff("arbeitszeit", newestTimeEntry.clockInAt)) {
+    throw new Error(
+      `Löschung gesperrt: Aufbewahrungsfrist für erfasste Arbeitszeiten (${RETENTION_POLICIES.arbeitszeit.legalBasis}) noch nicht abgelaufen.`,
     );
   }
 

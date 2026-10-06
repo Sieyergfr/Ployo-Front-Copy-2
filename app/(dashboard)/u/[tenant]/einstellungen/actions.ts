@@ -5,6 +5,7 @@ import {
   updateTenantNotifications,
   updateTenantProfile,
   updateTenantSecurity,
+  updateTenantTimeTracking,
 } from "@/lib/settings-service";
 import { updateAccountName } from "@/lib/account-service";
 import { type ActionState, withActionErrorHandling } from "@/lib/action-state";
@@ -139,6 +140,21 @@ async function saveSettingsPopupCategory(
       absenceAlerts: formBool(formData, "absenceAlerts"),
       shiftAlerts: formBool(formData, "shiftAlerts"),
       digestTime: digestTimeFromForm(formData),
+    });
+  }
+
+  if (category === "timeTracking") {
+    await updateTenantTimeTracking({
+      tenantSlug: tenant,
+      enabled: formBool(formData, "timeTrackingEnabled"),
+      breaksEnabled: formBool(formData, "timeTrackingBreaksEnabled"),
+      autoBreakDeduction: formBool(formData, "timeTrackingAutoBreakDeduction"),
+      clockInMode: formString(formData, "timeTrackingClockInMode", "always"),
+      clockInLeadMinutes: formString(formData, "timeTrackingClockInLeadMinutes"),
+      reminderPush: formBool(formData, "timeTrackingReminderPush"),
+      autoClockOut: formBool(formData, "timeTrackingAutoClockOut"),
+      autoClockOutAfterShiftMinutes: formString(formData, "timeTrackingAutoClockOutAfterShiftMinutes"),
+      autoClockOutMaxHours: formString(formData, "timeTrackingAutoClockOutMaxHours"),
     });
   }
 

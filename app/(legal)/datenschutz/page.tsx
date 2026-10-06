@@ -6,8 +6,8 @@ export const metadata = {
 
 /**
  * Deckt die von der App tatsächlich verarbeiteten Datenkategorien ab
- * (Personalakte, Schichten, Urlaub/Krankheit, Dokumente, Push-Token, Kamera/
- * Fotos). Vor dem Livegang trotzdem final von einer fachkundigen Person
+ * (Personalakte, Schichten, Zeiterfassung, Urlaub/Krankheit, Dokumente,
+ * Push-Token, Kamera/Fotos). Vor dem Livegang trotzdem final von einer fachkundigen Person
  * gegenpruefen lassen, insbesondere die konkreten Aufbewahrungsfristen.
  */
 export default function DatenschutzPage() {
@@ -111,6 +111,19 @@ export default function DatenschutzPage() {
             Arbeitszeiten, Wunschfrei- und Urlaubsanträge.
           </li>
           <li>
+            <strong>Arbeitszeiterfassung (Stempeluhr):</strong> sofern Ihr
+            Arbeitgeber die Funktion aktiviert hat, die Zeitpunkte, zu denen
+            Sie sich ein- und ausstempeln sowie Pausen beginnen und beenden,
+            der Bezug zur geplanten Schicht und etwaige Korrekturen durch
+            Ihren Arbeitgeber (inklusive Grund und bearbeitender Person).
+            Rechtsgrundlage ist Art. 6 Abs. 1 lit. b und c DSGVO i. V. m. der
+            Pflicht des Arbeitgebers zur Arbeitszeiterfassung (§ 16 Abs. 2
+            ArbZG, § 17 MiLoG, BAG, Beschl. v. 13.09.2022 – 1 ABR 22/21). Es
+            werden dabei <strong>keine Standort- oder GPS-Daten</strong>{" "}
+            erhoben. Erinnerungen zum Ein- und Ausstempeln werden als
+            Push-Benachrichtigung zugestellt (siehe Ziffer 6).
+          </li>
+          <li>
             <strong>Gesundheitsdaten (besondere Kategorie, Art. 9 DSGVO):</strong>{" "}
             Krankmeldungen und ärztliche Atteste. Deren Verarbeitung stützt
             sich auf Art. 9 Abs. 2 lit. b DSGVO i. V. m. arbeits- und
@@ -144,7 +157,8 @@ export default function DatenschutzPage() {
         <p>
           Wenn Sie Push-Benachrichtigungen in der App erlauben, speichern wir
           ein Geräte-/Push-Token zusammen mit Ihrer Nutzerkennung, um Sie
-          z. B. über neue Schichten, Anträge oder Info-Anfragen zu
+          z. B. über neue Schichten, Anträge, Info-Anfragen oder das
+          Ein- und Ausstempeln zu
           benachrichtigen (Art. 6 Abs. 1 lit. b, f DSGVO). Der Versand
           erfolgt über den Push-Dienst Expo (650 Industries, Inc., USA), der
           die Benachrichtigung an den Push-Dienst des jeweiligen
@@ -256,7 +270,11 @@ export default function DatenschutzPage() {
           steuerrechtlichen Aufbewahrungsfristen (i. d. R. bis zu 10 Jahre,
           §§ 147 AO, 257 HGB); Krankmeldungen/Atteste und sonstige
           Personalunterlagen werden entsprechend der arbeitsrechtlichen
-          Aufbewahrungspflichten Ihres Arbeitgebers gespeichert. Audit-
+          Aufbewahrungspflichten Ihres Arbeitgebers gespeichert. Gestempelte
+          Arbeitszeiten werden zwei Jahre nach ihrer Erfassung automatisch
+          gelöscht (§ 16 Abs. 2 ArbZG, § 17 MiLoG), sofern Ihr Arbeitgeber
+          keine Aufbewahrungssperre (z. B. wegen eines Rechtsstreits)
+          gesetzt hat. Audit-
           Protokolle werden gemäß der im jeweiligen Arbeitsbereich
           konfigurierten Aufbewahrungsfrist automatisch entfernt.
         </p>

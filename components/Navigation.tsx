@@ -34,6 +34,7 @@ import {
   Save,
   ShieldCheck,
   SlidersHorizontal,
+  Timer,
   UserCog,
   X,
   type LucideIcon,
@@ -57,6 +58,8 @@ type NavItem = {
   href: string;
   area?: TenantPermissionArea;
   requiredLevel?: PermissionLevel;
+  /** Nur anzeigen, wenn der Mandant die Zeiterfassung aktiviert hat. */
+  requiresTimeTracking?: boolean;
 };
 
 function hasRequiredLevel(actual: PermissionLevel, required: PermissionLevel) {
@@ -105,6 +108,15 @@ type TenantItem = {
     twoFactorRequired: boolean;
     sessionTimeout: boolean;
     auditRetentionMonths: number;
+    timeTrackingEnabled: boolean;
+    timeTrackingBreaksEnabled: boolean;
+    timeTrackingAutoBreakDeduction: boolean;
+    timeTrackingClockInMode: string;
+    timeTrackingClockInLeadMinutes: number;
+    timeTrackingReminderPush: boolean;
+    timeTrackingAutoClockOut: boolean;
+    timeTrackingAutoClockOutAfterShiftMinutes: number;
+    timeTrackingAutoClockOutMaxHours: number;
   };
 };
 
@@ -113,6 +125,7 @@ export type NavigationTenantItem = TenantItem;
 const navigationItems: NavItem[] = [
   { labelKey: "overview", code: "Üb", href: "" },
   { labelKey: "myArea", code: "Mb", href: "/mein-bereich" },
+  { labelKey: "myTimes", code: "Zt", href: "/zeiten", requiresTimeTracking: true },
   { labelKey: "employees", code: "MA", href: "/employees", area: "employees" },
   { labelKey: "locations", code: "St", href: "/standorte", area: "locations" },
   { labelKey: "teams", code: "Tm", href: "/teams", area: "teams" },
@@ -121,6 +134,13 @@ const navigationItems: NavItem[] = [
   { labelKey: "vacation", code: "Ur", href: "/urlaub", area: "vacation" },
   { labelKey: "sickness", code: "Kr", href: "/krankheit", area: "sickness" },
   { labelKey: "shifts", code: "Sp", href: "/schichtplanung", area: "shifts" },
+  {
+    labelKey: "timeTracking",
+    code: "Ze",
+    href: "/zeiterfassung",
+    area: "timeTracking",
+    requiresTimeTracking: true,
+  },
   { labelKey: "reminders", code: "Er", href: "/erinnerungen", area: "reminders" },
 ];
 
@@ -155,6 +175,15 @@ const defaultSettings: NonNullable<TenantItem["settings"]> = {
   twoFactorRequired: false,
   sessionTimeout: true,
   auditRetentionMonths: 24,
+  timeTrackingEnabled: false,
+  timeTrackingBreaksEnabled: true,
+  timeTrackingAutoBreakDeduction: false,
+  timeTrackingClockInMode: "always",
+  timeTrackingClockInLeadMinutes: 60,
+  timeTrackingReminderPush: true,
+  timeTrackingAutoClockOut: false,
+  timeTrackingAutoClockOutAfterShiftMinutes: 60,
+  timeTrackingAutoClockOutMaxHours: 12,
 };
 
 function tenantSlugFromHref(href: string) {
@@ -227,6 +256,7 @@ type SettingsCategoryId =
   | "account"
   | "company"
   | "notifications"
+  | "timeTracking"
   | "security"
   | "integrations"
   | "billing";
@@ -269,6 +299,14 @@ function getSettingsCategories(t: (key: string) => string): SettingsCategory[] {
       label: t("categories.notifications.label"),
       description: t("categories.notifications.description"),
       icon: Bell,
+      area: "settings",
+      requiredLevel: "write",
+    },
+    {
+      id: "timeTracking",
+      label: t("categories.timeTracking.label"),
+      description: t("categories.timeTracking.description"),
+      icon: Timer,
       area: "settings",
       requiredLevel: "write",
     },
@@ -745,6 +783,123 @@ function SettingsPanel({
           </div>
         </div>
       </SettingsSection>
+    );
+  }
+
+  if (activeCategory === "timeTracking") {
+    return (
+      <div className="flex flex-col gap-4">
+        <SettingsSection title={t("timeTrackingTab.title")} icon={Timer}>
+          <div className="flex flex-col gap-3">
+            <Checkbox id="timeTrackingEnabled" defaultChecked={settings.timeTrackingEnabled}>
+              {t("timeTrackingTab.enabled")}
+            </Checkbox>
+            <p className="text-[12px] text-muted">{t("timeTrackingTab.enabledHint")}</p>
+            <p className="text-[12px] text-muted">{t("timeTrackingTab.worksCouncilHint")}</p>
+          </div>
+        </SettingsSection>
+
+        <SettingsSection title={t("timeTrackingTab.clockInTitle")} icon={Timer}>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="field">
+              <label htmlFor="settings-clock-in-mode" className="label">
+                {t("timeTrackingTab.clockInMode")}
+              </label>
+              <select
+                id="settings-clock-in-mode"
+                name="timeTrackingClockInMode"
+                className="input cursor-pointer bg-white"
+                defaultValue={settings.timeTrackingClockInMode}
+              >
+                <option value="always">{t("timeTrackingTab.clockInModeAlways")}</option>
+                <option value="shift">{t("timeTrackingTab.clockInModeShift")}</option>
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="settings-clock-in-lead" className="label">
+                {t("timeTrackingTab.clockInLead")}
+              </label>
+              <input
+                id="settings-clock-in-lead"
+                name="timeTrackingClockInLeadMinutes"
+                type="number"
+                min={0}
+                max={240}
+                className="input bg-white"
+                defaultValue={settings.timeTrackingClockInLeadMinutes}
+              />
+            </div>
+            <p className="text-[12px] text-muted sm:col-span-2">{t("timeTrackingTab.clockInHint")}</p>
+          </div>
+        </SettingsSection>
+
+        <SettingsSection title={t("timeTrackingTab.breaksTitle")} icon={Timer}>
+          <div className="flex flex-col gap-3">
+            <Checkbox id="timeTrackingBreaksEnabled" defaultChecked={settings.timeTrackingBreaksEnabled}>
+              {t("timeTrackingTab.breaksEnabled")}
+            </Checkbox>
+            <Checkbox
+              id="timeTrackingAutoBreakDeduction"
+              defaultChecked={settings.timeTrackingAutoBreakDeduction}
+            >
+              {t("timeTrackingTab.autoBreakDeduction")}
+            </Checkbox>
+            <p className="text-[12px] text-muted">{t("timeTrackingTab.autoBreakDeductionHint")}</p>
+          </div>
+        </SettingsSection>
+
+        <SettingsSection title={t("timeTrackingTab.autoClockOutTitle")} icon={Timer}>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <Checkbox id="timeTrackingAutoClockOut" defaultChecked={settings.timeTrackingAutoClockOut}>
+                {t("timeTrackingTab.autoClockOut")}
+              </Checkbox>
+            </div>
+            <div className="field">
+              <label htmlFor="settings-auto-clock-out-after-shift" className="label">
+                {t("timeTrackingTab.autoClockOutAfterShift")}
+              </label>
+              <input
+                id="settings-auto-clock-out-after-shift"
+                name="timeTrackingAutoClockOutAfterShiftMinutes"
+                type="number"
+                min={0}
+                max={720}
+                className="input bg-white"
+                defaultValue={settings.timeTrackingAutoClockOutAfterShiftMinutes}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="settings-auto-clock-out-max-hours" className="label">
+                {t("timeTrackingTab.autoClockOutMaxHours")}
+              </label>
+              <input
+                id="settings-auto-clock-out-max-hours"
+                name="timeTrackingAutoClockOutMaxHours"
+                type="number"
+                min={1}
+                max={24}
+                className="input bg-white"
+                defaultValue={settings.timeTrackingAutoClockOutMaxHours}
+              />
+            </div>
+            <p className="text-[12px] text-muted sm:col-span-2">{t("timeTrackingTab.autoClockOutHint")}</p>
+          </div>
+        </SettingsSection>
+
+        <SettingsSection title={t("timeTrackingTab.pushTitle")} icon={Bell}>
+          <div className="flex flex-col gap-3">
+            <Checkbox id="timeTrackingReminderPush" defaultChecked={settings.timeTrackingReminderPush}>
+              {t("timeTrackingTab.reminderPush")}
+            </Checkbox>
+            <p className="text-[12px] text-muted">
+              {settings.mobilePush
+                ? t("timeTrackingTab.reminderPushHint")
+                : t("timeTrackingTab.reminderPushNeedsMobilePush")}
+            </p>
+          </div>
+        </SettingsSection>
+      </div>
     );
   }
 
@@ -1473,6 +1628,10 @@ export default function NavigationSidebar({
     () =>
       navigationItems
         .filter((item) => {
+          if (item.requiresTimeTracking && !activeTenant.settings?.timeTrackingEnabled) {
+            return false;
+          }
+
           if (!item.area || !activeTenant.permissions) {
             return true;
           }
@@ -1495,7 +1654,7 @@ export default function NavigationSidebar({
                 : pathname === href || pathname.startsWith(`${href}/`),
           };
         }),
-    [activeTenant.permissions, baseHref, pathname, t],
+    [activeTenant.permissions, activeTenant.settings?.timeTrackingEnabled, baseHref, pathname, t],
   );
 
   useEffect(() => {

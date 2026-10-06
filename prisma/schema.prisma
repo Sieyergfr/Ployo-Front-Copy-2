@@ -412,6 +412,8 @@ model Tenant {
   employeeTimeline         TenantEmployeeTimeline[]
   employeeNotifications    TenantEmployeeNotification[]
   employeeFolderTemplates  TenantEmployeeFolderTemplate[]
+  timeEntries              TenantTimeEntry[]
+  clockReminders           TenantTimeClockReminder[]
   settings                 TenantSettings?
 }
 
@@ -484,6 +486,26 @@ model TenantSettings {
   sessionTimeout          Boolean  @default(true)
   auditRetentionMonths    Int      @default(24)
   billingNotifications    Boolean  @default(true)
+  /// Zeiterfassung (Stempeluhr) fuer Mitarbeiter - siehe lib/time-tracking-service.ts.
+  timeTrackingEnabled                       Boolean  @default(false)
+  /// Pausen stempeln (Start/Stopp) erlaubt.
+  timeTrackingBreaksEnabled                 Boolean  @default(true)
+  /// Gesetzliche Mindestpause (§4 ArbZG: 30 Min. ab 6h, 45 Min. ab 9h)
+  /// automatisch abziehen, wenn weniger Pause gestempelt wurde.
+  timeTrackingAutoBreakDeduction            Boolean  @default(false)
+  /// "always" = jederzeit einstempeln; "shift" = nur, wenn eine
+  /// veroeffentlichte Schicht laeuft oder innerhalb von
+  /// `timeTrackingClockInLeadMinutes` beginnt.
+  timeTrackingClockInMode                   String   @default("always")
+  timeTrackingClockInLeadMinutes            Int      @default(60)
+  /// Push-Erinnerung zum Ein-/Ausstempeln (5 Min. nach Schichtbeginn/-ende).
+  timeTrackingReminderPush                  Boolean  @default(true)
+  /// Vergessene Stempelungen automatisch schliessen.
+  timeTrackingAutoClockOut                  Boolean  @default(false)
+  /// ... X Minuten nach dem Ende der zugeordneten Schicht (Ausstempelzeit = Schichtende).
+  timeTrackingAutoClockOutAfterShiftMinutes Int      @default(60)
+  /// ... bzw. ohne zugeordnete Schicht nach X Stunden ab Einstempeln.
+  timeTrackingAutoClockOutMaxHours          Int      @default(12)
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
   tenantId                String   @unique
@@ -800,6 +822,7 @@ model TenantEmployee {
   sicknessReports             TenantSicknessReport[]
   infoRequests                TenantEmployeeInfoRequest[]
   timeline                    TenantEmployeeTimeline[]
+  timeEntries                 TenantTimeEntry[]
   contractDetails             TenantEmployeeContractDetails?
   locationsLed                TenantLocation[]               @relation("TenantLocationLead")
 
@@ -1287,6 +1310,76 @@ model TenantWishFreeRequest {
  * Dritt-Tool: schreibt in dieselbe Datenbank statt Daten an Google/Meta o. Ä.
  * abzugeben.
  */
+/**
+ * Ein gestempelter Arbeitsblock (Einstempeln bis Ausstempeln). Zeitpunkte
+ * setzt ausschliesslich der Server. Hoechstens ein offener Eintrag
+ * (`clockOutAt IS NULL`) je Mitarbeiter - erzwungen in
+ * lib/time-tracking-service.ts, das jede Stempelaktion unter einer
+ * Zeilensperre (`SELECT ... FOR UPDATE`) auf den Mitarbeiter ausfuehrt.
+ */
+model TenantTimeEntry {
+  id                   String            @id @default(cuid())
+  tenantId             String
+  employeeId           String
+  clockInAt            DateTime
+  clockOutAt           DateTime?
+  /// ID des Eintrags aus `TenantShiftWeek.publishedShiftsJson`, "" ohne Schicht.
+  shiftId              String            @default("")
+  plannedStartAt       DateTime?
+  plannedEndAt         DateTime?
+  shiftLocation        String            @default("")
+  /// "app" | "web" | "manual" (von der Verwaltung nachgetragen)
+  source               String            @default("app")
+  /// Vom Cron automatisch ausgestempelt (vergessenes Ausstempeln).
+  autoClosed           Boolean           @default(false)
+  /// Korrigierte Pausendauer - ersetzt die gestempelten Pausen in der Berechnung.
+  breakMinutesOverride Int?
+  /// Grund der letzten Korrektur bzw. Notiz zum manuellen Eintrag.
+  note                 String            @default("")
+  correctedAt          DateTime?
+  correctedBy          String            @default("")
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+  tenant               Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee             TenantEmployee    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  breaks               TenantTimeBreak[]
+
+  @@index([tenantId, clockInAt])
+  @@index([employeeId, clockInAt])
+}
+
+/** Gestempelte Pause innerhalb eines Arbeitsblocks; hoechstens eine offene je Eintrag (gleiche Sperre wie oben). */
+model TenantTimeBreak {
+  id          String          @id @default(cuid())
+  timeEntryId String
+  startAt     DateTime
+  endAt       DateTime?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  timeEntry   TenantTimeEntry @relation(fields: [timeEntryId], references: [id], onDelete: Cascade)
+
+  @@index([timeEntryId])
+}
+
+/**
+ * Versandprotokoll der Stempel-Erinnerungen - der Unique-Key verhindert, dass
+ * der alle 5 Minuten laufende Cron dieselbe Erinnerung mehrfach verschickt.
+ */
+model TenantTimeClockReminder {
+  id         String   @id @default(cuid())
+  tenantId   String
+  employeeId String
+  /// "<Schicht-ID>@<Datum>"
+  shiftRef   String
+  /// "clock-in" | "clock-out"
+  kind       String
+  createdAt  DateTime @default(now())
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, shiftRef, kind])
+  @@index([createdAt])
+}
+
 model PageView {
   id           String   @id @default(cuid())
   path         String

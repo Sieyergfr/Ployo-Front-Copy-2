@@ -17,6 +17,7 @@ import {
 import { headers } from "next/headers";
 import { requireTenantAccess } from "@/lib/tenant-access";
 import { isStripeConfigured } from "@/lib/stripe/client";
+import { isClockInMode } from "@/lib/time-tracking";
 
 const INVITATION_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 
@@ -392,6 +393,69 @@ export async function updateTenantNotifications(input: {
       digestTime: normalizeDigestTime(input.digestTime),
     },
   });
+}
+
+function clampInt(value: string | undefined, fallback: number, min: number, max: number) {
+  const parsed = Number.parseInt(value ?? "", 10);
+
+  return Number.isFinite(parsed) ? Math.min(max, Math.max(min, parsed)) : fallback;
+}
+
+/** Zeiterfassung (Stempeluhr) — siehe lib/time-tracking-service.ts. */
+export async function updateTenantTimeTracking(input: {
+  tenantSlug: string;
+  enabled?: boolean;
+  breaksEnabled?: boolean;
+  autoBreakDeduction?: boolean;
+  clockInMode?: string;
+  clockInLeadMinutes?: string;
+  reminderPush?: boolean;
+  autoClockOut?: boolean;
+  autoClockOutAfterShiftMinutes?: string;
+  autoClockOutMaxHours?: string;
+}) {
+  const access = await requireSettingsManager(input.tenantSlug);
+  const actor = await requireTenantAccess(input.tenantSlug, "settings", "write");
+
+  await ensureTenantSettings(access.tenantId);
+
+  const updated = await prisma.tenantSettings.update({
+    where: { tenantId: access.tenantId },
+    data: {
+      timeTrackingEnabled: normalizeBool(input.enabled),
+      timeTrackingBreaksEnabled: normalizeBool(input.breaksEnabled),
+      timeTrackingAutoBreakDeduction: normalizeBool(input.autoBreakDeduction),
+      timeTrackingClockInMode: isClockInMode(input.clockInMode) ? input.clockInMode : "always",
+      timeTrackingClockInLeadMinutes: clampInt(input.clockInLeadMinutes, 60, 0, 240),
+      timeTrackingReminderPush: normalizeBool(input.reminderPush),
+      timeTrackingAutoClockOut: normalizeBool(input.autoClockOut),
+      timeTrackingAutoClockOutAfterShiftMinutes: clampInt(input.autoClockOutAfterShiftMinutes, 60, 0, 720),
+      timeTrackingAutoClockOutMaxHours: clampInt(input.autoClockOutMaxHours, 12, 1, 24),
+    },
+  });
+
+  await recordTenantAudit({
+    tenantId: access.tenantId,
+    actorId: actor.userId,
+    actorName: actor.userName,
+    action: "Zeiterfassungs-Einstellungen geändert",
+    source: "Einstellungen",
+    entityType: "settings",
+    entityId: access.tenantId,
+    detail: `Aktiv: ${updated.timeTrackingEnabled ? "ja" : "nein"}, Pausen stempeln: ${
+      updated.timeTrackingBreaksEnabled ? "ja" : "nein"
+    }, Mindestpause abziehen: ${updated.timeTrackingAutoBreakDeduction ? "ja" : "nein"}, Einstempeln: ${
+      updated.timeTrackingClockInMode
+    } (${updated.timeTrackingClockInLeadMinutes} Min. vorher), Push: ${
+      updated.timeTrackingReminderPush ? "ja" : "nein"
+    }, Auto-Ausstempeln: ${
+      updated.timeTrackingAutoClockOut
+        ? `${updated.timeTrackingAutoClockOutAfterShiftMinutes} Min. nach Schichtende / ${updated.timeTrackingAutoClockOutMaxHours} h ohne Schicht`
+        : "aus"
+    }`,
+  });
+
+  return updated;
 }
 
 export async function updateTenantSecurity(input: {

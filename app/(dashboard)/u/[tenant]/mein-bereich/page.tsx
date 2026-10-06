@@ -1,4 +1,5 @@
 import MyShiftsCard from "@/components/MyShiftsCard";
+import TimeClockCard from "@/components/TimeClockCard";
 import PageHeader from "@/components/PageHeader";
 import SelfServiceEmployeeLink, {
   UnlinkOwnEmployeeButton,
@@ -11,6 +12,7 @@ import {
 import { getUnlinkedEmployeesForTenant } from "@/lib/employee-service";
 import { getMySelfServiceOverview } from "@/lib/self-service";
 import { getMyShiftsForCurrentWeek } from "@/lib/shift-service";
+import { getMyClockStatus } from "@/lib/time-tracking-service";
 import { withAccessRedirect } from "@/lib/tenant-access";
 import { getVacationStatusConfig } from "@/lib/vacations";
 import {
@@ -63,7 +65,10 @@ export default async function SelfServicePage({
 
   const { employee, vacationRequests, sicknessReports, documents, profileFields, profileCompleteness } =
     overview;
-  const myShifts = await getMyShiftsForCurrentWeek(tenant).catch(() => null);
+  const [myShifts, clockStatus] = await Promise.all([
+    getMyShiftsForCurrentWeek(tenant).catch(() => null),
+    getMyClockStatus(tenant).catch(() => null),
+  ]);
   const vacationStatusConfig = getVacationStatusConfig(tStatus);
 
   return (
@@ -112,6 +117,14 @@ export default async function SelfServicePage({
           </div>
         </div>
       </section>
+
+      {/* Im Modus "nur rund um Schichten" verschwindet die Uhr hier ganz, solange
+          keine Schicht in Reichweite ist — unter "Meine Zeiten" bleibt sie mit Hinweis sichtbar. */}
+      {clockStatus?.showClock && (
+        <div className="mb-7">
+          <TimeClockCard tenant={tenant} initialStatus={clockStatus} />
+        </div>
+      )}
 
       {myShifts && (
         <div className="mb-7">

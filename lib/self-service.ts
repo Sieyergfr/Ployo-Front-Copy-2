@@ -1,4 +1,5 @@
 import "server-only";
+import { getTimeEntriesForEmployeeExport, type TimeEntryView } from "@/lib/time-tracking-service";
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { requireTenantMembership } from "@/lib/tenant-access";
@@ -483,6 +484,8 @@ export type PersonalakteExport = SelfServiceOverview & {
   notifications: SelfServiceNotification[];
   /** Eigene Cookie-Consent-Nachweise (ConsentRecord) — vorher nicht Teil des Exports. */
   consentRecords: SelfServiceConsentRecord[];
+  /** Gestempelte Arbeitszeiten (Zeiterfassung) inkl. Pausen und Korrekturen. */
+  timeEntries: TimeEntryView[];
 };
 
 /**
@@ -527,11 +530,12 @@ export async function getMyPersonalakteExport(tenantSlug: string): Promise<Perso
       maternityProtection: null,
       notifications: [],
       consentRecords: mappedConsentRecords,
+      timeEntries: [],
     };
   }
 
   const employeeId = overview.employee.id;
-  const [contracts, contractDetails, payrollStatements, timeline, employeeRecord, notifications] =
+  const [contracts, contractDetails, payrollStatements, timeline, employeeRecord, notifications, timeEntries] =
     await Promise.all([
       prisma.tenantEmployeeContract.findMany({
         where: { employeeId },
@@ -551,6 +555,7 @@ export async function getMyPersonalakteExport(tenantSlug: string): Promise<Perso
         where: { tenantId: access.tenantId, userId: access.userId },
         orderBy: { createdAt: "desc" },
       }),
+      getTimeEntriesForEmployeeExport(access.tenantId, employeeId),
     ]);
 
   return {
@@ -607,6 +612,7 @@ export async function getMyPersonalakteExport(tenantSlug: string): Promise<Perso
       createdAt: notification.createdAt.toISOString(),
     })),
     consentRecords: mappedConsentRecords,
+    timeEntries,
   };
 }
 

@@ -244,6 +244,15 @@ export async function getTenantsForUser(userId: string) {
               twoFactorRequired: true,
               sessionTimeout: true,
               auditRetentionMonths: true,
+              timeTrackingEnabled: true,
+              timeTrackingBreaksEnabled: true,
+              timeTrackingAutoBreakDeduction: true,
+              timeTrackingClockInMode: true,
+              timeTrackingClockInLeadMinutes: true,
+              timeTrackingReminderPush: true,
+              timeTrackingAutoClockOut: true,
+              timeTrackingAutoClockOutAfterShiftMinutes: true,
+              timeTrackingAutoClockOutMaxHours: true,
               companyAddress: {
                 select: {
                   street: true,

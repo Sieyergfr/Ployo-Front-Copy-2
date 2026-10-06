@@ -9,13 +9,13 @@ import {
 export type TenantPermissionArea =
   | "employees" | "contracts" | "employeeFiles" | "payroll" | "sensitiveData" | "mutterschutz"
   | "locations" | "teams" | "files"
-  | "vacation" | "sickness" | "shifts" | "reminders" | "audit"
+  | "vacation" | "sickness" | "shifts" | "timeTracking" | "reminders" | "audit"
   | "roles" | "settings";
 
 export const tenantPermissionAreas: TenantPermissionArea[] = [
   "employees", "contracts", "employeeFiles", "payroll", "sensitiveData", "mutterschutz",
   "locations", "teams", "files",
-  "vacation", "sickness", "shifts", "reminders", "audit",
+  "vacation", "sickness", "shifts", "timeTracking", "reminders", "audit",
   "roles", "settings",
 ];
 

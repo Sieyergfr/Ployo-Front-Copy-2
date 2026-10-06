@@ -45,7 +45,15 @@ export type NotificationEvent = {
   /** Optionale Referenz fürs Deep-Linking (z. B. "info-request" + die jeweilige ID). */
   entityType?: string;
   entityId?: string;
+  /**
+   * Auf diese Kanäle beschränken (Standard: alle). Für zeitkritische
+   * Hinweise wie die Stempel-Erinnerungen, die als E-Mail oder als
+   * Posteingangs-Zeile nur Rauschen wären.
+   */
+  channels?: NotificationChannelName[];
 };
+
+export type NotificationChannelName = "email" | "push" | "in-app";
 
 /**
  * Zentrale Zustellung für Benachrichtigungen, kanalunabhängig.
@@ -77,7 +85,7 @@ type TenantChannelSettings = {
 };
 
 interface NotificationChannel {
-  name: string;
+  name: NotificationChannelName;
   isEnabledFor(
     event: ResolvedNotificationEvent,
     preference: UserNotificationPreference,
@@ -240,6 +248,10 @@ export async function dispatchNotification(event: NotificationEvent) {
   const resolved: ResolvedNotificationEvent = { ...event, ...rendered, locale };
 
   for (const channel of channels) {
+    if (event.channels && !event.channels.includes(channel.name)) {
+      continue;
+    }
+
     try {
       if (await channel.isEnabledFor(resolved, preference, tenantSettings)) {
         await channel.send(resolved);

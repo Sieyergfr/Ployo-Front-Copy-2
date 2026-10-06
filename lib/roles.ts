@@ -101,6 +101,7 @@ export const permissionAreas: PermissionArea[] = [
   { id: "vacation", label: "Urlaub", description: "Anträge, Kontingente, Freigaben", supportsScope: true, fileRelevant: false, supportsAssignedScope: false },
   { id: "sickness", label: "Krankheit", description: "Krankmeldungen, Atteste, Abschluss", supportsScope: true, fileRelevant: true, supportsAssignedScope: false },
   { id: "shifts", label: "Schichtplanung", description: "Dienstpläne, Wochenplanung, Konflikte", supportsScope: true, fileRelevant: false, supportsAssignedScope: false },
+  { id: "timeTracking", label: "Zeiterfassung", description: "Gestempelte Arbeitszeiten aller Mitarbeiter einsehen, korrigieren, nachtragen — die eigenen Zeiten sieht jeder ohnehin", supportsScope: true, fileRelevant: false, supportsAssignedScope: false },
   { id: "reminders", label: "Erinnerungen", description: "Fristen, Wiedervorlagen, Eskalationen", supportsScope: true, fileRelevant: false, supportsAssignedScope: false },
   { id: "audit", label: "Audit Logs", description: "Zugriffe, Änderungen, Exporte", supportsScope: false, fileRelevant: false, supportsAssignedScope: false },
   { id: "roles", label: "Rollen", description: "Berechtigungen und Sicherheitsrichtlinien", supportsScope: false, fileRelevant: false, supportsAssignedScope: false },
@@ -168,12 +169,13 @@ export const defaultPermissionRoles: Omit<
       vacation: "admin",
       sickness: "admin",
       shifts: "write",
+      timeTracking: "admin",
       reminders: "admin",
       audit: "read",
       roles: "admin",
       settings: "write",
     },
-    scopes: { employees: "all", contracts: "all", employeeFiles: "all", payroll: "all", sensitiveData: "all", mutterschutz: "all", vacation: "all", sickness: "all" },
+    scopes: { employees: "all", contracts: "all", employeeFiles: "all", payroll: "all", sensitiveData: "all", mutterschutz: "all", vacation: "all", sickness: "all", timeTracking: "all" },
   },
   {
     key: "payroll",
@@ -197,12 +199,14 @@ export const defaultPermissionRoles: Omit<
       vacation: "read",
       sickness: "read",
       shifts: "read",
+      // Ist-Zeiten sind Grundlage der Lohnabrechnung (Zuschläge, Überstunden).
+      timeTracking: "read",
       reminders: "write",
       audit: "read",
       roles: "none",
       settings: "none",
     },
-    scopes: { employees: "all", contracts: "all", employeeFiles: "all", payroll: "all", sensitiveData: "all", vacation: "all", sickness: "all" },
+    scopes: { employees: "all", contracts: "all", employeeFiles: "all", payroll: "all", sensitiveData: "all", vacation: "all", sickness: "all", timeTracking: "all" },
   },
   {
     key: "teamlead",
@@ -225,6 +229,7 @@ export const defaultPermissionRoles: Omit<
       vacation: "write",
       sickness: "read",
       shifts: "admin",
+      timeTracking: "write",
       reminders: "write",
       audit: "none",
       roles: "none",
@@ -232,7 +237,7 @@ export const defaultPermissionRoles: Omit<
     },
     // Teamleitung plant und genehmigt fuer das eigene Team — nicht
     // mandantenweit.
-    scopes: { employees: "team", employeeFiles: "team", vacation: "team", sickness: "team" },
+    scopes: { employees: "team", employeeFiles: "team", vacation: "team", sickness: "team", timeTracking: "team" },
   },
   {
     key: "employee",
@@ -256,6 +261,9 @@ export const defaultPermissionRoles: Omit<
       vacation: "write",
       sickness: "write",
       shifts: "read",
+      // Die eigenen Zeiten laufen über den Self-Service (ohne Bereichsrecht) —
+      // "timeTracking" ist die Verwaltungssicht auf fremde Zeiten.
+      timeTracking: "none",
       // Erinnerungen sind ein Verwaltungswerkzeug (Fristen, Wiedervorlagen,
       // Eskalationen des Betriebs) und mandantenweit skopiert — ein einfaches
       // Mitgliedskonto hatte damit Einblick in Vorgaenge, die es nichts

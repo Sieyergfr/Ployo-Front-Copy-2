@@ -1,3 +1,5 @@
+import { TIME_TRACKING_ERROR_STATUS } from "@/lib/time-tracking";
+
 /**
  * Gemeinsames Fehler-Mapping für alle Route Handler unter `/api/me/*` und
  * `/api/tenants/[tenant]/*`. Die lib-Funktionen darunter (self-service.ts,
@@ -127,6 +129,14 @@ const KNOWN_ACTION_GUARD_MESSAGES = new Set([
 function classifySelfServiceError(message: string): number | null {
   if (KNOWN_ACTION_GUARD_MESSAGES.has(message)) {
     return 400;
+  }
+
+  // lib/time-tracking-service.ts — feste Stempeluhr-/Korrekturmeldungen mit
+  // eigenem Status (z. B. "bereits eingestempelt" → 409).
+  const timeTrackingStatus = TIME_TRACKING_ERROR_STATUS.get(message);
+
+  if (timeTrackingStatus !== undefined) {
+    return timeTrackingStatus;
   }
 
   if (

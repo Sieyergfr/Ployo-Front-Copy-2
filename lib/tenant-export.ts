@@ -73,6 +73,7 @@ export async function buildTenantExport(tenantSlug: string) {
   const vacationScope = await resolveExportScope(tenantSlug, "vacation");
   const shiftsScope = await resolveExportScope(tenantSlug, "shifts");
   const filesScope = await resolveExportScope(tenantSlug, "files");
+  const timeTrackingScope = await resolveExportScope(tenantSlug, "timeTracking");
 
   const [
     tenant,
@@ -90,6 +91,7 @@ export async function buildTenantExport(tenantSlug: string) {
     roles,
     files,
     payrollStatements,
+    timeEntries,
   ] = await Promise.all([
     prisma.tenant.findUnique({
       where: { id: tenantId },
@@ -151,6 +153,13 @@ export async function buildTenantExport(tenantSlug: string) {
       },
     }),
     prisma.tenantPayrollStatement.findMany({ where: { tenantId } }),
+    timeTrackingScope
+      ? prisma.tenantTimeEntry.findMany({
+          where: { tenantId },
+          include: { breaks: { orderBy: { startAt: "asc" } } },
+          orderBy: { clockInAt: "asc" },
+        })
+      : Promise.resolve([]),
   ]);
 
   const session = await auth.api.getSession({ headers: await headers() });
@@ -282,6 +291,9 @@ export async function buildTenantExport(tenantSlug: string) {
   );
   const scopedShifts = shifts.filter(shiftAllowed);
   const scopedFiles = files.filter(fileAllowed);
+  const scopedTimeEntries = timeEntries.filter((entry) =>
+    scopeIncludesEmployee(timeTrackingScope, entry.employeeId, employeesById),
+  );
 
   const scopeLabel = (scope: ScopeFilter | null) => {
     if (!scope) return null;
@@ -300,6 +312,7 @@ export async function buildTenantExport(tenantSlug: string) {
       ["Krankmeldungen", sicknessScope],
       ["Urlaubs-/Wunschfrei-Anträge", vacationScope],
       ["Schichten", shiftsScope],
+      ["Zeiterfassung", timeTrackingScope],
       ["Dateimetadaten", filesScope],
     ] as const
   ).map(([label, scope]) => {
@@ -325,6 +338,7 @@ export async function buildTenantExport(tenantSlug: string) {
     roles,
     files: scopedFiles,
     payrollStatements: decryptedPayrollStatements,
+    timeEntries: scopedTimeEntries,
     hinweis:
       "Dateiinhalte (Dokumente) sind nicht eingebettet — die Originale stehen einzeln im Dateien-Bereich zum Download bereit. Audit-Protokolle unterliegen der in den Einstellungen konfigurierten Aufbewahrungsfrist und sind nicht Teil dieses Exports." +
       (redactedAreas.length

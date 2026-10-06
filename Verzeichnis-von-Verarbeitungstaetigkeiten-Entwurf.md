@@ -68,8 +68,15 @@ Ployo ist als Anbieter der Software sowohl Verantwortlicher (für die eigenen Ku
 - **Löschfrist:** Kategorie `arbeitszeit`, 2 Jahre.
 - **Ergänzung seit 2026-09-03:** Automatisierte Prüfung auf Ruhezeit- (§5 ArbZG) und Höchstarbeitszeit-Verstöße (§3 ArbZG) bei Schicht-Anlage (`lib/arbzg-rules.ts`).
 
+### B4a. Arbeitszeiterfassung (Stempeluhr) — seit 2026-10-06
+- **Zweck:** Erfassung der tatsächlich geleisteten Arbeitszeit (Beginn, Ende, Pausen) zur Erfüllung der Aufzeichnungspflichten und als Grundlage der Lohnabrechnung.
+- **Datenkategorien:** Ein-/Ausstempel- und Pausenzeitpunkte, Bezug zur geplanten Schicht, Korrekturen inkl. Grund und Bearbeiter. Kein Standort/GPS.
+- **Rechtsgrundlage:** Art. 6 Abs. 1 lit. b, c DSGVO; §16 Abs. 2 ArbZG, §17 MiLoG, BAG 1 ABR 22/21.
+- **Löschfrist:** Kategorie `arbeitszeit`, 2 Jahre ab Erfassung, automatische Löschung (Legal Hold ausgenommen).
+- **Besonderheit:** Je Mandant einschaltbar (Standard aus); Mitbestimmung nach § 87 Abs. 1 Nr. 6 BetrVG beachten.
+
 ### B5. Push-Benachrichtigungen
-- **Zweck:** Benachrichtigung über neue Schichten, genehmigte Anträge, Info-Anfragen.
+- **Zweck:** Benachrichtigung über neue Schichten, genehmigte Anträge, Info-Anfragen, Erinnerungen zum Ein-/Ausstempeln.
 - **Datenkategorien:** Geräte-/Push-Token, Benachrichtigungsinhalt.
 - **Rechtsgrundlage:** Art. 6 Abs. 1 lit. b, f DSGVO.
 - **Empfänger:** Expo (650 Industries, Inc., USA) als Zustelldienst, leitet an Apple/Google weiter.
