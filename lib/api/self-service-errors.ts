@@ -1,3 +1,4 @@
+import { REPORT_ERRORS } from "@/lib/report-hours";
 import { TIME_TRACKING_ERROR_STATUS } from "@/lib/time-tracking";
 
 /**
@@ -137,6 +138,11 @@ function classifySelfServiceError(message: string): number | null {
 
   if (timeTrackingStatus !== undefined) {
     return timeTrackingStatus;
+  }
+
+  // lib/reports-service.ts — feste Meldungen der Stunden-Reports.
+  if ((Object.values(REPORT_ERRORS) as string[]).includes(message)) {
+    return message === REPORT_ERRORS.rateLimited ? 429 : message === REPORT_ERRORS.emailNotConfigured ? 503 : 400;
   }
 
   if (

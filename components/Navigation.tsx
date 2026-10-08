@@ -141,6 +141,7 @@ const navigationItems: NavItem[] = [
     area: "timeTracking",
     requiresTimeTracking: true,
   },
+  { labelKey: "reports", code: "Rp", href: "/reports", area: "timeTracking" },
   { labelKey: "reminders", code: "Er", href: "/erinnerungen", area: "reminders" },
 ];
 

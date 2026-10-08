@@ -414,6 +414,7 @@ model Tenant {
   employeeFolderTemplates  TenantEmployeeFolderTemplate[]
   timeEntries              TenantTimeEntry[]
   clockReminders           TenantTimeClockReminder[]
+  reportRecipients         TenantReportRecipient[]
   settings                 TenantSettings?
 }
 
@@ -1378,6 +1379,24 @@ model TenantTimeClockReminder {
 
   @@unique([tenantId, shiftRef, kind])
   @@index([createdAt])
+}
+
+/**
+ * Gespeicherte Empfänger für den Versand von Stunden-Reports
+ * (app/(dashboard)/u/[tenant]/reports, lib/reports-service.ts). Bewusst eine
+ * eigene, anfangs leere Liste je Betrieb — NICHT die E-Mail-Adressen der
+ * Mitarbeiter: Reports gehen typischerweise an Lohnbuchhaltung/Steuerbüro.
+ */
+model TenantReportRecipient {
+  id        String   @id @default(cuid())
+  tenantId  String
+  email     String
+  createdBy String   @default("")
+  createdAt DateTime @default(now())
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
 }
 
 model PageView {

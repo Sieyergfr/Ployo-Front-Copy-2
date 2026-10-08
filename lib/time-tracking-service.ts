@@ -99,7 +99,7 @@ function toSettings(row: SettingsRow | null): TimeTrackingSettings {
   };
 }
 
-async function loadTenantContext(tenantId: string) {
+export async function loadTenantContext(tenantId: string) {
   const tenant = await prisma.tenant.findUnique({
     where: { id: tenantId },
     select: { name: true, timezone: true, settings: { select: settingsSelect } },
@@ -145,7 +145,7 @@ type SnapshotEntry = {
  * Veröffentlichte Schichten im Datumsbereich (Ortszeit-Kalendertage, `date`
  * der Schicht), gruppiert nach Mitarbeiter. `employeeIds = null` lädt alle.
  */
-async function loadPublishedShifts(
+export async function loadPublishedShifts(
   tenantId: string,
   employeeIds: string[] | null,
   fromDate: string,
@@ -232,7 +232,7 @@ export type ShiftView = {
   plannedMinutes: number;
 };
 
-function toShiftView(shift: ResolvedShift): ShiftView {
+export function toShiftView(shift: ResolvedShift): ShiftView {
   const duration = Math.round((shift.endAt.getTime() - shift.startAt.getTime()) / 60_000);
 
   return {
@@ -247,7 +247,7 @@ function toShiftView(shift: ResolvedShift): ShiftView {
   };
 }
 
-const entryInclude = {
+export const entryInclude = {
   breaks: { orderBy: { startAt: "asc" } },
 } satisfies Prisma.TenantTimeEntryInclude;
 
@@ -628,7 +628,7 @@ function buildDays(input: {
   };
 }
 
-function rangeBounds(from: string, to: string, timeZone: string) {
+export function rangeBounds(from: string, to: string, timeZone: string) {
   return {
     gte: zonedTimeToUtc(from, "00:00", timeZone),
     lt: zonedTimeToUtc(addDaysToIsoDate(to, 1), "00:00", timeZone),
@@ -705,7 +705,7 @@ export type TenantTimeEntriesView = TimeEntriesView & {
   timeTrackingEnabled: boolean;
 };
 
-async function scopedEmployeeWhere(access: TenantAccess): Promise<Prisma.TenantEmployeeWhereInput> {
+export async function scopedEmployeeWhere(access: TenantAccess): Promise<Prisma.TenantEmployeeWhereInput> {
   const scope = await resolveScopeFilter(access);
 
   if (scope.type === "all") return { tenantId: access.tenantId };

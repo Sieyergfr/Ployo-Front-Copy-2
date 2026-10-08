@@ -2,6 +2,21 @@
 
 Stand: 2026-09-05. Blocker, Sollte-behoben-werden, Responsive Design, Datenschutz-Umbauplan Phase 0-2 und die komplette i18n-String-Extraktion (108 Dateien, 93 Namespaces, ~1635 Keys) sind vollständig umgesetzt, code-verifiziert, committet und gepusht. Die machbaren Teile von Phase 3 (Jugendarbeitsschutz, Mutterschutz, Betriebsrat-Hinweis, Verarbeitungsverzeichnis) sind ebenfalls umgesetzt und code-verifiziert, aber noch nicht gepusht/deployt (steht noch dein Go aus). Alles Weitere unten sind bewusst offene Punkte, die externe Schritte oder deine Entscheidung brauchen (siehe "Braucht weiterhin deine Aufmerksamkeit").
 
+## 🟡 Reports / Stundenreport — Web (2026-10-07, gebaut + getestet, NICHT committet/deployt)
+
+Neue Seite **Reports** (`/u/<firma>/reports`, Navigation unter „Zeiterfassung“, Recht: Bereich „Zeiterfassung“).
+- **Auswahl:** alle / einzelner Mitarbeiter / mehrere / Team / Standort — immer begrenzt auf den eigenen Zeiterfassungs-Scope.
+- **Zeitraum:** Tag, Woche, Monat, benutzerdefiniert (max. 366 Tage), mit Vor/Zurück.
+- **Tabelle:** Name, Personalnr., Soll (veröffentlichter Schichtplan), Ist (Zeiterfassung nach Pausen), davon Nacht (wählbar 20–6 §3b EStG oder 23–6 §2 ArbZG), davon Feiertag (Bundesland des Standorts), davon Sonntag (Feiertag am Sonntag zählt nur als Feiertag), Urlaub + Krankheit mit Zeitraum und Tagen. Alles in Dezimalstunden, mit Summenzeile.
+- **Bearbeitbar:** Ist/Nacht/Feiertag/Sonntag (Schreibrecht). Anpassungen gelten nur für Export/Mail, ändern keine Zeiteinträge, werden in der Datei markiert und im Audit-Log festgehalten.
+- **Export Excel** (Leserecht reicht) und **Versand per E-Mail als PDF oder Excel** (Schreibrecht). Empfängerliste je Betrieb startet leer, Adressen hinzufügen/entfernen, neue Adresse direkt beim Senden (optional speichern). Jeder Empfänger bekommt eine eigene Mail.
+- Urlaub/Krankheit nur sichtbar mit Leserecht auf „Urlaub“ bzw. „Krankheit“ (Krankheit = Gesundheitsdaten).
+- Neue Tabelle `TenantReportRecipient` (Migration `20261007120000_add_report_recipients`, rein additiv), neue Abhängigkeit `pdf-lib`. Excel ohne Zusatzbibliothek.
+
+Offen:
+- Live-DB migrieren (`npx prisma migrate deploy`), committen, per `scripts/deploy.sh` deployen. — **[Du → Ich, auf dein Go]**
+- Datenschutz: Report-Versand an externe Empfänger (z. B. Steuerbüro) in VVT/Datenschutzerklärung als Empfängerkategorie prüfen; mit Steuerbüro ggf. AVV. — **[Du]**
+
 ## ✅ Zeiterfassung / Stempeluhr — App + Web (2026-10-06)
 
 - **Mitarbeiter:** Ein-/Ausstempeln und Pause starten/stoppen (Zeitpunkt setzt immer der Server), „Meine Zeiten“ mit Soll (veröffentlichte Schichten) vs. Ist je Tag, Woche/Monat. Web: `/u/[tenant]/zeiten` + Stempeluhr in „Mein Bereich“; App: `app/time-tracking.tsx` + Stempeluhr auf Home + Schnellaktion.

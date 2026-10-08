@@ -18,6 +18,7 @@ export type SendEmailInput = {
    * antworten soll das Postfach aber an den Einsender.
    */
   replyTo?: string;
+  attachments?: Array<{ filename: string; content: Buffer; contentType: string }>;
 };
 
 export function isEmailConfigured() {
@@ -38,6 +39,7 @@ export async function sendEmail(input: SendEmailInput) {
       to: input.to,
       subject: input.subject,
       text: input.text,
+      attachments: input.attachments?.map((attachment) => attachment.filename),
     });
     return;
   }
@@ -62,6 +64,7 @@ export async function sendEmail(input: SendEmailInput) {
     text: input.text,
     html: input.html,
     replyTo: input.replyTo,
+    attachments: input.attachments,
   });
 }
 
@@ -166,6 +169,34 @@ export async function sendInvitationEmail(input: {
       `Einladung zu ${escapeHtml(input.tenantName)}`,
       `<p style="font-size:14px;line-height:1.5;">Sie wurden eingeladen, dem Arbeitsbereich „${escapeHtml(input.tenantName)}“ bei Ployo beizutreten.</p>${actionButton(input.url, "Einladung annehmen")}`,
     ),
+  });
+}
+
+/** Stunden-Report (app/(dashboard)/u/[tenant]/reports) als Anhang an eine gespeicherte Empfängeradresse. */
+export async function sendHoursReportEmail(input: {
+  to: string;
+  tenantName: string;
+  rangeLabel: string;
+  selectionLabel: string;
+  senderName: string;
+  attachment: { filename: string; content: Buffer; contentType: string };
+}) {
+  const subject = `Stundenreport ${input.tenantName} – ${input.rangeLabel}`;
+
+  await sendEmail({
+    to: input.to,
+    subject,
+    text: `Guten Tag,\n\nanbei der Stundenreport von ${input.tenantName}.\n\nZeitraum: ${input.rangeLabel}\nAuswahl: ${input.selectionLabel}\nVersendet von: ${input.senderName}\n\nDatei: ${input.attachment.filename}`,
+    html: emailLayout(
+      "Stundenreport",
+      `<p style="font-size:14px;line-height:1.5;">Anbei der Stundenreport von <strong>${escapeHtml(input.tenantName)}</strong>.</p>
+      <p style="font-size:14px;line-height:1.6;margin:0;">
+        <strong>Zeitraum:</strong> ${escapeHtml(input.rangeLabel)}<br />
+        <strong>Auswahl:</strong> ${escapeHtml(input.selectionLabel)}<br />
+        <strong>Versendet von:</strong> ${escapeHtml(input.senderName)}
+      </p>`,
+    ),
+    attachments: [input.attachment],
   });
 }
 
