@@ -2,7 +2,7 @@
 
 Stand: 2026-09-05. Blocker, Sollte-behoben-werden, Responsive Design, Datenschutz-Umbauplan Phase 0-2 und die komplette i18n-String-Extraktion (108 Dateien, 93 Namespaces, ~1635 Keys) sind vollständig umgesetzt, code-verifiziert, committet und gepusht. Die machbaren Teile von Phase 3 (Jugendarbeitsschutz, Mutterschutz, Betriebsrat-Hinweis, Verarbeitungsverzeichnis) sind ebenfalls umgesetzt und code-verifiziert, aber noch nicht gepusht/deployt (steht noch dein Go aus). Alles Weitere unten sind bewusst offene Punkte, die externe Schritte oder deine Entscheidung brauchen (siehe "Braucht weiterhin deine Aufmerksamkeit").
 
-## 🟡 Reports / Stundenreport — Web (2026-10-07, gebaut + getestet, NICHT committet/deployt)
+## ✅ Reports / Stundenreport — Web (2026-10-07, live seit 2026-10-08)
 
 Neue Seite **Reports** (`/u/<firma>/reports`, Navigation unter „Zeiterfassung“, Recht: Bereich „Zeiterfassung“).
 - **Auswahl:** alle / einzelner Mitarbeiter / mehrere / Team / Standort — immer begrenzt auf den eigenen Zeiterfassungs-Scope.
@@ -13,8 +13,9 @@ Neue Seite **Reports** (`/u/<firma>/reports`, Navigation unter „Zeiterfassung�
 - Urlaub/Krankheit nur sichtbar mit Leserecht auf „Urlaub“ bzw. „Krankheit“ (Krankheit = Gesundheitsdaten).
 - Neue Tabelle `TenantReportRecipient` (Migration `20261007120000_add_report_recipients`, rein additiv), neue Abhängigkeit `pdf-lib`. Excel ohne Zusatzbibliothek.
 
+Live-DB migriert, committet (848b9d76), deployt (Release 20261008000837).
+
 Offen:
-- Live-DB migrieren (`npx prisma migrate deploy`), committen, per `scripts/deploy.sh` deployen. — **[Du → Ich, auf dein Go]**
 - Datenschutz: Report-Versand an externe Empfänger (z. B. Steuerbüro) in VVT/Datenschutzerklärung als Empfängerkategorie prüfen; mit Steuerbüro ggf. AVV. — **[Du]**
 
 ## ✅ Zeiterfassung / Stempeluhr — App + Web (2026-10-06)
