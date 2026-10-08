@@ -2214,6 +2214,7 @@
     "breakSince": "Pause seit {time} Uhr",
     "currentBlock": "Aktueller Block",
     "todayTotal": "Heute gesamt",
+    "todayBreak": "Pause heute",
     "clockIn": "Einstempeln",
     "clockOut": "Ausstempeln",
     "breakStart": "Pause starten",

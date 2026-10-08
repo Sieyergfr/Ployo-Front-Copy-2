@@ -71,6 +71,10 @@ export default function TimeClockCard({
   const todayMinutes =
     status.today.workedMinutes +
     (status.state === "working" ? Math.max(0, Math.floor((nowMs - renderedAt) / 60_000)) : 0);
+  const todayBreakMinutes =
+    status.today.breakMinutes +
+    (status.state === "break" ? Math.max(0, Math.floor((nowMs - renderedAt) / 60_000)) : 0);
+  const showBreak = status.settings.breaksEnabled || todayBreakMinutes > 0;
   const stateLabel =
     status.state === "working" ? t("stateWorking") : status.state === "break" ? t("stateBreak") : t("stateOff");
   const tone =
@@ -128,7 +132,7 @@ export default function TimeClockCard({
       </div>
 
       <div className="flex flex-wrap items-end justify-between gap-5">
-        <div className="flex gap-8">
+        <div className="flex flex-wrap gap-x-8 gap-y-4">
           {status.state !== "off" && (
             <div>
               <div className="font-mono text-[10px] uppercase tracking-[0.6px] text-muted">
@@ -147,6 +151,16 @@ export default function TimeClockCard({
               {formatDuration(todayMinutes)}
             </div>
           </div>
+          {showBreak && (
+            <div>
+              <div className="font-mono text-[10px] uppercase tracking-[0.6px] text-muted">
+                {t("todayBreak")}
+              </div>
+              <div className="mt-1 font-display text-[28px] font-semibold tabular-nums text-ink">
+                {formatDuration(todayBreakMinutes)}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="flex flex-wrap gap-2">
