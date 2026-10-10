@@ -70,7 +70,7 @@ Ployo ist als Anbieter der Software sowohl Verantwortlicher (für die eigenen Ku
 
 ### B4a. Arbeitszeiterfassung (Stempeluhr) — seit 2026-10-06
 - **Zweck:** Erfassung der tatsächlich geleisteten Arbeitszeit (Beginn, Ende, Pausen) zur Erfüllung der Aufzeichnungspflichten und als Grundlage der Lohnabrechnung.
-- **Datenkategorien:** Ein-/Ausstempel- und Pausenzeitpunkte, Bezug zur geplanten Schicht, Korrekturen inkl. Grund und Bearbeiter. Kein Standort/GPS.
+- **Datenkategorien:** Ein-/Ausstempel- und Pausenzeitpunkte, Bezug zur geplanten Schicht, Korrekturen inkl. Grund und Bearbeiter; bei aktiviertem QR-Stempeln der Betriebsstandort, dessen QR-Code beim Ein-/Ausstempeln gescannt wurde. Kein GPS/keine Geräteortung.
 - **Rechtsgrundlage:** Art. 6 Abs. 1 lit. b, c DSGVO; §16 Abs. 2 ArbZG, §17 MiLoG, BAG 1 ABR 22/21.
 - **Löschfrist:** Kategorie `arbeitszeit`, 2 Jahre ab Erfassung, automatische Löschung (Legal Hold ausgenommen).
 - **Besonderheit:** Je Mandant einschaltbar (Standard aus); Mitbestimmung nach § 87 Abs. 1 Nr. 6 BetrVG beachten.

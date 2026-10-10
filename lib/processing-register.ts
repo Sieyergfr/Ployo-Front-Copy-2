@@ -97,7 +97,7 @@ const PROCESSING_REGISTER_TEMPLATE: ProcessingRegisterTemplate[] = [
       "Erfassung der tatsächlich geleisteten Arbeitszeit (Beginn, Ende, Pausen) zur Erfüllung der Aufzeichnungspflichten und als Grundlage der Lohnabrechnung.",
     betroffenePersonen: "Mitarbeiter",
     datenkategorien:
-      "Ein-/Ausstempelzeitpunkte, Pausenzeiten, Bezug zur geplanten Schicht, Korrekturen inkl. Grund und Bearbeiter (kein Standort/GPS)",
+      "Ein-/Ausstempelzeitpunkte, Pausenzeiten, Bezug zur geplanten Schicht, Korrekturen inkl. Grund und Bearbeiter; bei QR-Stempeln der gescannte Betriebsstandort (kein GPS/keine Geräteortung)",
     rechtsgrundlage:
       "Art. 6 Abs. 1 lit. b, c DSGVO; §16 Abs. 2 ArbZG, §17 MiLoG, BAG 1 ABR 22/21 (Pflicht zur Arbeitszeiterfassung)",
     loeschfrist: retentionText("arbeitszeit"),

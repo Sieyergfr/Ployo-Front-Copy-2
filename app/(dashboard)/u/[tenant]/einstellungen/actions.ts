@@ -155,6 +155,7 @@ async function saveSettingsPopupCategory(
       autoClockOut: formBool(formData, "timeTrackingAutoClockOut"),
       autoClockOutAfterShiftMinutes: formString(formData, "timeTrackingAutoClockOutAfterShiftMinutes"),
       autoClockOutMaxHours: formString(formData, "timeTrackingAutoClockOutMaxHours"),
+      qrRequired: formBool(formData, "timeTrackingQrRequired"),
     });
   }
 

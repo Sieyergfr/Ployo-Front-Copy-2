@@ -507,6 +507,9 @@ model TenantSettings {
   timeTrackingAutoClockOutAfterShiftMinutes Int      @default(60)
   /// ... bzw. ohne zugeordnete Schicht nach X Stunden ab Einstempeln.
   timeTrackingAutoClockOutMaxHours          Int      @default(12)
+  /// In der App nur nach Scan eines Standort-QR-Codes (TenantLocation.clockQrToken)
+  /// ein- und ausstempeln. Gilt nicht fuer das Web-Dashboard.
+  timeTrackingQrRequired                    Boolean  @default(false)
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
   tenantId                String   @unique
@@ -669,6 +672,10 @@ model TenantLocation {
   leadPhone          String                   @default("")
   leadEmail          String                   @default("")
   leadEmployeeId     String?
+  /// Dauerhafter Stempel-QR-Code des Standorts (zum Ausdrucken/Aufhaengen) -
+  /// zufaelliges Token, `null` = noch keiner erzeugt. Neu erzeugen macht den
+  /// alten Ausdruck ungueltig. Siehe lib/time-clock-qr.ts.
+  clockQrToken       String?                  @unique
   createdAt          DateTime                 @default(now())
   updatedAt          DateTime                 @updatedAt
   tenantId           String
@@ -684,6 +691,8 @@ model TenantLocation {
   storageFileFolders TenantFileFolder[]
   members            TenantLocationMember[]
   activities         TenantLocationActivity[]
+  clockInEntries     TenantTimeEntry[]        @relation("TimeEntryClockInLocation")
+  clockOutEntries    TenantTimeEntry[]        @relation("TimeEntryClockOutLocation")
 
   @@unique([tenantId, key])
   @@index([tenantId])
@@ -1329,6 +1338,13 @@ model TenantTimeEntry {
   plannedStartAt       DateTime?
   plannedEndAt         DateTime?
   shiftLocation        String            @default("")
+  /// Standort, dessen QR-Code beim Ein-/Ausstempeln gescannt wurde (nur App).
+  /// Kann vom Schicht-Standort abweichen; der Name bleibt als Schnappschuss
+  /// erhalten, auch wenn der Standort spaeter umbenannt/geloescht wird.
+  clockInLocationId    String?
+  clockInLocationName  String            @default("")
+  clockOutLocationId   String?
+  clockOutLocationName String            @default("")
   /// "app" | "web" | "manual" (von der Verwaltung nachgetragen)
   source               String            @default("app")
   /// Vom Cron automatisch ausgestempelt (vergessenes Ausstempeln).
@@ -1343,6 +1359,8 @@ model TenantTimeEntry {
   updatedAt            DateTime          @updatedAt
   tenant               Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   employee             TenantEmployee    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  clockInLocation      TenantLocation?   @relation("TimeEntryClockInLocation", fields: [clockInLocationId], references: [id], onDelete: SetNull)
+  clockOutLocation     TenantLocation?   @relation("TimeEntryClockOutLocation", fields: [clockOutLocationId], references: [id], onDelete: SetNull)
   breaks               TenantTimeBreak[]
 
   @@index([tenantId, clockInAt])

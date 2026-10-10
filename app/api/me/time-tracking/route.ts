@@ -9,7 +9,9 @@ import { headers } from "next/headers";
  * Stempeluhr (App). GET: aktueller Status inkl. ob die Uhr überhaupt
  * angezeigt werden soll (`showClock`). POST: `{ tenant, action }` mit
  * action = clockIn | clockOut | breakStart | breakEnd — den Zeitpunkt setzt
- * der Server, die Antwort ist der neue Status.
+ * der Server, die Antwort ist der neue Status. Optional `qrCode`: der
+ * gescannte Text des Standort-QR-Codes — Pflicht für clockIn/clockOut, wenn
+ * der Betrieb "QR-Scan erforderlich" aktiviert hat (`status.settings.qrRequired`).
  */
 export async function GET(request: Request) {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -61,6 +63,7 @@ export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as {
     tenant?: unknown;
     action?: unknown;
+    qrCode?: unknown;
   } | null;
 
   if (typeof body?.tenant !== "string" || !body.tenant.trim()) {
@@ -71,11 +74,16 @@ export async function POST(request: Request) {
     return Response.json({ error: TIME_TRACKING_ERRORS.invalidAction }, { status: 400 });
   }
 
+  if (body.qrCode !== undefined && body.qrCode !== null && typeof body.qrCode !== "string") {
+    return Response.json({ error: TIME_TRACKING_ERRORS.qrInvalid }, { status: 400 });
+  }
+
   try {
     const status = await performMyClockAction({
       tenantSlug: body.tenant.trim(),
       action: body.action,
       source: "app",
+      qrCode: body.qrCode ?? null,
     });
 
     return Response.json({ status });

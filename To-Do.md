@@ -2,6 +2,22 @@
 
 Stand: 2026-09-05. Blocker, Sollte-behoben-werden, Responsive Design, Datenschutz-Umbauplan Phase 0-2 und die komplette i18n-String-Extraktion (108 Dateien, 93 Namespaces, ~1635 Keys) sind vollständig umgesetzt, code-verifiziert, committet und gepusht. Die machbaren Teile von Phase 3 (Jugendarbeitsschutz, Mutterschutz, Betriebsrat-Hinweis, Verarbeitungsverzeichnis) sind ebenfalls umgesetzt und code-verifiziert, aber noch nicht gepusht/deployt (steht noch dein Go aus). Alles Weitere unten sind bewusst offene Punkte, die externe Schritte oder deine Entscheidung brauchen (siehe "Braucht weiterhin deine Aufmerksamkeit").
 
+## ✅ Zeiterfassung: Stempeln per Standort-QR-Code — App + Web (2026-10-10, gebaut, NICHT committet/deployt)
+
+- **Einstellung** (Einstellungen → Zeiterfassung → Einstempeln): „Einstempeln: QR-Code-Scan erforderlich (App)“. Gilt nur in der App; im Web-Dashboard bleibt das normale Stempeln.
+- **QR-Code je Standort:** Standort-Detailseite → Panel „Stempel-QR-Code“ (nur Standort-Verwalter): erzeugen, Druckansicht (A4, `/u/<firma>/standorte/<standort>/stempel-qr`), „Neu erzeugen“ macht den alten Ausdruck ungültig (mit Rückfrage + Audit-Log). Der Code ist dauerhaft gültig und enthält eine URL `https://ployo.io/stempeln/<Token>` — mit der normalen Handykamera gescannt landet man auf einer Hinweisseite („bitte in der App scannen“), die nichts über Betrieb/Standort verrät.
+- **App:** Bei aktiver Einstellung öffnen „Einstempeln“/„Ausstempeln“ einen QR-Scanner. Jeder aktive Standort des eigenen Betriebs ist erlaubt (nicht nur der Schicht-Standort); Ausstempeln auch an einem anderen Standort als beim Einstempeln. Pausen ohne Scan. Fremde/inaktive/alte Codes werden abgelehnt.
+- **Nachvollziehbarkeit:** Am Zeiteintrag stehen Einstempel- und Ausstempel-Standort (Name als Schnappschuss) — sichtbar in der Web-Zeiterfassung, „Meine Zeiten“ (Web + App) und in den Exporten.
+- Migration `20261010120000_add_time_clock_qr` (rein additiv), neue Abhängigkeiten `qrcode` (Web) und `expo-camera` (App, nativ → neuer App-Build nötig).
+- Datenschutz: Datenschutzerklärung (Ziffer 5 + Kamera-Passage, Stand 10.10.2026), Verarbeitungsverzeichnis (Code + Entwurf), DSFA-Entwurf angepasst — weiterhin kein GPS, aber der gescannte Betriebsstandort wird gespeichert.
+- Verifiziert: `tsc`, `eslint`, volle Testsuite gegen isolierte DB (396/396, davon 9 neu), Migration gegen Schema ohne Drift, Probe-`next build`; `ployo-mobile` `typecheck` + `lint`.
+
+Offen dazu:
+- Commit + Push (beide Repos), Live-DB-Migration (vorher Backup) und Web-Deploy per `scripts/deploy.sh` — **[Du → Ich]** (auf dein Go)
+- Neuer App-Build (EAS) wegen `expo-camera` — ältere App-Versionen können bei aktiver QR-Pflicht nicht mehr ein-/ausstempeln (sie zeigen die Fehlermeldung „Bitte scannen Sie …“). Einstellung daher erst aktivieren, wenn die neue App verteilt ist — **[Du → Ich]**
+- QR-Codes je Standort erzeugen, ausdrucken, aufhängen — **[Du]**
+- Anwaltliche Prüfung der geänderten Datenschutz-Passagen; ggf. Betriebsrat informieren (Standortbezug der Stempelung) — **[Du]**
+
 ## ✅ Reports / Stundenreport — Web (2026-10-07, live seit 2026-10-08)
 
 Neue Seite **Reports** (`/u/<firma>/reports`, Navigation unter „Zeiterfassung“, Recht: Bereich „Zeiterfassung“).

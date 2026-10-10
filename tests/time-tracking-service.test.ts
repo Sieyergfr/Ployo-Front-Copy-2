@@ -38,6 +38,7 @@ vi.mock("@/lib/notifications/dispatch", () => ({
 }));
 
 const service = await import("@/lib/time-tracking-service");
+const locationService = await import("@/lib/location-service");
 
 const RUN_ID = Math.random().toString(36).slice(2);
 const tenantSlug = `test-time-${RUN_ID}`;
@@ -140,11 +141,12 @@ beforeEach(async () => {
     timeTrackingClockInLeadMinutes: 60,
     timeTrackingReminderPush: true,
     timeTrackingAutoClockOut: false,
+    timeTrackingQrRequired: false,
   });
 });
 
 afterAll(async () => {
-  await prisma.tenant.deleteMany({ where: { id: tenantId } });
+  await prisma.tenant.deleteMany({ where: { slug: { in: [tenantSlug, `${tenantSlug}-foreign`] } } });
   await prisma.user.deleteMany({ where: { id: { in: userIds } } });
   await prisma.$disconnect();
 });
@@ -253,6 +255,149 @@ describe("Stempeluhr (Self-Service)", () => {
     await expect(
       service.performMyClockAction({ tenantSlug, action: "clockIn", source: "app" }),
     ).rejects.toThrow(TIME_TRACKING_ERRORS.disabled);
+  });
+});
+
+describe("Stempeln per Standort-QR-Code", () => {
+  let filialeId: string;
+  let lagerId: string;
+  let filialeQr: string;
+  let lagerQr: string;
+  let inactiveQr: string;
+  let foreignQr: string;
+
+  async function createLocation(data: { tenantId: string; key: string; name: string; status?: "active" | "inactive" }) {
+    const location = await prisma.tenantLocation.create({
+      data: { tenantId: data.tenantId, key: data.key, name: data.name, kind: "Filiale", status: data.status ?? "active" },
+    });
+    currentUserId = ownerUserId;
+    await locationService.regenerateLocationClockQr({
+      tenantSlug: data.tenantId === tenantId ? tenantSlug : `${tenantSlug}-foreign`,
+      locationId: location.id,
+    });
+    const qr = await prisma.tenantLocation.findUniqueOrThrow({ where: { id: location.id } });
+    return { id: location.id, payload: `https://ployo.io/stempeln/${qr.clockQrToken}` };
+  }
+
+  beforeAll(async () => {
+    const foreignTenant = await prisma.tenant.create({
+      data: { slug: `${tenantSlug}-foreign`, name: `Fremd ${RUN_ID}`, timezone: TZ },
+    });
+    await prisma.tenantMembership.create({ data: { tenantId: foreignTenant.id, userId: ownerUserId, role: "OWNER" } });
+
+    const filiale = await createLocation({ tenantId, key: `filiale-${RUN_ID}`, name: "Filiale Mitte" });
+    const lager = await createLocation({ tenantId, key: `lager-${RUN_ID}`, name: "Lager Nord" });
+    const inactive = await createLocation({ tenantId, key: `alt-${RUN_ID}`, name: "Alt", status: "inactive" });
+    const foreign = await createLocation({ tenantId: foreignTenant.id, key: `fremd-${RUN_ID}`, name: "Fremd" });
+    filialeId = filiale.id;
+    lagerId = lager.id;
+    filialeQr = filiale.payload;
+    lagerQr = lager.payload;
+    inactiveQr = inactive.payload;
+    foreignQr = foreign.payload;
+  });
+
+  beforeEach(async () => {
+    currentUserId = employeeUserId;
+    await setSettings({ timeTrackingQrRequired: true });
+  });
+
+  it("App: Ein-/Ausstempeln ohne Scan verweigert, Pausen ohne Scan erlaubt, Web unverändert", async () => {
+    let status = await service.getMyClockStatus(tenantSlug);
+    expect(status.settings.qrRequired).toBe(true);
+
+    await expect(
+      service.performMyClockAction({ tenantSlug, action: "clockIn", source: "app" }),
+    ).rejects.toThrow(TIME_TRACKING_ERRORS.qrRequired);
+
+    status = await service.performMyClockAction({ tenantSlug, action: "clockIn", source: "app", qrCode: filialeQr });
+    expect(status.state).toBe("working");
+    expect(status.openEntry?.clockInLocation).toEqual({ id: filialeId, name: "Filiale Mitte" });
+
+    status = await service.performMyClockAction({ tenantSlug, action: "breakStart", source: "app" });
+    expect(status.state).toBe("break");
+
+    await expect(
+      service.performMyClockAction({ tenantSlug, action: "clockOut", source: "app" }),
+    ).rejects.toThrow(TIME_TRACKING_ERRORS.qrRequired);
+
+    // Web-Dashboard: kein Scan nötig.
+    status = await service.performMyClockAction({ tenantSlug, action: "clockOut", source: "web" });
+    expect(status.state).toBe("off");
+    status = await service.performMyClockAction({ tenantSlug, action: "clockIn", source: "web" });
+    expect(status.openEntry?.clockInLocation).toBeNull();
+  });
+
+  it("erlaubt Ausstempeln an einem anderen Standort und hält beide Standorte fest", async () => {
+    // Schicht ist für "Filiale" geplant — gescannt werden darf trotzdem jeder Standort.
+    const now = Date.now();
+    await publishShift(new Date(now - 30 * 60_000), new Date(now + 3 * 3_600_000));
+
+    await service.performMyClockAction({ tenantSlug, action: "clockIn", source: "app", qrCode: lagerQr });
+    await service.performMyClockAction({ tenantSlug, action: "clockOut", source: "app", qrCode: filialeQr });
+
+    const entry = await prisma.tenantTimeEntry.findFirstOrThrow({ where: { tenantId } });
+    expect(entry.clockInLocationId).toBe(lagerId);
+    expect(entry.clockInLocationName).toBe("Lager Nord");
+    expect(entry.clockOutLocationId).toBe(filialeId);
+    expect(entry.clockOutLocationName).toBe("Filiale Mitte");
+    expect(entry.shiftLocation).toBe("Filiale");
+
+    const view = await service.getMyTimeEntries({ tenantSlug });
+    const listed = view.days.flatMap((day) => day.entries)[0];
+    expect(listed.clockInLocation?.name).toBe("Lager Nord");
+    expect(listed.clockOutLocation?.name).toBe("Filiale Mitte");
+  });
+
+  it("verweigert fremde, inaktive, alte und unsinnige Codes", async () => {
+    for (const qrCode of [foreignQr, inactiveQr, "https://ployo.io/stempeln/kaputt", "hallo", "x".repeat(600)]) {
+      await expect(
+        service.performMyClockAction({ tenantSlug, action: "clockIn", source: "app", qrCode }),
+      ).rejects.toThrow(TIME_TRACKING_ERRORS.qrInvalid);
+    }
+
+    // Neu erzeugen macht den alten Ausdruck ungültig.
+    currentUserId = ownerUserId;
+    await locationService.regenerateLocationClockQr({ tenantSlug, locationId: filialeId });
+    currentUserId = employeeUserId;
+    await expect(
+      service.performMyClockAction({ tenantSlug, action: "clockIn", source: "app", qrCode: filialeQr }),
+    ).rejects.toThrow(TIME_TRACKING_ERRORS.qrInvalid);
+    filialeQr = `https://ployo.io/stempeln/${
+      (await prisma.tenantLocation.findUniqueOrThrow({ where: { id: filialeId } })).clockQrToken
+    }`;
+    const status = await service.performMyClockAction({ tenantSlug, action: "clockIn", source: "app", qrCode: filialeQr });
+    expect(status.state).toBe("working");
+    expect(await prisma.tenantTimeEntry.count({ where: { tenantId } })).toBe(1);
+
+    const audit = await prisma.tenantAuditLog.findFirst({
+      where: { tenantId, action: "Stempel-QR-Code neu erzeugt", entityId: filialeId },
+    });
+    expect(audit).not.toBeNull();
+  });
+
+  it("nur Standort-Verwalter können den QR-Code sehen oder erzeugen", async () => {
+    await expect(locationService.getLocationClockQr(tenantSlug, filialeId)).rejects.toThrow("FORBIDDEN");
+    await expect(
+      locationService.regenerateLocationClockQr({ tenantSlug, locationId: filialeId }),
+    ).rejects.toThrow("FORBIDDEN");
+
+    currentUserId = ownerUserId;
+    const qr = await locationService.getLocationClockQr(tenantSlug, filialeId);
+    expect(qr?.payload).toMatch(/\/stempeln\/[A-Za-z0-9_-]{32}$/);
+    expect(qr?.qrRequired).toBe(true);
+  });
+
+  it("ohne QR-Pflicht wird ein mitgeschickter Code trotzdem geprüft und vermerkt", async () => {
+    await setSettings({ timeTrackingQrRequired: false });
+
+    let status = await service.performMyClockAction({ tenantSlug, action: "clockIn", source: "app" });
+    expect(status.openEntry?.clockInLocation).toBeNull();
+    status = await service.performMyClockAction({ tenantSlug, action: "clockOut", source: "app", qrCode: lagerQr });
+    expect(status.state).toBe("off");
+    expect((await prisma.tenantTimeEntry.findFirstOrThrow({ where: { tenantId } })).clockOutLocationName).toBe(
+      "Lager Nord",
+    );
   });
 });
 

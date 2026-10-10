@@ -101,6 +101,7 @@ const KNOWN_ACTION_GUARD_MESSAGES = new Set([
   "Schichtplan konnte nicht veröffentlicht werden.",
   "Schichtplan konnte nicht zurückgesetzt werden.",
   "Sichtbarkeit konnte nicht geändert werden.",
+  "QR-Code konnte nicht erzeugt werden.",
   "Standort konnte nicht gelöscht werden.",
   "Standort konnte nicht gespeichert werden.",
   "Standortname ist erforderlich.",

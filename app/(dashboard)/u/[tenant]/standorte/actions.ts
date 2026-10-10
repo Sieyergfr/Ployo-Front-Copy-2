@@ -4,6 +4,7 @@ import {
   addEmployeesToTenantLocation,
   createTenantLocation,
   deleteTenantLocation,
+  regenerateLocationClockQr,
   updateTenantLocation,
 } from "@/lib/location-service";
 import { parseOpeningHoursDays } from "@/lib/opening-hours";
@@ -176,4 +177,22 @@ export async function deleteLocationAction(
     revalidatePath(locationsPath(tenant));
     redirect(locationsPath(tenant));
   }, "Standort löschen");
+}
+
+export async function regenerateLocationClockQrAction(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  return withActionErrorHandling(async () => {
+    const tenant = formString(formData, "tenant");
+    const locationId = formString(formData, "locationId");
+
+    if (!tenant || !locationId) {
+      throw new Error("QR-Code konnte nicht erzeugt werden.");
+    }
+
+    const location = await regenerateLocationClockQr({ tenantSlug: tenant, locationId });
+
+    revalidatePath(locationPath(tenant, location.key));
+  }, "Stempel-QR-Code erzeugen");
 }

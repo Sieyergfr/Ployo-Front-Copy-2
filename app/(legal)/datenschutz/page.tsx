@@ -118,9 +118,12 @@ export default function DatenschutzPage() {
             Ihren Arbeitgeber (inklusive Grund und bearbeitender Person).
             Rechtsgrundlage ist Art. 6 Abs. 1 lit. b und c DSGVO i. V. m. der
             Pflicht des Arbeitgebers zur Arbeitszeiterfassung (§ 16 Abs. 2
-            ArbZG, § 17 MiLoG, BAG, Beschl. v. 13.09.2022 – 1 ABR 22/21). Es
-            werden dabei <strong>keine Standort- oder GPS-Daten</strong>{" "}
-            erhoben. Erinnerungen zum Ein- und Ausstempeln werden als
+            ArbZG, § 17 MiLoG, BAG, Beschl. v. 13.09.2022 – 1 ABR 22/21). Hat
+            Ihr Arbeitgeber das Stempeln per QR-Code eingerichtet, wird
+            zusätzlich gespeichert, an welchem Betriebsstandort (dessen
+            QR-Code Sie gescannt haben) Sie sich ein- bzw. ausgestempelt
+            haben. Es werden dabei <strong>keine GPS- oder sonstigen
+            Ortungsdaten</strong> Ihres Geräts erhoben. Erinnerungen zum Ein- und Ausstempeln werden als
             Push-Benachrichtigung zugestellt (siehe Ziffer 6).
           </li>
           <li>
@@ -180,6 +183,10 @@ export default function DatenschutzPage() {
           auswählen. Der Zugriff erfolgt ausschließlich auf von Ihnen aktiv
           ausgewählte Aufnahmen bzw. Dateien (Art. 6 Abs. 1 lit. b DSGVO) und
           wird erst beim tatsächlichen Gebrauch dieser Funktion angefragt.
+          Zum Ein- und Ausstempeln per QR-Code nutzt die App die Kamera
+          ausschließlich zum Erkennen des QR-Codes; dabei werden keine
+          Bilder gespeichert oder übertragen, sondern nur der Inhalt des
+          erkannten Codes.
           Mikrofon-, Standort-, Kontakt-, SMS- und Telefonberechtigungen
           fordert die App nicht an.
         </p>
@@ -328,7 +335,7 @@ export default function DatenschutzPage() {
         </p>
       </section>
 
-      <p className="text-muted">Stand: 05.09.2026</p>
+      <p className="text-muted">Stand: 10.10.2026</p>
     </article>
   );
 }

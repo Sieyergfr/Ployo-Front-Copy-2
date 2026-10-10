@@ -413,6 +413,7 @@ export async function updateTenantTimeTracking(input: {
   autoClockOut?: boolean;
   autoClockOutAfterShiftMinutes?: string;
   autoClockOutMaxHours?: string;
+  qrRequired?: boolean;
 }) {
   const access = await requireSettingsManager(input.tenantSlug);
   const actor = await requireTenantAccess(input.tenantSlug, "settings", "write");
@@ -431,6 +432,7 @@ export async function updateTenantTimeTracking(input: {
       timeTrackingAutoClockOut: normalizeBool(input.autoClockOut),
       timeTrackingAutoClockOutAfterShiftMinutes: clampInt(input.autoClockOutAfterShiftMinutes, 60, 0, 720),
       timeTrackingAutoClockOutMaxHours: clampInt(input.autoClockOutMaxHours, 12, 1, 24),
+      timeTrackingQrRequired: normalizeBool(input.qrRequired),
     },
   });
 
@@ -446,7 +448,9 @@ export async function updateTenantTimeTracking(input: {
       updated.timeTrackingBreaksEnabled ? "ja" : "nein"
     }, Mindestpause abziehen: ${updated.timeTrackingAutoBreakDeduction ? "ja" : "nein"}, Einstempeln: ${
       updated.timeTrackingClockInMode
-    } (${updated.timeTrackingClockInLeadMinutes} Min. vorher), Push: ${
+    } (${updated.timeTrackingClockInLeadMinutes} Min. vorher), QR-Scan in der App: ${
+      updated.timeTrackingQrRequired ? "ja" : "nein"
+    }, Push: ${
       updated.timeTrackingReminderPush ? "ja" : "nein"
     }, Auto-Ausstempeln: ${
       updated.timeTrackingAutoClockOut

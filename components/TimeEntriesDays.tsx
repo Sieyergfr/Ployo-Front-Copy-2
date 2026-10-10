@@ -13,7 +13,7 @@ import { useCloseOnSuccess, useUniversalPopup } from "@/components/UniversalPopu
 import type { ActionState } from "@/lib/action-state";
 import { formatDuration } from "@/lib/time-tracking";
 import type { DaySummaryView, TimeEntryView } from "@/lib/time-tracking-service";
-import { Pencil, Plus, Save, Trash2 } from "lucide-react";
+import { MapPin, Pencil, Plus, Save, Trash2 } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { useActionState } from "react";
 
@@ -203,6 +203,35 @@ export function AddTimeEntryButton({
   );
 }
 
+/**
+ * Per QR-Code gescannter Standort beim Ein-/Ausstempeln (App). Gleicher
+ * Standort → eine Angabe, abweichend → beide.
+ */
+function ScannedLocations({ entry }: { entry: TimeEntryView }) {
+  const t = useTranslations("TimeTracking");
+  const clockIn = entry.clockInLocation?.name ?? "";
+  const clockOut = entry.clockOutLocation?.name ?? "";
+
+  if (!clockIn && !clockOut) return null;
+
+  const label =
+    clockIn && clockOut && clockIn === clockOut
+      ? t("scannedAt", { location: clockIn })
+      : [
+          clockIn ? t("scannedIn", { location: clockIn }) : null,
+          clockOut ? t("scannedOut", { location: clockOut }) : null,
+        ]
+          .filter(Boolean)
+          .join(" · ");
+
+  return (
+    <div className="mt-0.5 flex items-center gap-1 text-[11.5px] text-muted-2">
+      <MapPin size={11} className="shrink-0" />
+      <span className="truncate">{label}</span>
+    </div>
+  );
+}
+
 function EntryRow({ entry, edit }: { entry: TimeEntryView; edit?: EditContext }) {
   const t = useTranslations("TimeTracking");
   const { openPopup, closePopup } = useUniversalPopup();
@@ -222,6 +251,7 @@ function EntryRow({ entry, edit }: { entry: TimeEntryView; edit?: EditContext })
             {t("breakMinutes", { minutes: entry.breakMinutes })}
           </span>
         </div>
+        <ScannedLocations entry={entry} />
         {(badges.length > 0 || entry.note) && (
           <div className="mt-0.5 flex flex-wrap gap-1.5 text-[11.5px] text-muted">
             {badges.map((badge) => (

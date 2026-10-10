@@ -253,6 +253,7 @@ export async function getTenantsForUser(userId: string) {
               timeTrackingAutoClockOut: true,
               timeTrackingAutoClockOutAfterShiftMinutes: true,
               timeTrackingAutoClockOutMaxHours: true,
+              timeTrackingQrRequired: true,
               companyAddress: {
                 select: {
                   street: true,

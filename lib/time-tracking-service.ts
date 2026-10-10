@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { recordTenantAudit } from "@/lib/audit";
 import { logger } from "@/lib/logger";
 import { dispatchNotification } from "@/lib/notifications/dispatch";
+import { parseClockQrToken } from "@/lib/time-clock-qr";
 import {
   assertEmployeeInScope,
   requireTenantAccess,
@@ -67,6 +68,7 @@ const settingsSelect = {
   timeTrackingAutoClockOut: true,
   timeTrackingAutoClockOutAfterShiftMinutes: true,
   timeTrackingAutoClockOutMaxHours: true,
+  timeTrackingQrRequired: true,
 } satisfies Prisma.TenantSettingsSelect;
 
 type SettingsRow = Prisma.TenantSettingsGetPayload<{ select: typeof settingsSelect }>;
@@ -81,6 +83,7 @@ const disabledSettings: TimeTrackingSettings = {
   autoClockOut: false,
   autoClockOutAfterShiftMinutes: 60,
   autoClockOutMaxHours: 12,
+  qrRequired: false,
 };
 
 function toSettings(row: SettingsRow | null): TimeTrackingSettings {
@@ -96,6 +99,7 @@ function toSettings(row: SettingsRow | null): TimeTrackingSettings {
     autoClockOut: row.timeTrackingAutoClockOut,
     autoClockOutAfterShiftMinutes: row.timeTrackingAutoClockOutAfterShiftMinutes,
     autoClockOutMaxHours: row.timeTrackingAutoClockOutMaxHours,
+    qrRequired: row.timeTrackingQrRequired,
   };
 }
 
@@ -115,7 +119,7 @@ export async function loadTenantContext(tenantId: string) {
 /** Öffentliche Einstellungen für den Client (Stempeluhr-Bedienung). */
 export type ClockSettingsView = Pick<
   TimeTrackingSettings,
-  "breaksEnabled" | "autoBreakDeduction" | "clockInMode" | "clockInLeadMinutes"
+  "breaksEnabled" | "autoBreakDeduction" | "clockInMode" | "clockInLeadMinutes" | "qrRequired"
 >;
 
 function toClockSettingsView(settings: TimeTrackingSettings): ClockSettingsView {
@@ -124,6 +128,7 @@ function toClockSettingsView(settings: TimeTrackingSettings): ClockSettingsView 
     autoBreakDeduction: settings.autoBreakDeduction,
     clockInMode: settings.clockInMode,
     clockInLeadMinutes: settings.clockInLeadMinutes,
+    qrRequired: settings.qrRequired,
   };
 }
 
@@ -276,7 +281,15 @@ export type TimeEntryView = {
   note: string;
   source: string;
   shift: { id: string; startAt: string | null; endAt: string | null; location: string } | null;
+  /** Standort, dessen QR-Code beim Einstempeln gescannt wurde (nur App mit QR-Pflicht). */
+  clockInLocation: { id: string | null; name: string } | null;
+  /** Dto. beim Ausstempeln — darf vom Einstempel-Standort abweichen. */
+  clockOutLocation: { id: string | null; name: string } | null;
 };
+
+function scannedLocationView(id: string | null, name: string) {
+  return id || name ? { id, name } : null;
+}
 
 function toEntryView(
   entry: EntryRow,
@@ -316,6 +329,8 @@ function toEntryView(
           location: entry.shiftLocation,
         }
       : null,
+    clockInLocation: scannedLocationView(entry.clockInLocationId, entry.clockInLocationName),
+    clockOutLocation: scannedLocationView(entry.clockOutLocationId, entry.clockOutLocationName),
   };
 }
 
@@ -449,10 +464,33 @@ async function lockEmployee(tx: Prisma.TransactionClient, employeeId: string) {
   await tx.$queryRaw`SELECT "id" FROM "TenantEmployee" WHERE "id" = ${employeeId} FOR UPDATE`;
 }
 
+/**
+ * Standort zum gescannten Stempel-QR-Code — nur aktive Standorte des eigenen
+ * Mandanten. Bewusst NICHT auf den Schicht-Standort beschränkt: gestempelt
+ * werden darf an jedem Standort, sichtbar ist hinterher, an welchem.
+ */
+async function resolveScannedLocation(tenantId: string, qrCode: string) {
+  const token = parseClockQrToken(qrCode);
+  const location = token
+    ? await prisma.tenantLocation.findFirst({
+        where: { tenantId, clockQrToken: token, status: "active" },
+        select: { id: true, name: true },
+      })
+    : null;
+
+  if (!location) {
+    throw new Error(TIME_TRACKING_ERRORS.qrInvalid);
+  }
+
+  return location;
+}
+
 export async function performMyClockAction(input: {
   tenantSlug: string;
   action: ClockAction;
   source: "app" | "web";
+  /** Gescannter Inhalt des Standort-QR-Codes (nur App). */
+  qrCode?: string | null;
 }): Promise<ClockStatusView> {
   const context = await resolveMyContext(input.tenantSlug);
   const { settings, timeZone, employeeId } = context;
@@ -466,6 +504,18 @@ export async function performMyClockAction(input: {
     throw new Error(TIME_TRACKING_ERRORS.breaksDisabled);
   }
 
+  // QR-Pflicht gilt nur in der App — im Web-Dashboard (meist am PC) lässt
+  // sich kein Code scannen, dort bleibt es beim normalen Stempeln. Pausen
+  // brauchen nie einen Scan. Wird ein Code mitgeschickt, obwohl keine Pflicht
+  // besteht, wird er trotzdem geprüft und der Standort festgehalten.
+  const isClockInOrOut = input.action === "clockIn" || input.action === "clockOut";
+  const qrCode = isClockInOrOut && typeof input.qrCode === "string" && input.qrCode.trim() ? input.qrCode : null;
+
+  if (isClockInOrOut && input.source === "app" && settings.qrRequired && !qrCode) {
+    throw new Error(TIME_TRACKING_ERRORS.qrRequired);
+  }
+
+  const scannedLocation = qrCode ? await resolveScannedLocation(tenantId, qrCode) : null;
   let clockableShift: ResolvedShift | null = null;
 
   if (input.action === "clockIn") {
@@ -504,6 +554,8 @@ export async function performMyClockAction(input: {
             plannedStartAt: clockableShift?.startAt ?? null,
             plannedEndAt: clockableShift?.endAt ?? null,
             shiftLocation: clockableShift?.location ?? "",
+            clockInLocationId: scannedLocation?.id ?? null,
+            clockInLocationName: scannedLocation?.name ?? "",
           },
         });
         return;
@@ -515,7 +567,15 @@ export async function performMyClockAction(input: {
           await tx.tenantTimeBreak.update({ where: { id: openBreak.id }, data: { endAt: now } });
         }
 
-        await tx.tenantTimeEntry.update({ where: { id: openEntry.id }, data: { clockOutAt: now } });
+        await tx.tenantTimeEntry.update({
+          where: { id: openEntry.id },
+          data: {
+            clockOutAt: now,
+            ...(scannedLocation
+              ? { clockOutLocationId: scannedLocation.id, clockOutLocationName: scannedLocation.name }
+              : {}),
+          },
+        });
         return;
       }
       case "breakStart": {

@@ -8,6 +8,7 @@ import {
   LocationEditFormAndBar,
   LocationHeaderActions,
 } from "@/components/LocationActionForms";
+import LocationClockQrPanel from "@/components/LocationClockQrPanel";
 import LocationShiftPlanner from "@/components/LocationShiftPlanner";
 import { OpeningHoursEditor } from "@/components/OpeningHoursEditor";
 import {
@@ -16,7 +17,8 @@ import {
 } from "@/lib/opening-hours";
 import { getAuditLogsForEntity } from "@/lib/audit";
 import { getEmployeesForTenant } from "@/lib/employee-service";
-import { getLocationForTenant } from "@/lib/location-service";
+import { getLocationClockQr, getLocationForTenant } from "@/lib/location-service";
+import { renderClockQrSvg } from "@/lib/time-clock-qr-svg";
 import { locationColorPalette, locationKinds } from "@/lib/org-options";
 import { hasPermissionLevel } from "@/lib/roles";
 import { getTenantCapabilities, withAccessRedirect } from "@/lib/tenant-access";
@@ -429,6 +431,10 @@ export default async function LocationDetailPage({
   const locationHref = `/u/${tenant}/standorte/${location.id}`;
   const locationEditHref = `${locationHref}?edit=1`;
   const locationDbId = location.dbId ?? "";
+  const clockQr = canEditLocation && isHomeTab && !isEditing
+    ? await getLocationClockQr(tenant, location.id)
+    : null;
+  const clockQrSvg = clockQr?.payload ? await renderClockQrSvg(clockQr.payload) : null;
   const auditEntries = canViewAudit
     ? await getAuditLogsForEntity({
         tenantSlug: tenant,
@@ -761,6 +767,18 @@ export default async function LocationDetailPage({
                 </div>
               )}
             </DetailPanel>
+
+            {clockQr && (
+              <DetailPanel title={t("clockQrTitle")}>
+                <LocationClockQrPanel
+                  tenant={tenant}
+                  locationId={clockQr.locationId}
+                  printHref={`${locationHref}/stempel-qr`}
+                  svg={clockQrSvg}
+                  qrRequired={clockQr.qrRequired}
+                />
+              </DetailPanel>
+            )}
 
             <DetailPanel
               title={t("activity")}

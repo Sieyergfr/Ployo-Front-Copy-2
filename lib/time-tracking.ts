@@ -40,6 +40,8 @@ export type TimeTrackingSettings = {
   autoClockOut: boolean;
   autoClockOutAfterShiftMinutes: number;
   autoClockOutMaxHours: number;
+  /** App: Ein-/Ausstempeln nur mit gescanntem Standort-QR-Code (Web ausgenommen). */
+  qrRequired: boolean;
 };
 
 /** Eine veröffentlichte Schicht, auf absolute Zeitpunkte umgerechnet. */
@@ -397,6 +399,8 @@ export const TIME_TRACKING_ERRORS = {
   noteRequired: "Bitte einen Grund für die Korrektur angeben.",
   overlap: "Der Eintrag überschneidet sich mit einem anderen Zeiteintrag.",
   notFound: "Zeiteintrag nicht gefunden.",
+  qrRequired: "Bitte scannen Sie zum Ein- und Ausstempeln den QR-Code am Standort.",
+  qrInvalid: "Dieser QR-Code gehört zu keinem aktiven Standort Ihres Betriebs.",
 } as const;
 
 export const TIME_TRACKING_ERROR_STATUS: ReadonlyMap<string, number> = new Map([
@@ -417,6 +421,8 @@ export const TIME_TRACKING_ERROR_STATUS: ReadonlyMap<string, number> = new Map([
   [TIME_TRACKING_ERRORS.noteRequired, 400],
   [TIME_TRACKING_ERRORS.overlap, 409],
   [TIME_TRACKING_ERRORS.notFound, 404],
+  [TIME_TRACKING_ERRORS.qrRequired, 400],
+  [TIME_TRACKING_ERRORS.qrInvalid, 400],
 ]);
 
 /** Minuten als "h:mm" (z. B. 465 → "7:45"); negative Werte mit Minus (Soll/Ist-Differenz). */

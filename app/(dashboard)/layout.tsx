@@ -124,6 +124,7 @@ export default async function AuthLayout ({
                 membership.tenant.settings.timeTrackingAutoClockOutAfterShiftMinutes,
               timeTrackingAutoClockOutMaxHours:
                 membership.tenant.settings.timeTrackingAutoClockOutMaxHours,
+              timeTrackingQrRequired: membership.tenant.settings.timeTrackingQrRequired,
             }
           : undefined,
     }));

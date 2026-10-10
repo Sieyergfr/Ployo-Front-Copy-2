@@ -22,6 +22,7 @@ import {
   type OpeningHoursDay,
 } from "@/lib/opening-hours";
 import { prisma } from "@/lib/prisma";
+import { clockQrPayload, generateClockQrToken } from "@/lib/time-clock-qr";
 import { getDefaultOpeningHours, getISOWeekFromDate, getISOWeekStart } from "@/lib/shift-service";
 import { headers } from "next/headers";
 
@@ -1185,4 +1186,83 @@ export async function deleteTenantLocation(input: {
     entityId: location.id,
     detail: location.name,
   });
+}
+
+/**
+ * Stempel-QR-Code eines Standorts (Zeiterfassung mit QR-Pflicht). Wie das
+ * Bearbeiten des Standorts nur für Standort-Verwalter — der Code ist zwar
+ * kein Passwort, soll aber nicht jedem Mitglied zum Ausdrucken offenstehen.
+ */
+export type LocationClockQr = {
+  locationId: string;
+  locationKey: string;
+  locationName: string;
+  token: string | null;
+  /** Inhalt des QR-Codes (URL), `null` solange keiner erzeugt wurde. */
+  payload: string | null;
+  /** Zeiterfassung aktiv und QR-Scan in der App Pflicht. */
+  qrRequired: boolean;
+};
+
+export async function getLocationClockQr(
+  tenantSlug: string,
+  locationHandle: string,
+): Promise<LocationClockQr | null> {
+  const access = await requireLocationManager(tenantSlug);
+  const where = await locationScopeWhere(access);
+  const location = await prisma.tenantLocation.findFirst({
+    where: { ...where, OR: [{ key: locationHandle }, { id: locationHandle }] },
+    select: { id: true, key: true, name: true, clockQrToken: true },
+  });
+
+  if (!location) return null;
+
+  const settings = await prisma.tenantSettings.findUnique({
+    where: { tenantId: access.tenantId },
+    select: { timeTrackingEnabled: true, timeTrackingQrRequired: true },
+  });
+
+  return {
+    locationId: location.id,
+    locationKey: location.key,
+    locationName: location.name,
+    token: location.clockQrToken,
+    payload: location.clockQrToken ? clockQrPayload(location.clockQrToken) : null,
+    qrRequired: Boolean(settings?.timeTrackingEnabled && settings.timeTrackingQrRequired),
+  };
+}
+
+/**
+ * Erzeugt (bzw. ersetzt) das Token. Ein bereits ausgehängter Ausdruck wird
+ * dadurch ungültig — gedacht für "Code ist nach außen gelangt".
+ */
+export async function regenerateLocationClockQr(input: { tenantSlug: string; locationId: string }) {
+  const access = await requireLocationManager(input.tenantSlug);
+  await assertLocationInScope(access, input.locationId);
+
+  const existing = await prisma.tenantLocation.findFirst({
+    where: { id: input.locationId, tenantId: access.tenantId },
+    select: { id: true, key: true, name: true, clockQrToken: true },
+  });
+
+  if (!existing) {
+    throw new Error("Standort nicht gefunden.");
+  }
+
+  const location = await prisma.tenantLocation.update({
+    where: { id: existing.id },
+    data: { clockQrToken: generateClockQrToken() },
+    select: { id: true, key: true },
+  });
+
+  await recordLocationAudit(
+    access,
+    existing.clockQrToken ? "Stempel-QR-Code neu erzeugt" : "Stempel-QR-Code erzeugt",
+    location.id,
+    existing.clockQrToken
+      ? `${existing.name} — der bisherige QR-Code ist ab sofort ungültig.`
+      : existing.name,
+  );
+
+  return location;
 }
