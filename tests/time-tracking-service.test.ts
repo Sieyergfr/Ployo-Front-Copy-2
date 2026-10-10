@@ -302,7 +302,7 @@ describe("Stempeln per Standort-QR-Code", () => {
     await setSettings({ timeTrackingQrRequired: true });
   });
 
-  it("App: Ein-/Ausstempeln ohne Scan verweigert, Pausen ohne Scan erlaubt, Web unverändert", async () => {
+  it("App: Einstempeln ohne Scan verweigert, Pausen und Ausstempeln ohne Scan erlaubt, Web unverändert", async () => {
     let status = await service.getMyClockStatus(tenantSlug);
     expect(status.settings.qrRequired).toBe(true);
 
@@ -317,18 +317,19 @@ describe("Stempeln per Standort-QR-Code", () => {
     status = await service.performMyClockAction({ tenantSlug, action: "breakStart", source: "app" });
     expect(status.state).toBe("break");
 
-    await expect(
-      service.performMyClockAction({ tenantSlug, action: "clockOut", source: "app" }),
-    ).rejects.toThrow(TIME_TRACKING_ERRORS.qrRequired);
-
-    // Web-Dashboard: kein Scan nötig.
-    status = await service.performMyClockAction({ tenantSlug, action: "clockOut", source: "web" });
+    // Ausstempeln per Knopf — kein Scan, kein Ausstempel-Standort.
+    status = await service.performMyClockAction({ tenantSlug, action: "clockOut", source: "app" });
     expect(status.state).toBe("off");
+    const closed = await prisma.tenantTimeEntry.findFirstOrThrow({ where: { tenantId } });
+    expect(closed.clockOutLocationId).toBeNull();
+    expect(closed.clockInLocationId).toBe(filialeId);
+
+    // Web-Dashboard: auch Einstempeln ohne Scan.
     status = await service.performMyClockAction({ tenantSlug, action: "clockIn", source: "web" });
     expect(status.openEntry?.clockInLocation).toBeNull();
   });
 
-  it("erlaubt Ausstempeln an einem anderen Standort und hält beide Standorte fest", async () => {
+  it("ein beim Ausstempeln freiwillig gescannter anderer Standort wird ebenfalls festgehalten", async () => {
     // Schicht ist für "Filiale" geplant — gescannt werden darf trotzdem jeder Standort.
     const now = Date.now();
     await publishShift(new Date(now - 30 * 60_000), new Date(now + 3 * 3_600_000));

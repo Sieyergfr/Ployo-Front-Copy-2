@@ -508,7 +508,7 @@ model TenantSettings {
   /// ... bzw. ohne zugeordnete Schicht nach X Stunden ab Einstempeln.
   timeTrackingAutoClockOutMaxHours          Int      @default(12)
   /// In der App nur nach Scan eines Standort-QR-Codes (TenantLocation.clockQrToken)
-  /// ein- und ausstempeln. Gilt nicht fuer das Web-Dashboard.
+  /// einstempeln; Ausstempeln per Knopf. Gilt nicht fuer das Web-Dashboard.
   timeTrackingQrRequired                    Boolean  @default(false)
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
@@ -1338,7 +1338,7 @@ model TenantTimeEntry {
   plannedStartAt       DateTime?
   plannedEndAt         DateTime?
   shiftLocation        String            @default("")
-  /// Standort, dessen QR-Code beim Ein-/Ausstempeln gescannt wurde (nur App).
+  /// Standort, dessen QR-Code beim Einstempeln (bzw. optional beim Ausstempeln) gescannt wurde (nur App).
   /// Kann vom Schicht-Standort abweichen; der Name bleibt als Schnappschuss
   /// erhalten, auch wenn der Standort spaeter umbenannt/geloescht wird.
   clockInLocationId    String?

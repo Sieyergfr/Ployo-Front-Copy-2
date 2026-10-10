@@ -40,7 +40,7 @@ export type TimeTrackingSettings = {
   autoClockOut: boolean;
   autoClockOutAfterShiftMinutes: number;
   autoClockOutMaxHours: number;
-  /** App: Ein-/Ausstempeln nur mit gescanntem Standort-QR-Code (Web ausgenommen). */
+  /** App: Einstempeln nur mit gescanntem Standort-QR-Code (Ausstempeln per Knopf, Web ausgenommen). */
   qrRequired: boolean;
 };
 
@@ -399,7 +399,7 @@ export const TIME_TRACKING_ERRORS = {
   noteRequired: "Bitte einen Grund für die Korrektur angeben.",
   overlap: "Der Eintrag überschneidet sich mit einem anderen Zeiteintrag.",
   notFound: "Zeiteintrag nicht gefunden.",
-  qrRequired: "Bitte scannen Sie zum Ein- und Ausstempeln den QR-Code am Standort.",
+  qrRequired: "Bitte scannen Sie zum Einstempeln den QR-Code am Standort.",
   qrInvalid: "Dieser QR-Code gehört zu keinem aktiven Standort Ihres Betriebs.",
 } as const;
 

@@ -204,8 +204,9 @@ export function AddTimeEntryButton({
 }
 
 /**
- * Per QR-Code gescannter Standort beim Ein-/Ausstempeln (App). Gleicher
- * Standort → eine Angabe, abweichend → beide.
+ * Per QR-Code gescannter Standort beim Einstempeln (App) — beim Ausstempeln
+ * nur, falls dort freiwillig gescannt wurde. Gleicher Standort → eine
+ * Angabe, abweichend → beide.
  */
 function ScannedLocations({ entry }: { entry: TimeEntryView }) {
   const t = useTranslations("TimeTracking");

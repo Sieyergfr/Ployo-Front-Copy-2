@@ -6,7 +6,7 @@ import { randomBytes } from "node:crypto";
  *
  * Der QR-Code enthält eine normale URL `<BETTER_AUTH_URL>/stempeln/<token>`:
  * Die App liest daraus das Token und schickt den gescannten Text beim
- * Ein-/Ausstempeln mit; wer ihn versehentlich mit der Handykamera öffnet,
+ * Einstempeln mit; wer ihn versehentlich mit der Handykamera öffnet,
  * landet auf einer Hinweisseite (app/stempeln/[token]) statt auf einem
  * Fehler. Das Token ist zufällig (192 Bit) und verrät weder Mandant noch
  * Standort — die Zuordnung passiert ausschließlich serverseitig, immer

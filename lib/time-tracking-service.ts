@@ -504,14 +504,15 @@ export async function performMyClockAction(input: {
     throw new Error(TIME_TRACKING_ERRORS.breaksDisabled);
   }
 
-  // QR-Pflicht gilt nur in der App — im Web-Dashboard (meist am PC) lässt
-  // sich kein Code scannen, dort bleibt es beim normalen Stempeln. Pausen
-  // brauchen nie einen Scan. Wird ein Code mitgeschickt, obwohl keine Pflicht
-  // besteht, wird er trotzdem geprüft und der Standort festgehalten.
+  // QR-Pflicht gilt nur fürs Einstempeln und nur in der App — im
+  // Web-Dashboard (meist am PC) lässt sich kein Code scannen, dort bleibt es
+  // beim normalen Stempeln. Ausstempeln und Pausen gehen per Knopfdruck.
+  // Wird ein Code mitgeschickt (auch beim Ausstempeln oder ohne Pflicht),
+  // wird er trotzdem geprüft und der Standort festgehalten.
   const isClockInOrOut = input.action === "clockIn" || input.action === "clockOut";
   const qrCode = isClockInOrOut && typeof input.qrCode === "string" && input.qrCode.trim() ? input.qrCode : null;
 
-  if (isClockInOrOut && input.source === "app" && settings.qrRequired && !qrCode) {
+  if (input.action === "clockIn" && input.source === "app" && settings.qrRequired && !qrCode) {
     throw new Error(TIME_TRACKING_ERRORS.qrRequired);
   }
 
