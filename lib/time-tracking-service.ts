@@ -69,6 +69,7 @@ const settingsSelect = {
   timeTrackingAutoClockOutAfterShiftMinutes: true,
   timeTrackingAutoClockOutMaxHours: true,
   timeTrackingQrRequired: true,
+  timeTrackingQrRequiredClockOut: true,
 } satisfies Prisma.TenantSettingsSelect;
 
 type SettingsRow = Prisma.TenantSettingsGetPayload<{ select: typeof settingsSelect }>;
@@ -84,6 +85,7 @@ const disabledSettings: TimeTrackingSettings = {
   autoClockOutAfterShiftMinutes: 60,
   autoClockOutMaxHours: 12,
   qrRequired: false,
+  qrRequiredClockOut: false,
 };
 
 function toSettings(row: SettingsRow | null): TimeTrackingSettings {
@@ -100,6 +102,7 @@ function toSettings(row: SettingsRow | null): TimeTrackingSettings {
     autoClockOutAfterShiftMinutes: row.timeTrackingAutoClockOutAfterShiftMinutes,
     autoClockOutMaxHours: row.timeTrackingAutoClockOutMaxHours,
     qrRequired: row.timeTrackingQrRequired,
+    qrRequiredClockOut: row.timeTrackingQrRequiredClockOut,
   };
 }
 
@@ -119,7 +122,7 @@ export async function loadTenantContext(tenantId: string) {
 /** Öffentliche Einstellungen für den Client (Stempeluhr-Bedienung). */
 export type ClockSettingsView = Pick<
   TimeTrackingSettings,
-  "breaksEnabled" | "autoBreakDeduction" | "clockInMode" | "clockInLeadMinutes" | "qrRequired"
+  "breaksEnabled" | "autoBreakDeduction" | "clockInMode" | "clockInLeadMinutes" | "qrRequired" | "qrRequiredClockOut"
 >;
 
 function toClockSettingsView(settings: TimeTrackingSettings): ClockSettingsView {
@@ -129,6 +132,7 @@ function toClockSettingsView(settings: TimeTrackingSettings): ClockSettingsView 
     clockInMode: settings.clockInMode,
     clockInLeadMinutes: settings.clockInLeadMinutes,
     qrRequired: settings.qrRequired,
+    qrRequiredClockOut: settings.qrRequiredClockOut,
   };
 }
 
@@ -504,16 +508,20 @@ export async function performMyClockAction(input: {
     throw new Error(TIME_TRACKING_ERRORS.breaksDisabled);
   }
 
-  // QR-Pflicht gilt nur fürs Einstempeln und nur in der App — im
-  // Web-Dashboard (meist am PC) lässt sich kein Code scannen, dort bleibt es
-  // beim normalen Stempeln. Ausstempeln und Pausen gehen per Knopfdruck.
-  // Wird ein Code mitgeschickt (auch beim Ausstempeln oder ohne Pflicht),
-  // wird er trotzdem geprüft und der Standort festgehalten.
+  // QR-Pflicht ist fürs Ein- und Ausstempeln getrennt einstellbar und gilt
+  // nur in der App — im Web-Dashboard (meist am PC) lässt sich kein Code
+  // scannen, dort bleibt es beim normalen Stempeln. Pausen gehen immer per
+  // Knopfdruck. Wird ein Code mitgeschickt (auch ohne Pflicht), wird er
+  // trotzdem geprüft und der Standort festgehalten.
   const isClockInOrOut = input.action === "clockIn" || input.action === "clockOut";
   const qrCode = isClockInOrOut && typeof input.qrCode === "string" && input.qrCode.trim() ? input.qrCode : null;
 
   if (input.action === "clockIn" && input.source === "app" && settings.qrRequired && !qrCode) {
     throw new Error(TIME_TRACKING_ERRORS.qrRequired);
+  }
+
+  if (input.action === "clockOut" && input.source === "app" && settings.qrRequiredClockOut && !qrCode) {
+    throw new Error(TIME_TRACKING_ERRORS.qrRequiredClockOut);
   }
 
   const scannedLocation = qrCode ? await resolveScannedLocation(tenantId, qrCode) : null;

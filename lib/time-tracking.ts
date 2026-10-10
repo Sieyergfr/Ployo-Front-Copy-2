@@ -40,8 +40,10 @@ export type TimeTrackingSettings = {
   autoClockOut: boolean;
   autoClockOutAfterShiftMinutes: number;
   autoClockOutMaxHours: number;
-  /** App: Einstempeln nur mit gescanntem Standort-QR-Code (Ausstempeln per Knopf, Web ausgenommen). */
+  /** App: Einstempeln nur mit gescanntem Standort-QR-Code (Web ausgenommen). */
   qrRequired: boolean;
+  /** App: Ausstempeln nur mit gescanntem Standort-QR-Code (Web ausgenommen). */
+  qrRequiredClockOut: boolean;
 };
 
 /** Eine veröffentlichte Schicht, auf absolute Zeitpunkte umgerechnet. */
@@ -400,6 +402,7 @@ export const TIME_TRACKING_ERRORS = {
   overlap: "Der Eintrag überschneidet sich mit einem anderen Zeiteintrag.",
   notFound: "Zeiteintrag nicht gefunden.",
   qrRequired: "Bitte scannen Sie zum Einstempeln den QR-Code am Standort.",
+  qrRequiredClockOut: "Bitte scannen Sie zum Ausstempeln den QR-Code am Standort.",
   qrInvalid: "Dieser QR-Code gehört zu keinem aktiven Standort Ihres Betriebs.",
 } as const;
 
@@ -422,6 +425,7 @@ export const TIME_TRACKING_ERROR_STATUS: ReadonlyMap<string, number> = new Map([
   [TIME_TRACKING_ERRORS.overlap, 409],
   [TIME_TRACKING_ERRORS.notFound, 404],
   [TIME_TRACKING_ERRORS.qrRequired, 400],
+  [TIME_TRACKING_ERRORS.qrRequiredClockOut, 400],
   [TIME_TRACKING_ERRORS.qrInvalid, 400],
 ]);
 

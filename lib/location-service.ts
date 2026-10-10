@@ -1200,7 +1200,7 @@ export type LocationClockQr = {
   token: string | null;
   /** Inhalt des QR-Codes (URL), `null` solange keiner erzeugt wurde. */
   payload: string | null;
-  /** Zeiterfassung aktiv und QR-Scan in der App Pflicht. */
+  /** Zeiterfassung aktiv und QR-Scan in der App Pflicht (Ein- und/oder Ausstempeln). */
   qrRequired: boolean;
 };
 
@@ -1219,7 +1219,7 @@ export async function getLocationClockQr(
 
   const settings = await prisma.tenantSettings.findUnique({
     where: { tenantId: access.tenantId },
-    select: { timeTrackingEnabled: true, timeTrackingQrRequired: true },
+    select: { timeTrackingEnabled: true, timeTrackingQrRequired: true, timeTrackingQrRequiredClockOut: true },
   });
 
   return {
@@ -1228,7 +1228,9 @@ export async function getLocationClockQr(
     locationName: location.name,
     token: location.clockQrToken,
     payload: location.clockQrToken ? clockQrPayload(location.clockQrToken) : null,
-    qrRequired: Boolean(settings?.timeTrackingEnabled && settings.timeTrackingQrRequired),
+    qrRequired: Boolean(
+      settings?.timeTrackingEnabled && (settings.timeTrackingQrRequired || settings.timeTrackingQrRequiredClockOut),
+    ),
   };
 }
 

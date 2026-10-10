@@ -217,7 +217,8 @@
         "clockInLead": "Minuten vor Schichtbeginn",
         "clockInHint": "Bei „Nur kurz vor/während einer Schicht“ wird die Stempeluhr ausgeblendet, solange keine veröffentlichte Schicht läuft oder in dieser Zeitspanne beginnt. Ausstempeln ist immer möglich.",
         "qrRequired": "Einstempeln: QR-Code-Scan erforderlich (App)",
-        "qrRequiredHint": "Mitarbeiter müssen in der App zum Einstempeln den QR-Code eines Standorts scannen; Ausstempeln geht weiterhin per Knopfdruck. Jeder Standort ist erlaubt — in der Zeiterfassung sehen Sie danach, an welchem Standort eingestempelt wurde. Den QR-Code zum Ausdrucken erzeugen Sie auf der Detailseite des Standorts. Im Web-Dashboard bleibt das Stempeln ohne Scan möglich.",
+        "qrRequiredClockOut": "Ausstempeln: QR-Code-Scan erforderlich (App)",
+        "qrRequiredHint": "Getrennt für Ein- und Ausstempeln einstellbar: Ist der Scan aktiviert, müssen Mitarbeiter dafür in der App den QR-Code eines Standorts scannen, sonst genügt ein Knopfdruck. Pausen gehen immer per Knopfdruck. Jeder Standort ist erlaubt — in der Zeiterfassung sehen Sie danach, an welchem Standort gestempelt wurde. Den QR-Code zum Ausdrucken erzeugen Sie auf der Detailseite des Standorts. Im Web-Dashboard bleibt das Stempeln ohne Scan möglich.",
         "breaksTitle": "Pausen",
         "breaksEnabled": "Pausen stempeln (Start/Stopp)",
         "autoBreakDeduction": "Gesetzliche Mindestpause automatisch abziehen",
@@ -2361,8 +2362,8 @@
     "sent": "{count, plural, one {Report an # Empfänger gesendet.} other {Report an # Empfänger gesendet.}}"
   },
   "LocationClockQr": {
-    "descriptionActive": "Mitarbeiter scannen diesen Code in der App, um sich einzustempeln. Ausdrucken und gut sichtbar am Standort aufhängen — der Code bleibt dauerhaft gültig.",
-    "descriptionInactive": "Dauerhafter QR-Code zum Einstempeln in der App. Er wird erst benötigt, wenn unter Einstellungen → Zeiterfassung „QR-Code-Scan erforderlich“ aktiviert ist.",
+    "descriptionActive": "Mitarbeiter scannen diesen Code in der App, um sich ein- bzw. auszustempeln (je nach Einstellung). Ausdrucken und gut sichtbar am Standort aufhängen — der Code bleibt dauerhaft gültig.",
+    "descriptionInactive": "Dauerhafter QR-Code zum Ein-/Ausstempeln in der App. Er wird erst benötigt, wenn unter Einstellungen → Zeiterfassung „QR-Code-Scan erforderlich“ aktiviert ist.",
     "qrAlt": "Stempel-QR-Code des Standorts",
     "generate": "QR-Code erzeugen",
     "generating": "Wird erzeugt…",
@@ -2373,14 +2374,14 @@
     "regenerateHint": "Nur nötig, wenn der Code in falsche Hände geraten ist.",
     "printTitle": "Stempel-QR-Code",
     "printEyebrow": "Zeiterfassung",
-    "printInstruction": "Zum Einstempeln diesen Code in der Ployo-App über die Stempeluhr scannen.",
+    "printInstruction": "Zum Ein-/Ausstempeln diesen Code in der Ployo-App über die Stempeluhr scannen.",
     "printFooter": "Bitte nicht abfotografieren oder weitergeben.",
     "notGeneratedYet": "Für diesen Standort wurde noch kein Stempel-QR-Code erzeugt.",
     "back": "Zurück zum Standort"
   },
   "ClockQrLanding": {
     "title": "Stempel-QR-Code",
-    "body": "Dieser Code dient zum Einstempeln. Bitte öffne die Ployo-App und scanne ihn dort über die Stempeluhr.",
+    "body": "Dieser Code dient zum Ein-/Ausstempeln. Bitte öffne die Ployo-App und scanne ihn dort über die Stempeluhr.",
     "home": "Zur Startseite"
   }
 }

@@ -217,7 +217,8 @@
         "clockInLead": "Minutes before shift start",
         "clockInHint": "With “Only shortly before/during a shift” the time clock is hidden while no published shift is running or starting within this window. Clocking out is always possible.",
         "qrRequired": "Clock-in: QR code scan required (app)",
-        "qrRequiredHint": "In the app, employees must scan a location's QR code to clock in; clocking out still works with a button tap. Any location is allowed — the time tracking view shows afterwards where each clock-in happened. Generate the printable QR code on the location's detail page. Clocking in via the web dashboard still works without a scan.",
+        "qrRequiredClockOut": "Clock-out: QR code scan required (app)",
+        "qrRequiredHint": "Configurable separately for clocking in and out: when the scan is enabled, employees must scan a location's QR code in the app; otherwise a button tap is enough. Breaks always work with a button tap. Any location is allowed — the time tracking view shows afterwards where each clock-in and clock-out happened. Generate the printable QR code on the location's detail page. Clocking in via the web dashboard still works without a scan.",
         "breaksTitle": "Breaks",
         "breaksEnabled": "Clock breaks (start/stop)",
         "autoBreakDeduction": "Automatically deduct the statutory minimum break",
@@ -2361,8 +2362,8 @@
     "sent": "{count, plural, one {Report sent to # recipient.} other {Report sent to # recipients.}}"
   },
   "LocationClockQr": {
-    "descriptionActive": "Employees scan this code in the app to clock in. Print it and put it up visibly at the location — the code stays valid permanently.",
-    "descriptionInactive": "Permanent QR code for clocking in in the app. It is only required once “QR code scan required” is enabled under Settings → Time tracking.",
+    "descriptionActive": "Employees scan this code in the app to clock in and/or out (depending on settings). Print it and put it up visibly at the location — the code stays valid permanently.",
+    "descriptionInactive": "Permanent QR code for clocking in/out in the app. It is only required once “QR code scan required” is enabled under Settings → Time tracking.",
     "qrAlt": "Clock-in QR code of the location",
     "generate": "Generate QR code",
     "generating": "Generating…",
@@ -2373,14 +2374,14 @@
     "regenerateHint": "Only needed if the code has fallen into the wrong hands.",
     "printTitle": "Clock-in QR code",
     "printEyebrow": "Time tracking",
-    "printInstruction": "To clock in, scan this code with the time clock in the Ployo app.",
+    "printInstruction": "To clock in or out, scan this code with the time clock in the Ployo app.",
     "printFooter": "Please do not photograph or share.",
     "notGeneratedYet": "No clock-in QR code has been generated for this location yet.",
     "back": "Back to location"
   },
   "ClockQrLanding": {
     "title": "Clock-in QR code",
-    "body": "This code is used for clocking in. Please open the Ployo app and scan it with the time clock there.",
+    "body": "This code is used for clocking in and out. Please open the Ployo app and scan it with the time clock there.",
     "home": "Go to homepage"
   }
 }

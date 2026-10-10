@@ -118,6 +118,7 @@ type TenantItem = {
     timeTrackingAutoClockOutAfterShiftMinutes: number;
     timeTrackingAutoClockOutMaxHours: number;
     timeTrackingQrRequired: boolean;
+    timeTrackingQrRequiredClockOut: boolean;
   };
 };
 
@@ -187,6 +188,7 @@ const defaultSettings: NonNullable<TenantItem["settings"]> = {
   timeTrackingAutoClockOutAfterShiftMinutes: 60,
   timeTrackingAutoClockOutMaxHours: 12,
   timeTrackingQrRequired: false,
+  timeTrackingQrRequiredClockOut: false,
 };
 
 function tenantSlugFromHref(href: string) {
@@ -836,6 +838,12 @@ function SettingsPanel({
             <div className="flex flex-col gap-2 sm:col-span-2">
               <Checkbox id="timeTrackingQrRequired" defaultChecked={settings.timeTrackingQrRequired}>
                 {t("timeTrackingTab.qrRequired")}
+              </Checkbox>
+              <Checkbox
+                id="timeTrackingQrRequiredClockOut"
+                defaultChecked={settings.timeTrackingQrRequiredClockOut}
+              >
+                {t("timeTrackingTab.qrRequiredClockOut")}
               </Checkbox>
               <p className="text-[12px] text-muted">{t("timeTrackingTab.qrRequiredHint")}</p>
             </div>

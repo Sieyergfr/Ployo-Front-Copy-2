@@ -299,7 +299,7 @@ describe("Stempeln per Standort-QR-Code", () => {
 
   beforeEach(async () => {
     currentUserId = employeeUserId;
-    await setSettings({ timeTrackingQrRequired: true });
+    await setSettings({ timeTrackingQrRequired: true, timeTrackingQrRequiredClockOut: false });
   });
 
   it("App: Einstempeln ohne Scan verweigert, Pausen und Ausstempeln ohne Scan erlaubt, Web unverändert", async () => {
@@ -327,6 +327,34 @@ describe("Stempeln per Standort-QR-Code", () => {
     // Web-Dashboard: auch Einstempeln ohne Scan.
     status = await service.performMyClockAction({ tenantSlug, action: "clockIn", source: "web" });
     expect(status.openEntry?.clockInLocation).toBeNull();
+  });
+
+  it("Ausstempeln: Scan-Pflicht getrennt einstellbar, unabhängig vom Einstempeln", async () => {
+    await setSettings({ timeTrackingQrRequired: false, timeTrackingQrRequiredClockOut: true });
+    let status = await service.getMyClockStatus(tenantSlug);
+    expect(status.settings.qrRequired).toBe(false);
+    expect(status.settings.qrRequiredClockOut).toBe(true);
+
+    // Einstempeln per Knopf, Pausen per Knopf ...
+    status = await service.performMyClockAction({ tenantSlug, action: "clockIn", source: "app" });
+    expect(status.state).toBe("working");
+    status = await service.performMyClockAction({ tenantSlug, action: "breakStart", source: "app" });
+    expect(status.state).toBe("break");
+
+    // ... Ausstempeln in der App nur mit Scan.
+    await expect(
+      service.performMyClockAction({ tenantSlug, action: "clockOut", source: "app" }),
+    ).rejects.toThrow(TIME_TRACKING_ERRORS.qrRequiredClockOut);
+    status = await service.performMyClockAction({ tenantSlug, action: "clockOut", source: "app", qrCode: lagerQr });
+    expect(status.state).toBe("off");
+    const closed = await prisma.tenantTimeEntry.findFirstOrThrow({ where: { tenantId } });
+    expect(closed.clockInLocationId).toBeNull();
+    expect(closed.clockOutLocationId).toBe(lagerId);
+
+    // Web-Dashboard: Ausstempeln ohne Scan.
+    await service.performMyClockAction({ tenantSlug, action: "clockIn", source: "web" });
+    status = await service.performMyClockAction({ tenantSlug, action: "clockOut", source: "web" });
+    expect(status.state).toBe("off");
   });
 
   it("ein beim Ausstempeln freiwillig gescannter anderer Standort wird ebenfalls festgehalten", async () => {

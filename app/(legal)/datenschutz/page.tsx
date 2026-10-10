@@ -121,7 +121,7 @@ export default function DatenschutzPage() {
             ArbZG, § 17 MiLoG, BAG, Beschl. v. 13.09.2022 – 1 ABR 22/21). Hat
             Ihr Arbeitgeber das Stempeln per QR-Code eingerichtet, wird
             zusätzlich gespeichert, an welchem Betriebsstandort (dessen
-            QR-Code Sie gescannt haben) Sie sich eingestempelt haben. Es werden dabei <strong>keine GPS- oder sonstigen
+            QR-Code Sie gescannt haben) Sie sich ein- bzw. ausgestempelt haben. Es werden dabei <strong>keine GPS- oder sonstigen
             Ortungsdaten</strong> Ihres Geräts erhoben. Erinnerungen zum Ein- und Ausstempeln werden als
             Push-Benachrichtigung zugestellt (siehe Ziffer 6).
           </li>
@@ -182,7 +182,7 @@ export default function DatenschutzPage() {
           auswählen. Der Zugriff erfolgt ausschließlich auf von Ihnen aktiv
           ausgewählte Aufnahmen bzw. Dateien (Art. 6 Abs. 1 lit. b DSGVO) und
           wird erst beim tatsächlichen Gebrauch dieser Funktion angefragt.
-          Zum Einstempeln per QR-Code nutzt die App die Kamera
+          Zum Ein-/Ausstempeln per QR-Code nutzt die App die Kamera
           ausschließlich zum Erkennen des QR-Codes; dabei werden keine
           Bilder gespeichert oder übertragen, sondern nur der Inhalt des
           erkannten Codes.
