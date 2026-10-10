@@ -119,13 +119,13 @@ describe("findShiftOverlap", () => {
   it("erkennt eine echte zeitliche Überschneidung derselben Person", () => {
     const existing = { date: "2026-09-01", startTime: "08:00", endTime: "16:00" };
     const candidate = { date: "2026-09-01", startTime: "12:00", endTime: "20:00" };
-    expect(findShiftOverlap([existing], candidate)).toEqual({ neighborDate: "2026-09-01" });
+    expect(findShiftOverlap([existing], candidate)).toEqual({ neighborDate: "2026-09-01", shift: existing });
   });
 
   it("erkennt eine Überschneidung über Mitternacht hinweg (Nachtschicht trifft Frühschicht)", () => {
     const nightShift = { date: "2026-09-01", startTime: "22:00", endTime: "06:00" }; // endet 02.09. 06:00
     const candidate = { date: "2026-09-02", startTime: "05:00", endTime: "13:00" }; // beginnt vor Schichtende
-    expect(findShiftOverlap([nightShift], candidate)).toEqual({ neighborDate: "2026-09-01" });
+    expect(findShiftOverlap([nightShift], candidate)).toEqual({ neighborDate: "2026-09-01", shift: nightShift });
   });
 
   it("meldet keine Überschneidung bei ausreichendem Ruheabstand", () => {

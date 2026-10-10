@@ -127,6 +127,12 @@ export function getISOWeekFromDate(date: Date) {
   return { year, week };
 }
 
+/** "2026-10-08" → "08.10.2026" für Fehlermeldungen. */
+function formatGermanDate(value: string) {
+  const [year, month, day] = value.split("-");
+  return year && month && day ? `${day}.${month}.${year}` : value;
+}
+
 function formatDateValue(date: Date) {
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(
     2,
@@ -1312,14 +1318,29 @@ async function assertArbzgCompliant(input: {
       date: { gte: shiftDateBy(input.date, -2), lte: shiftDateBy(input.date, 2) },
       id: input.excludeShiftId ? { not: input.excludeShiftId } : undefined,
     },
-    select: { date: true, startTime: true, endTime: true, breakMinutes: true },
+    select: {
+      date: true,
+      startTime: true,
+      endTime: true,
+      breakMinutes: true,
+      location: { select: { name: true } },
+    },
   });
 
   const overlap = findShiftOverlap(neighborShifts, candidate);
 
+  // Vorher nur "überschneidet sich mit einer Schicht am 2026-10-08" — und
+  // da die Meldung nicht in der Allowlist von lib/api/self-service-errors.ts
+  // stand, kam in der App nur ein generischer 500er an. Jetzt mit Zeiten und
+  // Standort der kollidierenden Schicht, damit man sie im Plan findet. Der
+  // Präfix "Konflikt mit bestehender Schicht:" wird dort auf 409 gemappt.
   if (overlap) {
+    const existing = overlap.shift;
+    const where = existing.location?.name ? ` (${existing.location.name})` : "";
     throw new Error(
-      `Schicht überschneidet sich zeitlich mit einer bestehenden Schicht am ${overlap.neighborDate} derselben Person.`,
+      `Konflikt mit bestehender Schicht: Die Person ist am ${formatGermanDate(existing.date)} bereits von ` +
+        `${existing.startTime} bis ${existing.endTime} Uhr${where} eingeplant. Die neue Schicht ` +
+        `(${input.startTime}–${input.endTime} Uhr) überschneidet sich damit.`,
     );
   }
 
@@ -1327,7 +1348,7 @@ async function assertArbzgCompliant(input: {
 
   if (violation) {
     throw new Error(
-      `Ruhezeit unterschritten: nur ${violation.restHours.toFixed(1)}h Abstand zur Schicht am ${violation.neighborDate} ` +
+      `Ruhezeit unterschritten: nur ${violation.restHours.toFixed(1)}h Abstand zur Schicht am ${formatGermanDate(violation.neighborDate)} ` +
         `(§5 ArbZG verlangt mind. ${minRestHours}h).`,
     );
   }

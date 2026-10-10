@@ -153,7 +153,10 @@ function classifySelfServiceError(message: string): number | null {
     message === "FOLDER_LOCKED" ||
     message.startsWith("Keine Berechtigung") ||
     // lib/employee-service.ts — Self-Service-Zugriff auf eine fremde Personalakte.
-    message.includes("gehört nicht zu Ihrem Konto")
+    message.includes("gehört nicht zu Ihrem Konto") ||
+    // lib/shift-service.ts requireTenantWideShiftManager() — Team-Planer
+    // ohne "all"-Scope bei wochenweiten Aktionen (Veröffentlichen etc.).
+    message.includes("erfordert uneingeschränkte Schichtplan-Berechtigung")
   ) {
     return 403;
   }
@@ -190,7 +193,11 @@ function classifySelfServiceError(message: string): number | null {
     message.includes("bereits vergeben") ||
     message.includes("bereits einer anderen Personalakte zugeordnet") ||
     // lib/vacation-service.ts assertNoVacationOverlap() — QA-Bug BUG-001.
-    message.includes("bereits ein offener oder genehmigter Urlaubsantrag")
+    message.includes("bereits ein offener oder genehmigter Urlaubsantrag") ||
+    // lib/shift-service.ts assertArbzgCompliant() — Schicht überschneidet
+    // sich mit einer bestehenden Schicht derselben Person. Fehlte bisher, die
+    // App zeigte deshalb nur "Es ist ein Fehler aufgetreten."
+    message.startsWith("Konflikt mit bestehender Schicht:")
   ) {
     return 409;
   }
@@ -268,7 +275,10 @@ function classifySelfServiceError(message: string): number | null {
     message.includes("MuSchG") ||
     // lib/shift-service.ts assertArbzgCompliant() — Pause länger als die
     // Schicht selbst (QA-Bug BUG-008).
-    message.includes("darf nicht länger sein als die Schicht selbst")
+    message.includes("darf nicht länger sein als die Schicht selbst") ||
+    // lib/shift-service.ts assertPublishedShiftsArbzgCompliant() — Sammelmeldung beim
+    // Veröffentlichen; enthält die Einzelmeldungen oben (inkl. Überschneidung).
+    message.startsWith("Veröffentlichung abgebrochen")
   ) {
     return 400;
   }

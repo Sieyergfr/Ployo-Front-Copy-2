@@ -84,17 +84,17 @@ export function exceedsMaxShiftHours(shift: ShiftTimeRange, maxShiftHours: numbe
  * gleiche Kalendertage vergleicht und nirgends als Schreibsperre verwendet
  * wird (Audit-Finding M03: Überschneidungen wurden bisher gespeichert).
  */
-export function findShiftOverlap(
-  otherShifts: ShiftTimeRange[],
+export function findShiftOverlap<T extends ShiftTimeRange>(
+  otherShifts: T[],
   candidate: ShiftTimeRange,
-): { neighborDate: string } | null {
+): { neighborDate: string; shift: T } | null {
   const candidateInterval = shiftInterval(candidate);
 
   for (const other of otherShifts) {
     const otherInterval = shiftInterval(other);
 
     if (candidateInterval.start < otherInterval.end && candidateInterval.end > otherInterval.start) {
-      return { neighborDate: other.date };
+      return { neighborDate: other.date, shift: other };
     }
   }
 
