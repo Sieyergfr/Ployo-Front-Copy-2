@@ -2,7 +2,7 @@
 
 Stand: 2026-09-05. Blocker, Sollte-behoben-werden, Responsive Design, Datenschutz-Umbauplan Phase 0-2 und die komplette i18n-String-Extraktion (108 Dateien, 93 Namespaces, ~1635 Keys) sind vollständig umgesetzt, code-verifiziert, committet und gepusht. Die machbaren Teile von Phase 3 (Jugendarbeitsschutz, Mutterschutz, Betriebsrat-Hinweis, Verarbeitungsverzeichnis) sind ebenfalls umgesetzt und code-verifiziert, aber noch nicht gepusht/deployt (steht noch dein Go aus). Alles Weitere unten sind bewusst offene Punkte, die externe Schritte oder deine Entscheidung brauchen (siehe "Braucht weiterhin deine Aufmerksamkeit").
 
-## ✅ Zeiterfassung: Stempeln per Standort-QR-Code — App + Web (2026-10-10, gebaut, NICHT committet/deployt)
+## ✅ Zeiterfassung: Stempeln per Standort-QR-Code — App + Web (2026-10-10, committet + Live-DB migriert, Web-Deploy offen)
 
 - **Einstellung** (Einstellungen → Zeiterfassung → Einstempeln): „Einstempeln: QR-Code-Scan erforderlich (App)“. Gilt nur in der App; im Web-Dashboard bleibt das normale Stempeln.
 - **QR-Code je Standort:** Standort-Detailseite → Panel „Stempel-QR-Code“ (nur Standort-Verwalter): erzeugen, Druckansicht (A4, `/u/<firma>/standorte/<standort>/stempel-qr`), „Neu erzeugen“ macht den alten Ausdruck ungültig (mit Rückfrage + Audit-Log). Der Code ist dauerhaft gültig und enthält eine URL `https://ployo.io/stempeln/<Token>` — mit der normalen Handykamera gescannt landet man auf einer Hinweisseite („bitte in der App scannen“), die nichts über Betrieb/Standort verrät.
@@ -13,8 +13,10 @@ Stand: 2026-09-05. Blocker, Sollte-behoben-werden, Responsive Design, Datenschut
 - Verifiziert: `tsc`, `eslint`, volle Testsuite gegen isolierte DB (396/396, davon 9 neu), Migration gegen Schema ohne Drift, Probe-`next build`; `ployo-mobile` `typecheck` + `lint`.
 
 Offen dazu:
-- Commit + Push (beide Repos), Live-DB-Migration (vorher Backup) und Web-Deploy per `scripts/deploy.sh` — **[Du → Ich]** (auf dein Go)
-- Neuer App-Build (EAS) wegen `expo-camera` — ältere App-Versionen können bei aktiver QR-Pflicht nicht mehr ein-/ausstempeln (sie zeigen die Fehlermeldung „Bitte scannen Sie …“). Einstellung daher erst aktivieren, wenn die neue App verteilt ist — **[Du → Ich]**
+- ✅ Committet + gepusht (Web `602103a0`, App `e3715fa`; davor je ein eigener Commit mit der Vorarbeit „Schicht-Überschneidungsmeldung/Aufräumen“: Web `71554135`, App `d718d61`). Live-DB migriert (Backup: `/var/backups/ployo/ployo-before-time-clock-qr-20261010155301.sql.gz`).
+- Web-Deploy: `bash scripts/deploy.sh` — für Claude im Auto-Modus gesperrt — **[Du]**
+- ✅ EAS-Preview-Builds gestartet (2026-10-10): Android `7390250f-7e7a-41ae-a11f-141eeb6eff1b`, iOS `5b02a0ee-bbca-4452-8b23-58cb2f435d68`. Store-Build (`--profile production`) + Einreichung — **[Du]**
+- Hinweis: ältere App-Versionen können bei aktiver QR-Pflicht nicht mehr ein-/ausstempeln (sie zeigen die Fehlermeldung „Bitte scannen Sie …“). Einstellung daher erst aktivieren, wenn die neue App verteilt ist — **[Du → Ich]**
 - QR-Codes je Standort erzeugen, ausdrucken, aufhängen — **[Du]**
 - Anwaltliche Prüfung der geänderten Datenschutz-Passagen; ggf. Betriebsrat informieren (Standortbezug der Stempelung) — **[Du]**
 
