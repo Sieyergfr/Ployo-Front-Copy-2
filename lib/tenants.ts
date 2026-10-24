@@ -55,6 +55,8 @@ export type CreateTenantInput = {
   primaryColor?: string;
   plan?: string;
   billingCycle?: string;
+  /** Ohne abgeschlossenen Checkout gesperrt (lib/billing-access.ts). */
+  billingRequired?: boolean;
   invitations?: Array<{
     email?: string;
     role?: string;
@@ -308,6 +310,7 @@ export async function createTenantForOwner(input: CreateTenantInput) {
       primaryColor: normalizeCode(input.primaryColor, "#2A6FDB", 16),
       plan: normalizePlan(input.plan),
       billingCycle: normalizeBillingCycle(input.billingCycle),
+      billingRequired: input.billingRequired ?? false,
       invitations: {
         create: Array.from(invitationsByEmail.values()).map((invitation) => ({
           ...invitation,

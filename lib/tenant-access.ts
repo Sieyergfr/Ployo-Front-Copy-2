@@ -5,6 +5,12 @@ import {
   type PermissionLevel,
   type PermissionScope,
 } from "@/lib/roles";
+import {
+  getBillingBlockReason,
+  isStripeConfiguredForBilling,
+  tenantBillingSelect,
+  type TenantBillingFields,
+} from "@/lib/billing-access";
 
 export type TenantPermissionArea =
   | "employees" | "contracts" | "employeeFiles" | "payroll" | "sensitiveData" | "mutterschutz"
@@ -115,11 +121,30 @@ export function computePermissionLevels(membership: {
  * eigentliche Autorisierungs-Entscheidung ohne Request-Kontext gegen eine
  * echte Test-DB geprüft werden kann (siehe tests/tenant-access.test.ts).
  */
+export type TenantAccessOptions = {
+  /**
+   * Abo-Sperre überspringen — nur für das, was ein gesperrter Mandant zum
+   * Entsperren bzw. für seine Daten braucht (Checkout, Zahlungsverwaltung,
+   * Rechnungen, DSGVO-Datenexport).
+   */
+  allowBillingBlocked?: boolean;
+};
+
+/** Wirft "SUBSCRIPTION_REQUIRED", wenn der Mandant wegen des Abos gesperrt ist (lib/billing-access.ts). */
+function assertBillingAccess(tenant: TenantBillingFields, options?: TenantAccessOptions) {
+  if (options?.allowBillingBlocked) return;
+
+  if (getBillingBlockReason(tenant, isStripeConfiguredForBilling())) {
+    throw new Error("SUBSCRIPTION_REQUIRED");
+  }
+}
+
 export async function resolveTenantAccessForUser(
   user: { id: string; name?: string | null; email: string; twoFactorEnabled?: boolean | null },
   tenantSlug: string,
   area: TenantPermissionArea,
   required: PermissionLevel = "read",
+  options?: TenantAccessOptions,
 ): Promise<TenantAccess> {
   const { prisma } = await import("@/lib/prisma");
   const membership = await prisma.tenantMembership.findFirst({
@@ -128,7 +153,12 @@ export async function resolveTenantAccessForUser(
       role: true,
       roleId: true,
       tenant: {
-        select: { id: true, slug: true, settings: { select: { twoFactorRequired: true } } },
+        select: {
+          id: true,
+          slug: true,
+          settings: { select: { twoFactorRequired: true } },
+          ...tenantBillingSelect,
+        },
       },
       roleRef: {
         select: {
@@ -156,6 +186,8 @@ export async function resolveTenantAccessForUser(
   if (membership.tenant.settings?.twoFactorRequired && !user.twoFactorEnabled) {
     throw new Error("TWO_FACTOR_REQUIRED");
   }
+
+  assertBillingAccess(membership.tenant, options);
 
   const membershipRole = membership.role;
   const isTenantManager = ["OWNER", "ADMIN", "HR"].includes(membershipRole);
@@ -196,10 +228,11 @@ export async function requireTenantAccess(
   tenantSlug: string,
   area: TenantPermissionArea,
   required: PermissionLevel = "read",
+  options?: TenantAccessOptions,
 ): Promise<TenantAccess> {
   const user = await getSessionUser();
 
-  return resolveTenantAccessForUser(user, tenantSlug, area, required);
+  return resolveTenantAccessForUser(user, tenantSlug, area, required, options);
 }
 
 /**
@@ -226,7 +259,10 @@ export async function isUnassignedEmployee(tenantSlug: string) {
  * darf auf die eigenen Daten zugreifen (Urlaub/Krankheit/Dokumente),
  * unabhängig von Rollen-Berechtigungen für die tenant-weiten Bereiche.
  */
-export async function requireTenantMembership(tenantSlug: string): Promise<TenantAccess> {
+export async function requireTenantMembership(
+  tenantSlug: string,
+  options?: TenantAccessOptions,
+): Promise<TenantAccess> {
   const { prisma } = await import("@/lib/prisma");
   const user = await getSessionUser();
   const membership = await prisma.tenantMembership.findFirst({
@@ -235,7 +271,12 @@ export async function requireTenantMembership(tenantSlug: string): Promise<Tenan
       role: true,
       roleId: true,
       tenant: {
-        select: { id: true, slug: true, settings: { select: { twoFactorRequired: true } } },
+        select: {
+          id: true,
+          slug: true,
+          settings: { select: { twoFactorRequired: true } },
+          ...tenantBillingSelect,
+        },
       },
     },
   });
@@ -245,6 +286,8 @@ export async function requireTenantMembership(tenantSlug: string): Promise<Tenan
   if (membership.tenant.settings?.twoFactorRequired && !user.twoFactorEnabled) {
     throw new Error("TWO_FACTOR_REQUIRED");
   }
+
+  assertBillingAccess(membership.tenant, options);
 
   return {
     tenantId: membership.tenant.id,
@@ -417,7 +460,7 @@ export async function getTenantCapabilities(
 export type ScopeFilter =
   | { type: "all" }
   | { type: "own"; employeeId: string | null }
-  | { type: "team"; team: string; employeeId: string | null }
+  | { type: "team"; employeeId: string | null; teamIds: string[]; teammateIds: string[] }
   | { type: "assigned"; area: "locations"; employeeId: string | null; locationNames: string[] }
   | { type: "assigned"; area: "teams"; employeeId: string | null; teamIds: string[] };
 
@@ -484,14 +527,41 @@ export async function resolveScopeFilter(access: TenantAccess): Promise<ScopeFil
 
   const me = await prisma.tenantEmployee.findFirst({
     where: { tenantId: access.tenantId, userId: access.userId },
-    select: { id: true, team: true },
+    select: { id: true },
   });
 
   if (access.scope === "own") {
     return { type: "own", employeeId: me?.id ?? null };
   }
 
-  return { type: "team", team: me?.team ?? "", employeeId: me?.id ?? null };
+  // Team-Zugehörigkeit kommt aus `TenantTeamMember` (wie beim "assigned"-
+  // Scope oben), nicht mehr aus der Freitext-Kopie `TenantEmployee.team`:
+  // die kannte nur ein Team, wurde beim Hinzufügen über die Team-Seite nicht
+  // gesetzt und überlebte das Löschen des Teams ("Geister-Team", das ein
+  // später gleichnamig angelegtes Team automatisch erbte). Ohne eigenes Team
+  // bleiben beide Listen leer — der Filter trifft dann nichts (H03).
+  const teamIds = me
+    ? (
+        await prisma.tenantTeamMember.findMany({
+          where: { employeeId: me.id, team: { tenantId: access.tenantId } },
+          select: { teamId: true },
+        })
+      ).map((membership) => membership.teamId)
+    : [];
+  const teammateIds = teamIds.length
+    ? Array.from(
+        new Set(
+          (
+            await prisma.tenantTeamMember.findMany({
+              where: { teamId: { in: teamIds } },
+              select: { employeeId: true },
+            })
+          ).map((membership) => membership.employeeId),
+        ),
+      )
+    : [];
+
+  return { type: "team", employeeId: me?.id ?? null, teamIds, teammateIds };
 }
 
 /**
@@ -503,13 +573,13 @@ export async function resolveScopeFilter(access: TenantAccess): Promise<ScopeFil
  */
 export function scopeAllowsTarget(
   scopeFilter: ScopeFilter,
-  target: { id: string; team: string },
+  target: { id: string },
 ): boolean {
   if (scopeFilter.type === "all") return true;
   if (scopeFilter.type === "own") return scopeFilter.employeeId === target.id;
-  if (scopeFilter.type === "team") return Boolean(target.team) && scopeFilter.team === target.team;
+  if (scopeFilter.type === "team") return scopeFilter.teammateIds.includes(target.id);
 
-  // "assigned" gilt für Standorte/Teams — nicht für {id, team}-Zieldatensätze
+  // "assigned" gilt für Standorte/Teams — nicht für Mitarbeiter-Zieldatensätze
   // (Mitarbeiter/Gehaltsabrechnungen), auf die diese Hilfsfunktion bisher
   // ausschließlich angewendet wird. Sicherheitshalber verweigern statt zu
   // raten, welches Ziel gemeint sein könnte.
@@ -537,7 +607,7 @@ export async function assertEmployeeInScope(
   const { prisma } = await import("@/lib/prisma");
   const employee = await prisma.tenantEmployee.findFirst({
     where: { id: employeeId, tenantId: access.tenantId },
-    select: { id: true, team: true },
+    select: { id: true },
   });
 
   if (!employee || !scopeAllowsTarget(scopeFilter, employee)) {
@@ -664,6 +734,11 @@ export async function withAccessRedirect<T>(
     if (err instanceof Error && err.message === "TWO_FACTOR_REQUIRED") {
       const { redirect } = await import("next/navigation");
       redirect(`/u/${tenantSlug}/zwei-faktor-erforderlich`);
+    }
+
+    if (err instanceof Error && err.message === "SUBSCRIPTION_REQUIRED") {
+      const { redirect } = await import("next/navigation");
+      redirect(`/u/${tenantSlug}/abo-erforderlich`);
     }
 
     throw err;

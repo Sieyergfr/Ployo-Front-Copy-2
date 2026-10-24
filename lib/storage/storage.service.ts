@@ -10,14 +10,21 @@ import { createReadSignedUrl } from "@/lib/storage/signed-url";
 import { uploadObject } from "@/lib/storage/upload";
 import { prisma } from "@/lib/prisma";
 import { headers } from "next/headers";
+import { randomUUID } from "node:crypto";
+import {
+  FILE_RESTORE_WINDOW_MS,
+  type FileDeletionEntry,
+  type FileDeletionResult,
+} from "@/lib/file-trash";
 import {
   assertEmployeeInScope,
   assertLocationInScope,
   assertTeamInScope,
   requireTenantAccess,
+  type TenantAccess,
   type TenantPermissionArea,
 } from "@/lib/tenant-access";
-import { requireFileAcl, requireTenantFileAreaAccess } from "@/lib/file-access";
+import { canAccessFileAcl, requireFileAcl, requireTenantFileAreaAccess } from "@/lib/file-access";
 import { assertFileDeletionAllowed } from "@/lib/retention-service";
 
 export type FileOwnerType = "tenant" | "employee" | "location" | "team";
@@ -67,6 +74,14 @@ function normalizeFolderPath(value: string) {
 export function folderScope(ownerType: FileOwnerType, ownerId?: string) {
   return ownerType === "tenant" ? "tenant" : `${ownerType}:${ownerId ?? "unknown"}`;
 }
+
+/**
+ * Wird ein gelöschter Ordner (status "inactive") unter demselben Pfad neu
+ * angelegt, belebt der Upsert den alten Datensatz wieder — dessen
+ * Lösch-Kennung muss dabei weg, sonst würde eine spätere Wiederherstellung
+ * der alten Löschung bzw. der Purge ihn erneut erfassen.
+ */
+const clearedFolderDeletion = { deletedAt: null, deletionBatchId: null, deletedByName: "" };
 
 function fileFolderScope(file: {
   employeeId?: string | null;
@@ -658,7 +673,7 @@ async function materializeFileBackedFolder(input: {
         path,
         ownerName: input.ownerName,
       },
-      update: { status: "active" },
+      update: { status: "active", ...clearedFolderDeletion },
       select: { id: true, path: true },
     });
 
@@ -781,6 +796,7 @@ export async function createTenantFileFolder(input: {
     },
     update: {
       status: "active",
+      ...clearedFolderDeletion,
       name,
       ownerName: input.ownerName?.trim() || access.userName || "HR",
       locked,
@@ -804,6 +820,8 @@ export async function ensureEmployeeTemplateFolder(input: {
   employeeId: string;
   name: string;
   ownerName?: string;
+  /** Vorlage, aus der der Ordner entsteht (`TenantFileFolder.templateId`). */
+  templateId?: string;
 }) {
   const name = input.name.trim();
 
@@ -813,6 +831,7 @@ export async function ensureEmployeeTemplateFolder(input: {
 
   const slug = slugify(name);
   const scope = folderScope("employee", input.employeeId);
+  const templateId = input.templateId ?? null;
 
   await prisma.tenantFileFolder.upsert({
     where: {
@@ -830,9 +849,12 @@ export async function ensureEmployeeTemplateFolder(input: {
       slug,
       path: slug,
       ownerName: input.ownerName?.trim() || "HR",
+      templateId,
     },
     update: {
       status: "active",
+      ...clearedFolderDeletion,
+      ...(templateId ? { templateId } : {}),
     },
   });
 }
@@ -1163,6 +1185,8 @@ export async function softDeleteTenantFile(input: {
   const deleted = await markObjectDeleted({
     tenantId: access.tenantId,
     fileId: input.fileId,
+    deletionBatchId: randomUUID(),
+    deletedByName: access.userName,
   });
 
   await recordTenantAudit({
@@ -1176,7 +1200,10 @@ export async function softDeleteTenantFile(input: {
     detail: deleted.displayName,
   });
 
-  return deleted;
+  return {
+    ...deleted,
+    restorableUntil: restorableUntil(deleted.deletedAt ?? new Date()).toISOString(),
+  };
 }
 
 /**
@@ -1405,4 +1432,431 @@ export async function getTenantFileSignedUrl(input: {
     disposition: input.disposition,
     contentType: file.mimeType,
   });
+}
+
+// ---------------------------------------------------------------------------
+// Löschen mit 24-h-Rückgängig (Dateien und ganze Ordner)
+// ---------------------------------------------------------------------------
+
+function restorableUntil(deletedAt: Date) {
+  return new Date(deletedAt.getTime() + FILE_RESTORE_WINDOW_MS);
+}
+
+/** Dateien genau einer Ablage — zentral (`tenant`) heißt: an niemanden gehängt. */
+function ownerFileWhere(ownerType: FileOwnerType, ownerId?: string) {
+  return {
+    employeeId: ownerType === "employee" ? ownerId : null,
+    locationId: ownerType === "location" ? ownerId : null,
+    teamId: ownerType === "team" ? ownerId : null,
+  };
+}
+
+function ownerOfRecord(record: {
+  employeeId: string | null;
+  locationId: string | null;
+  teamId: string | null;
+}): { ownerType: FileOwnerType; ownerId?: string } {
+  if (record.employeeId) return { ownerType: "employee", ownerId: record.employeeId };
+  if (record.locationId) return { ownerType: "location", ownerId: record.locationId };
+  if (record.teamId) return { ownerType: "team", ownerId: record.teamId };
+  return { ownerType: "tenant" };
+}
+
+/**
+ * Wer löschen (und damit auch wiederherstellen) darf: dieselbe Grundregel
+ * wie `softDeleteTenantFile` ("files" + canDelete), zusätzlich muss die
+ * Ablage (Mitarbeiter/Standort/Team) im eigenen Scope liegen.
+ */
+async function requireFileDeleteAccess(
+  tenantSlug: string,
+  ownerType: FileOwnerType,
+  ownerId?: string,
+) {
+  const access = await requireTenantAccess(tenantSlug, "files", "read");
+
+  if (!access.canDelete) {
+    throw new Error("FORBIDDEN");
+  }
+
+  const owner = await validateOwner({ tenantId: access.tenantId, ownerType, ownerId });
+
+  if (ownerType !== "tenant" && !owner.ownerId) {
+    throw new Error("Ablage nicht gefunden.");
+  }
+
+  await assertOwnerInScope(tenantSlug, ownerType, owner.ownerId);
+
+  return { access, ownerId: owner.ownerId, scope: folderScope(ownerType, owner.ownerId) };
+}
+
+type DeletableFile = {
+  id: string;
+  displayName: string;
+  employeeId: string | null;
+  locationId: string | null;
+  teamId: string | null;
+  parentId: string | null;
+  hiddenFromEmployee: boolean;
+  uploadedById: string;
+  accessRoleIdsJson: Prisma.JsonValue;
+  accessUserIdsJson: Prisma.JsonValue;
+};
+
+const deletableFileSelect = {
+  id: true,
+  displayName: true,
+  employeeId: true,
+  locationId: true,
+  teamId: true,
+  parentId: true,
+  hiddenFromEmployee: true,
+  uploadedById: true,
+  accessRoleIdsJson: true,
+  accessUserIdsJson: true,
+} satisfies Prisma.TenantFileSelect;
+
+/** ACL + Fachbereich wie bei `softDeleteTenantFile` — die ACL hängt am Wurzeldokument eines Versionsverbunds. */
+async function canSeeFile(access: TenantAccess, file: DeletableFile) {
+  const aclFile = file.parentId
+    ? ((await prisma.tenantFile.findFirst({
+        where: { id: file.parentId, tenantId: access.tenantId },
+        select: { accessRoleIdsJson: true, accessUserIdsJson: true },
+      })) ?? file)
+    : file;
+
+  if (!canAccessFileAcl(aclFile, access)) {
+    return false;
+  }
+
+  try {
+    await requireTenantFileAreaAccess(access, file);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Ordner samt allen Unterordnern und Dateien löschen. Adressiert über
+ * Ablage + Pfad (wie Sichtbarkeit/Anlegen), weil nur über Dateien
+ * existierende Ordner keine eigene ID haben — sie werden dafür nachgetragen.
+ *
+ * Alles oder nichts: enthält der Ordner eine Datei, die der Aufrufer nicht
+ * sehen/löschen darf oder die einer Aufbewahrungsfrist bzw. einem Legal Hold
+ * unterliegt, wird gar nichts gelöscht.
+ */
+export async function softDeleteTenantFileFolder(input: {
+  tenantSlug: string;
+  ownerType?: FileOwnerType;
+  ownerId?: string;
+  path: string;
+  pin?: string;
+}): Promise<FileDeletionResult> {
+  const ownerType = input.ownerType ?? "tenant";
+  const { access, ownerId, scope } = await requireFileDeleteAccess(
+    input.tenantSlug,
+    ownerType,
+    input.ownerId,
+  );
+  const path = normalizeFolderPath(input.path);
+
+  if (!path) {
+    throw new Error("Ordner nicht gefunden.");
+  }
+
+  const inFolder = (field: "path" | "folderSlug") => [
+    { [field]: path },
+    { [field]: { startsWith: `${path}/` } },
+  ];
+
+  // Der Ordner selbst muss einen Datensatz haben, damit die Löschung in der
+  // Liste "Kürzlich gelöscht" als Ordner (mit Namen) erscheint.
+  const rootRecord =
+    (await prisma.tenantFileFolder.findFirst({
+      where: { tenantId: access.tenantId, scope, path, status: "active" },
+      select: { id: true },
+    })) ??
+    (await materializeFileBackedFolder({
+      tenantId: access.tenantId,
+      scope,
+      ownerType,
+      ownerId,
+      path,
+      ownerName: access.userName || "HR",
+    }));
+
+  if (!rootRecord) {
+    throw new Error("Ordner nicht gefunden.");
+  }
+
+  const [folders, files] = await Promise.all([
+    prisma.tenantFileFolder.findMany({
+      where: { tenantId: access.tenantId, scope, status: "active", OR: inFolder("path") },
+      select: { id: true, path: true, name: true, locked: true },
+    }),
+    prisma.tenantFile.findMany({
+      where: {
+        tenantId: access.tenantId,
+        ...ownerFileWhere(ownerType, ownerId),
+        status: "active",
+        OR: inFolder("folderSlug"),
+      },
+      select: deletableFileSelect,
+    }),
+  ]);
+
+  // PIN-Sperren: übergeordnete Ordner, der Ordner selbst und jeder gesperrte
+  // Unterordner — sonst ließe sich geschützter Inhalt über das Löschen des
+  // Elternordners entfernen, ohne die PIN je eingegeben zu haben.
+  const segments = path.split("/");
+  const lockPaths = new Set(segments.map((_, index) => segments.slice(0, index + 1).join("/")));
+  folders.filter((folder) => folder.locked).forEach((folder) => lockPaths.add(folder.path));
+
+  for (const lockPath of lockPaths) {
+    await assertFolderPinAccess({ tenantSlug: input.tenantSlug, folderPath: lockPath, pin: input.pin, scope });
+  }
+
+  for (const file of files) {
+    if (!(await canSeeFile(access, file))) {
+      throw new Error(`Keine Berechtigung, „${file.displayName}“ in diesem Ordner zu löschen.`);
+    }
+
+    try {
+      await assertFileDeletionAllowed(access.tenantId, file);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new Error(`Ordner kann nicht gelöscht werden — „${file.displayName}“: ${reason}`);
+    }
+  }
+
+  const root = folders.find((folder) => folder.path === path);
+  const name = root?.name ?? segments[segments.length - 1];
+  const batchId = randomUUID();
+  const now = new Date();
+  const marker = { deletedAt: now, deletionBatchId: batchId, deletedByName: access.userName };
+
+  await prisma.$transaction([
+    prisma.tenantFileFolder.updateMany({
+      where: { id: { in: folders.map((folder) => folder.id) } },
+      data: { status: "inactive", ...marker },
+    }),
+    prisma.tenantFile.updateMany({
+      where: { id: { in: files.map((file) => file.id) } },
+      data: { status: "deleted", ...marker },
+    }),
+  ]);
+
+  await recordTenantAudit({
+    tenantId: access.tenantId,
+    actorId: access.userId,
+    actorName: access.userName,
+    action: "Ordner gelöscht",
+    source: "Dateien",
+    entityType: "file-folder",
+    entityId: root?.id ?? rootRecord.id,
+    detail: `${name} (${files.length} Dateien, ${folders.length} Ordner)`,
+  });
+
+  return {
+    batchId,
+    kind: "folder",
+    name,
+    fileCount: files.length,
+    folderCount: folders.length,
+    restorableUntil: restorableUntil(now).toISOString(),
+  };
+}
+
+/**
+ * Noch wiederherstellbare Löschungen (jünger als 24 h) einer Ablage, neueste
+ * zuerst. Nur für Nutzer mit Löschrecht; Dateien, die der Aufrufer nicht
+ * sehen darf, lassen den ganzen Eintrag weg (sonst verriete die Liste
+ * Dateinamen, z. B. fremder Gehaltsabrechnungen).
+ */
+export async function listTenantFileDeletions(input: {
+  tenantSlug: string;
+  ownerType?: FileOwnerType;
+  ownerId?: string;
+}): Promise<FileDeletionEntry[]> {
+  const ownerType = input.ownerType ?? "tenant";
+  const { access, ownerId, scope } = await requireFileDeleteAccess(
+    input.tenantSlug,
+    ownerType,
+    input.ownerId,
+  );
+  const since = new Date(Date.now() - FILE_RESTORE_WINDOW_MS);
+
+  const [files, folders] = await Promise.all([
+    prisma.tenantFile.findMany({
+      where: {
+        tenantId: access.tenantId,
+        ...ownerFileWhere(ownerType, ownerId),
+        status: "deleted",
+        deletionBatchId: { not: null },
+        deletedAt: { gt: since },
+      },
+      select: { ...deletableFileSelect, folderSlug: true, deletionBatchId: true, deletedAt: true, deletedByName: true },
+    }),
+    prisma.tenantFileFolder.findMany({
+      where: {
+        tenantId: access.tenantId,
+        scope,
+        status: "inactive",
+        deletionBatchId: { not: null },
+        deletedAt: { gt: since },
+      },
+      select: { name: true, path: true, deletionBatchId: true, deletedAt: true, deletedByName: true },
+    }),
+  ]);
+
+  const batchIds = new Set([...files, ...folders].map((entry) => entry.deletionBatchId!));
+  const entries: FileDeletionEntry[] = [];
+
+  for (const batchId of batchIds) {
+    const batchFiles = files.filter((file) => file.deletionBatchId === batchId);
+    const batchFolders = folders
+      .filter((folder) => folder.deletionBatchId === batchId)
+      .sort((a, b) => a.path.length - b.path.length);
+    let visible = true;
+
+    for (const file of batchFiles) {
+      if (!(await canSeeFile(access, file))) {
+        visible = false;
+        break;
+      }
+    }
+
+    if (!visible) {
+      continue;
+    }
+
+    const first = batchFolders[0] ?? batchFiles[0];
+    const deletedAt = first.deletedAt!;
+
+    entries.push({
+      batchId,
+      kind: batchFolders.length > 0 ? "folder" : "file",
+      name: batchFolders[0]?.name ?? batchFiles[0].displayName,
+      path: batchFolders[0]?.path ?? batchFiles[0].folderSlug,
+      fileCount: batchFiles.length,
+      folderCount: batchFolders.length,
+      deletedAt: deletedAt.toISOString(),
+      deletedByName: first.deletedByName,
+      restorableUntil: restorableUntil(deletedAt).toISOString(),
+    });
+  }
+
+  return entries.sort((a, b) => b.deletedAt.localeCompare(a.deletedAt));
+}
+
+/** Eine Löschung (Datei bzw. Ordner samt Inhalt) innerhalb der 24 h vollständig rückgängig machen. */
+export async function restoreTenantFileDeletion(input: {
+  tenantSlug: string;
+  batchId: string;
+}): Promise<{ kind: "file" | "folder"; name: string; fileCount: number; folderCount: number }> {
+  const baseAccess = await requireTenantAccess(input.tenantSlug, "files", "read");
+
+  if (!baseAccess.canDelete) {
+    throw new Error("FORBIDDEN");
+  }
+
+  const batchId = input.batchId.trim();
+  const [files, folders] = batchId
+    ? await Promise.all([
+        prisma.tenantFile.findMany({
+          where: { tenantId: baseAccess.tenantId, deletionBatchId: batchId, status: "deleted" },
+          select: { ...deletableFileSelect, folderSlug: true, deletedAt: true },
+        }),
+        prisma.tenantFileFolder.findMany({
+          where: { tenantId: baseAccess.tenantId, deletionBatchId: batchId, status: "inactive" },
+          select: {
+            id: true,
+            name: true,
+            path: true,
+            scope: true,
+            employeeId: true,
+            locationId: true,
+            teamId: true,
+            deletedAt: true,
+          },
+        }),
+      ])
+    : [[], []];
+
+  const first = folders[0] ?? files[0];
+
+  if (!first) {
+    throw new Error("Löschung nicht gefunden — sie wurde bereits wiederhergestellt oder endgültig entfernt.");
+  }
+
+  if (!first.deletedAt || first.deletedAt.getTime() + FILE_RESTORE_WINDOW_MS < Date.now()) {
+    throw new Error("Die 24-Stunden-Frist zum Wiederherstellen ist abgelaufen.");
+  }
+
+  const owner = ownerOfRecord(first);
+  const { access, scope } = await requireFileDeleteAccess(input.tenantSlug, owner.ownerType, owner.ownerId);
+
+  for (const file of files) {
+    if (!(await canSeeFile(access, file))) {
+      throw new Error("FORBIDDEN");
+    }
+  }
+
+  // Liegt das Ziel in einem Ordner, der durch eine ANDERE Löschung entfernt
+  // wurde, käme der Inhalt in einem unsichtbaren Ordner zurück — dann zuerst
+  // diesen Ordner wiederherstellen lassen.
+  const targetPaths = new Set<string>();
+  for (const path of [...folders.map((folder) => folder.path), ...files.map((file) => file.folderSlug)]) {
+    const segments = path.split("/").filter(Boolean);
+    segments.forEach((_, index) => targetPaths.add(segments.slice(0, index + 1).join("/")));
+  }
+
+  if (targetPaths.size > 0) {
+    const blockingFolder = await prisma.tenantFileFolder.findFirst({
+      where: {
+        tenantId: access.tenantId,
+        scope,
+        path: { in: [...targetPaths] },
+        status: "inactive",
+        deletionBatchId: { not: null },
+        NOT: { deletionBatchId: batchId },
+      },
+      orderBy: { path: "asc" },
+      select: { name: true },
+    });
+
+    if (blockingFolder) {
+      throw new Error(`Bitte zuerst den Ordner „${blockingFolder.name}“ wiederherstellen.`);
+    }
+  }
+
+  const restored = { deletedAt: null, deletionBatchId: null, deletedByName: "" };
+
+  await prisma.$transaction([
+    prisma.tenantFileFolder.updateMany({
+      where: { id: { in: folders.map((folder) => folder.id) } },
+      data: { status: "active", ...restored },
+    }),
+    prisma.tenantFile.updateMany({
+      where: { id: { in: files.map((file) => file.id) } },
+      data: { status: "active", ...restored },
+    }),
+  ]);
+
+  const rootFolder = [...folders].sort((a, b) => a.path.length - b.path.length)[0];
+  const kind = rootFolder ? "folder" : "file";
+  const name = rootFolder?.name ?? files[0].displayName;
+
+  await recordTenantAudit({
+    tenantId: access.tenantId,
+    actorId: access.userId,
+    actorName: access.userName,
+    action: kind === "folder" ? "Ordner wiederhergestellt" : "Datei wiederhergestellt",
+    source: "Dateien",
+    entityType: kind === "folder" ? "file-folder" : "file",
+    entityId: rootFolder?.id ?? files[0].id,
+    detail: kind === "folder" ? `${name} (${files.length} Dateien, ${folders.length} Ordner)` : name,
+  });
+
+  return { kind, name, fileCount: files.length, folderCount: folders.length };
 }

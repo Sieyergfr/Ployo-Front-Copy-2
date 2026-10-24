@@ -319,6 +319,7 @@ function FilesTab({
   employeeHref,
   uploadOptions,
   canManageFiles,
+  canDeleteFiles,
   activeFolder,
   t,
 }: {
@@ -327,6 +328,7 @@ function FilesTab({
   employeeHref: string;
   uploadOptions: FileUploadOptions;
   canManageFiles: boolean;
+  canDeleteFiles: boolean;
   activeFolder?: string;
   t: T;
 }) {
@@ -348,6 +350,7 @@ function FilesTab({
         files={employee.files}
         uploadOptions={uploadOptions}
         canManageFiles={canManageFiles}
+        canDeleteFiles={canDeleteFiles}
         initialFolderPath={activeFolder ?? ""}
         emptyLabel={t("noFilesInRecord")}
         employeeHandle={employee.id}
@@ -589,6 +592,7 @@ export default async function EmployeeDetailPage({
   const canEditMutterschutz = hasPermissionLevel(capabilities.mutterschutz.level, "write");
   const canViewEmployeeFiles = hasPermissionLevel(capabilities.employeeFiles.level, "read");
   const canManageFiles = hasPermissionLevel(capabilities.employeeFiles.level, "write");
+  const canDeleteFiles = canManageFiles && capabilities.files.canDelete;
   const deletionEligibility =
     canDeleteEmployee && employee.status === "former" && employee.dbId
       ? await getDeletionEligibilityForEmployee(tenant, employee.dbId)
@@ -855,6 +859,7 @@ export default async function EmployeeDetailPage({
           employeeHref={employeeHref}
           uploadOptions={uploadOptions}
           canManageFiles={canManageFiles}
+          canDeleteFiles={canDeleteFiles}
           activeFolder={activeFolder}
           t={t}
         />

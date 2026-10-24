@@ -19,6 +19,7 @@ export function FilesListClient({
   folderOptions,
   uploadOptions,
   canManageFiles,
+  canDeleteFiles,
   canManageReminders,
 }: {
   /** Alle Ordner der aktuellen Ansicht (Root-Ebene) — leer, solange ein Ordner geöffnet ist. */
@@ -35,6 +36,7 @@ export function FilesListClient({
   folderOptions?: FileFolder[];
   uploadOptions?: FileUploadOptions;
   canManageFiles?: boolean;
+  canDeleteFiles?: boolean;
   canManageReminders?: boolean;
 }) {
   const t = useTranslations("FilesListClient");
@@ -85,6 +87,7 @@ export function FilesListClient({
         folderOptions={folderOptions}
         uploadOptions={uploadOptions}
         canManageFiles={canManageFiles}
+        canDeleteFiles={canDeleteFiles}
         canManageReminders={canManageReminders}
         emptyFilesLabel={isFiltering ? t("noSearchResults") : undefined}
       />

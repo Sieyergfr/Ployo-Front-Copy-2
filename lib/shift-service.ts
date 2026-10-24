@@ -305,9 +305,7 @@ async function shiftScopeWhere(tenantSlug: string) {
   if (scopeFilter.type === "team") {
     // Kein eigenes Team darf nicht "alle Schichten nicht zugeordneter
     // Kolleg:innen" bedeuten (Audit-Finding H03).
-    return scopeFilter.team
-      ? { tenantId: access.tenantId, employee: { team: scopeFilter.team } }
-      : { tenantId: access.tenantId, employeeId: "__none__" };
+    return { tenantId: access.tenantId, employeeId: { in: scopeFilter.teammateIds } };
   }
 
   // "shifts" unterstützt (bisher) keinen "assigned"-Scope — sollte er
@@ -503,13 +501,7 @@ async function publishedShiftRecords(
   } else if (scopeFilter.type === "team") {
     // Kein eigenes Team darf nicht "alle nicht zugeordneten Kolleg:innen"
     // bedeuten (Audit-Finding H03).
-    const teammates = scopeFilter.team
-      ? await prisma.tenantEmployee.findMany({
-          where: { tenantId, team: scopeFilter.team },
-          select: { id: true },
-        })
-      : [];
-    const teammateIds = new Set(teammates.map((employee) => employee.id));
+    const teammateIds = new Set(scopeFilter.teammateIds);
 
     visible = entries.filter((entry) => entry.employeeId && teammateIds.has(entry.employeeId));
   } else if (scopeFilter.type !== "all") {
@@ -1038,7 +1030,7 @@ async function getActorName() {
  * dann bekommt die Konflikt-Meldung den konkreten Krankheitsbezug, sonst
  * einen neutralen Abwesenheits-Hinweis (siehe `notifyShiftPlanManagersOfAbsenceConflict`).
  */
-async function getShiftPlanManagers(tenantId: string, targetEmployee: { team: string }) {
+async function getShiftPlanManagers(tenantId: string, targetEmployee: { id: string | null }) {
   const memberships = await prisma.tenantMembership.findMany({
     where: { tenantId },
     select: {
@@ -1066,14 +1058,37 @@ async function getShiftPlanManagers(tenantId: string, targetEmployee: { team: st
     })
     .map((membership) => membership.userId);
 
+  // Team-Zugehörigkeit über `TenantTeamMember` (siehe resolveScopeFilter) —
+  // ein "team"-gescopter Planer ist zuständig, wenn er mit dem Zielmitarbeiter
+  // mindestens ein Team teilt.
   const linkedEmployees = await prisma.tenantEmployee.findMany({
     where: { tenantId, userId: { in: candidateIds } },
-    select: { userId: true, team: true },
+    select: { id: true, userId: true },
   });
-  const teamByUserId = new Map(
+  const targetTeamIds = new Set(
+    targetEmployee.id
+      ? (
+          await prisma.tenantTeamMember.findMany({
+            where: { employeeId: targetEmployee.id, team: { tenantId } },
+            select: { teamId: true },
+          })
+        ).map((membership) => membership.teamId)
+      : [],
+  );
+  const managerMemberships = targetTeamIds.size
+    ? await prisma.tenantTeamMember.findMany({
+        where: {
+          employeeId: { in: linkedEmployees.map((employee) => employee.id) },
+          teamId: { in: Array.from(targetTeamIds) },
+        },
+        select: { employeeId: true },
+      })
+    : [];
+  const employeesSharingTeam = new Set(managerMemberships.map((membership) => membership.employeeId));
+  const sharesTeamByUserId = new Map(
     linkedEmployees
-      .filter((employee): employee is { userId: string; team: string } => Boolean(employee.userId))
-      .map((employee) => [employee.userId, employee.team]),
+      .filter((employee): employee is { id: string; userId: string } => Boolean(employee.userId))
+      .map((employee) => [employee.userId, employeesSharingTeam.has(employee.id)]),
   );
 
   const result: Array<{ userId: string; email: string | null; canViewSicknessReason: boolean }> = [];
@@ -1092,12 +1107,8 @@ async function getShiftPlanManagers(tenantId: string, targetEmployee: { team: st
       continue;
     }
 
-    if (scope === "team") {
-      const managerTeam = teamByUserId.get(membership.userId) ?? "";
-
-      if (!managerTeam || !targetEmployee.team || managerTeam !== targetEmployee.team) {
-        continue;
-      }
+    if (scope === "team" && !sharesTeamByUserId.get(membership.userId)) {
+      continue;
     }
 
     const sicknessPermission = membership.roleRef?.permissions.find((p) => p.area === "sickness");
@@ -1117,9 +1128,7 @@ async function getShiftPlanManagers(tenantId: string, targetEmployee: { team: st
         // Zielmitarbeiter beziehen.
         canViewSicknessReason = false;
       } else if (sicknessScope === "team") {
-        const managerTeam = teamByUserId.get(membership.userId) ?? "";
-        canViewSicknessReason =
-          Boolean(managerTeam) && Boolean(targetEmployee.team) && managerTeam === targetEmployee.team;
+        canViewSicknessReason = sharesTeamByUserId.get(membership.userId) ?? false;
       }
     }
 
@@ -1206,9 +1215,9 @@ export async function notifyIfAbsenceConflictsWithPublishedShifts(input: {
 
   const targetEmployee = await prisma.tenantEmployee.findFirst({
     where: { id: input.employeeId, tenantId: input.tenantId },
-    select: { team: true },
+    select: { id: true },
   });
-  const managers = await getShiftPlanManagers(input.tenantId, { team: targetEmployee?.team ?? "" });
+  const managers = await getShiftPlanManagers(input.tenantId, { id: targetEmployee?.id ?? null });
 
   await notifyShiftPlanManagersOfAbsenceConflict({
     tenantId: input.tenantId,
@@ -1453,6 +1462,23 @@ async function assertArbzgCompliant(input: {
   }
 }
 
+/**
+ * `TenantShift.teamId` zum Teamnamen der Schicht. Der Name bleibt als
+ * Anzeige-Text in `team` stehen (Vorlagen, veröffentlichte Wochen und die App
+ * arbeiten mit Namen); ein Name ohne passendes Team ergibt keine id.
+ */
+async function resolveShiftTeamIds(tenantId: string, names: string[]) {
+  const unique = Array.from(new Set(names.map((name) => name.trim()).filter(Boolean)));
+  const teams = unique.length
+    ? await prisma.tenantTeam.findMany({
+        where: { tenantId, name: { in: unique } },
+        select: { id: true, name: true },
+      })
+    : [];
+
+  return new Map(teams.map((team) => [team.name, team.id]));
+}
+
 export async function createTenantShift(input: {
   tenantSlug: string;
   date: string;
@@ -1515,6 +1541,8 @@ export async function createTenantShift(input: {
     });
   }
 
+  const team = input.team?.trim() || employee?.team || "";
+  const teamIds = await resolveShiftTeamIds(access.tenantId, [team]);
   const created = await prisma.tenantShift.create({
     data: {
       tenantId: access.tenantId,
@@ -1527,7 +1555,8 @@ export async function createTenantShift(input: {
       breakMinutes: input.breakMinutes,
       employeeId: employee?.id,
       locationId: input.locationId || null,
-      team: input.team?.trim() || employee?.team || "",
+      team,
+      teamId: teamIds.get(team) ?? null,
       note: input.note?.trim() || "",
     },
   });
@@ -1634,6 +1663,9 @@ export async function updateTenantShift(input: {
     });
   }
 
+  const team = input.team?.trim() || employee?.team || "";
+  const teamIds = await resolveShiftTeamIds(access.tenantId, [team]);
+
   // Löst bewusst nie selbst eine Benachrichtigung aus, siehe createTenantShift.
   await prisma.tenantShift.update({
     where: { id: input.shiftId },
@@ -1645,7 +1677,8 @@ export async function updateTenantShift(input: {
       breakMinutes: input.breakMinutes,
       employeeId: employee?.id ?? null,
       locationId: input.locationId || null,
-      team: input.team?.trim() || employee?.team || "",
+      team,
+      teamId: teamIds.get(team) ?? null,
       note: input.note?.trim() || "",
     },
   });
@@ -2084,6 +2117,11 @@ export async function resetShiftWeekToPublished(input: {
   // einen Eintrag fälschlich als Überschneidung mit seinem eigenen,
   // gleich ersetzten Vorgänger melden. Verstöße, die erst NACH der letzten
   // Veröffentlichung entstanden sind, fallen mit dem Zurücksetzen ohnehin weg.
+  const snapshotTeamIds = await resolveShiftTeamIds(
+    access.tenantId,
+    snapshot.map((entry) => entry.team ?? ""),
+  );
+
   await prisma.$transaction([
     prisma.tenantShift.deleteMany({
       where: { tenantId: access.tenantId, date: { in: dayIds } },
@@ -2101,6 +2139,7 @@ export async function resetShiftWeekToPublished(input: {
           endTime: entry.endTime,
           breakMinutes: entry.breakMinutes,
           team: entry.team ?? "",
+          teamId: snapshotTeamIds.get(entry.team?.trim() ?? "") ?? null,
           note: entry.note,
           employeeId:
             entry.employeeId && knownEmployeeIds.has(entry.employeeId)
@@ -2165,9 +2204,7 @@ export async function saveShiftTemplateFromWeek(input: {
       : scopeFilter.type === "own"
         ? { employeeId: scopeFilter.employeeId ?? "__none__" }
         : scopeFilter.type === "team"
-          ? scopeFilter.team
-            ? { employee: { team: scopeFilter.team } }
-            : { employeeId: "__none__" }
+          ? { employeeId: { in: scopeFilter.teammateIds } }
           : { employeeId: "__none__" };
   const records = await prisma.tenantShift.findMany({
     where: { tenantId: access.tenantId, date: { in: dayIds }, ...scopeWhere },
@@ -2293,6 +2330,10 @@ export async function applyShiftTemplateToWeek(input: {
 
   const entries = parseShiftTemplateEntries(template.entriesJson);
   const weekStart = getISOWeekStart(input.year, input.week);
+  const templateTeamIds = await resolveShiftTeamIds(
+    access.tenantId,
+    entries.map((entry) => entry.team),
+  );
   let created = 0;
 
   for (const entry of entries) {
@@ -2323,6 +2364,7 @@ export async function applyShiftTemplateToWeek(input: {
         breakMinutes: entry.breakMinutes,
         locationId: entry.locationId || null,
         team: entry.team,
+        teamId: templateTeamIds.get(entry.team.trim()) ?? null,
       },
     });
     created += 1;

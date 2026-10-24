@@ -5,8 +5,11 @@ import {
   createTenantFileFolder,
   folderScope,
   getTenantFileSignedUrl,
+  listTenantFileDeletions,
   resolveTenantFileFolderPath,
+  restoreTenantFileDeletion,
   softDeleteTenantFile,
+  softDeleteTenantFileFolder,
   uploadTenantFile,
   uploadTenantFileVersion,
   verifyTenantFileFolderPin,
@@ -16,6 +19,7 @@ import { markFolderUnlocked } from "@/lib/folder-pin";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { auth } from "@/lib/auth";
 import { type ActionState, withActionErrorHandling } from "@/lib/action-state";
+import type { FileDeletionEntry, FileDeletionResult } from "@/lib/file-trash";
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -317,26 +321,6 @@ export async function uploadHrFileVersionAction(
   }, "Dateiversion hochladen");
 }
 
-export async function softDeleteHrFileAction(
-  _prevState: ActionState,
-  formData: FormData,
-): Promise<ActionState> {
-  return withActionErrorHandling(async () => {
-    const tenant = formString(formData, "tenant");
-    const fileId = formString(formData, "fileId");
-    const returnPath = formString(formData, "returnPath") || filesPath(tenant);
-
-    if (!tenant || !fileId) {
-      throw new Error("Datei konnte nicht gelöscht werden.");
-    }
-
-    await softDeleteTenantFile({ tenantSlug: tenant, fileId });
-
-    revalidatePath(returnPath);
-    redirect(returnPath);
-  }, "Datei löschen");
-}
-
 export async function getHrFileSignedUrlAction(input: {
   tenant: string;
   fileId: string;
@@ -364,4 +348,91 @@ export async function getHrFileSignedUrlAction(input: {
     version: input.version,
     disposition: input.disposition,
   });
+}
+
+/**
+ * Löschen/Wiederherstellen ohne Formular-Redirect — die Client-Komponenten in
+ * components/FileTrash.tsx rufen diese Actions direkt auf, zeigen danach
+ * einen Toast mit "Rückgängig" und laden die Ansicht per `router.refresh()`
+ * neu. Fehler kommen wie bei allen Actions als `error` (kuratierte Meldung
+ * oder generischer Text) zurück, nie als Exception.
+ */
+export type FileTrashActionResult = ActionState & {
+  deletion?: FileDeletionResult;
+  deletions?: FileDeletionEntry[];
+  restored?: { kind: "file" | "folder"; name: string; fileCount: number; folderCount: number };
+};
+
+type TrashOwner = { ownerType?: FileOwnerType; ownerId?: string };
+
+export async function deleteFileWithUndoAction(input: {
+  tenant: string;
+  fileId: string;
+}): Promise<FileTrashActionResult> {
+  return withActionErrorHandling(async () => {
+    const file = await softDeleteTenantFile({ tenantSlug: input.tenant, fileId: input.fileId });
+
+    const result: FileTrashActionResult = {
+      success: true,
+      deletion: {
+        batchId: file.deletionBatchId ?? "",
+        kind: "file",
+        name: file.displayName,
+        fileCount: 1,
+        folderCount: 0,
+        restorableUntil: file.restorableUntil,
+      },
+    };
+
+    return result;
+  }, "Datei löschen");
+}
+
+export async function deleteFolderWithUndoAction(
+  input: { tenant: string; path: string } & TrashOwner,
+): Promise<FileTrashActionResult> {
+  return withActionErrorHandling(async () => {
+    const deletion = await softDeleteTenantFileFolder({
+      tenantSlug: input.tenant,
+      ownerType: input.ownerType,
+      ownerId: input.ownerId,
+      path: input.path,
+    });
+
+    const result: FileTrashActionResult = { success: true, deletion };
+
+    return result;
+  }, "Ordner löschen");
+}
+
+export async function listFileDeletionsAction(
+  input: { tenant: string } & TrashOwner,
+): Promise<FileTrashActionResult> {
+  return withActionErrorHandling(async () => {
+    const deletions = await listTenantFileDeletions({
+      tenantSlug: input.tenant,
+      ownerType: input.ownerType,
+      ownerId: input.ownerId,
+    });
+
+    const result: FileTrashActionResult = { success: true, deletions };
+
+    return result;
+  }, "Gelöschte Dateien laden");
+}
+
+export async function restoreFileDeletionAction(input: {
+  tenant: string;
+  batchId: string;
+}): Promise<FileTrashActionResult> {
+  return withActionErrorHandling(async () => {
+    const restored = await restoreTenantFileDeletion({
+      tenantSlug: input.tenant,
+      batchId: input.batchId,
+    });
+
+    const result: FileTrashActionResult = { success: true, restored };
+
+    return result;
+  }, "Löschung rückgängig machen");
 }

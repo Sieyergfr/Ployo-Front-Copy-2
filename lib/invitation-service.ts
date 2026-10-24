@@ -182,6 +182,8 @@ export async function acceptInvitationForUser(
     invitation.role,
   );
 
+  let linkedEmployeeId: string | null = null;
+
   await prisma.$transaction(async (tx) => {
     await tx.tenantMembership.upsert({
       where: {
@@ -204,16 +206,7 @@ export async function acceptInvitationForUser(
       data: { status: "ACCEPTED", acceptedAt: new Date() },
     });
 
-    // Vorhandene Mitarbeiterakte mit gleicher E-Mail dem Konto zuordnen,
-    // damit Self-Service-Funktionen später den richtigen Datensatz finden.
-    await tx.tenantEmployee.updateMany({
-      where: {
-        tenantId: invitation.tenantId,
-        userId: null,
-        email: invitation.email,
-      },
-      data: { userId: user.id },
-    });
+    linkedEmployeeId = await linkEmployeeForInvitation(tx, invitation, user.id);
   });
 
   await recordTenantAudit({
@@ -224,10 +217,72 @@ export async function acceptInvitationForUser(
     source: "Einladung",
     entityType: "invitation",
     entityId: invitation.id,
-    detail: invitation.email,
+    detail: linkedEmployeeId
+      ? invitation.email
+      : `${invitation.email} (ohne Verknüpfung zu einer Personalakte)`,
   });
 
   return { ok: true, tenantSlug: invitation.tenant.slug };
+}
+
+type InvitationTx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
+
+/**
+ * Verknüpft beim Annehmen die passende Personalakte mit dem Konto und
+ * liefert deren id (oder null, wenn keine verknüpft wurde).
+ *
+ * - Einladung aus der Personalakte (`employeeId` gesetzt): genau diese Akte,
+ *   sofern sie noch frei ist — unabhängig davon, ob die E-Mail in der Akte
+ *   inzwischen geändert wurde.
+ * - Sonst (Einladung aus den Einstellungen): per E-Mail-Abgleich, aber nur
+ *   bei genau einer freien Akte. Vorher verknüpfte ein `updateMany` alle
+ *   Treffer mit dem Konto, und spätere `findFirst`-Abfragen wählten zufällig
+ *   eine davon.
+ *
+ * Ist das Konto in diesem Mandanten schon mit einer Akte verknüpft, bleibt es
+ * dabei (ein Konto hängt pro Mandant an höchstens einer Akte).
+ */
+async function linkEmployeeForInvitation(
+  tx: InvitationTx,
+  invitation: { tenantId: string; email: string; employeeId: string | null },
+  userId: string,
+) {
+  const alreadyLinked = await tx.tenantEmployee.findFirst({
+    where: { tenantId: invitation.tenantId, userId },
+    select: { id: true },
+  });
+
+  if (alreadyLinked) {
+    return alreadyLinked.id;
+  }
+
+  const candidates = invitation.employeeId
+    ? await tx.tenantEmployee.findMany({
+        where: { id: invitation.employeeId, tenantId: invitation.tenantId, userId: null },
+        select: { id: true },
+      })
+    : await tx.tenantEmployee.findMany({
+        where: {
+          tenantId: invitation.tenantId,
+          userId: null,
+          email: { equals: invitation.email.trim(), mode: "insensitive" },
+        },
+        select: { id: true },
+        take: 2,
+      });
+
+  if (candidates.length !== 1) {
+    return null;
+  }
+
+  // Bedingtes Update statt `update`: hat jemand die Akte zwischenzeitlich
+  // verknüpft, bleibt sie unangetastet.
+  const { count } = await tx.tenantEmployee.updateMany({
+    where: { id: candidates[0].id, userId: null },
+    data: { userId },
+  });
+
+  return count === 1 ? candidates[0].id : null;
 }
 
 export function buildInvitationUrl(token: string) {

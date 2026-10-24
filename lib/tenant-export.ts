@@ -38,7 +38,7 @@ async function resolveExportScope(
 function scopeIncludesEmployee(
   scope: ScopeFilter | null,
   employeeId: string | null | undefined,
-  employeesById: Map<string, { id: string; team: string }>,
+  employeesById: Map<string, { id: string }>,
 ): boolean {
   if (!scope) return false;
   if (scope.type === "all") return true;
@@ -56,7 +56,8 @@ function scopeIncludesEmployee(
  * Originaldateien bleiben über den Dateien-Bereich einzeln abrufbar.
  */
 export async function buildTenantExport(tenantSlug: string) {
-  const access = await requireSettingsManager(tenantSlug);
+  // DSGVO-Datenexport bleibt auch bei Abo-Sperre möglich.
+  const access = await requireSettingsManager(tenantSlug, { allowBillingBlocked: true });
   const tenantId = access.tenantId;
 
   // "settings:write" allein ist keine Berechtigung für sensible Stammdaten,
@@ -175,19 +176,19 @@ export async function buildTenantExport(tenantSlug: string) {
     detail: `${employees.length} Mitarbeiter, ${files.length} Dateien, ${payrollStatements.length} Abrechnungen`,
   });
 
-  const employeesById = new Map(employees.map((employee) => [employee.id, { id: employee.id, team: employee.team }]));
-  const teamNameById = new Map(teams.map((team) => [team.id, team.name]));
+  const employeesById = new Map(employees.map((employee) => [employee.id, { id: employee.id }]));
 
   // "own"/"team" bei Schichten lässt sich direkt über die auf der Schicht
-  // gespeicherten Felder auflösen, ohne Umweg über `employeesById`.
-  function shiftAllowed(shift: { employeeId: string | null; team: string }): boolean {
+  // gespeicherte employeeId auflösen, ohne Umweg über `employeesById` —
+  // "team" wie in `shiftScopeWhere` (shift-service.ts) über die Kolleg:innen.
+  function shiftAllowed(shift: { employeeId: string | null }): boolean {
     if (!shiftsScope) return false;
     if (shiftsScope.type === "all") return true;
     if (shiftsScope.type === "own") {
       return shift.employeeId != null && shift.employeeId === shiftsScope.employeeId;
     }
     if (shiftsScope.type === "team") {
-      return Boolean(shift.team) && shift.team === shiftsScope.team;
+      return shift.employeeId != null && shiftsScope.teammateIds.includes(shift.employeeId);
     }
     return false;
   }
@@ -207,11 +208,10 @@ export async function buildTenantExport(tenantSlug: string) {
     }
     if (filesScope.type === "team") {
       if (file.employeeId) {
-        const owner = employeesById.get(file.employeeId);
-        return Boolean(owner?.team) && owner?.team === filesScope.team;
+        return filesScope.teammateIds.includes(file.employeeId);
       }
       if (file.teamId) {
-        return teamNameById.get(file.teamId) === filesScope.team;
+        return filesScope.teamIds.includes(file.teamId);
       }
       return false;
     }

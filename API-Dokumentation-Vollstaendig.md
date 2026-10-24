@@ -42,7 +42,7 @@ Stand: 2026-08-16. Ersetzt `API-Dokumentation-Mitarbeiter-App.md` und `Schichtpl
 |---|---|
 | 400 | Pflichtfeld fehlt/ungültig |
 | 401 | nicht angemeldet |
-| 402 | Plan-/Abo-Limit erreicht (z. B. Mitarbeiterlimit) |
+| 402 | Plan-/Abo-Limit erreicht (z. B. Mitarbeiterlimit) — oder `code: "SUBSCRIPTION_REQUIRED"`: Mandant wegen Abo gesperrt (Checkout nicht abgeschlossen, Zahlung fehlgeschlagen, Abo beendet), betrifft **alle** mandantengebundenen Endpunkte außer Checkout/Portal (s. 13) |
 | 403 | keine Berechtigung, bzw. 2FA vom Mandanten erzwungen und noch nicht erfüllt |
 | 404 | Ressource nicht gefunden |
 | 409 | Konflikt (z. B. Konto bereits verknüpft, Rolle noch in Benutzung) |
@@ -210,6 +210,14 @@ Zeiterfassung (nur wenn der Mandant sie aktiviert hat, `TenantSettings.timeTrack
 GDPR-Datenexport des **eigenen** Kontos (nicht des Mandanten — dafür Abschnitt 2). Rate-Limit 5/Stunde. `200`: Datei-Download, JSON `{ exportedAt, account, memberships, sessions, linkedEmployeeRecords, hinweis }` — HR-Personalakte-Daten **nicht** enthalten.
 
 ---
+
+### App-Popups (`/api/me/app-popups`)
+
+Ployo-weite Popups für die Mitarbeiter-App (nicht mandantengebunden, Inhalt aus `AppPopup`, gepflegt per `scripts/app-popup.ts`, später Admin-Dashboard).
+
+`GET /api/me/app-popups` → `200 { "popups": [{ "id", "title", "body", "titleEn", "bodyEn", "imageUrl", "buttonLabel", "buttonLabelEn", "buttonUrl" }] }` — nur aktive, im Zeitfenster (`startsAt`/`endsAt`) liegende und vom Nutzer noch nicht geschlossene Popups, sortiert nach `priority` absteigend, dann ältestes zuerst. Die App zeigt sie in dieser Reihenfolge **nacheinander**. `*En`-Felder optional (Fallback Deutsch). `buttonUrl`: `https://…` oder App-Pfad `/…`. Rate-Limit 60/60s.
+
+`POST /api/me/app-popups/[popupId]/dismiss` → `200 { "ok": true }` — als geschlossen merken (idempotent), `404` unbekanntes Popup. Rate-Limit 60/60s.
 
 ## 4. Schichtplanung
 
@@ -437,7 +445,13 @@ Das eigenständige "Dateien"-Modul (zentrale HR-Ablage) — **nicht** dasselbe w
 
 `POST /files/[fileId]/versions` — **`multipart/form-data`**, Feld `file` Pflicht. Neue Version, alte wird `status: "replaced"`. `201 { "file": {...} }`. Auth: `files:write` (Basis-Check, **kein** zusätzlicher Owner-Area-Check anders als beim Erst-Upload). Rate-Limit 20/Stunde.
 
-`DELETE /files/[fileId]` — Soft-Delete (`status: "deleted"`, physisches Löschen später per Cron). `200 { "file": {...} }`. Auth: `files:write`. Rate-Limit 30/Stunde.
+`DELETE /files/[fileId]` — Soft-Delete (`status: "deleted"`). **24 h lang rückgängig machbar** (`POST /files/deleted/[batchId]`), danach entfernt der stündliche Cleanup-Cron Datensatz + S3-Objekt endgültig. `200 { "file": {..., "deletionBatchId", "restorableUntil" (ISO) } }`. Datei in PIN-geschütztem Ordner: PIN per `X-Folder-Pin`-Header. `409` bei Legal Hold/Aufbewahrungsfrist (`"Löschung gesperrt: …"`). Auth: `files:read` + `canDelete`, Datei-ACL, Fachbereich. Rate-Limit 30/Stunde (gemeinsam mit Ordner-Löschen).
+
+`DELETE /files/folders?path=&ownerType=&ownerId=` — Ordner **samt Unterordnern und Dateien** löschen, als eine Löschung 24 h lang rückgängig machbar. Ohne `ownerType` die zentrale Ablage, sonst `employee`|`location`|`team` + `ownerId`. PIN per `X-Folder-Pin` (gilt für übergeordnete, den Ordner selbst und gesperrte Unterordner). Alles oder nichts: enthält der Ordner eine Datei, die der Aufrufer nicht sehen darf (`403 "Keine Berechtigung, „…“ in diesem Ordner zu löschen."`) oder die einer Aufbewahrungsfrist/Legal Hold unterliegt (`409 "Ordner kann nicht gelöscht werden — „…“: …"`), wird nichts gelöscht. `200 { "deletion": { "batchId", "kind": "folder", "name", "fileCount", "folderCount", "restorableUntil" } }`. Auth: `files:read` + `canDelete` und Ablage im eigenen Scope. Rate-Limit 30/Stunde.
+
+`GET /files/deleted?ownerType=&ownerId=` — „Kürzlich gelöscht“: noch wiederherstellbare Löschungen (jünger als 24 h) einer Ablage, neueste zuerst. `200 { "deletions": [{ "batchId", "kind": "file"|"folder", "name", "path", "fileCount", "folderCount" (inkl. Ordner selbst), "deletedAt", "deletedByName", "restorableUntil" }] }`. Einträge mit Dateien, die der Aufrufer nicht sehen darf, fehlen. Auth: wie Löschen (ohne Löschrecht `403`). Rate-Limit 60/60s.
+
+`POST /files/deleted/[batchId]` — Löschung (Datei bzw. Ordner samt Inhalt) wiederherstellen. `200 { "restored": { "kind", "name", "fileCount", "folderCount" } }`. `404` wenn bereits wiederhergestellt/endgültig entfernt, `409 "Die 24-Stunden-Frist zum Wiederherstellen ist abgelaufen."`, `409 "Bitte zuerst den Ordner „…“ wiederherstellen."` wenn das Ziel in einem separat gelöschten Ordner liegt. Auth: wie Löschen. Rate-Limit 60/Stunde.
 
 `GET /files/[fileId]/signed-url?version=&disposition=inline|attachment` — signierte, 5 Min. gültige URL. `200 { "url" }`. `404` falls Datei/Version fehlt, `403 FORBIDDEN` falls Datei-ACL nicht erfüllt. Auth: nur `files:read` + ACL (schwächer als Schreib-Operationen). Rate-Limit 60/60s.
 
@@ -486,6 +500,8 @@ Der tatsächliche Abo-Zustand (`plan`, `stripeSubscriptionStatus`, ...) wird aus
 `GET /billing` → `200 { "plan", "billingCycle", "employeeLimit", "hasStripeCustomer", "hasSubscription", "subscriptionStatus", "subscriptionHealthy", "currentPeriodEnd", "cancelAtPeriodEnd" }`. Auth: `settings:read`. Rate-Limit 60/60s.
 
 `POST /billing/checkout` — startet eine Stripe-Checkout-Session für den **ersten** Vertragsabschluss (schlägt fehl, falls bereits ein gesundes Abo existiert — dafür `/portal`). Body: `{ "plan"? (`starter`|`professional`|`business`, Default `professional`), "billingCycle"? (`monthly`|`yearly`, Default `monthly`), "successUrl"?, "cancelUrl"? }` (URLs Default: Tenant-Dashboard-Startseite). `200 { "url" }` — JSON statt Redirect, App navigiert selbst dorthin. `503 STRIPE_NOT_CONFIGURED` falls Stripe serverseitig nicht eingerichtet. Auth: `requireSettingsManager`. Rate-Limit 10/Stunde.
+
+**Abo-Sperre** (`lib/billing-access.ts`): Über `POST /api/tenants` angelegte Mandanten sind bis zum abgeschlossenen Checkout gesperrt. Der erste Checkout eines Mandanten enthält 14 Tage Testphase (Zahlungsdaten werden sofort erfasst). Schlägt eine Zahlung fehl, ist ein Mandant, der noch nie bezahlt hat, sofort gesperrt; ein Mandant, der schon bezahlt hat, erst nach dem 4. Fehlversuch (`invoice.attempt_count`; Erstabbuchung + Wiederholungen nach 1, 5 und 9 Tagen) bzw. bei `unpaid`. Gesperrt antworten alle mandantengebundenen Endpunkte mit `402 { "error": "<lesbarer Text>", "code": "SUBSCRIPTION_REQUIRED" }`. Ausgenommen: `POST /billing/checkout`, `POST /billing/portal` und der Mandanten-Datenexport. Entsperren geht nur im Web-Dashboard (`/u/<tenant>/abo-erforderlich`).
 
 `POST /billing/portal` — Stripe-Billing-Portal-Session (Zahlungsmethode ändern, Rechnungen einsehen, kündigen). Body optional: `{ "returnUrl"?, "intent"?: "switch-plan" }` (`switch-plan` springt direkt in den Plan-Wechsel-Flow, braucht ein bestehendes Abo). `200 { "url" }`. Auth: `requireSettingsManager`. Rate-Limit 20/Stunde.
 

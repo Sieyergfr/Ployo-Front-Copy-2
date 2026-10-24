@@ -2,6 +2,65 @@
 
 Stand: 2026-09-05. Blocker, Sollte-behoben-werden, Responsive Design, Datenschutz-Umbauplan Phase 0-2 und die komplette i18n-String-Extraktion (108 Dateien, 93 Namespaces, ~1635 Keys) sind vollständig umgesetzt, code-verifiziert, committet und gepusht. Die machbaren Teile von Phase 3 (Jugendarbeitsschutz, Mutterschutz, Betriebsrat-Hinweis, Verarbeitungsverzeichnis) sind ebenfalls umgesetzt und code-verifiziert, aber noch nicht gepusht/deployt (steht noch dein Go aus). Alles Weitere unten sind bewusst offene Punkte, die externe Schritte oder deine Entscheidung brauchen (siehe "Braucht weiterhin deine Aufmerksamkeit").
 
+## ✅ App-Popups aus der Datenbank — App + Web (2026-10-22, Live-DB migriert, nicht committet, nicht deployt)
+
+- App: Popup fährt von unten herein, unten positioniert, ca. halbe Bildschirmhöhe, abgerundete Ecken, Abstand links/rechts/unten, abgedunkelter Hintergrund. Mehrere aktive Popups kommen **nacheinander** (höhere Priorität zuerst). Schließen per Button, Wischen, Tippen auf den Hintergrund oder Android-Zurück; danach erscheint es diesem Konto nicht wieder. Erst nach Login + Betriebswahl.
+- Inhalt aus der DB (`AppPopup`): Titel, Text, optional Bild (https), Button mit Link (`https://…` oder App-Pfad wie `/vacation`), englische Fassung optional, Zeitfenster, Priorität, aktiv/inaktiv.
+- Pflege bis zum Admin-Dashboard: `npx tsx scripts/app-popup.ts list | create | activate | deactivate | reset | delete` (Optionen im Kopfkommentar des Skripts).
+- Neue API: `GET /api/me/app-popups`, `POST /api/me/app-popups/[popupId]/dismiss` (in der API-Doku ergänzt).
+- App-Version 1.0.2 → **1.1.0**.
+- Migration `20261022200000_app_popups` (rein additiv) **auf der Live-DB angewendet** (Backup: `/var/backups/ployo/ployo-before-app-popups-20261022184855.sql.gz`), Prisma-Client neu generiert.
+- Verifiziert: Web `tsc` + `eslint`, volle Testsuite gegen `ployo_test` 429/429 (davon 4 neu); App `typecheck` + `lint`. Nicht getestet: Optik auf einem echten Gerät.
+- Ersten Popup-Inhalt festlegen (ich lege ihn an) — **[Du → Ich]**
+- Web-Deploy `bash scripts/deploy.sh` — **[Du]**; App-Build 1.1.0 — **[Du]**
+- Committen/pushen (beide Repos) — **[Du → Ich]**
+
+## ✅ Firmenanlage mit Stripe-Checkout, 14 Tage Testphase + Abo-Sperre — Web + App (2026-10-22, Live-DB migriert, nicht committet, nicht deployt)
+
+- Assistent „Unternehmen erstellen“ von 5 auf 3 Schritte gekürzt (Unternehmen → Details → Abrechnung). „Branding“ und „Team einladen“ entfernt; der Betriebsrat-Hinweis steht jetzt im Schritt „Details“.
+- Der letzte Button „14 Tage kostenlos testen“ legt das Unternehmen an und leitet direkt in den Stripe-Checkout. Testphase: `trial_period_days: 14` beim **ersten** Abo eines Unternehmens; die Karte wird sofort erfasst, abgebucht wird nach 14 Tagen. Nach einer Kündigung gibt es keine zweite Testphase.
+- **Abo-Sperre** (`lib/billing-access.ts`, durchgesetzt zentral in `lib/tenant-access.ts`, gleiche Stelle wie die 2FA-Pflicht):
+  - Neu angelegt + Checkout abgebrochen → gesperrt, Popup „Einrichtung abschließen“ (`/u/<firma>/abo-erforderlich`) mit Button zum Checkout.
+  - Erste Zahlung nach der Testphase fehlgeschlagen → sofort gesperrt, Popup „Abo muss erneuert werden“ mit „Offene Rechnung bezahlen“.
+  - Kunde hat schon einmal bezahlt → läuft bei fehlgeschlagener Zahlung weiter; Stripe wiederholt nach 1, 5 und 9 Tagen; gesperrt erst, wenn auch die letzte Wiederholung (Tag 9, 4. Versuch) scheitert.
+  - Abo beendet → gesperrt, „Abo abschließen“ (neuer Checkout, ohne Testphase).
+  - Nicht-Verwalter sehen dasselbe Popup mit dem Hinweis, sich an die Verwaltung zu wenden. Checkout, Zahlungsverwaltung und der DSGVO-Datenexport bleiben trotz Sperre möglich.
+  - Bestehende Unternehmen ohne Abo (Altbestand, Demo-Mandanten, `test-hotel-gmbh`) sind **nicht** betroffen; die Sperre bei fehlendem Checkout gilt nur für neu über den Assistenten angelegte.
+- App: gesperrte Betriebe bekommen `402` mit `code: "SUBSCRIPTION_REQUIRED"`; Start, Schichtplan und Profil zeigen „Betrieb eingeschränkt“. Ältere App-Versionen zeigen den lesbaren Text aus der Server-Antwort.
+- Migration `20261022180000_billing_access_gate` (rein additiv: `billingRequired`, `stripeHasPaid`, `stripeFailedPaymentAttempts`; Backfill `stripeHasPaid = true` für aktive Abos, also `infrastruc` und `ray-familygroup-gmbh`).
+- Verifiziert: Web `tsc` + `eslint` (gegen probeweise generierten Prisma-Client), volle Testsuite gegen `ployo_test` 425/425 (davon 7 neu), Probe-`next build` kompiliert; App `typecheck` + `lint`. Nicht getestet: echter Stripe-Durchlauf (Key ist **live**).
+
+Offen dazu:
+- ✅ Stripe-Webhook: `invoice.paid` + `invoice.payment_failed` abonniert (2026-10-22, von dir).
+- ✅ Stripe-Wiederholungsplan: nach 1, 5 und 9 Tagen, danach „überfällig“ (2026-10-22, von dir). Die Sperre zählt deshalb selbst mit (`MAX_FAILED_PAYMENT_ATTEMPTS = 4`).
+- ✅ Live-DB migriert + Prisma-Client neu generiert (2026-10-22; Backup: `/var/backups/ployo/ployo-before-billing-access-gate-20261022182842.sql.gz`). Backfill geprüft: `infrastruc` + `ray-familygroup-gmbh` = hat bezahlt.
+- Web-Deploy `bash scripts/deploy.sh` — **[Du]**; App-Build für den Hinweis-Screen — **[Du]**
+- Einmal komplett durchklicken: Firma anlegen → Checkout abbrechen → Popup → Einrichtung abschließen → Dashboard — **[Du]**
+- Committen/pushen (beide Repos) — **[Du → Ich]**
+
+## ✅ Dateien & Ordner löschen mit 24-h-Rückgängig — App + Web (2026-10-11, nicht committet, nicht deployt)
+
+- **Web:** Löschen-Button an Dateien und Ordnern in der zentralen Ablage und (neu) in den Mitarbeiter-/Standort-/Team-Ablagen, auch für den gerade geöffneten Ordner. Bestätigungsdialog, danach Toast mit „Rückgängig“. Bereich „Kürzlich gelöscht“ unter jeder Ablage mit „Wiederherstellen“.
+- **App:** Löschen von Dateien und Ordnern in „Dateien“ (zentral) und in den Mitarbeiter-/Team-/Standort-Ablagen, nativer Bestätigungsdialog, Bereich „Kürzlich gelöscht“ mit „Wiederherstellen“. Berechtigung `files.delete` jetzt wie serverseitig (Lesen + Lösch-Flag statt Schreibrecht).
+- **Logik:** Ein Ordner wird samt Unterordnern und Dateien als *eine* Löschung behandelt (gemeinsame `deletionBatchId`). Alles oder nichts: Dateien unter Legal Hold/Aufbewahrungsfrist (z. B. Gehaltsabrechnungen) oder ohne Leserecht blockieren das Löschen des Ordners. PIN-Sperren gelten auch beim Löschen. Nach 24 h entfernt der stündliche Cleanup-Cron Dateien (inkl. S3-Objekt) und Ordner endgültig. Andere Soft-Deletes behalten die 30-Tage-Karenz.
+- Neue API: `DELETE /files/folders`, `GET /files/deleted`, `POST /files/deleted/[batchId]`; `DELETE /files/[fileId]` liefert zusätzlich `deletionBatchId`/`restorableUntil` und akzeptiert `X-Folder-Pin` (alles additiv, in beiden API-Docs ergänzt).
+- Migration `20261011180000_file_deletion_undo` (rein additiv) **auf der Live-DB angewendet** (Backup: `/var/backups/ployo/ployo-before-file-deletion-undo-20261011162101.sql.gz`), Prisma-Client neu generiert.
+- Verifiziert: Web `tsc`, `eslint`, volle Testsuite gegen isolierte DB (407/407, davon 10 neu) + neuer Cron-Purge-Test separat grün, Probe-`next build`; App `typecheck` + `lint`.
+- Web-Deploy: `bash scripts/deploy.sh` — **[Du]**
+- ✅ App committet + gepusht (`1c655a7`), Android-Production-Build per EAS-Workflow fertig (versionCode 9, Build `914f8786-a36b-497f-be74-517b8eb73d48`, AAB: https://expo.dev/artifacts/eas/1epXnQ-d4HWCRQzg7zGSIc5AN4V0qQemcGh_KLsqx1c.aab).
+- ✅ iOS-Ad-hoc-Build fertig (Build 5, Commit `1ed3883`, Installationsseite mit QR: https://expo.dev/accounts/sieyergfr/projects/ployo/builds/0fc0138c-fa07-4ec2-86e7-01b43e8be9d7) — installierbar nur auf im Ad-hoc-Profil registrierten Geräten.
+- AAB in der Play Console in den Test-Track hochladen (kein Play-Service-Account für `eas submit` eingerichtet) — **[Du]**
+- Web-Repo committen/pushen — **[Du → Ich]**
+
+## ✅ Demo-Betrieb für Google-Play-Tester (2026-10-11, live in der DB)
+
+- Mandant **Ployo Demo Gastro GmbH** (`ployo-demo-gastro`) mit 20 Testkonten `nachname.test@ployo.io`, Inhaber `demo.test@ployo.io`. Zugangsdaten + Beschreibungen: `Demo-Testaccounts-Google-Play.md`/`.csv` im Repo-Root (vertraulich, per `.git/info/exclude` vom Commit ausgeschlossen).
+- Schichtplan KW 39–46 veröffentlicht, KW 47 Entwurf; dazu Urlaub, Krankheit, Wunschfrei, Erinnerungen, Info-Anfragen, Zeiteinträge, Verträge + Lohnabrechnungen (PDF in S3).
+- Angelegt mit `scripts/seed-play-test-demo.ts` (rein additiv, bricht ab, falls Slug/E-Mails existieren; nicht committet). Backup vorher: `/var/backups/ployo/ployo-before-play-demo-seed-20261011155222.sql.gz`.
+- Testkonten an die 20 Tester verteilen — **[Du]**
+- ✅ Bug behoben (2026-10-11): `uploadObject` schrieb den Dateinamen ungefiltert in die S3-Metadaten, Umlaute ließen jeden Upload scheitern (`SignatureDoesNotMatch`). Nicht-ASCII-Werte werden jetzt URL-kodiert (lib/storage/upload.ts, Test `tests/upload-metadata.test.ts`). Live erst nach Web-Deploy.
+- ✅ 8 verwaiste PDF-Objekte in S3 (abgebrochener erster Seed-Lauf) gelöscht.
+
 ## ✅ Zeiterfassung: Stempeln per Standort-QR-Code — App + Web (2026-10-10, committet + Live-DB migriert, Web-Deploy offen)
 
 - **Einstellung** (Einstellungen → Zeiterfassung → Einstempeln): „Einstempeln: QR-Code-Scan erforderlich (App)“. Gilt nur in der App; im Web-Dashboard bleibt das normale Stempeln.

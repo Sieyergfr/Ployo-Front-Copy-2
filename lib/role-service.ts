@@ -674,9 +674,51 @@ export async function deleteTenantRole(input: {
     throw new Error("ROLE_IN_USE");
   }
 
-  await prisma.tenantRole.delete({
-    where: { id: input.roleId },
+  await prisma.$transaction(async (tx) => {
+    await tx.tenantRole.delete({
+      where: { id: input.roleId },
+    });
+    await removeRoleFromFileAcls(tx, access.tenantId, role.id);
   });
 
   await recordRoleAudit(access, "Rolle gelöscht", role.id, role.name);
+}
+
+/**
+ * Entfernt die id einer gelöschten Rolle aus den Datei-Freigaben
+ * (`TenantFile.accessRoleIdsJson`) — aber nur dort, wo danach noch eine andere
+ * Freigabe (Rolle oder Person) übrig bleibt. Eine leere Freigabe bedeutet
+ * "für alle sichtbar" (`canAccessFileAcl`); eine Datei, die nur für diese
+ * Rolle freigegeben war, behält die id deshalb und bleibt so für alle außer
+ * OWNER/ADMIN/HR verschlossen, statt durch das Löschen aufzugehen.
+ */
+async function removeRoleFromFileAcls(
+  db: Pick<typeof prisma, "tenantFile">,
+  tenantId: string,
+  roleId: string,
+) {
+  const files = await db.tenantFile.findMany({
+    where: { tenantId, accessRoleIdsJson: { array_contains: [roleId] } },
+    select: { id: true, accessRoleIdsJson: true, accessUserIdsJson: true },
+  });
+
+  for (const file of files) {
+    const roleIds = jsonStringArray(file.accessRoleIdsJson);
+    const remainingRoleIds = roleIds.filter((id) => id !== roleId);
+
+    if (remainingRoleIds.length === 0 && jsonStringArray(file.accessUserIdsJson).length === 0) {
+      continue;
+    }
+
+    await db.tenantFile.update({
+      where: { id: file.id },
+      data: { accessRoleIdsJson: remainingRoleIds },
+    });
+  }
+}
+
+function jsonStringArray(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
 }

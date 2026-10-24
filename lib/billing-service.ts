@@ -4,7 +4,12 @@ import { recordTenantAudit } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 import { requireSettingsManager } from "@/lib/settings-service";
 import { getStripeClient, isStripeConfigured } from "@/lib/stripe/client";
-import { getPlanPriceId, isHealthySubscriptionStatus } from "@/lib/stripe/plans";
+import { getPlanPriceId, isHealthySubscriptionStatus, TRIAL_PERIOD_DAYS } from "@/lib/stripe/plans";
+import {
+  getBillingBlockReason,
+  tenantBillingSelect,
+  type BillingBlockReason,
+} from "@/lib/billing-access";
 import type { BillingCycle, TenantPlan } from "@/lib/tenants";
 import { headers } from "next/headers";
 
@@ -32,7 +37,7 @@ export async function createBillingCheckoutSession(input: {
     throw new Error("STRIPE_NOT_CONFIGURED");
   }
 
-  const access = await requireSettingsManager(input.tenantSlug);
+  const access = await requireSettingsManager(input.tenantSlug, { allowBillingBlocked: true });
   const tenant = await prisma.tenant.findUniqueOrThrow({
     where: { id: access.tenantId },
     select: {
@@ -91,11 +96,16 @@ export async function createBillingCheckoutSession(input: {
   // echter neuer Versuch nach Ablauf des Zeitfensters bekommt weiterhin
   // eine frische Session.
   const checkoutIdempotencyWindow = Math.floor(Date.now() / (5 * 60 * 1000));
+  // Testphase nur beim allerersten Abo: Nach einer Kündigung bleibt der
+  // Status auf "canceled" stehen (siehe clearSubscriptionState im Webhook),
+  // ein erneuter Checkout bekommt also keine zweite Testphase.
+  const trialEligible = !tenant.stripeSubscriptionId && tenant.stripeSubscriptionStatus === null;
   const session = await stripe.checkout.sessions.create(
     {
       mode: "subscription",
       customer: customerId,
       line_items: [{ price: priceId, quantity: 1 }],
+      ...(trialEligible ? { subscription_data: { trial_period_days: TRIAL_PERIOD_DAYS } } : {}),
       success_url: input.successUrl,
       cancel_url: input.cancelUrl,
       client_reference_id: tenant.id,
@@ -134,7 +144,7 @@ export async function createBillingPortalSession(input: {
     throw new Error("STRIPE_NOT_CONFIGURED");
   }
 
-  const access = await requireSettingsManager(input.tenantSlug);
+  const access = await requireSettingsManager(input.tenantSlug, { allowBillingBlocked: true });
   const tenant = await prisma.tenant.findUniqueOrThrow({
     where: { id: access.tenantId },
     select: { id: true, stripeCustomerId: true, stripeSubscriptionId: true },
@@ -198,7 +208,7 @@ export async function getBillingInvoices(tenantSlug: string): Promise<BillingInv
     return [];
   }
 
-  const access = await requireSettingsManager(tenantSlug);
+  const access = await requireSettingsManager(tenantSlug, { allowBillingBlocked: true });
   const tenant = await prisma.tenant.findUniqueOrThrow({
     where: { id: access.tenantId },
     select: { stripeCustomerId: true },
@@ -224,4 +234,91 @@ export async function getBillingInvoices(tenantSlug: string): Promise<BillingInv
     hostedInvoiceUrl: invoice.hosted_invoice_url ?? null,
     invoicePdf: invoice.invoice_pdf ?? null,
   }));
+}
+
+export type TenantBillingGate = {
+  reason: BillingBlockReason | null;
+  /** Darf Checkout/Zahlung selbst auslösen (wie requireSettingsManager). */
+  canManage: boolean;
+  tenantName: string;
+};
+
+/**
+ * Sperrstatus für die Seite /u/[tenant]/abo-erforderlich — bewusst ohne
+ * requireTenantAccess (das würde bei Sperre selbst werfen). `null`, wenn der
+ * angemeldete Nutzer kein Mitglied ist.
+ */
+export async function getTenantBillingGate(tenantSlug: string): Promise<TenantBillingGate | null> {
+  const session = await auth.api.getSession({ headers: await headers() });
+  const userId = session?.user?.id;
+
+  if (!userId) {
+    return null;
+  }
+
+  const membership = await prisma.tenantMembership.findFirst({
+    where: { userId, tenant: { slug: tenantSlug } },
+    select: {
+      role: true,
+      roleRef: {
+        select: { permissions: { where: { area: "settings" }, select: { level: true } } },
+      },
+      tenant: { select: { name: true, ...tenantBillingSelect } },
+    },
+  });
+
+  if (!membership) {
+    return null;
+  }
+
+  const settingsLevel = membership.roleRef?.permissions[0]?.level ?? "none";
+
+  return {
+    reason: getBillingBlockReason(membership.tenant, isStripeConfigured()),
+    canManage:
+      membership.role === "OWNER" ||
+      membership.role === "ADMIN" ||
+      settingsLevel === "write" ||
+      settingsLevel === "admin",
+    tenantName: membership.tenant.name,
+  };
+}
+
+/**
+ * Link zur gehosteten Stripe-Seite der offenen Abo-Rechnung — dort lässt
+ * sich die fehlgeschlagene Zahlung direkt mit einer anderen Karte begleichen.
+ * `null`, wenn keine offene Rechnung existiert.
+ */
+export async function getOpenInvoicePaymentUrl(tenantSlug: string): Promise<string | null> {
+  if (!isStripeConfigured()) {
+    throw new Error("STRIPE_NOT_CONFIGURED");
+  }
+
+  const access = await requireSettingsManager(tenantSlug, { allowBillingBlocked: true });
+  const tenant = await prisma.tenant.findUniqueOrThrow({
+    where: { id: access.tenantId },
+    select: { stripeCustomerId: true },
+  });
+
+  if (!tenant.stripeCustomerId) {
+    return null;
+  }
+
+  const invoices = await getStripeClient().invoices.list({
+    customer: tenant.stripeCustomerId,
+    status: "open",
+    limit: 1,
+  });
+
+  return invoices.data[0]?.hosted_invoice_url ?? null;
+}
+
+/** Plan/Zyklus, die der Mandant zuletzt gewählt hat — für den Checkout aus der Sperrseite. */
+export async function getTenantPlanSelection(tenantSlug: string) {
+  const access = await requireSettingsManager(tenantSlug, { allowBillingBlocked: true });
+
+  return prisma.tenant.findUniqueOrThrow({
+    where: { id: access.tenantId },
+    select: { plan: true, billingCycle: true },
+  });
 }

@@ -6,6 +6,9 @@ import { prisma } from "@/lib/prisma";
 export async function markObjectDeleted(input: {
   tenantId: string;
   fileId: string;
+  /** Nur bei Nutzer-Löschungen gesetzt — macht sie 24 h lang rückgängig machbar. */
+  deletionBatchId?: string;
+  deletedByName?: string;
 }) {
   const file = await prisma.tenantFile.update({
     where: {
@@ -15,10 +18,18 @@ export async function markObjectDeleted(input: {
     data: {
       status: "deleted",
       deletedAt: new Date(),
+      deletionBatchId: input.deletionBatchId ?? null,
+      deletedByName: input.deletedByName ?? "",
     },
   });
 
-  await pruneFileFromReminders(input);
+  // Bei rückgängig machbaren Nutzer-Löschungen bleibt die Verknüpfung bis zum
+  // endgültigen Purge stehen (s. `purgeTenantFiles`) — sonst ginge sie beim
+  // Wiederherstellen verloren. Die Erinnerungs-Oberfläche bietet ohnehin nur
+  // aktive Dateien zur Auswahl an, eine solche Verknüpfung bleibt unsichtbar.
+  if (!input.deletionBatchId) {
+    await pruneFileFromReminders(input);
+  }
 
   return file;
 }
@@ -118,6 +129,15 @@ export async function purgeTenantFiles(
   }
 
   if (succeededIds.length) {
+    const purged = await prisma.tenantFile.findMany({
+      where: { id: { in: succeededIds } },
+      select: { id: true, tenantId: true },
+    });
+
+    for (const file of purged) {
+      await pruneFileFromReminders({ tenantId: file.tenantId, fileId: file.id });
+    }
+
     await prisma.tenantFile.deleteMany({
       where: { id: { in: succeededIds } },
     });

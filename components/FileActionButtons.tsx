@@ -3,11 +3,11 @@
 import {
   createHrFolderAction,
   getHrFileSignedUrlAction,
-  softDeleteHrFileAction,
   uploadHrFileAction,
   uploadHrFileVersionAction,
 } from "@/app/(dashboard)/u/[tenant]/dateien/actions";
 import DatePickerField from "@/components/DatePickerField";
+import { DeleteFileButton } from "@/components/FileTrash";
 import { useActionStateWithToast } from "@/components/Toasts";
 import { useUniversalPopup } from "@/components/UniversalPopup";
 import {
@@ -31,11 +31,11 @@ import {
   Eye,
   FileUp,
   FolderPlus,
-  Trash2,
   Upload,
   UploadCloud,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { useRouter } from "next/navigation";
 import { type ReactNode, useRef, useState, useTransition } from "react";
 
 type T = ReturnType<typeof useTranslations>;
@@ -1088,49 +1088,12 @@ export function VersionUploadButton({
   );
 }
 
-function DeleteFileConfirmForm({
-  file,
-  tenant,
-  returnPath,
-  onCancel,
-  t,
-}: {
-  file: FileItem;
-  tenant: string;
-  returnPath: string;
-  onCancel: () => void;
-  t: T;
-}) {
-  const [, formAction] = useActionStateWithToast(softDeleteHrFileAction);
-
-  return (
-    <form className="flex flex-col gap-4" action={formAction}>
-      <input type="hidden" name="tenant" value={tenant} />
-      <input type="hidden" name="returnPath" value={returnPath} />
-      <input type="hidden" name="fileId" value={file.storageFileId ?? ""} />
-
-      <div className="rounded-xl border border-danger/20 bg-danger/5 px-4 py-3">
-        <div className="text-[13.5px] font-semibold text-ink">
-          {file.name}
-        </div>
-        <p className="mt-1 text-[12.5px] leading-5 text-muted">
-          {t("removeFileFromViewHint")}
-        </p>
-      </div>
-
-      <div className="mt-1 flex justify-end gap-2.5 border-t border-border-soft pt-4">
-        <button type="button" className="btn btn-secondary" onClick={onCancel}>
-          {t("cancel")}
-        </button>
-        <button type="submit" className="btn btn-secondary border-danger/25 text-danger hover:bg-danger/5">
-          <Trash2 size={15} />
-          {t("remove")}
-        </button>
-      </div>
-    </form>
-  );
-}
-
+/**
+ * Datei löschen — Bestätigung, Toast mit "Rückgängig" und 24-h-Wiederherstellung
+ * laufen über components/FileTrash.tsx. Bleibt als eigener Export bestehen,
+ * weil Datei-Liste und Datei-Detailseite ihn mit `FileItem` + `returnPath`
+ * aufrufen; nach dem Löschen geht es zurück zum Ordner.
+ */
 export function FileSoftDeleteButton({
   file,
   tenant,
@@ -1142,41 +1105,20 @@ export function FileSoftDeleteButton({
   returnPath?: string;
   compact?: boolean;
 }) {
-  const t = useTranslations("FileActionButtons");
-  const { openPopup, closePopup } = useUniversalPopup();
+  const router = useRouter();
 
   if (!tenant || !returnPath || !file.storageFileId) {
     return null;
   }
 
   return (
-    <button
-      type="button"
-      className={
-        compact
-          ? "flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-[8px] border border-danger/25 bg-white text-danger transition-colors hover:bg-danger/5"
-          : "btn btn-secondary btn-sm border-danger/25 text-danger hover:bg-danger/5"
-      }
-      title={t("hideFileTitle")}
-      aria-label={t("hideFileAria", { name: file.name })}
-      onClick={() =>
-        openPopup({
-          title: t("removeFileDialogTitle"),
-          content: (
-            <DeleteFileConfirmForm
-              file={file}
-              tenant={tenant}
-              returnPath={returnPath}
-              onCancel={closePopup}
-              t={t}
-            />
-          ),
-        })
-      }
-    >
-      <Trash2 size={14} />
-      {!compact && t("remove")}
-    </button>
+    <DeleteFileButton
+      tenant={tenant}
+      fileId={file.storageFileId}
+      name={file.name}
+      compact={compact}
+      afterDelete={() => router.push(returnPath)}
+    />
   );
 }
 

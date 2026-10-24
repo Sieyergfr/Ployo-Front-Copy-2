@@ -21,6 +21,12 @@ export type TenantFileContent = {
   contentType: string;
   fileName: string;
   sizeBytes: number;
+  /**
+   * Exakte Länge laut Speicher. Ohne `Content-Length` (chunked) zeigt
+   * iOS-Safari/SFSafariViewController eine PDF nicht an, sondern bietet sie
+   * als Download namens "content" (letztes URL-Segment) an.
+   */
+  contentLength: number | null;
 };
 
 async function loadAuthorizedFile(input: {
@@ -145,6 +151,7 @@ export async function getTenantFileContentForUser(input: {
     contentType: resolveContentType(file.displayName || file.originalName, file.mimeType),
     fileName: file.displayName || file.originalName,
     sizeBytes: file.sizeBytes,
+    contentLength: typeof object.ContentLength === "number" ? object.ContentLength : null,
   };
 }
 

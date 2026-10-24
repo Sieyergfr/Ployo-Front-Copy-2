@@ -141,6 +141,12 @@ async function handleStripeWebhook(request: Request, requestId: string) {
       break;
     }
 
+    case "invoice.paid":
+    case "invoice.payment_failed": {
+      await syncInvoicePaymentState(event.data.object);
+      break;
+    }
+
     default:
       break;
   }
@@ -321,5 +327,63 @@ async function clearSubscriptionState(subscription: Stripe.Subscription, eventCr
     entityType: "billing",
     entityId: tenant.id,
     detail: "",
+  });
+}
+
+/**
+ * Zahlungsstand für die Abo-Sperre (lib/billing-access.ts): bezahlt →
+ * Fehlversuche zurücksetzen und ggf. "hat schon gezahlt" merken;
+ * fehlgeschlagen → `attempt_count` übernehmen. Die Rechnung wird frisch bei
+ * Stripe nachgeladen, damit ein verspätet zugestelltes "payment_failed" eine
+ * inzwischen bezahlte Rechnung nicht wieder als offen zählt.
+ */
+async function syncInvoicePaymentState(eventInvoice: Stripe.Invoice) {
+  if (!eventInvoice.id || !eventInvoice.billing_reason?.startsWith("subscription")) {
+    return;
+  }
+
+  const invoice = await getStripeClient().invoices.retrieve(eventInvoice.id);
+  const customerId =
+    typeof invoice.customer === "string" ? invoice.customer : invoice.customer?.id;
+
+  if (!customerId) {
+    return;
+  }
+
+  const tenant = await findTenantByCustomerId(customerId);
+
+  if (!tenant) {
+    return;
+  }
+
+  if (invoice.status === "paid") {
+    await prisma.tenant.update({
+      where: { id: tenant.id },
+      data: {
+        stripeFailedPaymentAttempts: 0,
+        ...(invoice.amount_paid > 0 ? { stripeHasPaid: true } : {}),
+      },
+    });
+    return;
+  }
+
+  if (invoice.status !== "open") {
+    return;
+  }
+
+  await prisma.tenant.update({
+    where: { id: tenant.id },
+    data: { stripeFailedPaymentAttempts: invoice.attempt_count },
+  });
+
+  await recordTenantAudit({
+    tenantId: tenant.id,
+    actorId: "stripe-webhook",
+    actorName: "Stripe",
+    action: "Zahlung fehlgeschlagen",
+    source: "Abrechnung",
+    entityType: "billing",
+    entityId: tenant.id,
+    detail: `Versuch ${invoice.attempt_count}`,
   });
 }

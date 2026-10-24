@@ -58,7 +58,13 @@ export async function PATCH(
   }
 }
 
-/** Datei löschen (Soft-Delete — Status wird auf "deleted" gesetzt, physisches Löschen läuft später per Cron). */
+/**
+ * Datei löschen (Soft-Delete — Status wird auf "deleted" gesetzt). 24 h lang
+ * über `POST /files/deleted/[batchId]` rückgängig machbar (`file.deletionBatchId`,
+ * `file.restorableUntil`), danach entfernt der Cleanup-Cron sie endgültig.
+ * Liegt die Datei in einem PIN-geschützten Ordner, wird die PIN wie beim
+ * Lesen per `X-Folder-Pin`-Header übergeben.
+ */
 export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ tenant: string; fileId: string }> },
@@ -82,7 +88,11 @@ export async function DELETE(
   }
 
   try {
-    const file = await softDeleteTenantFile({ tenantSlug: tenant, fileId });
+    const file = await softDeleteTenantFile({
+      tenantSlug: tenant,
+      fileId,
+      pin: request.headers.get("x-folder-pin")?.trim() || undefined,
+    });
 
     return Response.json({ file });
   } catch (error) {

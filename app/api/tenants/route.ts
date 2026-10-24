@@ -96,6 +96,8 @@ export async function POST(request: Request) {
       primaryColor: body?.primaryColor,
       plan: body?.plan,
       billingCycle: body?.billingCycle,
+      // Selbst angelegte Unternehmen sind erst nach dem Checkout nutzbar.
+      billingRequired: true,
       invitations: body?.invitations,
     });
 

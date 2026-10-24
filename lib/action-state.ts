@@ -82,6 +82,14 @@ export async function withActionErrorHandling(
   } catch (error) {
     unstable_rethrow(error);
 
+    // Rohe Kennung aus lib/tenant-access.ts — für den Toast ausformulieren.
+    if (error instanceof Error && error.message === "SUBSCRIPTION_REQUIRED") {
+      return {
+        error:
+          "Ihr Unternehmen ist gesperrt, bis das Abo abgeschlossen bzw. die Zahlung geklärt ist.",
+      };
+    }
+
     if (isKnownSelfServiceErrorMessage(error)) {
       return { error: error.message };
     }

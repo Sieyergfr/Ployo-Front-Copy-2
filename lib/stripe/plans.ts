@@ -33,6 +33,9 @@ export function getPlanPriceId(plan: TenantPlan, billingCycle: BillingCycle) {
   return planPrices[plan][billingCycle];
 }
 
+/** Kostenlose Testphase beim ersten Abo (Stripe `trial_period_days`). */
+export const TRIAL_PERIOD_DAYS = 14;
+
 const healthySubscriptionStatuses = new Set(["active", "trialing"]);
 
 export function isHealthySubscriptionStatus(status: string | null | undefined) {

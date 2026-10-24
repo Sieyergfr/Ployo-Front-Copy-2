@@ -780,7 +780,7 @@ export async function scopedEmployeeWhere(access: TenantAccess): Promise<Prisma.
   if (scope.type === "all") return { tenantId: access.tenantId };
   if (scope.type === "own") return { tenantId: access.tenantId, id: scope.employeeId ?? "__none__" };
   if (scope.type === "team") {
-    return scope.team ? { tenantId: access.tenantId, team: scope.team } : { id: "__none__" };
+    return { tenantId: access.tenantId, id: { in: scope.teammateIds } };
   }
 
   // "assigned" wird für diesen Bereich nicht angeboten (supportsAssignedScope: false).

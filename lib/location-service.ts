@@ -830,19 +830,21 @@ export async function updateTenantLocation(input: {
     include: { address: true },
   });
 
-  // TenantEmployee.location / TenantTeamMember.location sind Freitext-Kopien
-  // des Standortnamens (keine Relation) — bei Umbenennung überall nachziehen.
+  // TenantEmployee.location / TenantTeamMember.location / TenantTeam.locations
+  // sind Freitext-Kopien des Standortnamens (keine Relation) — bei
+  // Umbenennung überall nachziehen.
   if (current && current.name !== nextName) {
-    await Promise.all([
-      prisma.tenantEmployee.updateMany({
+    await prisma.$transaction(async (tx) => {
+      await tx.tenantEmployee.updateMany({
         where: { tenantId: access.tenantId, location: current.name },
         data: { location: nextName },
-      }),
-      prisma.tenantTeamMember.updateMany({
+      });
+      await tx.tenantTeamMember.updateMany({
         where: { team: { tenantId: access.tenantId }, location: current.name },
         data: { location: nextName },
-      }),
-    ]);
+      });
+      await rewriteTeamLocationLists(tx, access.tenantId, current.name, nextName);
+    });
   }
 
   await recordLocationAudit(
@@ -1157,6 +1159,92 @@ export async function getEmployeeLocationNamesMap(
   return map;
 }
 
+type LocationCopyDb = Pick<
+  typeof prisma,
+  "tenantEmployee" | "tenantTeamMember" | "tenantTeam" | "tenantLocationMember" | "tenantSettings"
+>;
+
+/**
+ * `TenantTeam.locations` ist eine kommagetrennte Freitext-Liste von
+ * Standortnamen. Ersetzt `from` darin durch `to` — oder entfernt es, wenn
+ * `to` null ist (Standort gelöscht).
+ */
+async function rewriteTeamLocationLists(
+  db: LocationCopyDb,
+  tenantId: string,
+  from: string,
+  to: string | null,
+) {
+  const teams = await db.tenantTeam.findMany({
+    where: { tenantId, locations: { contains: from } },
+    select: { id: true, locations: true },
+  });
+
+  for (const team of teams) {
+    const names = team.locations
+      .split(",")
+      .map((name) => name.trim())
+      .filter(Boolean);
+
+    if (!names.includes(from)) {
+      continue;
+    }
+
+    const next = Array.from(
+      new Set(names.flatMap((name) => (name === from ? (to ? [to] : []) : [name]))),
+    );
+
+    await db.tenantTeam.update({
+      where: { id: team.id },
+      data: { locations: next.join(", ") },
+    });
+  }
+}
+
+/**
+ * Räumt nach dem Löschen eines Standorts die Freitext-Kopien seines Namens
+ * auf: der Hauptstandort der Mitarbeiter rückt auf ihren nächsten
+ * verbliebenen Standort (`TenantLocationMember`) nach, die Team-Mitglied-
+ * Schnappschüsse ziehen mit, Team-Standortlisten und der Mandanten-
+ * Standardstandort verlieren den Eintrag.
+ */
+async function clearDeletedLocationCopies(
+  db: LocationCopyDb,
+  tenantId: string,
+  location: { id: string; key: string; name: string },
+) {
+  const affected = await db.tenantEmployee.findMany({
+    where: { tenantId, location: location.name },
+    select: { id: true },
+  });
+
+  for (const employee of affected) {
+    const next = await db.tenantLocationMember.findFirst({
+      where: { employeeId: employee.id, location: { tenantId, name: { not: location.name } } },
+      orderBy: { location: { name: "asc" } },
+      select: { location: { select: { name: true } } },
+    });
+    const nextName = next?.location.name ?? "";
+
+    await db.tenantEmployee.update({ where: { id: employee.id }, data: { location: nextName } });
+    await db.tenantTeamMember.updateMany({
+      where: { employeeId: employee.id, team: { tenantId }, location: location.name },
+      data: { location: nextName },
+    });
+  }
+
+  // Schnappschüsse ohne passenden Mitarbeiter-Hauptstandort (z. B. veraltet)
+  await db.tenantTeamMember.updateMany({
+    where: { team: { tenantId }, location: location.name },
+    data: { location: "" },
+  });
+  await rewriteTeamLocationLists(db, tenantId, location.name, null);
+  await db.tenantSettings.updateMany({
+    where: { tenantId, defaultLocationId: { in: [location.id, location.key] } },
+    data: { defaultLocationId: "" },
+  });
+}
+
 export async function deleteTenantLocation(input: {
   tenantSlug: string;
   locationId: string;
@@ -1169,11 +1257,17 @@ export async function deleteTenantLocation(input: {
 
   await assertLocationInScope(access, input.locationId);
 
-  const location = await prisma.tenantLocation.delete({
-    where: {
-      id: input.locationId,
-      tenantId: access.tenantId,
-    },
+  const location = await prisma.$transaction(async (tx) => {
+    const deleted = await tx.tenantLocation.delete({
+      where: {
+        id: input.locationId,
+        tenantId: access.tenantId,
+      },
+    });
+
+    await clearDeletedLocationCopies(tx, access.tenantId, deleted);
+
+    return deleted;
   });
 
   await recordTenantAudit({

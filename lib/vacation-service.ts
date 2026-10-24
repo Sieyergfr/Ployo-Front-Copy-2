@@ -327,9 +327,7 @@ async function vacationScopeWhere(tenantSlug: string) {
   if (scopeFilter.type === "team") {
     // Kein eigenes Team darf nicht "alle Urlaubsanträge nicht zugeordneter
     // Kolleg:innen" bedeuten (Audit-Finding H03).
-    return scopeFilter.team
-      ? { tenantId: access.tenantId, employee: { team: scopeFilter.team } }
-      : { tenantId: access.tenantId, employeeId: "__none__" };
+    return { tenantId: access.tenantId, employeeId: { in: scopeFilter.teammateIds } };
   }
 
   // "vacation" unterstützt (bisher) keinen "assigned"-Scope — sollte er

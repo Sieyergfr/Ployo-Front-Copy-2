@@ -301,12 +301,8 @@ async function filesUploaderScopeWhere(tenant: Awaited<ReturnType<typeof require
   }
 
   if (scopeFilter.type === "team") {
-    if (!scopeFilter.team) {
-      return { uploadedById: "__none__" };
-    }
-
     const teammates = await prisma.tenantEmployee.findMany({
-      where: { tenantId: tenant.tenantId, team: scopeFilter.team, userId: { not: null } },
+      where: { tenantId: tenant.tenantId, id: { in: scopeFilter.teammateIds }, userId: { not: null } },
       select: { userId: true },
     });
     const teammateUserIds = teammates

@@ -314,6 +314,7 @@ export async function inviteEmployeeAction(
       email: employee.email,
       role: "EMPLOYEE",
       source: "Personalakte",
+      employeeId: employee.dbId,
     });
 
     const path = employeePath(tenant, employeeHandle);

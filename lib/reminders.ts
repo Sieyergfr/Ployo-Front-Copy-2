@@ -160,11 +160,7 @@ async function reminderScopeWhere(access: {
   }
 
   if (scopeFilter.type === "team") {
-    if (!scopeFilter.team) {
-      return { tenantId: access.tenantId, id: "__none__" };
-    }
-
-    return { tenantId: access.tenantId, team: { name: scopeFilter.team } };
+    return { tenantId: access.tenantId, teamId: { in: scopeFilter.teamIds } };
   }
 
   return { tenantId: access.tenantId };
@@ -187,7 +183,7 @@ async function assertReminderInScope(
 
   const reminder = await prisma.tenantReminder.findFirst({
     where: { id: reminderId, tenantId: access.tenantId },
-    select: { createdById: true, team: { select: { name: true } } },
+    select: { createdById: true, teamId: true },
   });
 
   if (!reminder) {
@@ -200,8 +196,8 @@ async function assertReminderInScope(
 
   if (
     scopeFilter.type === "team" &&
-    scopeFilter.team &&
-    reminder.team?.name === scopeFilter.team
+    reminder.teamId &&
+    scopeFilter.teamIds.includes(reminder.teamId)
   ) {
     return;
   }

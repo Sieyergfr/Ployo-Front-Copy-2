@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth";
 import { getMyPersonalakteExport } from "@/lib/self-service";
 import { checkRateLimit, tooManyRequests } from "@/lib/rate-limit";
 import { headers } from "next/headers";
+import { subscriptionRequiredResponse } from "@/lib/api/self-service-errors";
 
 export const runtime = "nodejs";
 
@@ -56,6 +57,10 @@ export async function GET(request: Request) {
       (error.message === "FORBIDDEN" || error.message === "TWO_FACTOR_REQUIRED")
     ) {
       return Response.json({ error: error.message }, { status: 403 });
+    }
+
+    if (error instanceof Error && error.message === "SUBSCRIPTION_REQUIRED") {
+      return subscriptionRequiredResponse();
     }
 
     throw error;

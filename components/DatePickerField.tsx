@@ -226,7 +226,14 @@ export default function DatePickerField({
     }
 
     function handlePointerDown(event: MouseEvent) {
-      if (!containerRef.current?.contains(event.target as Node)) {
+      const target = event.target as Node;
+
+      // Das Panel hängt per Portal an `document.body`, liegt also nicht im
+      // Container — Klicks darin dürfen den Kalender nicht schließen.
+      if (
+        !containerRef.current?.contains(target) &&
+        !panelRef.current?.contains(target)
+      ) {
         setIsOpen(false);
       }
     }
@@ -280,7 +287,7 @@ export default function DatePickerField({
         createPortal(
         <div
           ref={panelRef}
-          className="fixed z-[60] w-[280px] rounded-xl border border-border bg-white p-3 shadow-[0_14px_40px_rgba(0,0,0,0.14)]"
+          className="fixed z-[1200] w-[280px] rounded-xl border border-border bg-white p-3 shadow-[0_14px_40px_rgba(0,0,0,0.14)]"
           style={
             panelPosition
               ? { top: panelPosition.top, left: panelPosition.left }

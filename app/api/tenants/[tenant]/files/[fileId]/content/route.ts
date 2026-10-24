@@ -82,6 +82,9 @@ export async function GET(
     return new Response(content.body, {
       headers: {
         "Content-Type": content.contentType,
+        ...(content.contentLength != null
+          ? { "Content-Length": String(content.contentLength) }
+          : {}),
         "Content-Disposition": contentDispositionHeader(content.fileName, safeDisposition),
         // Sensible Inhalte gehören weder in einen Proxy- noch in den
         // Browser-Cache: der Link ist bewusst kurzlebig.

@@ -179,6 +179,8 @@ model User {
   twoFactor             TwoFactor[]
   preference            UserPreference?
   employeeNotifications TenantEmployeeNotification[]
+  appPopupDismissals    AppPopupDismissal[]
+  employeeRecords       TenantEmployee[]
 
   @@map("user")
 }
@@ -234,6 +236,46 @@ model TwoFactor {
  * bleibt die Tabelle leer und der Push-Kanal in lib/notifications ist ein
  * reiner No-Op-Stub.
  */
+/// Popup in der Mitarbeiter-App (Bottom-Sheet, lib/app-popups.ts). Ployo-weit,
+/// nicht mandantengebunden. Gepflegt vorerst per `scripts/app-popup.ts`,
+/// später über ein Ployo-Admin-Dashboard. Mehrere aktive Popups zeigt die App
+/// nacheinander (höhere `priority` zuerst), jedes pro Nutzer nur bis zum
+/// Schließen.
+model AppPopup {
+  id            String              @id @default(cuid())
+  title         String
+  body          String
+  /// Englische Fassung — fehlt sie, zeigt die App auch englischen Nutzern Deutsch.
+  titleEn       String?
+  bodyEn        String?
+  imageUrl      String?
+  buttonLabel   String?
+  buttonLabelEn String?
+  /// `https://…` öffnet den Browser, `/pfad` einen Screen in der App.
+  buttonUrl     String?
+  active        Boolean             @default(true)
+  startsAt      DateTime?
+  endsAt        DateTime?
+  priority      Int                 @default(0)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  dismissals    AppPopupDismissal[]
+
+  @@index([active, priority])
+}
+
+model AppPopupDismissal {
+  id          String   @id @default(cuid())
+  popupId     String
+  userId      String
+  dismissedAt DateTime @default(now())
+  popup       AppPopup @relation(fields: [popupId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([popupId, userId])
+  @@index([userId])
+}
+
 model PushSubscription {
   id        String   @id @default(cuid())
   userId    String
@@ -363,59 +405,68 @@ model ConsentRecord {
 }
 
 model Tenant {
-  id                       String                          @id @default(cuid())
-  slug                     String                          @unique
-  name                     String
-  country                  String                          @default("DE")
-  timezone                 String                          @default("Europe/Berlin")
-  size                     String?
-  industry                 String?
-  contactEmail             String?
-  logoUrl                  String?
-  primaryColor             String                          @default("#2A6FDB")
-  plan                     TenantPlan                      @default(professional)
-  billingCycle             BillingCycle                    @default(monthly)
-  stripeCustomerId         String?                         @unique
-  stripeSubscriptionId     String?                         @unique
-  stripePriceId            String?
-  stripeSubscriptionStatus String?
-  stripeCurrentPeriodEnd   DateTime?
-  stripeCancelAtPeriodEnd  Boolean                         @default(false)
+  id                          String                          @id @default(cuid())
+  slug                        String                          @unique
+  name                        String
+  country                     String                          @default("DE")
+  timezone                    String                          @default("Europe/Berlin")
+  size                        String?
+  industry                    String?
+  contactEmail                String?
+  logoUrl                     String?
+  primaryColor                String                          @default("#2A6FDB")
+  plan                        TenantPlan                      @default(professional)
+  billingCycle                BillingCycle                    @default(monthly)
+  stripeCustomerId            String?                         @unique
+  stripeSubscriptionId        String?                         @unique
+  stripePriceId               String?
+  stripeSubscriptionStatus    String?
+  stripeCurrentPeriodEnd      DateTime?
+  stripeCancelAtPeriodEnd     Boolean                         @default(false)
   /// Erstellungszeitpunkt (`event.created`) des zuletzt tatsächlich
   /// angewendeten Subscription-Webhook-Events — verhindert, dass ein
   /// verspätet zugestelltes/außer der Reihe eintreffendes älteres Ereignis
   /// einen bereits neueren lokalen Stand überschreibt (Audit-Finding M14).
-  stripeLastEventCreatedAt DateTime?
-  createdAt                DateTime                        @default(now())
-  updatedAt                DateTime                        @updatedAt
-  invitations              TenantInvitation[]
-  memberships              TenantMembership[]
-  roles                    TenantRole[]
-  teams                    TenantTeam[]
-  locations                TenantLocation[]
-  employees                TenantEmployee[]
-  vacationRequests         TenantVacationRequest[]
-  wishFreeRequests         TenantWishFreeRequest[]
-  shifts                   TenantShift[]
-  shiftTemplates           TenantShiftTemplate[]
-  shiftWeeks               TenantShiftWeek[]
-  files                    TenantFile[]
-  fileFolders              TenantFileFolder[]
-  reminders                TenantReminder[]
-  contracts                TenantEmployeeContract[]
-  contractDetails          TenantEmployeeContractDetails[]
-  payrollStatements        TenantPayrollStatement[]
-  sicknessReports          TenantSicknessReport[]
-  auditLogs                TenantAuditLog[]
-  locationActivities       TenantLocationActivity[]
-  infoRequests             TenantEmployeeInfoRequest[]
-  employeeTimeline         TenantEmployeeTimeline[]
-  employeeNotifications    TenantEmployeeNotification[]
-  employeeFolderTemplates  TenantEmployeeFolderTemplate[]
-  timeEntries              TenantTimeEntry[]
-  clockReminders           TenantTimeClockReminder[]
-  reportRecipients         TenantReportRecipient[]
-  settings                 TenantSettings?
+  stripeLastEventCreatedAt    DateTime?
+  /// Über den Anlage-Assistenten erstellt: ohne abgeschlossenen Checkout
+  /// gesperrt (lib/billing-access.ts). Ältere Mandanten bleiben `false`.
+  billingRequired             Boolean                         @default(false)
+  /// Mindestens eine Rechnung mit Betrag > 0 wurde bezahlt — entscheidet,
+  /// ob eine fehlgeschlagene Zahlung eine Kulanzphase bekommt.
+  stripeHasPaid               Boolean                         @default(false)
+  /// `attempt_count` der aktuell offenen, fehlgeschlagenen Abo-Rechnung;
+  /// bei bezahlter Rechnung wieder 0.
+  stripeFailedPaymentAttempts Int                             @default(0)
+  createdAt                   DateTime                        @default(now())
+  updatedAt                   DateTime                        @updatedAt
+  invitations                 TenantInvitation[]
+  memberships                 TenantMembership[]
+  roles                       TenantRole[]
+  teams                       TenantTeam[]
+  locations                   TenantLocation[]
+  employees                   TenantEmployee[]
+  vacationRequests            TenantVacationRequest[]
+  wishFreeRequests            TenantWishFreeRequest[]
+  shifts                      TenantShift[]
+  shiftTemplates              TenantShiftTemplate[]
+  shiftWeeks                  TenantShiftWeek[]
+  files                       TenantFile[]
+  fileFolders                 TenantFileFolder[]
+  reminders                   TenantReminder[]
+  contracts                   TenantEmployeeContract[]
+  contractDetails             TenantEmployeeContractDetails[]
+  payrollStatements           TenantPayrollStatement[]
+  sicknessReports             TenantSicknessReport[]
+  auditLogs                   TenantAuditLog[]
+  locationActivities          TenantLocationActivity[]
+  infoRequests                TenantEmployeeInfoRequest[]
+  employeeTimeline            TenantEmployeeTimeline[]
+  employeeNotifications       TenantEmployeeNotification[]
+  employeeFolderTemplates     TenantEmployeeFolderTemplate[]
+  timeEntries                 TenantTimeEntry[]
+  clockReminders              TenantTimeClockReminder[]
+  reportRecipients            TenantReportRecipient[]
+  settings                    TenantSettings?
 }
 
 model TenantMembership {
@@ -447,46 +498,51 @@ model TenantInvitation {
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
   tenantId      String
+  /// Personalakte, für die eingeladen wurde (Einladung aus der Akte) — beim
+  /// Annehmen wird genau diese verknüpft statt per E-Mail-Abgleich.
+  employeeId    String?
   tenant        Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee      TenantEmployee?  @relation(fields: [employeeId], references: [id], onDelete: SetNull)
 
   @@unique([tenantId, email])
   @@index([email])
   @@index([token])
+  @@index([employeeId])
 }
 
 model TenantSettings {
-  id                      String   @id @default(cuid())
-  taxId                   String   @default("")
-  defaultLocationId       String   @default("")
-  weekStart               String   @default("monday")
-  workHours               String   @default("40 Stunden pro Woche")
-  vacationDays            Int      @default(30)
-  shiftPresetsJson        Json     @default("[]")
-  shiftMinStaffing        Int      @default(3)
-  shiftBreakRule          String   @default("30-6")
+  id                                        String   @id @default(cuid())
+  taxId                                     String   @default("")
+  defaultLocationId                         String   @default("")
+  weekStart                                 String   @default("monday")
+  workHours                                 String   @default("40 Stunden pro Woche")
+  vacationDays                              Int      @default(30)
+  shiftPresetsJson                          Json     @default("[]")
+  shiftMinStaffing                          Int      @default(3)
+  shiftBreakRule                            String   @default("30-6")
   /// Mindest-Ruhezeit zwischen zwei Schichten in Stunden (§5 ArbZG:
   /// gesetzliches Minimum 11h). Wird bei Schicht-Anlage/-Änderung geprüft.
-  minRestHours            Int      @default(11)
+  minRestHours                              Int      @default(11)
   /// Maximale Dauer einer einzelnen Schicht in Stunden (§3 ArbZG:
   /// grundsaetzlich 8h, verlaengerbar auf bis zu 10h bei Ausgleich
   /// innerhalb von 6 Monaten - 10 als praktikabler Default).
-  maxShiftHours           Int      @default(10)
-  defaultOpeningHoursJson Json     @default("[]")
-  employeeNumberRequired  Boolean  @default(true)
-  employeeNumberPrefix    String   @default("MA-")
-  employeeNumberSuffix    String   @default("")
-  archiveFormerEmployees  Boolean  @default(true)
-  mailNotifications       Boolean  @default(true)
-  inAppNotifications      Boolean  @default(true)
-  mobilePush              Boolean  @default(false)
-  deadlineAlerts          Boolean  @default(true)
-  absenceAlerts           Boolean  @default(true)
-  shiftAlerts             Boolean  @default(true)
-  digestTime              String   @default("monday-0800")
-  twoFactorRequired       Boolean  @default(false)
-  sessionTimeout          Boolean  @default(true)
-  auditRetentionMonths    Int      @default(24)
-  billingNotifications    Boolean  @default(true)
+  maxShiftHours                             Int      @default(10)
+  defaultOpeningHoursJson                   Json     @default("[]")
+  employeeNumberRequired                    Boolean  @default(true)
+  employeeNumberPrefix                      String   @default("MA-")
+  employeeNumberSuffix                      String   @default("")
+  archiveFormerEmployees                    Boolean  @default(true)
+  mailNotifications                         Boolean  @default(true)
+  inAppNotifications                        Boolean  @default(true)
+  mobilePush                                Boolean  @default(false)
+  deadlineAlerts                            Boolean  @default(true)
+  absenceAlerts                             Boolean  @default(true)
+  shiftAlerts                               Boolean  @default(true)
+  digestTime                                String   @default("monday-0800")
+  twoFactorRequired                         Boolean  @default(false)
+  sessionTimeout                            Boolean  @default(true)
+  auditRetentionMonths                      Int      @default(24)
+  billingNotifications                      Boolean  @default(true)
   /// Zeiterfassung (Stempeluhr) fuer Mitarbeiter - siehe lib/time-tracking-service.ts.
   timeTrackingEnabled                       Boolean  @default(false)
   /// Pausen stempeln (Start/Stopp) erlaubt.
@@ -512,12 +568,12 @@ model TenantSettings {
   timeTrackingQrRequired                    Boolean  @default(false)
   /// Dasselbe getrennt fuers Ausstempeln (aus = Ausstempeln per Knopf).
   timeTrackingQrRequiredClockOut            Boolean  @default(false)
-  createdAt               DateTime @default(now())
-  updatedAt               DateTime @updatedAt
-  tenantId                String   @unique
-  companyAddressId        String?  @unique
-  companyAddress          Address? @relation("TenantSettingsCompanyAddress", fields: [companyAddressId], references: [id], onDelete: SetNull)
-  tenant                  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdAt                                 DateTime @default(now())
+  updatedAt                                 DateTime @updatedAt
+  tenantId                                  String   @unique
+  companyAddressId                          String?  @unique
+  companyAddress                            Address? @relation("TenantSettingsCompanyAddress", fields: [companyAddressId], references: [id], onDelete: SetNull)
+  tenant                                    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 }
 
 model Address {
@@ -621,25 +677,27 @@ model TenantTeam {
   files          TenantFile[]
   fileFolders    TenantFileFolder[]
   reminders      TenantReminder[]
+  shifts         TenantShift[]
 
   @@unique([tenantId, key])
   @@index([tenantId])
 }
 
 model TenantTeamMember {
-  id         String     @id @default(cuid())
+  id         String         @id @default(cuid())
   employeeId String
   initials   String
   name       String
   location   String
   role       String
   contract   String
-  status     String     @default("on-duty")
-  isLead     Boolean    @default(false)
-  createdAt  DateTime   @default(now())
-  updatedAt  DateTime   @updatedAt
+  status     String         @default("on-duty")
+  isLead     Boolean        @default(false)
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
   teamId     String
-  team       TenantTeam @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  team       TenantTeam     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  employee   TenantEmployee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@unique([teamId, employeeId])
   @@index([employeeId])
@@ -713,6 +771,7 @@ model TenantLocationMember {
   updatedAt  DateTime       @updatedAt
   locationId String
   location   TenantLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  employee   TenantEmployee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@unique([locationId, employeeId])
   @@index([employeeId])
@@ -824,6 +883,8 @@ model TenantEmployee {
   privateAddress              EmployeeAddress?               @relation("TenantEmployeePrivateAddress", fields: [privateAddressId], references: [id], onDelete: SetNull)
   workAddress                 EmployeeAddress?               @relation("TenantEmployeeWorkAddress", fields: [workAddressId], references: [id], onDelete: SetNull)
   tenant                      Tenant                         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user                        User?                          @relation(fields: [userId], references: [id], onDelete: SetNull)
+  invitations                 TenantInvitation[]
   vacationRequests            TenantVacationRequest[]
   wishFreeRequests            TenantWishFreeRequest[]
   shifts                      TenantShift[]
@@ -836,10 +897,14 @@ model TenantEmployee {
   timeline                    TenantEmployeeTimeline[]
   timeEntries                 TenantTimeEntry[]
   contractDetails             TenantEmployeeContractDetails?
+  teamMemberships             TenantTeamMember[]
+  locationMemberships         TenantLocationMember[]
   locationsLed                TenantLocation[]               @relation("TenantLocationLead")
 
   @@unique([tenantId, key])
   @@unique([tenantId, employeeNumber])
+  /// Ein Konto hängt pro Mandant an höchstens einer Personalakte.
+  @@unique([tenantId, userId])
   @@index([tenantId])
   @@index([userId])
 }
@@ -958,6 +1023,13 @@ model TenantFile {
   version              Int                        @default(1)
   provider             String                     @default("s3")
   deletedAt            DateTime?
+  /// Gemeinsame Kennung einer Nutzer-Löschung (eine Datei oder ein ganzer
+  /// Ordner samt Inhalt) — nur damit lässt sie sich innerhalb von 24 h als
+  /// Ganzes rückgängig machen (lib/storage/storage.service.ts
+  /// `restoreTenantFileDeletion`). `null` bei Löschungen ohne
+  /// Rückgängig-Möglichkeit (Aufbewahrungsfristen, Kontolöschung, …).
+  deletionBatchId      String?
+  deletedByName        String                     @default("")
   /// Zeitpunkt, an dem eine neue Version hochgeladen und diese Version auf
   /// status=replaced gesetzt wurde. Grundlage fuer den 30-Tage-Purge-Lauf
   /// analog zu deletedAt bei status=deleted (siehe cron/cleanup).
@@ -984,6 +1056,7 @@ model TenantFile {
   @@index([assignedLocationId])
   @@index([parentId])
   @@index([bucket, storageKey])
+  @@index([tenantId, deletionBatchId])
 }
 
 model TenantEmployeeContract {
@@ -1112,37 +1185,46 @@ model TenantPayrollStatement {
 }
 
 model TenantFileFolder {
-  id                 String             @id @default(cuid())
+  id                 String                        @id @default(cuid())
   tenantId           String
   employeeId         String?
   locationId         String?
   teamId             String?
   parentId           String?
-  scope              String             @default("tenant")
+  /// Ordnervorlage, aus der der Ordner entstanden ist (lib/employee-folder-templates.ts).
+  templateId         String?
+  scope              String                        @default("tenant")
   name               String
   slug               String
   path               String
-  ownerName          String             @default("HR")
-  status             FileFolderStatus   @default(active)
-  locked             Boolean            @default(false)
+  ownerName          String                        @default("HR")
+  status             FileFolderStatus              @default(active)
+  locked             Boolean                       @default(false)
   /// Ordner (inkl. Inhalt) vor dem Mitarbeiter selbst verborgen.
-  hiddenFromEmployee Boolean            @default(false)
+  hiddenFromEmployee Boolean                       @default(false)
   pinHash            String?
-  createdAt          DateTime           @default(now())
-  updatedAt          DateTime           @updatedAt
-  tenant             Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  employee           TenantEmployee?    @relation(fields: [employeeId], references: [id], onDelete: SetNull)
-  location           TenantLocation?    @relation(fields: [locationId], references: [id], onDelete: SetNull)
-  team               TenantTeam?        @relation(fields: [teamId], references: [id], onDelete: SetNull)
-  parent             TenantFileFolder?  @relation("TenantFileFolderChildren", fields: [parentId], references: [id], onDelete: SetNull)
-  children           TenantFileFolder[] @relation("TenantFileFolderChildren")
+  /// Vom Nutzer gelöscht (status "inactive") — siehe TenantFile.deletionBatchId.
+  deletedAt          DateTime?
+  deletionBatchId    String?
+  deletedByName      String                        @default("")
+  createdAt          DateTime                      @default(now())
+  updatedAt          DateTime                      @updatedAt
+  tenant             Tenant                        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee           TenantEmployee?               @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  location           TenantLocation?               @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  team               TenantTeam?                   @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  parent             TenantFileFolder?             @relation("TenantFileFolderChildren", fields: [parentId], references: [id], onDelete: SetNull)
+  children           TenantFileFolder[]            @relation("TenantFileFolderChildren")
+  template           TenantEmployeeFolderTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
 
   @@unique([tenantId, scope, path])
+  @@index([tenantId, deletionBatchId])
   @@index([tenantId, parentId])
   @@index([tenantId, status])
   @@index([employeeId])
   @@index([locationId])
   @@index([teamId])
+  @@index([templateId])
 }
 
 /// Ordnervorlage für Mitarbeiter-Personalakten ("Unter Mitarbeiter-Seite
@@ -1152,11 +1234,12 @@ model TenantFileFolder {
 /// lib/employee-folder-templates.ts); neue Mitarbeiter bekommen ihn beim
 /// Anlegen automatisch mit (siehe `createTenantEmployeeRecord`).
 model TenantEmployeeFolderTemplate {
-  id        String   @id @default(cuid())
+  id        String             @id @default(cuid())
   tenantId  String
   name      String
-  createdAt DateTime @default(now())
-  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdAt DateTime           @default(now())
+  tenant    Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  folders   TenantFileFolder[]
 
   @@unique([tenantId, name])
   @@index([tenantId])
@@ -1206,15 +1289,20 @@ model TenantShift {
   tenantId     String
   employeeId   String?
   locationId   String?
+  /// Team der Schicht. `team` bleibt als Anzeige-/Schnappschuss-Text daneben
+  /// (Vorlagen, veröffentlichte Wochen, App-Contract `team: string`).
+  teamId       String?
   tenant       Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   employee     TenantEmployee? @relation(fields: [employeeId], references: [id], onDelete: SetNull)
   location     TenantLocation? @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  teamRef      TenantTeam?     @relation(fields: [teamId], references: [id], onDelete: SetNull)
 
   @@unique([tenantId, key])
   @@index([tenantId])
   @@index([employeeId])
   @@index([locationId])
   @@index([date])
+  @@index([teamId])
 }
 
 /**
@@ -1369,7 +1457,9 @@ model TenantTimeEntry {
   @@index([employeeId, clockInAt])
 }
 
-/** Gestempelte Pause innerhalb eines Arbeitsblocks; hoechstens eine offene je Eintrag (gleiche Sperre wie oben). */
+/**
+ * Gestempelte Pause innerhalb eines Arbeitsblocks; hoechstens eine offene je Eintrag (gleiche Sperre wie oben).
+ */
 model TenantTimeBreak {
   id          String          @id @default(cuid())
   timeEntryId String

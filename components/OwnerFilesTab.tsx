@@ -6,6 +6,7 @@ import {
 } from "@/app/(dashboard)/u/[tenant]/dateien/actions";
 import EmployeeVisibilityToggle from "@/components/EmployeeVisibilityToggle";
 import { CreateFolderButton, UploadFileButton } from "@/components/FileActionButtons";
+import { DeleteFileButton, DeleteFolderButton, RecentlyDeletedPanel } from "@/components/FileTrash";
 import { FormErrorBanner } from "@/components/FormFeedback";
 import FormSubmitButton from "@/components/FormSubmitButton";
 import { OwnerFileActions } from "@/components/OwnerFileActions";
@@ -90,6 +91,7 @@ export default function OwnerFilesTab({
   files,
   uploadOptions,
   canManageFiles,
+  canDeleteFiles = false,
   initialFolderPath = "",
   emptyLabel,
   employeeHandle,
@@ -103,6 +105,8 @@ export default function OwnerFilesTab({
   files: OwnerFilesFile[];
   uploadOptions: FileUploadOptions;
   canManageFiles: boolean;
+  /** Löschen von Dateien/Ordnern (mit 24-h-Rückgängig) — "files" + canDelete und Schreibrecht auf die Ablage. */
+  canDeleteFiles?: boolean;
   initialFolderPath?: string;
   emptyLabel: string;
   /**
@@ -216,126 +220,149 @@ export default function OwnerFilesTab({
     ? `${basePath}?tab=files&folder=${encodeURIComponent(currentPath)}`
     : `${basePath}?tab=files`;
 
+  const deleteContext = canDeleteFiles ? { tenant, ownerType, ownerId } : undefined;
+
   return (
-    <section className="overflow-hidden rounded-card border border-border bg-white">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-6 pt-5 pb-3.5">
-        <div className="flex min-w-0 items-center gap-3">
-          {currentPath && (
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              onClick={() => navigate(parentPath)}
-            >
-              <ArrowLeft size={14} />
-              {t("back")}
-            </button>
-          )}
-          <div className="min-w-0">
-            <h2 className="m-0 truncate font-display text-[16px] font-semibold tracking-[-0.3px] text-ink">
-              {currentFolder?.name ?? t("title")}
-            </h2>
-            <FolderBreadcrumbs
-              breadcrumbs={breadcrumbs}
-              folderCount={childFolders.length}
-              fileCount={currentFiles.length}
-              onNavigate={navigate}
-              t={t}
-            />
+    <>
+      <section className="overflow-hidden rounded-card border border-border bg-white">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-6 pt-5 pb-3.5">
+          <div className="flex min-w-0 items-center gap-3">
+            {currentPath && (
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => navigate(parentPath)}
+              >
+                <ArrowLeft size={14} />
+                {t("back")}
+              </button>
+            )}
+            <div className="min-w-0">
+              <h2 className="m-0 truncate font-display text-[16px] font-semibold tracking-[-0.3px] text-ink">
+                {currentFolder?.name ?? t("title")}
+              </h2>
+              <FolderBreadcrumbs
+                breadcrumbs={breadcrumbs}
+                folderCount={childFolders.length}
+                fileCount={currentFiles.length}
+                onNavigate={navigate}
+                t={t}
+              />
+            </div>
           </div>
+
+          {(canManageFiles || canDeleteFiles) && !lockedAncestor && (
+            <div className="flex flex-wrap gap-2">
+              {currentFolder && canDeleteFiles && (
+                <DeleteFolderButton
+                  tenant={tenant}
+                  ownerType={ownerType}
+                  ownerId={ownerId}
+                  path={currentFolder.path}
+                  name={currentFolder.name}
+                  afterDelete={() => navigate(parentPath)}
+                />
+              )}
+              {canManageFiles && (
+                <>
+                  <CreateFolderButton
+                    tenant={tenant}
+                    returnPath={returnPath}
+                    ownerType={ownerType}
+                    ownerId={ownerId}
+                    parentPath={currentPath}
+                    label={currentPath ? t("subfolder") : t("createFolder")}
+                  />
+                  <UploadFileButton
+                    tenant={tenant}
+                    returnPath={returnPath}
+                    ownerType={ownerType}
+                    ownerId={ownerId}
+                    folderSlug={currentPath || undefined}
+                    folderName={currentFolder?.name}
+                    folderOptions={navigableFolders.map(toFileFolderOption)}
+                    uploadOptions={uploadOptions}
+                  />
+                </>
+              )}
+            </div>
+          )}
         </div>
 
-        {canManageFiles && !lockedAncestor && (
-          <div className="flex flex-wrap gap-2">
-            <CreateFolderButton
-              tenant={tenant}
-              returnPath={returnPath}
-              ownerType={ownerType}
-              ownerId={ownerId}
-              parentPath={currentPath}
-              label={currentPath ? t("subfolder") : t("createFolder")}
-            />
-            <UploadFileButton
-              tenant={tenant}
-              returnPath={returnPath}
-              ownerType={ownerType}
-              ownerId={ownerId}
-              folderSlug={currentPath || undefined}
-              folderName={currentFolder?.name}
-              folderOptions={navigableFolders.map(toFileFolderOption)}
-              uploadOptions={uploadOptions}
-            />
-          </div>
-        )}
-      </div>
-
-      {lockedAncestor ? (
-        <FolderPinPanel
-          tenant={tenant}
-          ownerType={ownerType}
-          ownerId={ownerId}
-          folderName={lockedAncestor.name}
-          folderPath={lockedAncestor.path}
-          onUnlocked={(path) => setUnlockedPaths((current) => [...current, path])}
-          onBack={() => navigate(parentPath)}
-        />
-      ) : (
-        <FilesDropZone
-          tenant={tenant}
-          ownerType={ownerType}
-          ownerId={ownerId}
-          folderSlug={currentPath}
-          folderName={currentFolder?.name ?? ""}
-          returnPath={returnPath}
-          canUpload={canManageFiles}
-          onUploaded={() => router.refresh()}
-        >
-          {childFolders.length > 0 && (
-            <div className="grid gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(210px,1fr))]">
-              {childFolders.map((folder) => (
-                <FolderCard
-                  key={folder.path}
-                  folder={folder}
-                  onOpen={() => navigate(folder.path)}
-                  visibility={
-                    canHideFromEmployee
-                      ? { tenant, employeeHandle: employeeHandle!, employeeId: ownerId }
-                      : undefined
-                  }
-                  t={t}
-                />
-              ))}
-            </div>
-          )}
-
-          <div className={childFolders.length > 0 ? "mt-5" : ""}>
-            <div className="mb-2 font-mono text-[9.5px] uppercase tracking-[0.6px] text-muted">
-              {currentPath ? t("filesInFolder") : t("files")}
-            </div>
-            {currentFiles.length > 0 ? (
-              currentFiles.map((file) => (
-                <FileRow
-                  key={file.storageFileId ?? `${file.folderSlug}-${file.name}`}
-                  file={file}
-                  tenant={tenant}
-                  visibility={
-                    canHideFromEmployee
-                      ? { tenant, employeeHandle: employeeHandle!, employeeId: ownerId }
-                      : undefined
-                  }
-                  t={t}
-                />
-              ))
-            ) : (
-              <p className="rounded-xl border border-dashed border-border bg-bg px-4 py-6 text-center text-[12.5px] text-muted">
-                {childFolders.length > 0
-                  ? t("noFilesDirectlyInFolder")
-                  : emptyLabel}
-              </p>
+        {lockedAncestor ? (
+          <FolderPinPanel
+            tenant={tenant}
+            ownerType={ownerType}
+            ownerId={ownerId}
+            folderName={lockedAncestor.name}
+            folderPath={lockedAncestor.path}
+            onUnlocked={(path) => setUnlockedPaths((current) => [...current, path])}
+            onBack={() => navigate(parentPath)}
+          />
+        ) : (
+          <FilesDropZone
+            tenant={tenant}
+            ownerType={ownerType}
+            ownerId={ownerId}
+            folderSlug={currentPath}
+            folderName={currentFolder?.name ?? ""}
+            returnPath={returnPath}
+            canUpload={canManageFiles}
+            onUploaded={() => router.refresh()}
+          >
+            {childFolders.length > 0 && (
+              <div className="grid gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(210px,1fr))]">
+                {childFolders.map((folder) => (
+                  <FolderCard
+                    key={folder.path}
+                    folder={folder}
+                    onOpen={() => navigate(folder.path)}
+                    visibility={
+                      canHideFromEmployee
+                        ? { tenant, employeeHandle: employeeHandle!, employeeId: ownerId }
+                        : undefined
+                    }
+                    deleteContext={deleteContext}
+                    t={t}
+                  />
+                ))}
+              </div>
             )}
-          </div>
-        </FilesDropZone>
+
+            <div className={childFolders.length > 0 ? "mt-5" : ""}>
+              <div className="mb-2 font-mono text-[9.5px] uppercase tracking-[0.6px] text-muted">
+                {currentPath ? t("filesInFolder") : t("files")}
+              </div>
+              {currentFiles.length > 0 ? (
+                currentFiles.map((file) => (
+                  <FileRow
+                    key={file.storageFileId ?? `${file.folderSlug}-${file.name}`}
+                    file={file}
+                    tenant={tenant}
+                    visibility={
+                      canHideFromEmployee
+                        ? { tenant, employeeHandle: employeeHandle!, employeeId: ownerId }
+                        : undefined
+                    }
+                    canDelete={canDeleteFiles}
+                    t={t}
+                  />
+                ))
+              ) : (
+                <p className="rounded-xl border border-dashed border-border bg-bg px-4 py-6 text-center text-[12.5px] text-muted">
+                  {childFolders.length > 0
+                    ? t("noFilesDirectlyInFolder")
+                    : emptyLabel}
+                </p>
+              )}
+            </div>
+          </FilesDropZone>
+        )}
+      </section>
+      {canDeleteFiles && (
+        <RecentlyDeletedPanel tenant={tenant} ownerType={ownerType} ownerId={ownerId} className="mt-4" />
       )}
-    </section>
+    </>
   );
 }
 
@@ -408,11 +435,13 @@ function FolderCard({
   folder,
   onOpen,
   visibility,
+  deleteContext,
   t,
 }: {
   folder: OwnerFilesFolder & { path: string };
   onOpen: () => void;
   visibility?: VisibilityContext;
+  deleteContext?: { tenant: string; ownerType: OwnerFilesOwnerType; ownerId: string };
   t: T;
 }) {
   return (
@@ -447,6 +476,18 @@ function FolderCard({
           name={folder.name}
         />
       )}
+      {deleteContext && (
+        <span className="ml-1.5">
+          <DeleteFolderButton
+            tenant={deleteContext.tenant}
+            ownerType={deleteContext.ownerType}
+            ownerId={deleteContext.ownerId}
+            path={folder.path}
+            name={folder.name}
+            compact
+          />
+        </span>
+      )}
     </div>
   );
 }
@@ -455,11 +496,13 @@ function FileRow({
   file,
   tenant,
   visibility,
+  canDelete = false,
   t,
 }: {
   file: OwnerFilesFile;
   tenant: string;
   visibility?: VisibilityContext;
+  canDelete?: boolean;
   t: T;
 }) {
   return (
@@ -489,6 +532,9 @@ function FileRow({
           hidden={Boolean(file.hiddenFromEmployee)}
           name={file.name}
         />
+      )}
+      {canDelete && file.storageFileId && (
+        <DeleteFileButton tenant={tenant} fileId={file.storageFileId} name={file.name} compact />
       )}
     </div>
   );

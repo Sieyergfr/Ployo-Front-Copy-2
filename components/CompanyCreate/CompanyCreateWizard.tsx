@@ -1,31 +1,14 @@
 "use client";
 
-import {
-  Check,
-  ImagePlus,
-  Loader2,
-  Mail,
-  Pencil,
-  Plus,
-  X,
-} from "lucide-react";
+import { Check, Loader2, Pencil, X } from "lucide-react";
 import { useToast } from "@/components/Toasts";
 import { slugify } from "@/lib/slug";
 import { tenantIndustries, tenantSizes } from "@/lib/tenant-options";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
-import { type ChangeEvent, type CSSProperties, useEffect, useState } from "react";
+import { type CSSProperties, useEffect, useState } from "react";
 
 type PlanId = "starter" | "professional" | "business";
-
-type InviteRow = {
-  email: string;
-  // Literale Werte, keine Anzeige-Strings: werden 1:1 als `role` im
-  // Einladungs-Payload an /api/tenants gesendet (siehe <option>s in Schritt
-  // 5) — bewusst nicht übersetzt, sonst würde die EN-Oberfläche einen
-  // anderen Rollenwert speichern als die DE-Oberfläche.
-  role: "Admin" | "HR" | "Mitarbeiter";
-};
 
 type Plan = {
   id: PlanId;
@@ -64,8 +47,6 @@ const timezones = [
 const sizes = tenantSizes;
 
 const industries = tenantIndustries;
-
-const colorPresets = ["#0E0E0E", "#2A6FDB", "#357A52", "#B4332A", "#7C3AED", "#D97706"];
 
 function getPlans(t: T): Plan[] {
   return [
@@ -126,13 +107,13 @@ function getPlans(t: T): Plan[] {
   ];
 }
 
+const LAST_STEP = 3;
+
 function getStepLabels(t: T) {
   return [
     t("step1Label"),
     t("step2Label"),
     t("step3Label"),
-    t("step4Label"),
-    t("step5Label"),
   ];
 }
 
@@ -152,16 +133,6 @@ function getStepCopy(t: T) {
       eyebrow: t("step3Eyebrow"),
       title: t("step3Title"),
       subtitle: t("step3Subtitle"),
-    },
-    4: {
-      eyebrow: t("step4Eyebrow"),
-      title: t("step4Title"),
-      subtitle: t("step4Subtitle"),
-    },
-    5: {
-      eyebrow: t("step5Eyebrow"),
-      title: t("step5Title"),
-      subtitle: t("step5Subtitle"),
     },
   } satisfies Record<number, { eyebrow: string; title: string; subtitle: string }>;
 }
@@ -185,8 +156,6 @@ export default function CompanyCreateWizard() {
   const [size, setSize] = useState("");
   const [industry, setIndustry] = useState("");
   const [contactEmail, setContactEmail] = useState("");
-  const [logoUrl, setLogoUrl] = useState("");
-  const [primaryColor, setPrimaryColor] = useState("#2A6FDB");
   const [plan, setPlan] = useState<PlanId>("professional");
   const [billingCycle, setBillingCycle] = useState<"monthly" | "yearly">("monthly");
   const [creating, setCreating] = useState(false);
@@ -195,18 +164,12 @@ export default function CompanyCreateWizard() {
   const [slugState, setSlugState] = useState<SlugState>("empty");
   const [createError, setCreateError] = useState<string | null>(null);
   const [createdTenantSlug, setCreatedTenantSlug] = useState<string | null>(null);
-  const [emailRows, setEmailRows] = useState<InviteRow[]>([
-    { email: "", role: "Admin" },
-    { email: "", role: "HR" },
-    { email: "", role: "Mitarbeiter" },
-  ]);
 
   const baseSlug = customSlug || slugify(name);
   const showSlugStatus = slugState !== "empty";
   const companyName = name.trim() || t("companyNamePlaceholder");
   const currentCopy = stepCopy[step as keyof typeof stepCopy];
   const blocked = step === 1 && slugState !== "available";
-  const canSkip = step >= 3 && step <= 5;
   const tenantSlug = createdTenantSlug ?? baseSlug;
 
   useEffect(() => {
@@ -262,41 +225,6 @@ export default function CompanyCreateWizard() {
     };
   }
 
-  // lib/tenants.ts (normalizeLogoUrl) speichert data:-URLs nur bis 250.000
-  // Zeichen — größere Bilder dort abzuschneiden würde die Bilddaten
-  // beschädigen, statt sie sauber abzulehnen. Deshalb hier vorab prüfen.
-  const MAX_LOGO_FILE_BYTES = 180_000;
-
-  function readLogo(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-
-    if (!file) {
-      return;
-    }
-
-    if (file.size > MAX_LOGO_FILE_BYTES) {
-      toast({
-        tone: "error",
-        title: t("logoTooLargeTitle"),
-        subtitle: t("logoTooLargeSubtitle"),
-      });
-      event.target.value = "";
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = () => setLogoUrl(String(reader.result));
-    reader.readAsDataURL(file);
-  }
-
-  function setEmailRow(index: number, field: keyof InviteRow, value: string) {
-    setEmailRows((current) =>
-      current.map((row, rowIndex) =>
-        rowIndex === index ? { ...row, [field]: value } : row,
-      ),
-    );
-  }
-
   async function goNext() {
     if (blocked) {
       return;
@@ -304,7 +232,7 @@ export default function CompanyCreateWizard() {
 
     setCreateError(null);
 
-    if (step < 5) {
+    if (step < LAST_STEP) {
       setStep((current) => current + 1);
       return;
     }
@@ -323,16 +251,8 @@ export default function CompanyCreateWizard() {
         size,
         industry,
         contactEmail,
-        logoUrl,
-        primaryColor,
         plan,
         billingCycle,
-        invitations: emailRows
-          .map((row) => ({
-            email: row.email.trim(),
-            role: row.role,
-          }))
-          .filter((row) => row.email),
       }),
     });
     const data = (await response.json().catch(() => null)) as {
@@ -363,12 +283,43 @@ export default function CompanyCreateWizard() {
       return;
     }
 
-    setCreatedTenantSlug(data?.tenant?.slug ?? baseSlug);
+    const createdSlug = data?.tenant?.slug ?? baseSlug;
+    setCreatedTenantSlug(createdSlug);
+
+    // Direkt im Anschluss den Stripe-Checkout für den gewählten Plan starten.
+    // Ohne abgeschlossenen Checkout ist das Unternehmen gesperrt
+    // (lib/billing-access.ts); schlägt der Start hier fehl, bietet die
+    // Sperrseite /abo-erforderlich ihn erneut an.
+    const tenantUrl = `${window.location.origin}/u/${encodeURIComponent(createdSlug)}`;
+    const checkoutResponse = await fetch(
+      `/api/tenants/${encodeURIComponent(createdSlug)}/billing/checkout`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          plan,
+          billingCycle,
+          successUrl: `${tenantUrl}/abo-erforderlich?checkout=success`,
+          cancelUrl: `${tenantUrl}/abo-erforderlich`,
+        }),
+      },
+    ).catch(() => null);
+    const checkoutData = (await checkoutResponse?.json().catch(() => null)) as {
+      url?: string;
+    } | null;
+
+    if (checkoutResponse?.ok && checkoutData?.url) {
+      window.location.assign(checkoutData.url);
+      return;
+    }
+
     setCreating(false);
     toast({
-      tone: "success",
-      title: t("createdTitle"),
-      subtitle: t("createdSubtitle", { company: companyName }),
+      tone: "error",
+      title: t("checkoutFailedTitle"),
+      subtitle: t("checkoutFailedSubtitle"),
     });
     setDone(true);
   }
@@ -496,18 +447,18 @@ export default function CompanyCreateWizard() {
         <div className="h-[3px] bg-border-soft">
           <div
             className="h-full w-[var(--pct)] bg-ink transition-[width] duration-300"
-            style={{ "--pct": `${step * 20}%` } as CSSProperties}
+            style={{ "--pct": `${(step / LAST_STEP) * 100}%` } as CSSProperties}
           />
         </div>
 
         <div className="px-7 pt-[18px] pb-1">
-          <div className="relative grid w-full grid-cols-5">
-            <div className="absolute top-[10px] right-[10%] left-[10%] h-[1.5px] rounded-full bg-border" />
+          <div className="relative grid w-full grid-cols-3">
+            <div className="absolute top-[10px] right-[16.667%] left-[16.667%] h-[1.5px] rounded-full bg-border" />
             <div
-              className="absolute top-[10px] left-[10%] h-[1.5px] w-[var(--pct)] rounded-full bg-ink transition-[width] duration-300"
+              className="absolute top-[10px] left-[16.667%] h-[1.5px] w-[var(--pct)] rounded-full bg-ink transition-[width] duration-300"
               style={
                 {
-                  "--pct": step === 1 ? "0%" : `${((step - 1) / 4) * 80}%`,
+                  "--pct": `${((step - 1) / (LAST_STEP - 1)) * 66.667}%`,
                 } as CSSProperties
               }
             />
@@ -750,119 +701,14 @@ export default function CompanyCreateWizard() {
                     />
                   </div>
                 </div>
+                <div className="rounded-[12px] border border-border bg-bg px-4 py-3 text-[12.5px] leading-5 text-muted-2">
+                  {t("worksCouncilHint")}
+                </div>
               </div>
             )}
+
 
             {step === 3 && (
-              <div className="grid gap-4">
-                <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-[13px] border border-dashed border-[#D4D2CC] bg-bg px-5 py-6 text-center transition-colors hover:border-muted">
-                  <span
-                    className="flex size-[58px] items-center justify-center overflow-hidden rounded-[14px] bg-[var(--swatch)] text-white"
-                    style={{ "--swatch": primaryColor } as CSSProperties}
-                  >
-                    {logoUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={logoUrl} alt="" className="size-full object-cover" />
-                    ) : (
-                      <span className="font-display text-[22px] font-semibold">
-                        {companyName.charAt(0).toUpperCase()}
-                      </span>
-                    )}
-                  </span>
-                  <span className="mt-1 inline-flex items-center gap-2 text-[13.5px] font-semibold text-ink">
-                    <ImagePlus size={15} />
-                    {t("uploadLogo")}
-                  </span>
-                  <span className="text-[12.5px] text-muted">{t("logoFormatHint")}</span>
-                  <input type="file" accept="image/*" className="sr-only" onChange={readLogo} />
-                </label>
-
-                <div className="field">
-                  <span className="label">{t("primaryColorLabel")}</span>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {colorPresets.map((color) => (
-                      <button
-                        key={color}
-                        type="button"
-                        title={color}
-                        aria-label={t("colorAria", { color })}
-                        className={cx(
-                          "size-[38px] cursor-pointer rounded-[10px] border-2 bg-[var(--swatch)] shadow-[inset_0_0_0_1px_rgba(0,0,0,0.06)]",
-                          primaryColor.toLowerCase() === color.toLowerCase()
-                            ? "border-ink"
-                            : "border-transparent",
-                        )}
-                        style={{ "--swatch": color } as CSSProperties}
-                        onClick={() => setPrimaryColor(color)}
-                      />
-                    ))}
-                    <input
-                      aria-label={t("hexColorAria")}
-                      className="input input-mono max-w-[130px] bg-white"
-                      value={primaryColor}
-                      onChange={(event) => setPrimaryColor(event.target.value)}
-                    />
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-[9px]">
-                  <span className="label">{t("livePreviewLabel")}</span>
-                  <div className="flex h-[158px] overflow-hidden rounded-[14px] border border-border bg-white">
-                    <div
-                      className="flex w-16 shrink-0 flex-col items-center gap-3.5 bg-[var(--swatch)] px-0 py-[13px]"
-                      style={{ "--swatch": primaryColor } as CSSProperties}
-                    >
-                      <div className="flex size-[30px] items-center justify-center overflow-hidden rounded-[9px] bg-white/90">
-                        {logoUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={logoUrl} alt="" className="size-full object-cover" />
-                        ) : (
-                          <span
-                            className="font-display text-[13px] font-bold text-[var(--swatch)]"
-                            style={{ "--swatch": primaryColor } as CSSProperties}
-                          >
-                            {companyName.charAt(0).toUpperCase()}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex w-full flex-col items-center gap-[9px]">
-                        <div className="h-[5px] w-[26px] rounded-[3px] bg-white/90" />
-                        <div className="h-[5px] w-[26px] rounded-[3px] bg-white/40" />
-                        <div className="h-[5px] w-[26px] rounded-[3px] bg-white/40" />
-                        <div className="h-[5px] w-[26px] rounded-[3px] bg-white/40" />
-                      </div>
-                    </div>
-
-                    <div className="flex min-w-0 flex-1 flex-col">
-                      <div className="flex h-[38px] shrink-0 items-center justify-between border-b border-border-soft px-3.5">
-                        <span className="truncate font-display text-[12.5px] font-semibold text-ink">
-                          {companyName}
-                        </span>
-                        <span
-                          className="size-[22px] shrink-0 rounded-full bg-[var(--swatch)]"
-                          style={{ "--swatch": primaryColor } as CSSProperties}
-                        />
-                      </div>
-                      <div className="flex flex-1 flex-col gap-[9px] px-3.5 py-[13px]">
-                        <div className="flex gap-[9px]">
-                          <div className="h-[34px] flex-1 rounded-[8px] bg-[#F4F3EF]" />
-                          <div className="h-[34px] flex-1 rounded-[8px] bg-[#F4F3EF]" />
-                        </div>
-                        <div className="h-2 w-[70%] rounded bg-[#EDEBE6]" />
-                        <div
-                          className="mt-auto w-fit rounded-[7px] bg-[var(--swatch)] px-[11px] py-[5px] text-[10.5px] font-semibold text-white"
-                          style={{ "--swatch": primaryColor } as CSSProperties}
-                        >
-                          {t("primaryActionPreview")}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {step === 4 && (
               <div className="flex flex-col gap-3">
                 <div className="mb-1 flex w-fit gap-1 rounded-xl bg-border-soft p-1">
                   <button
@@ -964,67 +810,6 @@ export default function CompanyCreateWizard() {
               </div>
             )}
 
-            {step === 5 && (
-              <div className="grid gap-3">
-                {emailRows.map((row, index) => (
-                  <div key={index} className="grid gap-2.5 rounded-[12px] border border-border-light bg-bg p-3 sm:grid-cols-[1fr_145px]">
-                    <div className="field">
-                      <label htmlFor={`invite-${index}`} className="label">
-                        {t("emailLabel")}
-                      </label>
-                      <div className="input-wrapper">
-                        <Mail size={14} className="input-icon-left" />
-                        <input
-                          id={`invite-${index}`}
-                          type="email"
-                          className="input input-with-icon-left bg-white"
-                          placeholder={t("invitePlaceholder")}
-                          value={row.email}
-                          onChange={(event) => setEmailRow(index, "email", event.target.value)}
-                        />
-                      </div>
-                    </div>
-                    <div className="field">
-                      <label htmlFor={`invite-role-${index}`} className="label">
-                        {t("roleLabel")}
-                      </label>
-                      <select
-                        id={`invite-role-${index}`}
-                        className="input cursor-pointer bg-white"
-                        value={row.role}
-                        onChange={(event) => setEmailRow(index, "role", event.target.value)}
-                      >
-                        {/* Bewusst nicht übersetzt: der Options-Text IST der
-                            gesendete `role`-Wert (kein separates `value`),
-                            siehe InviteRow-Typ oben. */}
-                        <option>Admin</option>
-                        <option>HR</option>
-                        <option>Mitarbeiter</option>
-                      </select>
-                    </div>
-                  </div>
-                ))}
-                <button
-                  type="button"
-                  className="mt-1 inline-flex w-fit cursor-pointer items-center gap-2 rounded-[10px] border border-border-light bg-white px-4 py-2.5 text-[13.5px] font-semibold text-ink transition-colors hover:border-muted"
-                  onClick={() =>
-                    setEmailRows((current) => [
-                      ...current,
-                      { email: "", role: "Mitarbeiter" },
-                    ])
-                  }
-                >
-                  <Plus size={15} />
-                  {t("addAnotherInvite")}
-                </button>
-                <div className="rounded-[12px] border border-border bg-bg px-4 py-3 text-[12.5px] leading-5 text-muted-2">
-                  {t("inviteLaterHint")}
-                </div>
-                <div className="rounded-[12px] border border-border bg-bg px-4 py-3 text-[12.5px] leading-5 text-muted-2">
-                  {t("worksCouncilHint")}
-                </div>
-              </div>
-            )}
           </div>
 
           {createError && (
@@ -1048,16 +833,6 @@ export default function CompanyCreateWizard() {
             </button>
 
             <div className="flex items-center gap-3.5">
-              {canSkip && step < 5 && (
-                <button
-                  type="button"
-                  className="cursor-pointer border-0 bg-transparent px-0 py-2 text-[13.5px] font-medium text-muted transition-colors hover:text-ink"
-                  onClick={goNext}
-                  disabled={creating}
-                >
-                  {t("skip")}
-                </button>
-              )}
               <button
                 type="submit"
                 className={cx(
@@ -1070,8 +845,8 @@ export default function CompanyCreateWizard() {
               >
                 {creating ? (
                   <Loader2 size={15} className="animate-spin" />
-                ) : step === 5 ? (
-                  t("createCompany")
+                ) : step === LAST_STEP ? (
+                  t("continueToPayment")
                 ) : (
                   t("next")
                 )}

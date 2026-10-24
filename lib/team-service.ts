@@ -25,7 +25,7 @@ function assertKnownTeamColor(colorClassName: string) {
  * weiterhin bestimmt, OB überhaupt Team-Dateien sichtbar sind; dieser Scope
  * bestimmt zusätzlich, für WELCHE Teams). "own" zeigt keine Team-Dateien
  * (das sind keine eigenen Daten), "team" nur die des eigenen Teams
- * (Namensabgleich wie beim "team"-Scope anderer Bereiche), "all" alle.
+ * (über `TenantTeamMember`, wie beim "team"-Scope anderer Bereiche), "all" alle.
  */
 async function resolveFilesAreaScope(tenantSlug: string) {
   try {
@@ -43,7 +43,7 @@ async function resolveFilesAreaScope(tenantSlug: string) {
 
 function teamFilesVisible(
   filesScope: Awaited<ReturnType<typeof resolveFilesAreaScope>>,
-  teamName: string,
+  teamId: string,
 ) {
   if (!filesScope) {
     return false;
@@ -54,7 +54,7 @@ function teamFilesVisible(
   }
 
   if (filesScope.type === "team") {
-    return Boolean(teamName) && filesScope.team === teamName;
+    return filesScope.teamIds.includes(teamId);
   }
 
   return false;
@@ -365,7 +365,7 @@ export async function getTeamsForTenant(tenantSlug: string) {
   });
 
   return records.map((record) => {
-    const filesVisible = fileAccess && teamFilesVisible(filesScope, record.name);
+    const filesVisible = fileAccess && teamFilesVisible(filesScope, record.id);
 
     return toTeam({
       ...record,
@@ -408,7 +408,7 @@ export async function getTeamForTenant(tenantSlug: string, teamHandle: string) {
     return null;
   }
 
-  const filesVisible = fileAccess && teamFilesVisible(filesScope, record.name);
+  const filesVisible = fileAccess && teamFilesVisible(filesScope, record.id);
 
   return toTeam({
     ...record,
@@ -619,18 +619,62 @@ export async function updateTenantTeam(input: {
     },
   });
 
-  // TenantEmployee.team ist eine Freitext-Kopie des Teamnamens (keine
-  // Relation) — bei Umbenennung überall nachziehen.
+  // TenantEmployee.team und TenantShift.team sind Freitext-Kopien des
+  // Teamnamens — bei Umbenennung überall nachziehen (Schichten zusätzlich
+  // über TenantShift.teamId, falls deren Text schon abgewichen war).
   if (current && current.name !== nextName) {
-    await prisma.tenantEmployee.updateMany({
-      where: { tenantId: access.tenantId, team: current.name },
-      data: { team: nextName },
-    });
+    await prisma.$transaction([
+      prisma.tenantEmployee.updateMany({
+        where: { tenantId: access.tenantId, team: current.name },
+        data: { team: nextName },
+      }),
+      prisma.tenantShift.updateMany({
+        where: {
+          tenantId: access.tenantId,
+          OR: [{ teamId: team.id }, { team: current.name }],
+        },
+        data: { team: nextName, teamId: team.id },
+      }),
+    ]);
   }
 
   await recordTeamAudit(access, "Team geändert", team.id, team.name);
 
   return team;
+}
+
+/**
+ * `TenantEmployee.team` ist nur noch die Anzeige des Hauptteams (Quelle der
+ * Zugehörigkeit ist `TenantTeamMember`, siehe resolveScopeFilter). Zeigt sie
+ * bei einem dieser Mitarbeiter noch auf `teamName`, obwohl er dort kein
+ * Mitglied mehr ist (Team gelöscht, Mitglied entfernt), rückt sein erstes
+ * verbliebenes Team nach — sonst bleibt ein Name stehen, den es nicht mehr gibt.
+ */
+async function reassignPrimaryTeam(
+  db: Pick<typeof prisma, "tenantEmployee" | "tenantTeamMember">,
+  tenantId: string,
+  employeeIds: string[],
+  teamName: string,
+) {
+  const affected = employeeIds.length
+    ? await db.tenantEmployee.findMany({
+        where: { tenantId, id: { in: employeeIds }, team: teamName },
+        select: { id: true },
+      })
+    : [];
+
+  for (const employee of affected) {
+    const next = await db.tenantTeamMember.findFirst({
+      where: { employeeId: employee.id, team: { tenantId, name: { not: teamName } } },
+      orderBy: { team: { name: "asc" } },
+      select: { team: { select: { name: true } } },
+    });
+
+    await db.tenantEmployee.update({
+      where: { id: employee.id },
+      data: { team: next?.team.name ?? "" },
+    });
+  }
 }
 
 export async function deleteTenantTeam(input: {
@@ -645,11 +689,44 @@ export async function deleteTenantTeam(input: {
 
   await assertTeamInScope(access, input.teamId);
 
-  const team = await prisma.tenantTeam.delete({
-    where: {
-      id: input.teamId,
-      tenantId: access.tenantId,
-    },
+  // Die Mitgliedschaften fallen per Cascade weg; die Freitext-Kopien des
+  // Teamnamens (Hauptteam der Mitarbeiter, Team-Feld der Schichten) müssen
+  // mit — sonst übernähme ein später gleichnamig angelegtes Team sie.
+  const team = await prisma.$transaction(async (tx) => {
+    const members = await tx.tenantTeamMember.findMany({
+      where: { teamId: input.teamId, team: { tenantId: access.tenantId } },
+      select: { employeeId: true },
+    });
+    // Vor dem Löschen, solange TenantShift.teamId noch gesetzt ist (danach
+    // SetNull) — trifft so auch Schichten, deren Text schon abwich.
+    await tx.tenantShift.updateMany({
+      where: { tenantId: access.tenantId, teamId: input.teamId },
+      data: { team: "" },
+    });
+    const deleted = await tx.tenantTeam.delete({
+      where: {
+        id: input.teamId,
+        tenantId: access.tenantId,
+      },
+    });
+    const memberIds = members.map((member) => member.employeeId);
+    const formerMembers = await tx.tenantEmployee.findMany({
+      where: { tenantId: access.tenantId, team: deleted.name },
+      select: { id: true },
+    });
+
+    await reassignPrimaryTeam(
+      tx,
+      access.tenantId,
+      Array.from(new Set([...memberIds, ...formerMembers.map((employee) => employee.id)])),
+      deleted.name,
+    );
+    await tx.tenantShift.updateMany({
+      where: { tenantId: access.tenantId, team: deleted.name },
+      data: { team: "" },
+    });
+
+    return deleted;
   });
 
   await recordTenantAudit({
@@ -718,19 +795,29 @@ export async function addTenantTeamMember(input: {
       id: input.teamId,
       tenantId: access.tenantId,
     },
-    select: { id: true },
+    select: { id: true, name: true },
   });
 
   if (!team) {
     throw new Error("TEAM_NOT_FOUND");
   }
 
-  await prisma.tenantTeamMember.create({
-    data: {
-      teamId: input.teamId,
-      ...employeeToMember(employee, input.role.trim() || employee.role),
-    },
-  });
+  const member = employeeToMember(employee, input.role.trim() || employee.role);
+
+  await prisma.$transaction([
+    prisma.tenantTeamMember.create({
+      data: {
+        teamId: input.teamId,
+        ...member,
+      },
+    }),
+    // Wer noch kein Hauptteam hat, bekommt dieses als Anzeige — vorher blieb
+    // das Feld leer, wenn jemand über die Team-Seite hinzugefügt wurde.
+    prisma.tenantEmployee.updateMany({
+      where: { id: member.employeeId, tenantId: access.tenantId, team: "" },
+      data: { team: team.name },
+    }),
+  ]);
 }
 
 export async function removeTenantTeamMember(input: {
@@ -748,7 +835,7 @@ export async function removeTenantTeamMember(input: {
         tenantId: access.tenantId,
       },
     },
-    select: { id: true, isLead: true },
+    select: { id: true, isLead: true, employeeId: true, team: { select: { name: true } } },
   });
 
   if (!member) {
@@ -759,8 +846,11 @@ export async function removeTenantTeamMember(input: {
     throw new Error("TEAM_LEAD_CANNOT_BE_REMOVED");
   }
 
-  await prisma.tenantTeamMember.delete({
-    where: { id: input.memberId },
+  await prisma.$transaction(async (tx) => {
+    await tx.tenantTeamMember.delete({
+      where: { id: input.memberId },
+    });
+    await reassignPrimaryTeam(tx, access.tenantId, [member.employeeId], member.team.name);
   });
 }
 

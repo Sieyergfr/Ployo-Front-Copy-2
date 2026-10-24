@@ -47,6 +47,7 @@ export async function POST(
       email: employee.email,
       role: "EMPLOYEE",
       source: "Personalakte",
+      employeeId: employee.dbId,
     });
 
     return Response.json({ invitation }, { status: 201 });

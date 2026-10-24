@@ -15,7 +15,7 @@ import {
   slugify,
 } from "@/lib/tenants";
 import { headers } from "next/headers";
-import { requireTenantAccess } from "@/lib/tenant-access";
+import { requireTenantAccess, type TenantAccessOptions } from "@/lib/tenant-access";
 import { isStripeConfigured } from "@/lib/stripe/client";
 import { isClockInMode } from "@/lib/time-tracking";
 
@@ -172,8 +172,11 @@ export async function updateTenantShiftSettings(input: {
   });
 }
 
-export async function requireSettingsManager(tenantSlug: string) {
-  await requireTenantAccess(tenantSlug, "settings", "write");
+export async function requireSettingsManager(
+  tenantSlug: string,
+  options?: TenantAccessOptions,
+) {
+  await requireTenantAccess(tenantSlug, "settings", "write", options);
   const userId = await getSessionUserId();
 
   if (!userId) {
@@ -574,6 +577,8 @@ export async function createTenantInvitation(input: {
   email: string;
   role: string;
   source?: string;
+  /** Personalakte, für die eingeladen wird — beim Annehmen wird genau diese verknüpft. */
+  employeeId?: string;
 }) {
   const access = await requireSettingsManager(input.tenantSlug);
   const email = normalizeEmail(input.email);
@@ -590,6 +595,19 @@ export async function createTenantInvitation(input: {
 
   if (!email) {
     throw new Error("Gültige E-Mail ist erforderlich.");
+  }
+
+  const employeeId = input.employeeId
+    ? (
+        await prisma.tenantEmployee.findFirst({
+          where: { id: input.employeeId, tenantId: access.tenantId },
+          select: { id: true },
+        })
+      )?.id
+    : undefined;
+
+  if (input.employeeId && !employeeId) {
+    throw new Error("Mitarbeiter wurde nicht gefunden.");
   }
 
   const session = await auth.api.getSession({ headers: await headers() });
@@ -612,6 +630,7 @@ export async function createTenantInvitation(input: {
       token,
       expiresAt,
       invitedByName,
+      employeeId: employeeId ?? null,
     },
     update: {
       role,
@@ -620,6 +639,9 @@ export async function createTenantInvitation(input: {
       expiresAt,
       acceptedAt: null,
       invitedByName,
+      // Eine erneute Einladung ohne Akte (Einstellungen) lässt eine bereits
+      // gemerkte Akte stehen.
+      ...(employeeId ? { employeeId } : {}),
     },
     include: {
       tenant: { select: { name: true } },

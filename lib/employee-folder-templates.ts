@@ -50,6 +50,7 @@ export async function createEmployeeFolderTemplate(input: {
         employeeId: employee.id,
         name,
         ownerName: access.userName,
+        templateId: template.id,
       }),
     ),
   );

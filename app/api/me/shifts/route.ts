@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth";
 import { getMyShiftsForCurrentWeek } from "@/lib/shift-service";
 import { checkRateLimit, tooManyRequests } from "@/lib/rate-limit";
 import { headers } from "next/headers";
+import { subscriptionRequiredResponse } from "@/lib/api/self-service-errors";
 
 /** Eigene Schichten (Schichtplan-Screen, "Meine Schichten"). Ohne year/week: laufende Woche. */
 export async function GET(request: Request) {
@@ -47,6 +48,10 @@ export async function GET(request: Request) {
   } catch (error) {
     if (error instanceof Error && (error.message === "FORBIDDEN" || error.message === "TWO_FACTOR_REQUIRED")) {
       return Response.json({ error: error.message }, { status: 403 });
+    }
+
+    if (error instanceof Error && error.message === "SUBSCRIPTION_REQUIRED") {
+      return subscriptionRequiredResponse();
     }
 
     throw error;

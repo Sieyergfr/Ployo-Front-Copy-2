@@ -12,6 +12,7 @@ import {
   UploadFileButton,
   VersionUploadButton,
 } from "@/components/FileActionButtons";
+import { DeleteFolderButton } from "@/components/FileTrash";
 import { ArrowLeft, FileText, Folder, Lock } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
@@ -21,10 +22,14 @@ type T = ReturnType<typeof useTranslations>;
 function FolderCard({
   folder,
   baseHref,
+  tenant,
+  canDeleteFiles,
   t,
 }: {
   folder: FileFolder;
   baseHref: string;
+  tenant: string;
+  canDeleteFiles: boolean;
   t: T;
 }) {
   const folderHref = `${baseHref}/${folder.slug}`;
@@ -48,6 +53,14 @@ function FolderCard({
         </span>
       </Link>
       {folder.locked && <Lock size={13} className="shrink-0 text-muted" />}
+      {canDeleteFiles && (
+        <DeleteFolderButton
+          tenant={tenant}
+          path={folder.path ?? folder.slug}
+          name={folder.name}
+          compact
+        />
+      )}
     </div>
   );
 }
@@ -57,6 +70,7 @@ function FileRow({
   baseHref,
   tenant,
   canManageFiles,
+  canDeleteFiles,
   canManageReminders,
   t,
 }: {
@@ -64,6 +78,7 @@ function FileRow({
   baseHref: string;
   tenant: string;
   canManageFiles: boolean;
+  canDeleteFiles: boolean;
   canManageReminders: boolean;
   t: T;
 }) {
@@ -101,20 +116,20 @@ function FileRow({
       <FileViewButton file={file} tenant={tenant} compact />
       <FileDownloadButton file={file} tenant={tenant} compact />
       {canManageFiles && (
-        <>
-          <VersionUploadButton
-            file={file}
-            tenant={tenant}
-            returnPath={returnPath}
-            compact
-          />
-          <FileSoftDeleteButton
-            file={file}
-            tenant={tenant}
-            returnPath={returnPath}
-            compact
-          />
-        </>
+        <VersionUploadButton
+          file={file}
+          tenant={tenant}
+          returnPath={returnPath}
+          compact
+        />
+      )}
+      {canDeleteFiles && (
+        <FileSoftDeleteButton
+          file={file}
+          tenant={tenant}
+          returnPath={returnPath}
+          compact
+        />
       )}
       {file.locked && <Lock size={13} className="shrink-0 text-muted" />}
       <FileReminderButton
@@ -139,6 +154,7 @@ export default function FilesBrowser({
   folderOptions = [],
   uploadOptions,
   canManageFiles = true,
+  canDeleteFiles = false,
   canManageReminders = true,
   emptyFilesLabel,
 }: {
@@ -151,6 +167,7 @@ export default function FilesBrowser({
   folderOptions?: FileFolder[];
   uploadOptions?: FileUploadOptions;
   canManageFiles?: boolean;
+  canDeleteFiles?: boolean;
   canManageReminders?: boolean;
   /** Überschreibt den Leer-Text, z. B. bei aktiver Suche ohne Treffer. */
   emptyFilesLabel?: string;
@@ -161,8 +178,10 @@ export default function FilesBrowser({
   // kein bestimmter Ordner gemeint ist (QA-Bug BUG-025, zweiter Teil).
   const resolvedEmptyFilesLabel =
     emptyFilesLabel ?? (activeFolder ? t("emptyFiles") : t("emptyFilesRoot"));
-  const currentReturnPath = activeFolder
-    ? `${baseHref}/${activeFolder.path ?? activeFolder.slug}`
+  const activeFolderPath = activeFolder ? (activeFolder.path ?? activeFolder.slug) : "";
+  const currentReturnPath = activeFolder ? `${baseHref}/${activeFolderPath}` : baseHref;
+  const parentFolderHref = activeFolderPath.includes("/")
+    ? `${baseHref}/${activeFolderPath.slice(0, activeFolderPath.lastIndexOf("/"))}`
     : baseHref;
 
   return (
@@ -189,6 +208,14 @@ export default function FilesBrowser({
               <ArrowLeft size={14} />
               {t("allFolders")}
             </Link>
+          )}
+          {activeFolder && canDeleteFiles && (
+            <DeleteFolderButton
+              tenant={tenant}
+              path={activeFolderPath}
+              name={activeFolder.name}
+              afterDelete={() => router.push(parentFolderHref)}
+            />
           )}
           {canManageFiles && (
             <>
@@ -226,7 +253,14 @@ export default function FilesBrowser({
         {folders.length > 0 && (
           <div className="grid gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(250px,1fr))]">
             {folders.map((folder) => (
-              <FolderCard key={folder.slug} folder={folder} baseHref={baseHref} t={t} />
+              <FolderCard
+                key={folder.slug}
+                folder={folder}
+                baseHref={baseHref}
+                tenant={tenant}
+                canDeleteFiles={canDeleteFiles}
+                t={t}
+              />
             ))}
           </div>
         )}
@@ -243,6 +277,7 @@ export default function FilesBrowser({
                 baseHref={baseHref}
                 tenant={tenant}
                 canManageFiles={canManageFiles}
+                canDeleteFiles={canDeleteFiles}
                 canManageReminders={canManageReminders}
                 t={t}
               />

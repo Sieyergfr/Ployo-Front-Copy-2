@@ -152,9 +152,7 @@ export async function getSicknessForTenant(tenantSlug: string): Promise<Sickness
       : scopeFilter.type === "own"
         ? { tenantId: access.tenantId, id: scopeFilter.employeeId ?? "__none__" }
         : scopeFilter.type === "team"
-          ? scopeFilter.team
-            ? { tenantId: access.tenantId, team: scopeFilter.team }
-            : { tenantId: access.tenantId, id: "__none__" }
+          ? { tenantId: access.tenantId, id: { in: scopeFilter.teammateIds } }
           : { tenantId: access.tenantId, id: "__none__" };
   const reportWhere =
     scopeFilter.type === "all"
@@ -162,9 +160,7 @@ export async function getSicknessForTenant(tenantSlug: string): Promise<Sickness
       : scopeFilter.type === "own"
         ? { tenantId: access.tenantId, employeeId: scopeFilter.employeeId ?? "__none__" }
         : scopeFilter.type === "team"
-          ? scopeFilter.team
-            ? { tenantId: access.tenantId, employee: { team: scopeFilter.team } }
-            : { tenantId: access.tenantId, employeeId: "__none__" }
+          ? { tenantId: access.tenantId, employeeId: { in: scopeFilter.teammateIds } }
           : { tenantId: access.tenantId, employeeId: "__none__" };
   const now = startOfUtcDay();
   const sixMonthsAgo = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 5, 1));

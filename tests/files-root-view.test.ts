@@ -84,8 +84,8 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await prisma.tenant.deleteMany({ where: { id: tenantId } });
-  await prisma.user.deleteMany({ where: { id: actorUserId } });
+  if (tenantId) await prisma.tenant.deleteMany({ where: { id: tenantId } });
+  if (actorUserId) await prisma.user.deleteMany({ where: { id: actorUserId } });
   await prisma.$disconnect();
 });
 

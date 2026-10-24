@@ -53,9 +53,7 @@ export async function getPayrollStatements(
       : scopeFilter.type === "team"
         // Kein eigenes Team darf nicht "alle nicht zugeordneten Kolleg:innen"
         // bedeuten (Audit-Finding H03).
-        ? scopeFilter.team
-          ? { team: scopeFilter.team }
-          : { id: "__none__" }
+        ? { id: { in: scopeFilter.teammateIds } }
         : {};
   const fileAccess = await getOptionalFileReadAccess(tenantSlug);
 

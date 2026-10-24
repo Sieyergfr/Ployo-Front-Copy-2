@@ -34,3 +34,33 @@ describe("mapSelfServiceError — Schichtplanung", () => {
     expect(() => mapSelfServiceError(new Error("prisma: connection refused"))).toThrow();
   });
 });
+
+describe("mapSelfServiceError — Urlaub & weitere Fachmeldungen", () => {
+  it.each([
+    [
+      "Der gewählte Zeitraum enthält laut hinterlegtem Dienstplan keinen einzigen Arbeitstag — dafür ist kein Urlaubsantrag nötig.",
+      400,
+    ],
+    ["Über den eigenen Urlaubsantrag kann nicht selbst entschieden werden.", 403],
+    ["Der Genehmigungsstatus dieses Antrags hat sich zwischenzeitlich geändert. Bitte die Seite neu laden.", 409],
+    [
+      "Der Genehmigungsstatus dieses Antrags hat sich zwischenzeitlich geändert. Bitte die Seite neu laden und erneut versuchen.",
+      409,
+    ],
+    ['Bitte einen Abrechnungszeitraum angeben (z. B. "Januar 2026").', 400],
+    ["Für diesen Mandanten ist eine Personalnummer verpflichtend. Bitte eine Personalnummer angeben.", 400],
+    ['Die Personalnummer "P-007" ist bereits an einen anderen Mitarbeiter vergeben.', 409],
+    ["Diese Datei enthält aktive Inhalte (HTML/Skript) und kann nicht hochgeladen werden.", 400],
+    ['Der Dateiinhalt entspricht nicht der Dateiendung ".pdf".', 400],
+  ])("reicht %s mit Klartext durch", async (message, status) => {
+    const response = mapSelfServiceError(new Error(message));
+
+    expect(response.status).toBe(status);
+    expect(await response.json()).toEqual({ error: message });
+  });
+
+  it("lässt Konfigurations-/Interna weiterhin nicht durch", () => {
+    expect(() => mapSelfServiceError(new Error("EMAIL_NOT_CONFIGURED"))).toThrow();
+    expect(() => mapSelfServiceError(new Error("Storage-Konfiguration fehlt: S3_BUCKET"))).toThrow();
+  });
+});

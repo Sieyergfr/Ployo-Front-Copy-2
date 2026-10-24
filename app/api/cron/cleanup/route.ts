@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { purgeTenantFiles } from "@/lib/storage/delete";
+import { FILE_RESTORE_WINDOW_MS } from "@/lib/file-trash";
 import { logger, runWithRequestId } from "@/lib/logger";
 import {
   anonymizeFormerEmployeePii,
@@ -49,7 +50,9 @@ const PUSH_SUBSCRIPTION_STALE_DAYS = 90;
  * - löscht abgelaufene Sessions und Verification-Einträge
  * - setzt die Audit-Log-Aufbewahrung je Mandant durch
  * - entfernt soft-gelöschte und durch eine neue Version ersetzte Dateien
- *   nach Ablauf der Karenzzeit endgültig (inkl. S3-Objekt)
+ *   nach Ablauf der Karenzzeit endgültig (inkl. S3-Objekt) — von Nutzern
+ *   gelöschte Dateien/Ordner schon nach der 24-h-Rückgängig-Frist
+ *   (lib/file-trash.ts)
  * - markiert abgelaufene Einladungen
  * - entfernt Push-Tokens von Geräten, die sich lange nicht mehr gemeldet haben
  * - anonymisiert Kategorie-1-Stammdaten ehemaliger Mitarbeiter nach Ablauf
@@ -166,10 +169,15 @@ async function handleCleanup(request: Request, requestId: string) {
   const purgeCutoff = new Date(
     now.getTime() - SOFT_DELETE_GRACE_DAYS * 24 * 60 * 60 * 1000,
   );
+  // Nutzer-Löschungen (mit deletionBatchId) sind nur 24 h lang rückgängig
+  // machbar (lib/file-trash.ts) — danach endgültig, nicht erst nach der
+  // allgemeinen 30-Tage-Karenz.
+  const userDeletionCutoff = new Date(now.getTime() - FILE_RESTORE_WINDOW_MS);
   const filesToPurge = await prisma.tenantFile.findMany({
     where: {
       OR: [
         { status: "deleted", deletedAt: { lt: purgeCutoff } },
+        { status: "deleted", deletionBatchId: { not: null }, deletedAt: { lt: userDeletionCutoff } },
         // Durch eine neue Version ersetzte Dateiversionen (siehe
         // uploadTenantFileVersion) blieben bisher für immer liegen — analog
         // zum Soft-Delete-Purge nach derselben Karenzzeit endgültig entfernen.
@@ -198,6 +206,14 @@ async function handleCleanup(request: Request, requestId: string) {
   }
 
   await purgeTenantFiles(purgeableFiles);
+
+  // Gelöschte Ordner nach Ablauf der Rückgängig-Frist entfernen. Ordner sind
+  // reine Struktur ohne eigenen Inhalt — die Dateien darin räumt der Purge
+  // oben ab (bzw. hält sie bei Legal Hold/Aufbewahrungsfrist zurück, dann
+  // bleiben sie wie bisher als gelöschte Datei liegen).
+  const purgedFolders = await prisma.tenantFileFolder.deleteMany({
+    where: { status: "inactive", deletionBatchId: { not: null }, deletedAt: { lt: userDeletionCutoff } },
+  });
 
   // Löschkonzept (Datenschutz-Sicherheitsaudit-und-Umbauplan.md, Teil 4):
   // Kategorie 1 (Stammdaten) automatisch anonymisieren, sobald die Frist
@@ -310,6 +326,7 @@ async function handleCleanup(request: Request, requestId: string) {
     verifications: expiredVerifications.count,
     auditLogs: auditDeleted,
     purgedFiles: purgeableFiles.length,
+    purgedFolders: purgedFolders.count,
     expiredInvitations: expiredInvitations.count,
     accounts: accountsDeleted,
     staleRateLimits: staleRateLimits.count,

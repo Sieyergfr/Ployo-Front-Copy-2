@@ -193,6 +193,7 @@ function TeamFilesSection({
   teamHref,
   uploadOptions,
   canManageFiles,
+  canDeleteFiles,
   activeFolder,
   t,
 }: {
@@ -201,6 +202,7 @@ function TeamFilesSection({
   teamHref: string;
   uploadOptions: FileUploadOptions;
   canManageFiles: boolean;
+  canDeleteFiles: boolean;
   activeFolder?: string;
   t: T;
 }) {
@@ -215,6 +217,7 @@ function TeamFilesSection({
         files={team.files}
         uploadOptions={uploadOptions}
         canManageFiles={canManageFiles}
+        canDeleteFiles={canDeleteFiles}
         initialFolderPath={activeFolder ?? ""}
         emptyLabel={t("noFilesForTeam")}
       />
@@ -252,6 +255,7 @@ export default async function TeamDetailPage({
   const canDeleteTeam = capabilities.teams.canDelete;
   const canViewAudit = capabilities.teams.canViewAudit;
   const canManageFiles = capabilities.teams.canUploadFiles;
+  const canDeleteFiles = canManageFiles && capabilities.files.canDelete;
   const teamMetrics = getTeamMetrics(teams, tMetrics);
   const onDutyCount = team.members.filter(
     (member) => member.status === "on-duty",
@@ -400,6 +404,7 @@ export default async function TeamDetailPage({
           teamHref={teamHref}
           uploadOptions={uploadOptions}
           canManageFiles={canManageFiles}
+          canDeleteFiles={canDeleteFiles}
           activeFolder={activeFolder}
           t={t}
         />

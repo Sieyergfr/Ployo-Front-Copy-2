@@ -939,12 +939,11 @@ async function employeeScopeWhere(tenantSlug: string, required: PermissionLevel 
   }
 
   if (scopeFilter.type === "team") {
-    // Kein eigenes Team (leerer String) darf nicht "alle Mitarbeiter ohne
-    // Team" bedeuten — sonst sähe ein Team-Scope ohne eigene Teamzuordnung
-    // plötzlich alle nicht zugeordneten Kolleg:innen (Audit-Finding H03).
-    return scopeFilter.team
-      ? { tenantId: access.tenantId, team: scopeFilter.team }
-      : { tenantId: access.tenantId, id: "__none__" };
+    // Kein eigenes Team darf nicht "alle Mitarbeiter ohne Team" bedeuten —
+    // sonst sähe ein Team-Scope ohne eigene Teamzuordnung plötzlich alle
+    // nicht zugeordneten Kolleg:innen (Audit-Finding H03). Eine leere
+    // `teammateIds`-Liste trifft nichts.
+    return { tenantId: access.tenantId, id: { in: scopeFilter.teammateIds } };
   }
 
   // "employees" unterstützt (bisher) keinen "assigned"-Scope — sollte er
@@ -1224,11 +1223,11 @@ export async function getEmployeesForTenant(
           : [],
       },
       sensitiveDataScope !== null &&
-        scopeAllowsTarget(sensitiveDataScope, { id: record.id, team: record.team }),
+        scopeAllowsTarget(sensitiveDataScope, { id: record.id }),
       contractsScope !== null &&
-        scopeAllowsTarget(contractsScope, { id: record.id, team: record.team }),
+        scopeAllowsTarget(contractsScope, { id: record.id }),
       mutterschutzScope !== null &&
-        scopeAllowsTarget(mutterschutzScope, { id: record.id, team: record.team }),
+        scopeAllowsTarget(mutterschutzScope, { id: record.id }),
     );
     const onVacationToday = record.vacationRequests.some(
       (r) => r.startDate <= today && r.endDate >= today,
@@ -1314,7 +1313,7 @@ export async function getEmployeeForTenant(tenantSlug: string, employeeHandle: s
   const payrollScope = payrollAccess ? await resolveScopeFilter(payrollAccess) : null;
   const canViewPayroll =
     payrollScope !== null &&
-    scopeAllowsTarget(payrollScope, { id: record.id, team: record.team });
+    scopeAllowsTarget(payrollScope, { id: record.id });
 
   const { canViewSensitiveData, canViewContracts, canViewMutterschutz } =
     await employeeVisibilityFlags(tenantSlug, { id: record.id, team: record.team });
@@ -1675,7 +1674,7 @@ export async function createTenantEmployeeRecord({
         connect: { id: tenantId },
       },
       key,
-      userId: linkUserId ?? null,
+      ...(linkUserId ? { user: { connect: { id: linkUserId } } } : {}),
       initials,
       name,
       employeeNumber,
@@ -1806,7 +1805,7 @@ export async function createTenantEmployeeRecord({
   // jeder neue Mitarbeiter bekommt dieselben Ordner wie alle bestehenden.
   const folderTemplates = await prisma.tenantEmployeeFolderTemplate.findMany({
     where: { tenantId },
-    select: { name: true },
+    select: { id: true, name: true },
   });
 
   if (folderTemplates.length > 0) {
@@ -1817,6 +1816,7 @@ export async function createTenantEmployeeRecord({
           employeeId: record.id,
           name: template.name,
           ownerName: actorName,
+          templateId: template.id,
         }),
       ),
     );
@@ -2859,8 +2859,7 @@ export async function deleteTenantEmployee(input: {
     prisma.tenantEmployeeContract.deleteMany({
       where: { employeeId: input.employeeId },
     }),
-    prisma.tenantTeamMember.deleteMany({ where: { employeeId: input.employeeId } }),
-    prisma.tenantLocationMember.deleteMany({ where: { employeeId: input.employeeId } }),
+    // Team-/Standort-Mitgliedschaften fallen per Fremdschlüssel (Cascade) mit weg.
     prisma.tenantFileFolder.deleteMany({
       where: { tenantId, employeeId: input.employeeId },
     }),
@@ -2962,9 +2961,7 @@ async function infoRequestScopeWhere(tenantSlug: string) {
   if (scopeFilter.type === "team") {
     // Siehe employeeScopeWhere: kein eigenes Team darf nicht "alle
     // Info-Anfragen nicht zugeordneter Mitarbeiter" bedeuten.
-    return scopeFilter.team
-      ? { tenantId: access.tenantId, employee: { team: scopeFilter.team } }
-      : { tenantId: access.tenantId, employeeId: "__none__" };
+    return { tenantId: access.tenantId, employeeId: { in: scopeFilter.teammateIds } };
   }
 
   // "employees" unterstützt (bisher) keinen "assigned"-Scope — sollte er

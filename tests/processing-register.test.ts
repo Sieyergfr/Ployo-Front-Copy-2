@@ -66,7 +66,7 @@ afterAll(async () => {
     .flatMap((employee) => [employee.privateAddressId, employee.workAddressId])
     .filter((id): id is string => Boolean(id));
 
-  await prisma.tenant.deleteMany({ where: { id: tenantId } });
+  if (tenantId) await prisma.tenant.deleteMany({ where: { id: tenantId } });
 
   if (addressIds.length) {
     await prisma.employeeAddress.deleteMany({ where: { id: { in: addressIds } } });

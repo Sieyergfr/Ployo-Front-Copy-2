@@ -157,7 +157,9 @@ function classifySelfServiceError(message: string): number | null {
     message.includes("gehört nicht zu Ihrem Konto") ||
     // lib/shift-service.ts requireTenantWideShiftManager() — Team-Planer
     // ohne "all"-Scope bei wochenweiten Aktionen (Veröffentlichen etc.).
-    message.includes("erfordert uneingeschränkte Schichtplan-Berechtigung")
+    message.includes("erfordert uneingeschränkte Schichtplan-Berechtigung") ||
+    // lib/vacation-service.ts setTenantVacationRequestStatus() (Audit-Finding H10).
+    message === "Über den eigenen Urlaubsantrag kann nicht selbst entschieden werden."
   ) {
     return 403;
   }
@@ -175,6 +177,11 @@ function classifySelfServiceError(message: string): number | null {
     // deleteUserAccessImmediately() — solange der Nutzer alleinige/r
     // Inhaber/in eines Mandanten ist.
     message.includes("alleinige/r Inhaber") ||
+    // lib/employee-service.ts deleteEmployeeAccess() — letzte/r Inhaber/in.
+    message.includes("einzige Inhaber/in dieses Mandanten") ||
+    // lib/vacation-service.ts setTenantVacationRequestStatus()/
+    // updateTenantVacationRequest() — paralleler Statuswechsel (Compare-and-Set).
+    message.startsWith("Der Genehmigungsstatus dieses Antrags hat sich zwischenzeitlich geändert") ||
     // lib/shift-service.ts saveShiftTemplateFromWeek()/updateShiftTemplate()
     // — Vorlagenname pro Mandant eindeutig (@@unique([tenantId, name])).
     message.includes("gibt bereits eine Vorlage namens") ||
@@ -192,13 +199,21 @@ function classifySelfServiceError(message: string): number | null {
     // — Personalnummer bzw. E-Mail bereits an eine andere Personalakte
     // vergeben (QA-Bug BUG-005/BUG-007).
     message.includes("bereits vergeben") ||
+    message.includes("bereits an einen anderen Mitarbeiter vergeben") ||
     message.includes("bereits einer anderen Personalakte zugeordnet") ||
     // lib/vacation-service.ts assertNoVacationOverlap() — QA-Bug BUG-001.
     message.includes("bereits ein offener oder genehmigter Urlaubsantrag") ||
     // lib/shift-service.ts assertArbzgCompliant() — Schicht überschneidet
     // sich mit einer bestehenden Schicht derselben Person. Fehlte bisher, die
     // App zeigte deshalb nur "Es ist ein Fehler aufgetreten."
-    message.startsWith("Konflikt mit bestehender Schicht:")
+    message.startsWith("Konflikt mit bestehender Schicht:") ||
+    // lib/retention-service.ts assertFileDeletionAllowed() (Legal Hold/
+    // Aufbewahrungsfrist) sowie lib/storage/storage.service.ts
+    // softDeleteTenantFileFolder()/restoreTenantFileDeletion().
+    message.startsWith("Löschung gesperrt") ||
+    message.startsWith("Ordner kann nicht gelöscht werden") ||
+    message.startsWith("Bitte zuerst den Ordner") ||
+    message.includes("Frist zum Wiederherstellen ist abgelaufen")
   ) {
     return 409;
   }
@@ -254,6 +269,19 @@ function classifySelfServiceError(message: string): number | null {
     // lib/vacation-service.ts validateVacationDateRange()/lib/sickness.ts —
     // außerhalb der Beschäftigungsdauer (QA-Bug BUG-009).
     message.includes("vor dem Eintrittsdatum") ||
+    // lib/vacation-service.ts calculateAndValidateVacationWorkDays() — Zeitraum
+    // ohne einen einzigen Arbeitstag (Audit-Finding M01). Fehlte bisher: die
+    // App zeigte beim Urlaubsantrag nur "Es ist ein Fehler aufgetreten."
+    message.startsWith("Der gewählte Zeitraum enthält laut hinterlegtem Dienstplan keinen") ||
+    // lib/payroll-service.ts uploadPayrollStatement()
+    message.startsWith("Bitte einen Abrechnungszeitraum angeben") ||
+    // lib/employee-service.ts createTenantEmployeeRecord()
+    message.startsWith("Für diesen Mandanten ist eine Personalnummer verpflichtend") ||
+    // lib/storage/storage.service.ts validateUploadFileContent() (H08).
+    message.startsWith("Diese Datei enthält aktive Inhalte") ||
+    message.startsWith("Der Dateiinhalt entspricht nicht der Dateiendung") ||
+    // lib/account-service.ts confirmAccountDeletionByToken()
+    message.startsWith("Dieser Link ist ungueltig oder abgelaufen") ||
     message.includes("nach dem Austrittsdatum") ||
     // lib/account-service.ts changeAccountPassword()/scheduleOwnAccountDeletion()
     // — bewusst vage Meldung bei falschem Passwort (kein Enumeration-Leak).
@@ -284,6 +312,12 @@ function classifySelfServiceError(message: string): number | null {
     return 400;
   }
 
+  // lib/tenant-access.ts assertBillingAccess() — Mandant wegen Abo gesperrt
+  // (Checkout nicht abgeschlossen oder Zahlung fehlgeschlagen).
+  if (message === "SUBSCRIPTION_REQUIRED") {
+    return 402;
+  }
+
   // lib/billing-service.ts — Stripe ist serverseitig nicht konfiguriert
   // (fehlende Env-Vars), kein Client-Fehler.
   if (message === "STRIPE_NOT_CONFIGURED") {
@@ -300,9 +334,25 @@ function classifySelfServiceError(message: string): number | null {
   return null;
 }
 
+/** Lesbarer Text für die Abo-Sperre — auch für ältere App-Versionen, die `code` noch nicht kennen. */
+export const SUBSCRIPTION_REQUIRED_MESSAGE =
+  "Dein Betrieb ist derzeit eingeschränkt: Das Ployo-Abo muss abgeschlossen bzw. erneuert werden. Bitte wende dich an die Verwaltung deines Betriebs.";
+
+/** 402 für "SUBSCRIPTION_REQUIRED" aus lib/tenant-access.ts. */
+export function subscriptionRequiredResponse(): Response {
+  return Response.json(
+    { error: SUBSCRIPTION_REQUIRED_MESSAGE, code: "SUBSCRIPTION_REQUIRED" },
+    { status: 402 },
+  );
+}
+
 export function mapSelfServiceError(error: unknown): Response {
   if (!(error instanceof Error)) {
     throw error;
+  }
+
+  if (error.message === "SUBSCRIPTION_REQUIRED") {
+    return subscriptionRequiredResponse();
   }
 
   const status = classifySelfServiceError(error.message);

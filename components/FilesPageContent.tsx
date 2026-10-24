@@ -1,6 +1,7 @@
 import AuditLogPanel from "@/components/AuditLogPanel";
 import { FilesListClient } from "@/components/FilesListClient";
 import FolderPinGate from "@/components/FolderPinGate";
+import { RecentlyDeletedPanel } from "@/components/FileTrash";
 import PageHeader from "@/components/PageHeader";
 import {
   FileDownloadButton,
@@ -14,7 +15,7 @@ import { isFolderUnlocked } from "@/lib/folder-pin";
 import { getFileVersions, type FileItem } from "@/lib/files";
 import { paginate, searchParamPage } from "@/lib/pagination";
 import { hasPermissionLevel } from "@/lib/roles";
-import { getTenantPermissions, withAccessRedirect } from "@/lib/tenant-access";
+import { getTenantCapabilities, getTenantPermissions, withAccessRedirect } from "@/lib/tenant-access";
 import { ArrowLeft, FileText, Lock } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -51,12 +52,14 @@ function FileInfoCard({
   tenant,
   returnPath,
   canManageFiles,
+  canDeleteFiles,
   t,
 }: {
   file: FileItem;
   tenant: string;
   returnPath: string;
   canManageFiles: boolean;
+  canDeleteFiles: boolean;
   t: T;
 }) {
   const versions = getFileVersions(file);
@@ -81,10 +84,10 @@ function FileInfoCard({
           <FileViewButton file={file} tenant={tenant} />
           <FileDownloadButton file={file} tenant={tenant} label={t("currentVersionLabel")} />
           {canManageFiles && (
-            <>
-              <VersionUploadButton file={file} tenant={tenant} returnPath={returnPath} />
-              <FileSoftDeleteButton file={file} tenant={tenant} returnPath={returnPath} />
-            </>
+            <VersionUploadButton file={file} tenant={tenant} returnPath={returnPath} />
+          )}
+          {canDeleteFiles && (
+            <FileSoftDeleteButton file={file} tenant={tenant} returnPath={returnPath} />
           )}
         </div>
       </div>
@@ -242,8 +245,12 @@ export default async function FilesPageContent({
     notFound();
   }
 
-  const permissions = await getTenantPermissions(tenant);
+  const [permissions, capabilities] = await Promise.all([
+    getTenantPermissions(tenant),
+    getTenantCapabilities(tenant),
+  ]);
   const canManageFiles = hasPermissionLevel(permissions.files, "write");
+  const canDeleteFiles = capabilities.files.canDelete;
   const canManageReminders = hasPermissionLevel(permissions.reminders, "write");
 
   const baseHref = `/u/${tenant}/dateien`;
@@ -295,6 +302,7 @@ export default async function FilesPageContent({
           tenant={tenant}
           returnPath={returnPath}
           canManageFiles={canManageFiles}
+          canDeleteFiles={canDeleteFiles}
           t={t}
         />
         <div className="mt-4">
@@ -354,8 +362,11 @@ export default async function FilesPageContent({
         uploadOptions={uploadOptions}
         baseHref={baseHref}
         canManageFiles={canManageFiles}
+        canDeleteFiles={canDeleteFiles}
         canManageReminders={canManageReminders}
       />
+
+      {canDeleteFiles && <RecentlyDeletedPanel tenant={tenant} className="mt-4" />}
     </>
   );
 }

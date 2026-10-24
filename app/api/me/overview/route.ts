@@ -3,6 +3,7 @@ import { getMySelfServiceOverview } from "@/lib/self-service";
 import { getMyShiftsForCurrentWeek } from "@/lib/shift-service";
 import { checkRateLimit, tooManyRequests } from "@/lib/rate-limit";
 import { headers } from "next/headers";
+import { subscriptionRequiredResponse } from "@/lib/api/self-service-errors";
 
 /**
  * Gebündelter Einstiegspunkt für den Dashboard-Screen der Mitarbeiter-App:
@@ -42,6 +43,10 @@ export async function GET(request: Request) {
   } catch (error) {
     if (error instanceof Error && (error.message === "FORBIDDEN" || error.message === "TWO_FACTOR_REQUIRED")) {
       return Response.json({ error: error.message }, { status: 403 });
+    }
+
+    if (error instanceof Error && error.message === "SUBSCRIPTION_REQUIRED") {
+      return subscriptionRequiredResponse();
     }
 
     throw error;

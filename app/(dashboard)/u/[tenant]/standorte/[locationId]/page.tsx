@@ -349,6 +349,7 @@ function FilesTab({
   locationHref,
   uploadOptions,
   canManageFiles,
+  canDeleteFiles,
   activeFolder,
   t,
 }: {
@@ -357,6 +358,7 @@ function FilesTab({
   locationHref: string;
   uploadOptions: FileUploadOptions;
   canManageFiles: boolean;
+  canDeleteFiles: boolean;
   activeFolder?: string;
   t: T;
 }) {
@@ -370,6 +372,7 @@ function FilesTab({
       files={location.files}
       uploadOptions={uploadOptions}
       canManageFiles={canManageFiles}
+      canDeleteFiles={canDeleteFiles}
       initialFolderPath={activeFolder ?? ""}
       emptyLabel={t("noFilesForLocation")}
     />
@@ -422,6 +425,7 @@ export default async function LocationDetailPage({
   const canDeleteLocation = capabilities.locations.canDelete;
   const canManageShifts = hasPermissionLevel(capabilities.locations.shiftsLevel ?? "none", "write");
   const canManageFiles = capabilities.locations.canUploadFiles;
+  const canDeleteFiles = canManageFiles && capabilities.files.canDelete;
   const canViewAudit = capabilities.locations.canViewAudit;
 
   const isFilesTab = tab === "files";
@@ -613,6 +617,7 @@ export default async function LocationDetailPage({
           locationHref={locationHref}
           uploadOptions={uploadOptions}
           canManageFiles={canManageFiles}
+          canDeleteFiles={canDeleteFiles}
           activeFolder={activeFolder}
           t={t}
         />

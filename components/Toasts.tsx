@@ -30,6 +30,8 @@ export type ToastInput = {
   title: string;
   subtitle?: string;
   duration?: number;
+  /** Optionale Schaltfläche im Toast, z. B. "Rückgängig" nach dem Löschen. Schließt den Toast beim Klick. */
+  action?: { label: string; onClick: () => void };
 };
 
 type ToastItem = ToastInput & {
@@ -144,6 +146,18 @@ function ToastCard({
           <span className="mt-px block text-[11.5px] leading-[17px] text-muted-2">
             {item.subtitle}
           </span>
+        )}
+        {item.action && (
+          <button
+            type="button"
+            className="mt-1.5 cursor-pointer rounded-[7px] border border-border px-2 py-[3px] text-[11.5px] font-semibold text-ink transition-colors hover:bg-bg"
+            onClick={() => {
+              item.action?.onClick();
+              onDismiss(item.id);
+            }}
+          >
+            {item.action.label}
+          </button>
         )}
       </span>
       <button

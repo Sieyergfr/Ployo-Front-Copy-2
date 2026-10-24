@@ -185,16 +185,14 @@ export async function requireTenantFileAreaAccess(
   }
 
   if (scopeFilter.type === "team") {
-    if (!scopeFilter.team) throw new Error("FORBIDDEN");
-
     const uploader = file.uploadedById
       ? await prisma.tenantEmployee.findFirst({
           where: { tenantId: fileAccess.tenantId, userId: file.uploadedById },
-          select: { team: true },
+          select: { id: true },
         })
       : null;
 
-    if (!uploader || uploader.team !== scopeFilter.team) throw new Error("FORBIDDEN");
+    if (!uploader || !scopeFilter.teammateIds.includes(uploader.id)) throw new Error("FORBIDDEN");
     return;
   }
 

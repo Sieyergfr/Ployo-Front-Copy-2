@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@source not "../tmp";
 
 :root {
   --background: #FAFAF8;
@@ -440,7 +441,7 @@ body {
 }
 
 @utility sidebar-header {
-  @apply flex h-[76px] items-center justify-between gap-2 px-4;
+  @apply flex h-[76px] shrink-0 items-center justify-between gap-2 px-4;
 }
 
 @utility sidebar-brand {
@@ -468,11 +469,11 @@ body {
 }
 
 @utility sidebar-nav {
-  @apply flex flex-1 flex-col gap-1 overflow-y-auto px-[14px] py-1.5;
+  @apply flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overscroll-contain px-[14px] py-1.5;
 }
 
 @utility sidebar-link {
-  @apply flex h-10 cursor-pointer items-center gap-2.5 rounded-[9px] px-3 text-[13.5px] font-medium text-muted no-underline transition-colors hover:bg-white/[0.05] hover:text-white;
+  @apply flex h-10 shrink-0 cursor-pointer items-center gap-2.5 rounded-[9px] px-3 text-[13.5px] font-medium text-muted no-underline transition-colors hover:bg-white/[0.05] hover:text-white;
 }
 
 @utility sidebar-link-active {
