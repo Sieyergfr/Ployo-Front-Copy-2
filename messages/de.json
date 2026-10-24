@@ -2047,7 +2047,11 @@
   "TwoFactorRequiredPage": {
     "title": "Zwei-Faktor-Authentifizierung erforderlich",
     "body": "Dieses Unternehmen verlangt für alle Mitglieder eine aktivierte Zwei-Faktor-Authentifizierung. Bitte richten Sie sie jetzt ein, um fortzufahren.",
-    "continueToDashboard": "Weiter zum Dashboard"
+    "continueToDashboard": "Weiter zum Dashboard",
+    "ownerDisableTitle": "Sie sind Owner dieses Unternehmens",
+    "ownerDisableBody": "Statt 2FA einzurichten, können Sie die 2FA-Pflicht für das Unternehmen auch deaktivieren. Danach gilt sie für kein Mitglied mehr.",
+    "ownerDisableButton": "2FA-Pflicht deaktivieren",
+    "ownerDisablePending": "Wird deaktiviert …"
   },
   "CreateCompanyPage": {
     "privacy": "Datenschutz",

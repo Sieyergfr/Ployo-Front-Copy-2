@@ -1,5 +1,7 @@
+import DisableTwoFactorRequirementForm from "@/components/auth/DisableTwoFactorRequirementForm";
 import TwoFactorSettingsCard from "@/components/auth/TwoFactorSettingsCard";
 import { getAccountOverview } from "@/lib/account-service";
+import { isTenantOwner } from "@/lib/settings-service";
 import { ShieldCheck } from "lucide-react";
 import { getTranslations } from "next-intl/server";
 import Link from "next/link";
@@ -13,7 +15,7 @@ export default async function TwoFactorRequiredPage({
 }: PageProps<"/u/[tenant]/zwei-faktor-erforderlich">) {
   const t = await getTranslations("TwoFactorRequiredPage");
   const { tenant } = await params;
-  const account = await getAccountOverview();
+  const [account, isOwner] = await Promise.all([getAccountOverview(), isTenantOwner(tenant)]);
 
   return (
     <section className="mx-auto flex max-w-md flex-col items-center gap-4 rounded-card border border-border bg-white px-6 py-14 text-center">
@@ -28,6 +30,10 @@ export default async function TwoFactorRequiredPage({
       <div className="w-full text-left">
         <TwoFactorSettingsCard initialEnabled={account.twoFactorEnabled} />
       </div>
+
+      {isOwner && !account.twoFactorEnabled && (
+        <DisableTwoFactorRequirementForm tenant={tenant} />
+      )}
 
       {account.twoFactorEnabled && (
         <Link href={`/u/${tenant}`} className="btn btn-primary">

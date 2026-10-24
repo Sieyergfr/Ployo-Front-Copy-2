@@ -223,6 +223,63 @@ export async function requireSettingsManager(tenantSlug: string) {
   throw new Error("Keine Berechtigung zum Bearbeiten von Einstellungen.");
 }
 
+async function findOwnMembership(tenantSlug: string) {
+  const userId = await getSessionUserId();
+
+  if (!userId) {
+    throw new Error("Nicht angemeldet.");
+  }
+
+  const membership = await prisma.tenantMembership.findFirst({
+    where: { userId, tenant: { slug: tenantSlug } },
+    select: { role: true, tenantId: true },
+  });
+
+  return membership ? { ...membership, userId } : null;
+}
+
+/** Ob der eingeloggte Nutzer Owner des Mandanten ist — für die 2FA-Pflicht-Seite. */
+export async function isTenantOwner(tenantSlug: string) {
+  const membership = await findOwnMembership(tenantSlug).catch(() => null);
+
+  return membership?.role === "OWNER";
+}
+
+/**
+ * Hebt die 2FA-Pflicht auf, ohne dass der Owner selbst 2FA aktiv haben muss.
+ * requireTenantAccess wirft für ihn sonst TWO_FACTOR_REQUIRED, und er käme
+ * nie wieder an den Schalter. Bewusst nur für OWNER und nur zum Abschalten.
+ */
+export async function disableTwoFactorRequirementAsOwner(tenantSlug: string) {
+  const membership = await findOwnMembership(tenantSlug);
+
+  if (membership?.role !== "OWNER") {
+    throw new Error("FORBIDDEN");
+  }
+
+  await ensureTenantSettings(membership.tenantId);
+
+  const updated = await prisma.tenantSettings.update({
+    where: { tenantId: membership.tenantId },
+    data: { twoFactorRequired: false },
+  });
+
+  const session = await auth.api.getSession({ headers: await headers() });
+
+  await recordTenantAudit({
+    tenantId: membership.tenantId,
+    actorId: membership.userId,
+    actorName: session?.user?.name || session?.user?.email || "System",
+    action: "Sicherheitseinstellungen geändert",
+    source: "Einstellungen",
+    entityType: "settings",
+    entityId: updated.id,
+    detail: "2FA-Pflicht durch Owner ohne aktive 2FA deaktiviert",
+  });
+
+  return updated;
+}
+
 async function ensureTenantSettings(tenantId: string) {
   return prisma.tenantSettings.upsert({
     where: { tenantId },

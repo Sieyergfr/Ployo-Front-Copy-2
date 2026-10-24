@@ -2047,7 +2047,11 @@
   "TwoFactorRequiredPage": {
     "title": "Two-factor authentication required",
     "body": "This company requires two-factor authentication to be enabled for all members. Please set it up now to continue.",
-    "continueToDashboard": "Continue to dashboard"
+    "continueToDashboard": "Continue to dashboard",
+    "ownerDisableTitle": "You are the owner of this company",
+    "ownerDisableBody": "Instead of setting up 2FA, you can also turn off the 2FA requirement for the company. It will then no longer apply to any member.",
+    "ownerDisableButton": "Turn off 2FA requirement",
+    "ownerDisablePending": "Turning off …"
   },
   "CreateCompanyPage": {
     "privacy": "Privacy Policy",
