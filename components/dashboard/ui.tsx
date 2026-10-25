@@ -83,11 +83,11 @@ export function DbCardTitle({
   );
 }
 
-const ctaClass =
+export const ctaClass =
   "db-cta db-focus relative inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 overflow-hidden rounded-[10px] border border-[rgba(167,142,232,0.45)] bg-ink px-[18px] py-2.5 text-[14px] font-semibold text-white no-underline disabled:cursor-default disabled:opacity-60";
-const secondaryClass =
+export const secondaryClass =
   "db-btn2 db-focus inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-[10px] border border-[#ecebe7] bg-[#f2f1ed] px-4 py-2.5 text-[14px] font-semibold text-ink no-underline disabled:cursor-default disabled:opacity-60";
-const smallActionClass =
+export const smallActionClass =
   "db-act db-focus inline-flex min-h-9 cursor-pointer items-center gap-1.5 rounded-[9px] border border-[#ecebe7] bg-[#f2f1ed] px-3 py-[7px] text-[13px] font-medium text-ink no-underline";
 
 export function DbCtaLink({ className, ...props }: ComponentProps<typeof Link>) {

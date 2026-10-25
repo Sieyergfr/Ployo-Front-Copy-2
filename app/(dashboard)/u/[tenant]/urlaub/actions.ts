@@ -3,6 +3,7 @@
 import {
   createTenantVacationRequest,
   deleteTenantVacationRequest,
+  remindEmployeesOfVacationCarryover,
   setTenantVacationRequestStatus,
   updateTenantVacationRequest,
 } from "@/lib/vacation-service";
@@ -171,4 +172,29 @@ export async function deleteVacationRequestAction(
     revalidatePath(vacationPath(tenant));
     redirect(vacationPath(tenant));
   }, "Urlaubsantrag löschen");
+}
+
+export type CarryoverReminderState = ActionState & { delivered?: number; withoutAccount?: number };
+
+/** "Hinweisen" / "Alle hinweisen" im Tab Urlaubskonten. */
+export async function remindVacationCarryoverAction(
+  _prevState: CarryoverReminderState,
+  formData: FormData,
+): Promise<CarryoverReminderState> {
+  const result = await withActionErrorHandling(async () => {
+    const tenant = formString(formData, "tenant");
+    const employeeIds = formData.getAll("employeeId").filter((value): value is string => typeof value === "string" && value !== "");
+
+    if (!tenant || employeeIds.length === 0) {
+      throw new Error("Keine Mitarbeiter ausgewählt.");
+    }
+
+    const summary = await remindEmployeesOfVacationCarryover({ tenantSlug: tenant, employeeIds });
+
+    revalidatePath(vacationPath(tenant));
+
+    return { success: true, ...summary };
+  }, "Resturlaub-Hinweis senden");
+
+  return result as CarryoverReminderState;
 }

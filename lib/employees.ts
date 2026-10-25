@@ -225,6 +225,9 @@ export type Employee = {
   vacationTotal: number;
   vacationTaken: number;
   vacationCarryover: number;
+  /** Verfallsdatum des Übertrags (YYYY-MM-DD) und Zeitpunkt des Hinweises an den Mitarbeiter. */
+  vacationCarryoverExpiresAt?: string | null;
+  vacationCarryoverRemindedAt?: string | null;
   vacationManualCorrection: number;
   fileFolders: EmployeeFileFolder[];
   files: EmployeeFile[];

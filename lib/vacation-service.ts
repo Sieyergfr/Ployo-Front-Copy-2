@@ -365,7 +365,19 @@ export async function getVacationRequestsForTenant(tenantSlug: string) {
     },
   });
 
-  return records.map(toVacationRequest);
+  // `decidedBy` hält die User-ID des Entscheiders; für die Anzeige wird sie
+  // in einen Namen aufgelöst (ältere Datensätze enthalten bereits Namen).
+  const deciderIds = [...new Set(records.map((record) => record.decidedBy).filter((value): value is string => Boolean(value)))];
+  const deciders = deciderIds.length
+    ? await prisma.user.findMany({ where: { id: { in: deciderIds } }, select: { id: true, name: true } })
+    : [];
+  const deciderNames = new Map(deciders.map((user) => [user.id, user.name]));
+
+  return records.map((record) => {
+    const request = toVacationRequest(record);
+
+    return record.decidedBy ? { ...request, decidedByName: deciderNames.get(record.decidedBy) ?? record.decidedBy } : request;
+  });
 }
 
 export function getVacationMetrics(

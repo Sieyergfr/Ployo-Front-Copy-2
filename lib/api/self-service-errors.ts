@@ -38,6 +38,7 @@ const KNOWN_ACTION_GUARD_MESSAGES = new Set([
   // lib/employee-access-lock.ts (App-Zugang sperren, M2)
   "Den eigenen Zugang können Sie nicht sperren.",
   "Der Zugang des Inhabers kann nicht gesperrt werden.",
+  "Korrekturantrag konnte nicht bearbeitet werden.",
   "Bitte angeben, welche Information benötigt wird.",
   "Bitte die Vertrags-PDF auswählen.",
   "Bitte die vollständige Adresse angeben.",

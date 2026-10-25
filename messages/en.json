@@ -625,20 +625,6 @@
     "metricRequestedDaysLabel": "Requested days",
     "metricRequestedDaysCaption": "total"
   },
-  "SicknessPage": {
-    "eyebrow": "Absence statistics",
-    "title": "Sick Leave",
-    "currentSickTitle": "Currently sick",
-    "currentSickSubtitle": "Ongoing sick leaves",
-    "employeeCountBadge": "{count} EE",
-    "daysUnit": "Days",
-    "locationSince": "{location} · since {since}",
-    "rateTitle": "Sick reports per month",
-    "rateSubtitle": "Last 6 months, number of reports",
-    "historyTitle": "History · last 30 days",
-    "recoveredBadge": "✓ Recovered",
-    "periodEndedBadge": "Period ended"
-  },
   "RemindersPage": {
     "eyebrow": "Tasks & deadlines",
     "title": "Reminders",
@@ -712,21 +698,6 @@
     "notesPlaceholder": "Internal notes or next steps",
     "cancel": "Cancel",
     "create": "Create reminder"
-  },
-  "VacationListClient": {
-    "filterAll": "All",
-    "filterPending": "Pending",
-    "filterApproved": "Approved",
-    "filterRejected": "Rejected",
-    "decisionPending": "Working...",
-    "approve": "Approve",
-    "reject": "Reject",
-    "searchPlaceholder": "Employee, location, or team",
-    "title": "Vacation requests",
-    "entriesFiltered": "{filtered} of {total} entries",
-    "entriesTotal": "{total} entries",
-    "emptyNone": "No vacation requests logged yet.",
-    "emptyFiltered": "No requests match this search/filter."
   },
   "FolderTemplateButton": {
     "folderNameLabel": "Folder name",
@@ -3103,6 +3074,165 @@
         "pending": "certificate pending",
         "received": "certificate received",
         "not-required": "no certificate needed"
+      }
+    }
+  },
+  "VacationUi": {
+    "title": "Vacation",
+    "subtitle": "Vacation at {company}",
+    "tabRequests": "Requests",
+    "tabAccounts": "Leave accounts",
+    "timeline": {
+      "title": "Who is away when?",
+      "subtitle": "Approved and requested",
+      "concurrent": "Overlap",
+      "approved": "Approved",
+      "requested": "Requested",
+      "multipleTeam": "Several from one team",
+      "holiday": "Holiday",
+      "previous": "Previous month",
+      "next": "Next month",
+      "empty": "Nobody is on vacation this month."
+    },
+    "filters": {
+      "all": "All",
+      "pending": "Pending",
+      "approved": "Approved",
+      "rejected": "Declined"
+    },
+    "searchPlaceholder": "Name, location, team, note",
+    "columns": {
+      "employee": "Employee",
+      "period": "Period",
+      "days": "Days",
+      "note": "Note",
+      "status": "Status"
+    },
+    "status": {
+      "pending": "Pending",
+      "approved": "Approved",
+      "rejected": "Declined"
+    },
+    "requestedOn": "Requested on {date}",
+    "approvedBy": "Approved by {name} on {date}",
+    "rejectedBy": "Declined by {name} on {date}",
+    "approve": "Approve",
+    "reject": "Decline",
+    "empty": "No requests found.",
+    "hintOverlap": "Also away in the team: {names}",
+    "hintNoOverlap": "No overlap in the team",
+    "hintExceeds": "Exceeds remaining leave by {days, plural, one {# day} other {# days}}",
+    "accounts": {
+      "hint": "Leave carried over from last year only expires if the employee was told in time (German BUrlG §7).",
+      "remindAll": "Notify all ({count})",
+      "remind": "Notify",
+      "reminded": "Notified on {date}",
+      "noAccount": "no app account",
+      "expires": "expires {date}",
+      "sent": "{count, plural, one {# notice sent} other {# notices sent}}",
+      "withoutAccount": "{count, plural, one {# person has} other {# people have}} no app account – please tell them in person.",
+      "columns": {
+        "employee": "Employee",
+        "entitlement": "Entitlement",
+        "carryover": "Carried over",
+        "correction": "Correction",
+        "taken": "Taken",
+        "planned": "Planned",
+        "remaining": "Left"
+      }
+    }
+  },
+  "SicknessUi": {
+    "title": "Sickness",
+    "subtitle": "Sickness at {company}",
+    "currentTitle": "Currently sick",
+    "currentSubtitle": "Ongoing sick notes",
+    "employeeCount": "{count} staff",
+    "nobodySick": "Nobody is off sick right now.",
+    "since": "{location} · since {date}",
+    "days": "{count, plural, one {# day} other {# days}}",
+    "running": "Ongoing",
+    "chartTitle": "Sick notes per month",
+    "chartSubtitle": "Last 6 months",
+    "historyTitle": "History",
+    "historySubtitle": "Finished and expired sick notes of the last 6 months",
+    "noHistory": "No entries.",
+    "filters": {
+      "all": "All",
+      "open": "Open",
+      "closed": "Recovered"
+    },
+    "recovered": "Recovered",
+    "periodEnded": "Period ended",
+    "certificate": {
+      "pending": "Certificate pending",
+      "received": "Certificate received",
+      "not-required": "Not required"
+    }
+  },
+  "TimeUi": {
+    "title": "Time tracking",
+    "subtitle": "Time tracking at {company}",
+    "detailSubtitle": "Clocked times, corrections and manual entries",
+    "backToAll": "All employees",
+    "previousWeek": "Previous week",
+    "nextWeek": "Next week",
+    "week": "CW {week}",
+    "thisWeek": "This week",
+    "toThisWeek": "Go to this week",
+    "privacy": "Visible only with the “time tracking” permission · team leads see their team",
+    "allLocations": "All locations",
+    "kpi": {
+      "clockedIn": "Clocked in now",
+      "of": "of {total}",
+      "recorded": "Recorded CW {week}",
+      "ofHours": "of {hours} h",
+      "balance": "Team balance",
+      "hours": "h",
+      "overPlan": "{count, plural, =0 {Nobody over plan} one {# person over plan} other {# people over plan}}",
+      "review": "To review",
+      "corrections": "corrections",
+      "anomalies": "+ {count} anomalies"
+    },
+    "tabTimes": "Times",
+    "tabCorrections": "Corrections",
+    "sortBy": "Sort",
+    "sort": {
+      "name": "Name",
+      "saldo": "Balance",
+      "issues": "Anomalies"
+    },
+    "columns": {
+      "employee": "Employee",
+      "actualTarget": "Actual / target",
+      "balance": "Balance"
+    },
+    "ofTarget": "of {hours}",
+    "sick": "Sick",
+    "vacation": "Vacation",
+    "running": "running",
+    "noClockOut": "no clock-out",
+    "empty": "No employees in this selection.",
+    "legend": {
+      "running": "Running now",
+      "noClockOut": "Clock-out missing",
+      "limits": "Break / maximum hours",
+      "hint": "Click a row to edit"
+    },
+    "corrections": {
+      "empty": "No correction requests.",
+      "requestedAt": "requested {date}",
+      "missing": "missing",
+      "noEntry": "no entry",
+      "breakMinutes": "{minutes} min break",
+      "notePlaceholder": "Note (optional)",
+      "approve": "Approve",
+      "reject": "Decline",
+      "status": {
+        "pending": "Open",
+        "approved": "Approved",
+        "rejected": "Declined",
+        "withdrawn": "Withdrawn"
       }
     }
   }

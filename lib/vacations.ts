@@ -98,6 +98,7 @@ export type VacationRequest = {
   /** Entschieden am / von — nur bei genehmigten oder abgelehnten Anträgen. */
   decidedAt?: string | null;
   decidedBy?: string;
+  decidedByName?: string;
 };
 
 /**

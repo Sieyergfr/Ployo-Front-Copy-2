@@ -746,11 +746,16 @@ export function SicknessDrawerButton({
   item,
   canManage = true,
   canDelete = canManage,
+  className = "btn btn-secondary btn-sm",
+  children,
 }: {
   tenant: string;
   item: CurrentSickness | SicknessHistoryItem;
   canManage?: boolean;
   canDelete?: boolean;
+  /** Eigener Auslöser (z. B. die ganze Listenzeile) statt "Details". */
+  className?: string;
+  children?: ReactNode;
 }) {
   const t = useTranslations("ActionDrawers");
   const [isOpen, setIsOpen] = useState(false);
@@ -768,10 +773,10 @@ export function SicknessDrawerButton({
     <>
       <button
         type="button"
-        className="btn btn-secondary btn-sm"
+        className={className}
         onClick={() => setIsOpen(true)}
       >
-        {t("details")}
+        {children ?? t("details")}
       </button>
       {isOpen && (
         <RightDrawer

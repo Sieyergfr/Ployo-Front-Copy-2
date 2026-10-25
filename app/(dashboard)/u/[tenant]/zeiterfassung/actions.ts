@@ -1,5 +1,6 @@
 "use server";
 
+import { decideTimeCorrectionRequest } from "@/lib/time-correction-service";
 import { type ActionState, withActionErrorHandling } from "@/lib/action-state";
 import {
   correctTimeEntry,
@@ -82,4 +83,31 @@ export async function deleteTimeEntryAction(
     revalidate(tenant);
     return { success: true };
   }, "Zeiteintrag löschen");
+}
+
+/** Korrekturantrag genehmigen/ablehnen (Tab "Korrekturen", M6). */
+export async function decideTimeCorrectionAction(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  return withActionErrorHandling(async () => {
+    const tenant = String(formData.get("tenant") ?? "");
+    const requestId = String(formData.get("requestId") ?? "");
+    const decision = formData.get("decision");
+
+    if (!tenant || !requestId || (decision !== "approved" && decision !== "rejected")) {
+      throw new Error("Korrekturantrag konnte nicht bearbeitet werden.");
+    }
+
+    await decideTimeCorrectionRequest({
+      tenantSlug: tenant,
+      requestId,
+      decision,
+      note: String(formData.get("note") ?? ""),
+    });
+
+    revalidatePath(`/u/${tenant}/zeiterfassung`);
+
+    return { success: true };
+  }, "Korrekturantrag entscheiden");
 }

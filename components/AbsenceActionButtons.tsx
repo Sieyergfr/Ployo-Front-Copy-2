@@ -272,9 +272,11 @@ function SicknessReportDrawer({
 export function VacationRequestButton({
   tenant,
   employees,
+  className = "btn btn-primary",
 }: {
   tenant: string;
   employees: EmployeeOption[];
+  className?: string;
 }) {
   const t = useTranslations("AbsenceActionButtons");
   const { openPopup, closePopup } = useUniversalPopup();
@@ -282,7 +284,7 @@ export function VacationRequestButton({
   return (
     <button
       type="button"
-      className="btn btn-primary"
+      className={className}
       onClick={() =>
         openPopup({
           title: t("vacationDialogTitle"),
@@ -303,7 +305,15 @@ export function VacationRequestButton({
   );
 }
 
-export function SicknessReportButton({ tenant, employees }: { tenant: string; employees: EmployeeOption[] }) {
+export function SicknessReportButton({
+  tenant,
+  employees,
+  className = "btn btn-primary",
+}: {
+  tenant: string;
+  employees: EmployeeOption[];
+  className?: string;
+}) {
   const t = useTranslations("AbsenceActionButtons");
   const [isOpen, setIsOpen] = useState(false);
 
@@ -311,7 +321,7 @@ export function SicknessReportButton({ tenant, employees }: { tenant: string; em
     <>
       <button
         type="button"
-        className="btn btn-primary"
+        className={className}
         onClick={() => setIsOpen(true)}
       >
         <Plus size={15} strokeWidth={2} />

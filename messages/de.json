@@ -625,20 +625,6 @@
     "metricRequestedDaysLabel": "Beantragte Tage",
     "metricRequestedDaysCaption": "gesamt"
   },
-  "SicknessPage": {
-    "eyebrow": "Abwesenheitsstatistik",
-    "title": "Krankheit",
-    "currentSickTitle": "Aktuell krank",
-    "currentSickSubtitle": "Laufende Krankmeldungen",
-    "employeeCountBadge": "{count} MA",
-    "daysUnit": "Tage",
-    "locationSince": "{location} · seit {since}",
-    "rateTitle": "Krankmeldungen je Monat",
-    "rateSubtitle": "Letzte 6 Monate, Anzahl Meldungen",
-    "historyTitle": "Verlauf · letzte 30 Tage",
-    "recoveredBadge": "✓ Genesen",
-    "periodEndedBadge": "Zeitraum abgelaufen"
-  },
   "RemindersPage": {
     "eyebrow": "Aufgaben & Fristen",
     "title": "Erinnerungen",
@@ -712,21 +698,6 @@
     "notesPlaceholder": "Interne Hinweise oder nächste Schritte",
     "cancel": "Abbrechen",
     "create": "Erinnerung erstellen"
-  },
-  "VacationListClient": {
-    "filterAll": "Alle",
-    "filterPending": "Ausstehend",
-    "filterApproved": "Genehmigt",
-    "filterRejected": "Abgelehnt",
-    "decisionPending": "Läuft...",
-    "approve": "Genehmigen",
-    "reject": "Ablehnen",
-    "searchPlaceholder": "Mitarbeiter, Standort oder Team",
-    "title": "Urlaubsanträge",
-    "entriesFiltered": "{filtered} von {total} Einträge",
-    "entriesTotal": "{total} Einträge",
-    "emptyNone": "Noch keine Urlaubsanträge erfasst.",
-    "emptyFiltered": "Keine Anträge für diese Suche/diesen Filter."
   },
   "FolderTemplateButton": {
     "folderNameLabel": "Ordnername",
@@ -3103,6 +3074,165 @@
         "pending": "AU ausstehend",
         "received": "AU liegt vor",
         "not-required": "keine AU nötig"
+      }
+    }
+  },
+  "VacationUi": {
+    "title": "Urlaub",
+    "subtitle": "Urlaub für {company}",
+    "tabRequests": "Anträge",
+    "tabAccounts": "Urlaubskonten",
+    "timeline": {
+      "title": "Wer ist wann weg?",
+      "subtitle": "Genehmigt und beantragt",
+      "concurrent": "Gleichzeitig",
+      "approved": "Genehmigt",
+      "requested": "Beantragt",
+      "multipleTeam": "Mehrere aus einem Team",
+      "holiday": "Feiertag",
+      "previous": "Vorheriger Monat",
+      "next": "Nächster Monat",
+      "empty": "In diesem Monat ist niemand im Urlaub."
+    },
+    "filters": {
+      "all": "Alle",
+      "pending": "Ausstehend",
+      "approved": "Genehmigt",
+      "rejected": "Abgelehnt"
+    },
+    "searchPlaceholder": "Name, Standort, Team, Notiz",
+    "columns": {
+      "employee": "Mitarbeiter:in",
+      "period": "Zeitraum",
+      "days": "Tage",
+      "note": "Notiz",
+      "status": "Status"
+    },
+    "status": {
+      "pending": "Ausstehend",
+      "approved": "Genehmigt",
+      "rejected": "Abgelehnt"
+    },
+    "requestedOn": "Beantragt am {date}",
+    "approvedBy": "Genehmigt von {name} am {date}",
+    "rejectedBy": "Abgelehnt von {name} am {date}",
+    "approve": "Genehmigen",
+    "reject": "Ablehnen",
+    "empty": "Keine Anträge gefunden.",
+    "hintOverlap": "Gleichzeitig weg im Team: {names}",
+    "hintNoOverlap": "Keine Überschneidung im Team",
+    "hintExceeds": "Übersteigt Resturlaub um {days, plural, one {# Tag} other {# Tage}}",
+    "accounts": {
+      "hint": "Resturlaub aus dem Vorjahr verfällt nur, wenn rechtzeitig darauf hingewiesen wurde (BUrlG §7).",
+      "remindAll": "Alle hinweisen ({count})",
+      "remind": "Hinweisen",
+      "reminded": "Hingewiesen am {date}",
+      "noAccount": "kein App-Konto",
+      "expires": "verfällt {date}",
+      "sent": "{count, plural, one {# Hinweis gesendet} other {# Hinweise gesendet}}",
+      "withoutAccount": "{count, plural, one {# Person ohne App-Konto} other {# Personen ohne App-Konto}} – bitte persönlich hinweisen.",
+      "columns": {
+        "employee": "Mitarbeiter:in",
+        "entitlement": "Anspruch",
+        "carryover": "Übertrag",
+        "correction": "Korrektur",
+        "taken": "Genommen",
+        "planned": "Geplant",
+        "remaining": "Rest"
+      }
+    }
+  },
+  "SicknessUi": {
+    "title": "Krankheit",
+    "subtitle": "Krankheit für {company}",
+    "currentTitle": "Aktuell krank",
+    "currentSubtitle": "Laufende Krankmeldungen",
+    "employeeCount": "{count} MA",
+    "nobodySick": "Aktuell ist niemand krankgemeldet.",
+    "since": "{location} · seit {date}",
+    "days": "{count, plural, one {# Tag} other {# Tage}}",
+    "running": "Laufend",
+    "chartTitle": "Krankmeldungen je Monat",
+    "chartSubtitle": "Letzte 6 Monate",
+    "historyTitle": "Verlauf",
+    "historySubtitle": "Beendete und abgelaufene Krankmeldungen der letzten 6 Monate",
+    "noHistory": "Keine Einträge.",
+    "filters": {
+      "all": "Alle",
+      "open": "Offen",
+      "closed": "Genesen"
+    },
+    "recovered": "Genesen",
+    "periodEnded": "Zeitraum abgelaufen",
+    "certificate": {
+      "pending": "AU ausstehend",
+      "received": "AU liegt vor",
+      "not-required": "Nicht erforderlich"
+    }
+  },
+  "TimeUi": {
+    "title": "Zeiterfassung",
+    "subtitle": "Zeiterfassung für {company}",
+    "detailSubtitle": "Gestempelte Zeiten, Korrekturen und Nachträge",
+    "backToAll": "Alle Mitarbeiter",
+    "previousWeek": "Vorherige Woche",
+    "nextWeek": "Nächste Woche",
+    "week": "KW {week}",
+    "thisWeek": "Diese Woche",
+    "toThisWeek": "Zur aktuellen Woche",
+    "privacy": "Sichtbar nur mit Berechtigung „Zeiterfassung“ · Teamleitungen sehen ihr Team",
+    "allLocations": "Alle Standorte",
+    "kpi": {
+      "clockedIn": "Jetzt eingestempelt",
+      "of": "von {total}",
+      "recorded": "Erfasst KW {week}",
+      "ofHours": "von {hours} Std.",
+      "balance": "Saldo Team",
+      "hours": "Std.",
+      "overPlan": "{count, plural, =0 {Niemand über Plan} one {# Person über Plan} other {# Personen über Plan}}",
+      "review": "Zu prüfen",
+      "corrections": "Korrekturen",
+      "anomalies": "+ {count} Auffälligkeiten"
+    },
+    "tabTimes": "Zeiten",
+    "tabCorrections": "Korrekturen",
+    "sortBy": "Sortieren",
+    "sort": {
+      "name": "Name",
+      "saldo": "Saldo",
+      "issues": "Auffälligkeiten"
+    },
+    "columns": {
+      "employee": "Mitarbeiter",
+      "actualTarget": "Ist / Soll",
+      "balance": "Saldo"
+    },
+    "ofTarget": "von {hours}",
+    "sick": "Krank",
+    "vacation": "Urlaub",
+    "running": "läuft",
+    "noClockOut": "kein Gehen",
+    "empty": "Keine Mitarbeiter in dieser Auswahl.",
+    "legend": {
+      "running": "Läuft gerade",
+      "noClockOut": "Ausstempeln fehlt",
+      "limits": "Pause / Höchstarbeitszeit",
+      "hint": "Zeile anklicken zum Bearbeiten"
+    },
+    "corrections": {
+      "empty": "Keine Korrekturanträge.",
+      "requestedAt": "beantragt {date}",
+      "missing": "fehlt",
+      "noEntry": "kein Eintrag",
+      "breakMinutes": "{minutes} Min. Pause",
+      "notePlaceholder": "Hinweis (optional)",
+      "approve": "Genehmigen",
+      "reject": "Ablehnen",
+      "status": {
+        "pending": "Offen",
+        "approved": "Genehmigt",
+        "rejected": "Abgelehnt",
+        "withdrawn": "Zurückgezogen"
       }
     }
   }

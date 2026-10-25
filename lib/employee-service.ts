@@ -62,6 +62,8 @@ type EmployeeRecord = {
   userId?: string | null;
   appAccessLockedAt?: Date | null;
   appAccessLockReason?: string;
+  vacationCarryoverExpiresAt?: Date | null;
+  vacationCarryoverRemindedAt?: Date | null;
   initials: string;
   name: string;
   employeeNumber: string;
@@ -851,6 +853,8 @@ function toEmployee(
     hasAccount: Boolean(record.userId),
     appAccessLockedAt: record.appAccessLockedAt?.toISOString() ?? null,
     appAccessLockReason: record.appAccessLockReason ?? "",
+    vacationCarryoverExpiresAt: record.vacationCarryoverExpiresAt?.toISOString().slice(0, 10) ?? null,
+    vacationCarryoverRemindedAt: record.vacationCarryoverRemindedAt?.toISOString() ?? null,
     address: formatAddress(decryptedWorkAddress),
     addressFields: addressDefaults(decryptedWorkAddress),
     vacationRemaining: record.vacationRemaining,

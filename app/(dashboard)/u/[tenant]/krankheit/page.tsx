@@ -1,248 +1,212 @@
-import type { CSSProperties } from "react";
 import { SicknessReportButton } from "@/components/AbsenceActionButtons";
 import { SicknessDrawerButton } from "@/components/ActionDrawers";
-import PageHeader from "@/components/PageHeader";
-import {
-  getSicknessForTenant,
-  type CurrentSickness,
-  type SicknessHistoryItem,
-  type SicknessMetric,
-} from "@/lib/sickness";
+import { ctaClass, DbCard, DbPageHead } from "@/components/dashboard/ui";
+import { auth } from "@/lib/auth";
 import { getEmployeesForTenant } from "@/lib/employee-service";
 import { hasPermissionLevel } from "@/lib/roles";
+import { getSicknessForTenant, type CurrentSickness, type SicknessHistoryItem } from "@/lib/sickness";
 import { getTenantCapabilities, withAccessRedirect } from "@/lib/tenant-access";
+import { getTenantsForUser } from "@/lib/tenants";
+import { ChevronRight } from "lucide-react";
+import { headers } from "next/headers";
+import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 
 export const metadata = {
   title: "Krankheit",
 };
 
-type T = Awaited<ReturnType<typeof getTranslations>>;
+const avatarColors = ["#2a5bc9", "#4a5568", "#1d8a65", "#c9622a", "#7a3c9c", "#b7791f", "#168a8a", "#c23b7a"];
 
-function SicknessMetricCard({ label, value, caption, tone }: SicknessMetric) {
+function colorFor(name: string) {
+  let hash = 0;
+
+  for (const char of name) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+
+  return avatarColors[hash % avatarColors.length];
+}
+
+const certificateStyles: Record<string, string> = {
+  pending: "bg-[#fff7ea] text-[#9a5b00]",
+  received: "bg-[rgba(53,122,82,0.10)] text-[#1f5d2c]",
+  "not-required": "bg-[#f2f1ed] text-[#6e6e6b]",
+};
+
+function Avatar({ name, initials }: { name: string; initials: string }) {
   return (
-    <div className="rounded-[14px] border border-border bg-white px-[22px] pt-5 pb-4">
-      <div className="font-mono text-[10.5px] uppercase tracking-[0.6px] text-muted">
-        {label}
-      </div>
-      <div
-        className={`mt-4 mb-2 font-display text-[38px] font-semibold leading-none tracking-[-1.2px] ${
-          tone === "danger" ? "text-danger" : "text-ink"
-        }`}
-      >
-        {value}
-      </div>
-      <div className="text-[12px] text-muted">{caption}</div>
-    </div>
+    <span
+      className="flex size-9 shrink-0 items-center justify-center rounded-full text-[12px] font-bold text-white"
+      style={{ background: colorFor(name) }}
+    >
+      {initials}
+    </span>
   );
 }
 
-function CurrentSicknessRow({
-  item,
-  tenant,
-  canManage,
-  canDelete,
-  t,
-}: {
-  item: CurrentSickness;
-  tenant: string;
-  canManage: boolean;
-  canDelete: boolean;
-  t: T;
-}) {
-  return (
-    <div className="flex items-center gap-3 border-t border-border-soft py-3.5">
-      <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted-2 text-[12px] font-semibold text-white">
-        {item.initials}
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-[13.5px] font-semibold text-ink">
-          {item.name}
-        </div>
-        <div className="mt-0.5 truncate text-[12px] text-muted">
-          {t("locationSince", { location: item.location, since: item.since })}
-        </div>
-      </div>
-      <div className="shrink-0 text-right">
-        <div className="font-mono text-[14px] font-semibold text-muted-2">
-          {item.days}
-        </div>
-        <div className="text-[10px] text-muted">{t("daysUnit")}</div>
-      </div>
-      <SicknessDrawerButton tenant={tenant} item={item} canManage={canManage} canDelete={canDelete} />
-    </div>
-  );
-}
+const rowClass =
+  "db-focus flex w-full cursor-pointer flex-wrap items-center gap-x-3 gap-y-1 border-t border-[#f0efeb] bg-transparent py-3 text-left first:border-t-0 hover:bg-[#fafaf8]";
 
-function SicknessHistoryRow({
-  item,
-  tenant,
-  canManage,
-  canDelete,
-  t,
-}: {
-  item: SicknessHistoryItem;
-  tenant: string;
-  canManage: boolean;
-  canDelete: boolean;
-  t: T;
-}) {
-  // Nur eine explizit abgeschlossene Meldung gilt als "Genesen" — ein
-  // Zeitraum, der bloß in der Vergangenheit liegt, aber nie geschlossen
-  // wurde, zeigt das nicht (QA-Bug BUG-015: bisher stand hier für beide
-  // Fälle "✓ Genesen", obwohl niemand die Genesung je bestätigt hatte).
-  const isClosed = item.status === "closed";
-
-  return (
-    <div className="flex flex-wrap items-center gap-4 border-t border-border-soft px-6 py-3.5">
-      <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#B9B9B4] text-[12px] font-semibold text-white">
-        {item.initials}
-      </div>
-      <div className="min-w-[120px] flex-1">
-        <div className="text-[13.5px] font-semibold text-ink">{item.name}</div>
-        <div className="mt-0.5 text-[12px] text-muted">{item.location}</div>
-      </div>
-      <div className="shrink-0 font-mono text-[12px] text-ink">
-        {item.startDate} {"–"} {item.endDate}
-      </div>
-      <div className="shrink-0 font-mono text-[12px] text-muted">
-        {item.days}
-      </div>
-      <SicknessDrawerButton tenant={tenant} item={item} canManage={canManage} canDelete={canDelete} />
-      {isClosed ? (
-        <span className="inline-flex shrink-0 rounded-[7px] bg-success/10 px-[9px] py-0.5 font-mono text-[10.5px] text-success">
-          {t("recoveredBadge")}
-        </span>
-      ) : (
-        <span className="inline-flex shrink-0 rounded-[7px] bg-warning/10 px-[9px] py-0.5 font-mono text-[10.5px] text-[#7A4E00]">
-          {t("periodEndedBadge")}
-        </span>
-      )}
-    </div>
-  );
-}
-
-export default async function SicknessPage({ params }: PageProps<"/u/[tenant]/krankheit">) {
-  const t = await getTranslations("SicknessPage");
+export default async function SicknessPage({
+  params,
+  searchParams,
+}: PageProps<"/u/[tenant]/krankheit">) {
+  const t = await getTranslations("SicknessUi");
   const { tenant } = await params;
+  const query = await searchParams;
   const sickness = await withAccessRedirect(tenant, () => getSicknessForTenant(tenant));
   // Nur für Namen/Standort im Meldungs-Dialog — fehlende Berechtigung dafür
   // soll die Krankheitsübersicht selbst nicht sperren.
-  const employees = await getEmployeesForTenant(tenant).catch(() => []);
-  const capabilities = await getTenantCapabilities(tenant);
+  const [employees, capabilities, session] = await Promise.all([
+    getEmployeesForTenant(tenant).catch(() => []),
+    getTenantCapabilities(tenant),
+    auth.api.getSession({ headers: await headers() }),
+  ]);
+  const memberships = session?.user?.id ? await getTenantsForUser(session.user.id).catch(() => null) : null;
+  const tenantName = memberships?.find((item) => item.tenant.slug === tenant)?.tenant.name ?? tenant;
   const canManage = hasPermissionLevel(capabilities.sickness.level, "write");
   const canDelete = capabilities.sickness.canDelete;
-  const sicknessMetrics = sickness.metrics;
-  const currentSickness = sickness.current;
-  const sicknessChart = sickness.chart;
-  const sicknessHistory = sickness.history;
-  // Ausgeschiedene Mitarbeiter können keine neue Krankmeldung mehr erhalten
-  // (QA-Bug BUG-009, gleiche Definition wie BUG-002).
+  // Ausgeschiedene Mitarbeiter erhalten keine neue Krankmeldung (QA-Bug BUG-009).
   const employeeOptions = (employees ?? [])
     .filter((employee) => employee.status !== "former")
-    .map((employee) => ({
-      id: employee.dbId ?? employee.id,
-      name: employee.name,
-      location: employee.location,
-    }));
+    .map((employee) => ({ id: employee.dbId ?? employee.id, name: employee.name, location: employee.location }));
+  const filter = query.status === "offen" ? "open" : query.status === "genesen" ? "closed" : "all";
+  const history = sickness.history.filter((item) => filter === "all" || item.status === filter);
+  const counts = {
+    all: sickness.history.length,
+    open: sickness.history.filter((item) => item.status === "open").length,
+    closed: sickness.history.filter((item) => item.status === "closed").length,
+  };
+  const maxCount = Math.max(1, ...sickness.chart.map((item) => item.count));
+  const certificate = (item: CurrentSickness | SicknessHistoryItem) => (
+    <span className={`rounded-[7px] px-2 py-[3px] text-[12px] font-medium ${certificateStyles[item.certificateStatus] ?? certificateStyles.pending}`}>
+      {t(`certificate.${item.certificateStatus in certificateStyles ? item.certificateStatus : "pending"}`)}
+    </span>
+  );
+
   return (
     <>
-      <PageHeader eyebrow={t("eyebrow")} title={t("title")}>
-        {canManage && (
-          <SicknessReportButton tenant={tenant} employees={employeeOptions} />
-        )}
-      </PageHeader>
+      <DbPageHead
+        eyebrow={tenantName}
+        title={t("title")}
+        subtitle={t("subtitle", { company: tenantName })}
+        actions={canManage ? <SicknessReportButton tenant={tenant} employees={employeeOptions} className={ctaClass} /> : undefined}
+      />
 
-      <section className="mb-7 grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]">
-        {sicknessMetrics.map((metric) => (
-          <SicknessMetricCard key={metric.label} {...metric} />
-        ))}
-      </section>
-
-      <section className="mb-3.5 grid items-start gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(320px,1fr))]">
-        <div className="overflow-hidden rounded-card border border-border bg-white">
-          <div className="flex items-center justify-between gap-4 px-6 pt-[22px] pb-4">
-            <div>
-              <h2 className="m-0 font-display text-[18px] font-semibold tracking-[-0.4px] text-ink">
-                {t("currentSickTitle")}
-              </h2>
-              <div className="mt-1 text-[12.5px] text-muted">
-                {t("currentSickSubtitle")}
-              </div>
-            </div>
-            <span className="shrink-0 font-mono text-[12px] font-medium text-muted-2">
-              {t("employeeCountBadge", { count: currentSickness.length })}
+      <div className="mb-5 grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]">
+        {sickness.metrics.map((metric) => (
+          <DbCard key={metric.label} className="db-insight relative flex flex-col gap-2 p-[18px]">
+            <span className="text-[13px] font-medium text-[#6e6e6b]">{metric.label}</span>
+            {metric.tone === "danger" && <span className="absolute top-[18px] right-[18px] size-2 rounded-full bg-[#b4332a] shadow-[0_0_0_4px_rgba(180,51,42,0.12)]" />}
+            <span className={`font-display text-[30px] leading-none font-semibold tracking-[-1px] ${metric.tone === "danger" ? "text-[#b4332a]" : ""}`}>
+              {metric.value}
             </span>
+            <span className="text-[13px] text-[#6e6e6b]">{metric.caption}</span>
+          </DbCard>
+        ))}
+      </div>
+
+      <div className="mb-5 grid items-stretch gap-5 [grid-template-columns:repeat(auto-fit,minmax(340px,1fr))]">
+        <DbCard className="p-5">
+          <div className="mb-2 flex items-start justify-between gap-3">
+            <span className="flex flex-col gap-0.5">
+              <h2 className="m-0 font-display text-[18px] font-semibold tracking-[-0.4px]">{t("currentTitle")}</h2>
+              <span className="text-[13px] text-[#6e6e6b]">{t("currentSubtitle")}</span>
+            </span>
+            {sickness.current.length > 0 && (
+              <span className="rounded-[7px] bg-[rgba(180,51,42,0.08)] px-2 py-[3px] text-[12px] font-semibold text-[#b4332a]">
+                {t("employeeCount", { count: sickness.current.length })}
+              </span>
+            )}
           </div>
-          <div className="px-6 pb-5">
-            {currentSickness.map((item) => (
-              <CurrentSicknessRow
-                key={item.id}
-                item={item}
-                tenant={tenant}
-                canManage={canManage}
-                canDelete={canDelete}
-                t={t}
-              />
+          {sickness.current.length === 0 && <p className="m-0 py-4 text-[13px] text-[#6e6e6b]">{t("nobodySick")}</p>}
+          <div className="flex flex-col">
+            {sickness.current.map((item) => (
+              <SicknessDrawerButton key={item.id} tenant={tenant} item={item} canManage={canManage} canDelete={canDelete} className={rowClass}>
+                <Avatar name={item.name} initials={item.initials} />
+                <span className="flex min-w-[140px] flex-1 flex-col">
+                  <span className="text-[14.5px] font-semibold">{item.name}</span>
+                  <span className="text-[12.5px] text-[#6e6e6b]">{t("since", { location: item.location, date: item.since })}</span>
+                </span>
+                {certificate(item)}
+                <span className="text-[14px] font-semibold">{t("days", { count: Number(item.days) || 0 })}</span>
+                <span className="rounded-[7px] bg-[rgba(180,51,42,0.08)] px-2 py-[3px] text-[12px] font-medium text-[#b4332a]">{t("running")}</span>
+                <ChevronRight size={15} className="text-[#9a9a96]" />
+              </SicknessDrawerButton>
             ))}
           </div>
-        </div>
+        </DbCard>
 
-        <div className="overflow-hidden rounded-card border border-border bg-white">
-          <div className="px-6 pt-[22px] pb-4">
-            <h2 className="m-0 font-display text-[18px] font-semibold tracking-[-0.4px] text-ink">
-              {t("rateTitle")}
-            </h2>
-            <div className="mt-1 text-[12.5px] text-muted">
-              {t("rateSubtitle")}
-            </div>
+        <DbCard className="p-5">
+          <h2 className="m-0 font-display text-[18px] font-semibold tracking-[-0.4px]">{t("chartTitle")}</h2>
+          <span className="text-[13px] text-[#6e6e6b]">{t("chartSubtitle")}</span>
+          <div className="mt-4 flex h-[150px] items-end gap-3">
+            {sickness.chart.map((item) => (
+              <span key={item.monthIso} className="flex flex-1 flex-col items-center gap-1.5">
+                <span className={`text-[12px] font-semibold ${item.current ? "text-ink" : "text-[#6e6e6b]"}`}>{item.count}</span>
+                <span
+                  className="w-full max-w-[44px] rounded-[7px_7px_3px_3px]"
+                  style={{
+                    height: `${Math.max(8, (item.count / maxCount) * 110)}px`,
+                    background: item.current ? "linear-gradient(180deg, #a78ee8, #8b6ed4)" : "#e8e7e3",
+                  }}
+                />
+                <span className={`font-mono text-[10px] uppercase ${item.current ? "font-semibold text-ink" : "text-[#9a9a96]"}`}>{item.month}</span>
+              </span>
+            ))}
           </div>
-          <div className="px-6 pb-6">
-            <div className="flex h-[110px] items-end gap-2.5">
-              {sicknessChart.map((item) => (
-                <div
-                  key={item.month}
-                  className="flex flex-1 flex-col items-center gap-[5px]"
-                >
-                  <div
-                    className={`font-mono text-[10.5px] font-semibold ${
-                      item.current ? "text-ink" : "text-muted"
-                    }`}
-                  >
-                    {item.count}
-                  </div>
-                  <div
-                    className={`w-full h-[var(--bar-h)] rounded-t ${item.current ? "bg-ink" : "bg-border"}`}
-                    style={{ "--bar-h": `${item.height}px` } as CSSProperties}
-                  />
-                  <div className="font-mono text-[9.5px] text-muted">
-                    {item.month}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
+        </DbCard>
+      </div>
 
-      <section className="overflow-hidden rounded-card border border-border bg-white">
-        <div className="border-b border-border px-6 pt-5 pb-3.5">
-          <h2 className="m-0 font-display text-[18px] font-semibold tracking-[-0.4px] text-ink">
-            {t("historyTitle")}
-          </h2>
+      <DbCard className="p-5">
+        <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+          <span className="flex flex-col gap-0.5">
+            <h2 className="m-0 font-display text-[18px] font-semibold tracking-[-0.4px]">{t("historyTitle")}</h2>
+            <span className="text-[13px] text-[#6e6e6b]">{t("historySubtitle")}</span>
+          </span>
+          <nav className="inline-flex gap-0.5 rounded-[10px] bg-[#f2f1ed] p-1">
+            {(
+              [
+                ["all", ""],
+                ["open", "offen"],
+                ["closed", "genesen"],
+              ] as const
+            ).map(([id, param]) => (
+              <Link
+                key={id}
+                href={`/u/${tenant}/krankheit${param ? `?status=${param}` : ""}`}
+                aria-current={filter === id ? "page" : undefined}
+                className={`inline-flex min-h-8 items-center gap-1.5 rounded-[7px] px-3 text-[13px] font-semibold no-underline ${filter === id ? "bg-white text-ink shadow-[0_1px_2px_rgba(14,14,14,0.08)]" : "text-[#6e6e6b]"}`}
+              >
+                {t(`filters.${id}`)}
+                <span className="text-[11.5px] font-normal text-[#9a9a96]">{counts[id]}</span>
+              </Link>
+            ))}
+          </nav>
         </div>
-
-        {sicknessHistory.map((item) => (
-          <SicknessHistoryRow
-            key={item.id}
-            item={item}
-            tenant={tenant}
-            canManage={canManage}
-            canDelete={canDelete}
-            t={t}
-          />
-        ))}
-      </section>
+        {history.length === 0 && <p className="m-0 py-4 text-[13px] text-[#6e6e6b]">{t("noHistory")}</p>}
+        <div className="flex flex-col">
+          {history.map((item) => (
+            <SicknessDrawerButton key={item.id} tenant={tenant} item={item} canManage={canManage} canDelete={canDelete} className={rowClass}>
+              <Avatar name={item.name} initials={item.initials} />
+              <span className="flex min-w-[160px] flex-1 flex-col">
+                <span className="text-[14.5px] font-semibold">{item.name}</span>
+                <span className="text-[12.5px] text-[#6e6e6b]">
+                  {item.location} · {item.startDate} – {item.endDate}
+                </span>
+              </span>
+              {certificate(item)}
+              <span className="text-[14px] font-semibold">{t("days", { count: item.dayCount })}</span>
+              {item.status === "closed" ? (
+                <span className="rounded-[7px] bg-[rgba(53,122,82,0.10)] px-2 py-[3px] text-[12px] font-medium text-[#1f5d2c]">✓ {t("recovered")}</span>
+              ) : (
+                // Nur eine ausdrücklich abgeschlossene Meldung gilt als genesen (QA-Bug BUG-015).
+                <span className="rounded-[7px] bg-[#fff7ea] px-2 py-[3px] text-[12px] font-medium text-[#9a5b00]">{t("periodEnded")}</span>
+              )}
+              <ChevronRight size={15} className="text-[#9a9a96]" />
+            </SicknessDrawerButton>
+          ))}
+        </div>
+      </DbCard>
     </>
   );
 }
