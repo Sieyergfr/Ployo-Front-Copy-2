@@ -261,7 +261,16 @@
       "placeholder": "Search…",
       "dialogLabel": "Quick search",
       "inputPlaceholder": "Search pages…",
-      "empty": "No results."
+      "empty": "No results.",
+      "inputPlaceholderAll": "Pages, employees, locations, teams or files…",
+      "searching": "Searching…",
+      "group": {
+        "pages": "Pages",
+        "employee": "Employees",
+        "location": "Locations",
+        "team": "Teams",
+        "file": "Files"
+      }
     }
   },
   "EmployeeSelector": {

@@ -20,6 +20,7 @@ import {
   Folder,
   LayoutDashboard,
   LogOut,
+  FileText,
   MapPin,
   Menu,
   PanelLeftClose,
@@ -31,6 +32,7 @@ import {
   Sun,
   Thermometer,
   Timer,
+  UserRound,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -385,13 +387,30 @@ function NotificationsPanel({
   );
 }
 
-type SearchEntry = { label: string; href: string; icon: LucideIcon };
+type SearchEntry = { label: string; href: string; icon: LucideIcon; subtitle?: string; group?: string };
 
-/** Schnellsuche (⌘K) über die sichtbaren Seiten. */
+type SearchApiResult = {
+  kind: "employee" | "location" | "team" | "file";
+  id: string;
+  title: string;
+  subtitle: string;
+  href: string;
+};
+
+const searchKindIcons: Record<SearchApiResult["kind"], LucideIcon> = {
+  employee: UserRound,
+  location: MapPin,
+  team: Users,
+  file: FileText,
+};
+
+/** Schnellsuche (⌘K): Seiten sofort, dazu Mitarbeiter, Standorte, Teams und Dateien vom Server. */
 function SearchDialog({
+  tenant,
   entries,
   onClose,
 }: {
+  tenant: string;
   entries: SearchEntry[];
   onClose: () => void;
 }) {
@@ -399,10 +418,44 @@ function SearchDialog({
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
+  const [remote, setRemote] = useState<{ query: string; results: SearchApiResult[] }>({ query: "", results: [] });
   const normalizedQuery = query.trim().toLocaleLowerCase();
-  const results = normalizedQuery
+  const pageResults = normalizedQuery
     ? entries.filter((entry) => entry.label.toLocaleLowerCase().includes(normalizedQuery))
     : entries;
+  const remoteResults: SearchEntry[] =
+    remote.query === query.trim()
+      ? remote.results.map((result) => ({
+          label: result.title,
+          subtitle: result.subtitle,
+          href: result.href,
+          icon: searchKindIcons[result.kind],
+          group: t(`group.${result.kind}`),
+        }))
+      : [];
+  const results = [...pageResults.map((entry) => ({ ...entry, group: normalizedQuery ? t("group.pages") : undefined })), ...remoteResults];
+  const searching = query.trim().length >= 2 && remote.query !== query.trim();
+
+  useEffect(() => {
+    const trimmed = query.trim();
+
+    if (trimmed.length < 2 || !tenant) {
+      return;
+    }
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      fetch(`/api/tenants/${encodeURIComponent(tenant)}/search?q=${encodeURIComponent(trimmed)}`, { signal: controller.signal })
+        .then((response) => (response.ok ? response.json() : { results: [] }))
+        .then((data: { results?: SearchApiResult[] }) => setRemote({ query: trimmed, results: data.results ?? [] }))
+        .catch(() => undefined);
+    }, 180);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [query, tenant]);
 
   function open(entry: SearchEntry | undefined) {
     if (entry) {
@@ -425,15 +478,15 @@ function SearchDialog({
         role="dialog"
         aria-modal="true"
         aria-label={t("dialogLabel")}
-        className="db-pop-light w-full max-w-[520px] overflow-hidden rounded-[16px] bg-white text-ink"
+        className="db-pop-light w-full max-w-[560px] overflow-hidden rounded-[16px] bg-white text-ink"
       >
         <div className="flex items-center gap-2.5 border-b border-[#ecebe7] px-4">
           <Search size={16} className="shrink-0 text-[#6e6e6b]" />
           <input
             autoFocus
             value={query}
-            placeholder={t("inputPlaceholder")}
-            aria-label={t("inputPlaceholder")}
+            placeholder={t("inputPlaceholderAll")}
+            aria-label={t("inputPlaceholderAll")}
             className="h-12 min-w-0 flex-1 bg-transparent text-[14px] outline-none"
             onChange={(event) => {
               setQuery(event.target.value);
@@ -457,27 +510,38 @@ function SearchDialog({
             Esc
           </span>
         </div>
-        <div className="max-h-[50vh] overflow-y-auto p-2">
+        <div className="max-h-[55vh] overflow-y-auto p-2" role="listbox" aria-label={t("dialogLabel")}>
           {results.map((entry, index) => {
             const Icon = entry.icon;
+            const showGroup = entry.group && entry.group !== results[index - 1]?.group;
 
             return (
-              <button
-                key={entry.href}
-                type="button"
-                className={cx(
-                  "flex w-full cursor-pointer items-center gap-3 rounded-[10px] px-3 py-2.5 text-left text-[13.5px]",
-                  index === activeIndex ? "bg-[#f2f1ed]" : "hover:bg-[#f5f4f1]",
+              <div key={`${entry.group ?? ""}-${entry.href}`}>
+                {showGroup && (
+                  <div className="px-3 pt-2.5 pb-1 font-mono text-[10px] tracking-[0.12em] text-[#9a9a96] uppercase">{entry.group}</div>
                 )}
-                onMouseEnter={() => setActiveIndex(index)}
-                onClick={() => open(entry)}
-              >
-                <Icon size={16} className="shrink-0 text-[#6e6e6b]" />
-                {entry.label}
-              </button>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={index === activeIndex}
+                  className={cx(
+                    "flex w-full cursor-pointer items-center gap-3 rounded-[10px] px-3 py-2.5 text-left text-[13.5px]",
+                    index === activeIndex ? "bg-[#f2f1ed]" : "hover:bg-[#f5f4f1]",
+                  )}
+                  onMouseEnter={() => setActiveIndex(index)}
+                  onClick={() => open(entry)}
+                >
+                  <Icon size={16} className="shrink-0 text-[#6e6e6b]" />
+                  <span className="flex min-w-0 flex-col">
+                    <span className="truncate">{entry.label}</span>
+                    {entry.subtitle && <span className="truncate text-[12px] text-[#9a9a96]">{entry.subtitle}</span>}
+                  </span>
+                </button>
+              </div>
             );
           })}
-          {results.length === 0 && (
+          {searching && <p className="px-3 py-2 text-[12.5px] text-[#9a9a96]">{t("searching")}</p>}
+          {results.length === 0 && !searching && (
             <p className="px-3 py-6 text-center text-[13px] text-[#6e6e6b]">{t("empty")}</p>
           )}
         </div>
@@ -1057,6 +1121,7 @@ export default function DashboardShell({
 
       {isSearchOpen && (
         <SearchDialog
+          tenant={tenant ?? ""}
           entries={items.map((item) => ({ label: item.label, href: item.href, icon: item.icon }))}
           onClose={() => setIsSearchOpen(false)}
         />

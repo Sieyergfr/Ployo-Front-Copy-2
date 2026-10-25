@@ -406,7 +406,7 @@ export async function getTenantIdForLocations(tenantSlug: string) {
  * Sinn — sicherheitshalber nichts treffen statt zu raten, welcher Standort
  * gemeint sein könnte.
  */
-async function locationScopeWhere(access: TenantAccess) {
+export async function locationScopeWhere(access: TenantAccess) {
   const scopeFilter = await resolveScopeFilter(access);
 
   if (scopeFilter.type === "all") {

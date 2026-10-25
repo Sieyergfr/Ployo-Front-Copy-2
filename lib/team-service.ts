@@ -325,7 +325,7 @@ export async function getTenantIdForTeams(tenantSlug: string) {
  * für Teams (bisher) keinen Sinn — sicherheitshalber nichts treffen statt zu
  * raten, welches Team gemeint sein könnte.
  */
-async function teamScopeWhere(access: TenantAccess) {
+export async function teamScopeWhere(access: TenantAccess) {
   const scopeFilter = await resolveScopeFilter(access);
 
   if (scopeFilter.type === "all") {

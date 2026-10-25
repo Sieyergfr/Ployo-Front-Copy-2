@@ -976,7 +976,7 @@ export async function getTenantIdForEmployees(tenantSlug: string) {
  * Mitarbeiterdatensatz liefert einen Filter, der nichts trifft — nie
  * stillschweigend auf "alles sehen" zurückfallen.
  */
-async function employeeScopeWhere(tenantSlug: string, required: PermissionLevel = "read") {
+export async function employeeScopeWhere(tenantSlug: string, required: PermissionLevel = "read") {
   const access = await requireTenantAccess(tenantSlug, "employees", required);
   const scopeFilter = await resolveScopeFilter(access);
 
