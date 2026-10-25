@@ -1,5 +1,13 @@
 # To-Do — Live-Gang Ployo
 
+## ⚠️ Merkposten: Übergangslösung mehrteilige Info-Anfragen (Dashboard-Umbau)
+
+Bis die App mehrteilige Anfragen kann, sieht sie eine solche Anfrage als *eine* Anfrage (Elemente als
+Text-Aufzählung), und eine Antwort aus der alten App landet beim ersten offenen Element. Nach dem
+App-Update + Mindestversion zurückbauen – Code-Stellen: `TODO(app-multi-item-requests)`.
+Details: `Dashboard-Umbau-Plan.md`, Abschnitt 5.
+
+
 Stand: 2026-09-05. Blocker, Sollte-behoben-werden, Responsive Design, Datenschutz-Umbauplan Phase 0-2 und die komplette i18n-String-Extraktion (108 Dateien, 93 Namespaces, ~1635 Keys) sind vollständig umgesetzt, code-verifiziert, committet und gepusht. Die machbaren Teile von Phase 3 (Jugendarbeitsschutz, Mutterschutz, Betriebsrat-Hinweis, Verarbeitungsverzeichnis) sind ebenfalls umgesetzt und code-verifiziert, aber noch nicht gepusht/deployt (steht noch dein Go aus). Alles Weitere unten sind bewusst offene Punkte, die externe Schritte oder deine Entscheidung brauchen (siehe "Braucht weiterhin deine Aufmerksamkeit").
 
 ## ✅ App-Popups aus der Datenbank — App + Web (2026-10-22, Live-DB migriert, nicht committet, nicht deployt)

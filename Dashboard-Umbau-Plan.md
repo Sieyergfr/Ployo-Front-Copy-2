@@ -248,7 +248,28 @@ eAU-Abruf, PDF-Eckdaten-Erkennung, stündlicher Personalbedarf (siehe Fragen).
 
 ---
 
-## 5. Offene Fragen
+## 5. Entscheidungen (25.10.2026)
+
+1. **Alle Seiten jetzt umbauen**, Design-Änderungen werden später nachgezogen.
+2. **Alles sammeln** und auf einmal live schalten (ein gemeinsames Release mit allen Migrationen).
+3. **eAU-Abruf und PDF-Eckdaten-Erkennung kommen später** – vorerst nicht gebaut.
+4. **Bedarf je Stunde wird abgeleitet** aus Öffnungszeiten × Mindestbesetzung je Standort, kein neues Feld.
+5. **Mehrteilige Anfragen – Übergangslösung bis zum App-Update** (siehe Merkposten unten).
+6. **Branch:** weiter auf `claude/affectionate-noether-axt94e`.
+
+### ⚠️ Merkposten: Übergangslösung mehrteilige Anfragen zurückbauen
+
+Solange die App noch nicht aktualisiert ist, gilt für Anfragen mit mehreren Elementen:
+- `/api/me/overview` und `/api/me/info-requests/[requestId]` liefern sie wie bisher als **eine**
+  Anfrage; alle Elemente stehen als Aufzählung im Nachrichtentext.
+- Eine Antwort aus der alten App (Nachricht + eine Datei) wird dem **ersten offenen Element**
+  zugeordnet; HR prüft im Dashboard und fordert Weiteres an.
+
+**Zurückbauen, sobald die App mehrteilige Anfragen kann:** App-Update ausrollen, Mindestversion
+durchsetzen, dann die Text-Aufzählung und die „erstes offenes Element“-Zuordnung entfernen. Im Code
+ist die Stelle mit `TODO(app-multi-item-requests)` markiert. Auch in `To-Do.md` vermerkt.
+
+## 6. Ursprünglich offene Fragen
 
 1. **Unfertiges Design:** Soll ich Phase 0 + 1 jetzt für alle Seiten bauen und Änderungen am Design
    später nachziehen, oder nur die Seiten, die du als fertig betrachtest?

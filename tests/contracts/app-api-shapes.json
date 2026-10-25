@@ -1,0 +1,3483 @@
+{
+  "DELETE me/push-subscriptions": {
+    "status": 200,
+    "shape": {
+      "status": "boolean"
+    }
+  },
+  "DELETE me/team-shifts/[shiftId]": {
+    "status": 200,
+    "shape": {
+      "status": "boolean"
+    }
+  },
+  "DELETE me/wish-free-requests/[requestId]": {
+    "status": 200,
+    "shape": {
+      "status": "boolean"
+    }
+  },
+  "DELETE tenants/[tenant]/employees/[employeeHandle]": {
+    "status": 200,
+    "shape": {
+      "status": "boolean"
+    }
+  },
+  "DELETE tenants/[tenant]/employees/[employeeHandle] (Aufbewahrungsfrist)": {
+    "status": 409,
+    "shape": {
+      "error": "string"
+    }
+  },
+  "DELETE tenants/[tenant]/files/[fileId]": {
+    "status": 200,
+    "shape": {
+      "file": {
+        "accessRoleIdsJson": [],
+        "accessRoleNamesJson": [],
+        "accessUserIdsJson": [],
+        "accessUserNamesJson": [],
+        "assignedEmployeeId": "string",
+        "assignedEmployeeName": "string",
+        "assignedLocationId": "string",
+        "assignedLocationName": "string",
+        "bucket": "string",
+        "createdAt": "string",
+        "deletedAt": "string",
+        "deletedByName": "string",
+        "deletionBatchId": "string",
+        "description": "string",
+        "displayName": "string",
+        "documentType": "string",
+        "employeeId": "string",
+        "expiresAt": "string",
+        "extension": "string",
+        "folderName": "string",
+        "folderSlug": "string",
+        "hiddenFromEmployee": "boolean",
+        "id": "string",
+        "locationId": "null",
+        "mimeType": "string",
+        "originalName": "string",
+        "ownerName": "string",
+        "parentId": "null",
+        "provider": "string",
+        "reminderAt": "string",
+        "replacedAt": "null",
+        "restorableUntil": "string",
+        "sizeBytes": "number",
+        "status": "string",
+        "storageKey": "string",
+        "tagsJson": [],
+        "teamId": "null",
+        "tenantId": "string",
+        "updatedAt": "string",
+        "uploadedById": "string",
+        "uploadedByName": "string",
+        "validFrom": "string",
+        "version": "number"
+      }
+    }
+  },
+  "DELETE tenants/[tenant]/files/folders": {
+    "status": 200,
+    "shape": {
+      "deletion": {
+        "batchId": "string",
+        "fileCount": "number",
+        "folderCount": "number",
+        "kind": "string",
+        "name": "string",
+        "restorableUntil": "string"
+      }
+    }
+  },
+  "DELETE tenants/[tenant]/locations/[locationHandle]": {
+    "status": 200,
+    "shape": {
+      "status": "boolean"
+    }
+  },
+  "DELETE tenants/[tenant]/locations/[locationHandle]/employees": {
+    "status": 200,
+    "shape": {
+      "location": {
+        "accentClassName": "string",
+        "activeToday": "number",
+        "addressId": "string",
+        "bundesland": "null",
+        "clockQrToken": "null",
+        "createdAt": "string",
+        "employeeCount": "number",
+        "id": "string",
+        "key": "string",
+        "kind": "string",
+        "leadEmail": "string",
+        "leadEmployeeId": "null",
+        "leadInitials": "string",
+        "leadName": "string",
+        "leadPhone": "string",
+        "name": "string",
+        "openingHoursJson": [],
+        "openPositions": "number",
+        "shiftCount": "number",
+        "shiftMinStaffing": "null",
+        "status": "string",
+        "tenantId": "string",
+        "updatedAt": "string",
+        "utilization": "string",
+        "utilizationCaption": "string"
+      }
+    }
+  },
+  "DELETE tenants/[tenant]/roles/[roleId]": {
+    "status": 200,
+    "shape": {
+      "status": "boolean"
+    }
+  },
+  "DELETE tenants/[tenant]/teams/[teamHandle]": {
+    "status": 200,
+    "shape": {
+      "status": "boolean"
+    }
+  },
+  "DELETE tenants/[tenant]/teams/[teamHandle]/members/[memberId]": {
+    "status": 200,
+    "shape": {
+      "status": "boolean"
+    }
+  },
+  "DELETE tenants/[tenant]/vacation-requests/[requestId]": {
+    "status": 200,
+    "shape": {
+      "status": "boolean"
+    }
+  },
+  "GET me/account/deletion": {
+    "status": 200,
+    "shape": {
+      "scheduledDeletionAt": "null"
+    }
+  },
+  "GET me/documents/[fileId]/download": {
+    "status": 200,
+    "shape": {
+      "url": "string"
+    }
+  },
+  "GET me/employee-link/unlinked": {
+    "status": 200,
+    "shape": {
+      "employees": []
+    }
+  },
+  "GET me/employees": {
+    "status": 200,
+    "shape": {
+      "employees": [
+        {
+          "id": "string",
+          "location": "string",
+          "name": "string",
+          "role": "string",
+          "team": "string",
+          "weeklyHours": "string"
+        }
+      ]
+    }
+  },
+  "GET me/export": {
+    "status": 200,
+    "shape": {
+      "account": {
+        "createdAt": "string",
+        "email": "string",
+        "emailVerified": "boolean",
+        "id": "string",
+        "image": "null",
+        "name": "string",
+        "updatedAt": "string"
+      },
+      "exportedAt": "string",
+      "hinweis": "string",
+      "linkedEmployeeRecords": [
+        {
+          "email": "string",
+          "employeeNumber": "string",
+          "name": "string",
+          "tenant": {
+            "name": "string",
+            "slug": "string"
+          }
+        }
+      ],
+      "memberships": [
+        {
+          "createdAt": "string",
+          "role": "string",
+          "tenant": {
+            "name": "string",
+            "slug": "string"
+          }
+        }
+      ],
+      "sessions": []
+    }
+  },
+  "GET me/locations": {
+    "status": 200,
+    "shape": {
+      "locations": [
+        {
+          "accentClassName": "string",
+          "id": "string",
+          "key": "string",
+          "kind": "string",
+          "name": "string",
+          "openingHours": [
+            {
+              "mode": "string",
+              "ranges": [
+                {
+                  "breakMinutes": "number",
+                  "end": "string",
+                  "start": "string"
+                }
+              ],
+              "weekday": "string"
+            }
+          ],
+          "status": "string"
+        }
+      ]
+    }
+  },
+  "GET me/notifications-feed": {
+    "status": 200,
+    "shape": {
+      "notifications": [
+        {
+          "category": "string",
+          "createdAt": "string",
+          "detail": "string",
+          "entityId": "string",
+          "entityType": "string",
+          "id": "string",
+          "read": "boolean",
+          "title": "string"
+        }
+      ]
+    }
+  },
+  "GET me/overview": {
+    "status": 200,
+    "shape": {
+      "currentWeek": {
+        "days": [
+          {
+            "date": "string",
+            "id": "string",
+            "isWeekend": "boolean",
+            "shifts": [],
+            "weekday": "string"
+          }
+        ],
+        "label": "string",
+        "range": "string"
+      },
+      "documents": [
+        {
+          "documentType": "string",
+          "folder": "string",
+          "folderSlug": "string",
+          "id": "string",
+          "name": "string",
+          "updatedAt": "string"
+        }
+      ],
+      "employee": {
+        "id": "string",
+        "initials": "string",
+        "location": "string",
+        "name": "string",
+        "role": "string",
+        "startDate": "string",
+        "status": "string",
+        "team": "string",
+        "vacationCarryover": "number",
+        "vacationRemaining": "number",
+        "vacationTaken": "number",
+        "vacationTotal": "number"
+      },
+      "folders": [
+        {
+          "name": "string",
+          "slug": "string"
+        }
+      ],
+      "infoRequests": [
+        {
+          "dueAt": "null",
+          "fileRequested": "boolean",
+          "hasResponseFile": "boolean",
+          "id": "string",
+          "message": "string",
+          "requestedAt": "string",
+          "requestedBy": "string",
+          "respondedAt": "string",
+          "responseMessage": "string",
+          "status": "string",
+          "title": "string"
+        }
+      ],
+      "profileCompleteness": {
+        "filledCount": "number",
+        "missingLabels": [
+          "string"
+        ],
+        "percent": "number",
+        "totalCount": "number"
+      },
+      "profileFields": {
+        "birthDate": "string",
+        "birthPlace": "string",
+        "emergencyContacts": [],
+        "healthInsurance": "string",
+        "iban": "string",
+        "maritalStatus": "string",
+        "nationality": "string",
+        "phone": "string",
+        "privateAddress": {
+          "careOf": "string",
+          "city": "string",
+          "country": "string",
+          "houseNumber": "string",
+          "postalCode": "string",
+          "street": "string"
+        },
+        "socialSecurityNumber": "string",
+        "taxId": "string"
+      },
+      "sicknessReports": [
+        {
+          "endDate": "null",
+          "id": "string",
+          "note": "string",
+          "startDate": "string",
+          "status": "string"
+        }
+      ],
+      "vacationRequests": [
+        {
+          "days": "number",
+          "endDate": "string",
+          "id": "string",
+          "note": "string",
+          "startDate": "string",
+          "status": "string"
+        }
+      ]
+    }
+  },
+  "GET me/overview (2FA-Pflicht)": {
+    "status": 403,
+    "shape": {
+      "error": "string"
+    }
+  },
+  "GET me/overview (nicht verknüpft)": {
+    "status": 200,
+    "shape": {
+      "currentWeek": "null",
+      "documents": [],
+      "employee": "null",
+      "folders": [],
+      "infoRequests": [],
+      "profileCompleteness": "null",
+      "profileFields": "null",
+      "sicknessReports": [],
+      "vacationRequests": []
+    }
+  },
+  "GET me/payroll-statements": {
+    "status": 200,
+    "shape": {
+      "statements": [
+        {
+          "fileId": "string",
+          "fileName": "string",
+          "gross": "string",
+          "id": "string",
+          "issuedAt": "string",
+          "net": "string",
+          "period": "string",
+          "status": "string"
+        }
+      ]
+    }
+  },
+  "GET me/permissions": {
+    "status": 200,
+    "shape": {
+      "appOverviewEnabled": "boolean",
+      "canDelete": {
+        "audit": "boolean",
+        "contracts": "boolean",
+        "employeeFiles": "boolean",
+        "employees": "boolean",
+        "files": "boolean",
+        "locations": "boolean",
+        "mutterschutz": "boolean",
+        "payroll": "boolean",
+        "reminders": "boolean",
+        "roles": "boolean",
+        "sensitiveData": "boolean",
+        "settings": "boolean",
+        "shifts": "boolean",
+        "sickness": "boolean",
+        "teams": "boolean",
+        "timeTracking": "boolean",
+        "vacation": "boolean"
+      },
+      "canUploadFiles": {
+        "audit": "boolean",
+        "contracts": "boolean",
+        "employeeFiles": "boolean",
+        "employees": "boolean",
+        "files": "boolean",
+        "locations": "boolean",
+        "mutterschutz": "boolean",
+        "payroll": "boolean",
+        "reminders": "boolean",
+        "roles": "boolean",
+        "sensitiveData": "boolean",
+        "settings": "boolean",
+        "shifts": "boolean",
+        "sickness": "boolean",
+        "teams": "boolean",
+        "timeTracking": "boolean",
+        "vacation": "boolean"
+      },
+      "canViewAudit": {
+        "audit": "boolean",
+        "contracts": "boolean",
+        "employeeFiles": "boolean",
+        "employees": "boolean",
+        "files": "boolean",
+        "locations": "boolean",
+        "mutterschutz": "boolean",
+        "payroll": "boolean",
+        "reminders": "boolean",
+        "roles": "boolean",
+        "sensitiveData": "boolean",
+        "settings": "boolean",
+        "shifts": "boolean",
+        "sickness": "boolean",
+        "teams": "boolean",
+        "timeTracking": "boolean",
+        "vacation": "boolean"
+      },
+      "isManager": "boolean",
+      "permissions": {
+        "audit": "string",
+        "contracts": "string",
+        "employeeFiles": "string",
+        "employees": "string",
+        "files": "string",
+        "locations": "string",
+        "mutterschutz": "string",
+        "payroll": "string",
+        "reminders": "string",
+        "roles": "string",
+        "sensitiveData": "string",
+        "settings": "string",
+        "shifts": "string",
+        "sickness": "string",
+        "teams": "string",
+        "timeTracking": "string",
+        "vacation": "string"
+      },
+      "role": "string",
+      "roleName": "string",
+      "scopes": {
+        "audit": "string",
+        "contracts": "string",
+        "employeeFiles": "string",
+        "employees": "string",
+        "files": "string",
+        "locations": "string",
+        "mutterschutz": "string",
+        "payroll": "string",
+        "reminders": "string",
+        "roles": "string",
+        "sensitiveData": "string",
+        "settings": "string",
+        "shifts": "string",
+        "sickness": "string",
+        "teams": "string",
+        "timeTracking": "string",
+        "vacation": "string"
+      }
+    }
+  },
+  "GET me/preferences": {
+    "status": 200,
+    "shape": {
+      "preferences": {
+        "dateFormat": "string",
+        "language": "string",
+        "notifyShiftEvents": "boolean",
+        "notifyVacationEvents": "boolean",
+        "pushEnabled": "boolean",
+        "startPage": "string",
+        "timezone": "string"
+      }
+    }
+  },
+  "GET me/shifts": {
+    "status": 200,
+    "shape": {
+      "plan": {
+        "days": [
+          {
+            "date": "string",
+            "id": "string",
+            "isWeekend": "boolean",
+            "shifts": [
+              {
+                "breakMinutes": "number",
+                "endTime": "string",
+                "id": "string",
+                "location": "string",
+                "locationAccentClassName": "string",
+                "note": "string",
+                "startTime": "string",
+                "time": "string"
+              }
+            ],
+            "weekday": "string"
+          }
+        ],
+        "label": "string",
+        "range": "string"
+      }
+    }
+  },
+  "GET me/team-shifts": {
+    "status": 200,
+    "shape": {
+      "plan": {
+        "conflictCount": "number",
+        "days": [
+          {
+            "date": "string",
+            "id": "string",
+            "isWeekend": "boolean",
+            "shifts": [
+              {
+                "assignee": "string",
+                "breakMinutes": "number",
+                "conflict": "boolean",
+                "dbId": "string",
+                "employeeId": "string",
+                "endTime": "string",
+                "id": "string",
+                "key": "string",
+                "location": "string",
+                "locationAccentClassName": "string",
+                "locationId": "string",
+                "note": "string",
+                "startTime": "string",
+                "team": "string",
+                "time": "string"
+              }
+            ],
+            "staffedCount": "number",
+            "understaffed": "boolean",
+            "weekday": "string"
+          }
+        ],
+        "hasUnpublishedChanges": "boolean",
+        "label": "string",
+        "locationMinStaffing": {
+          "<id>": "number"
+        },
+        "minStaffing": "number",
+        "publishedAt": "null",
+        "range": "string",
+        "status": "string"
+      }
+    }
+  },
+  "GET me/time-entries month": {
+    "status": 200,
+    "shape": {
+      "entries": {
+        "autoBreakDeduction": "boolean",
+        "days": [
+          {
+            "breakMinutes": "number",
+            "date": "string",
+            "entries": [
+              {
+                "autoClosed": "boolean",
+                "breakDeducted": "boolean",
+                "breakMinutes": "number",
+                "breakMinutesOverride": "null",
+                "breaks": [
+                  {
+                    "endAt": "string",
+                    "endTime": "string",
+                    "startAt": "string",
+                    "startTime": "string"
+                  }
+                ],
+                "clockedBreakMinutes": "number",
+                "clockInAt": "string",
+                "clockInLocation": "null",
+                "clockInTime": "string",
+                "clockOutAt": "string",
+                "clockOutLocation": "null",
+                "clockOutTime": "string",
+                "corrected": "boolean",
+                "date": "string",
+                "employeeId": "string",
+                "grossMinutes": "number",
+                "id": "string",
+                "isOpen": "boolean",
+                "note": "string",
+                "shift": "null",
+                "source": "string",
+                "workedMinutes": "number"
+              }
+            ],
+            "plannedMinutes": "number",
+            "shifts": [],
+            "workedMinutes": "number"
+          }
+        ],
+        "from": "string",
+        "next": "string",
+        "previous": "string",
+        "timeZone": "string",
+        "to": "string",
+        "today": "string",
+        "totals": {
+          "breakMinutes": "number",
+          "entryCount": "number",
+          "plannedMinutes": "number",
+          "workedMinutes": "number"
+        }
+      }
+    }
+  },
+  "GET me/time-entries week": {
+    "status": 200,
+    "shape": {
+      "entries": {
+        "autoBreakDeduction": "boolean",
+        "days": [
+          {
+            "breakMinutes": "number",
+            "date": "string",
+            "entries": [
+              {
+                "autoClosed": "boolean",
+                "breakDeducted": "boolean",
+                "breakMinutes": "number",
+                "breakMinutesOverride": "null",
+                "breaks": [
+                  {
+                    "endAt": "string",
+                    "endTime": "string",
+                    "startAt": "string",
+                    "startTime": "string"
+                  }
+                ],
+                "clockedBreakMinutes": "number",
+                "clockInAt": "string",
+                "clockInLocation": "null",
+                "clockInTime": "string",
+                "clockOutAt": "string",
+                "clockOutLocation": "null",
+                "clockOutTime": "string",
+                "corrected": "boolean",
+                "date": "string",
+                "employeeId": "string",
+                "grossMinutes": "number",
+                "id": "string",
+                "isOpen": "boolean",
+                "note": "string",
+                "shift": "null",
+                "source": "string",
+                "workedMinutes": "number"
+              }
+            ],
+            "plannedMinutes": "number",
+            "shifts": [],
+            "workedMinutes": "number"
+          }
+        ],
+        "from": "string",
+        "next": "string",
+        "previous": "string",
+        "timeZone": "string",
+        "to": "string",
+        "today": "string",
+        "totals": {
+          "breakMinutes": "number",
+          "entryCount": "number",
+          "plannedMinutes": "number",
+          "workedMinutes": "number"
+        }
+      }
+    }
+  },
+  "GET me/time-tracking": {
+    "status": 200,
+    "shape": {
+      "status": {
+        "canClockIn": "boolean",
+        "clockableShift": "null",
+        "currentBreakStartAt": "null",
+        "enabled": "boolean",
+        "nextShift": {
+          "date": "string",
+          "endAt": "string",
+          "endTime": "string",
+          "id": "string",
+          "location": "string",
+          "plannedMinutes": "number",
+          "startAt": "string",
+          "startTime": "string"
+        },
+        "openEntry": "null",
+        "serverTime": "string",
+        "settings": {
+          "autoBreakDeduction": "boolean",
+          "breaksEnabled": "boolean",
+          "clockInLeadMinutes": "number",
+          "clockInMode": "string",
+          "qrRequired": "boolean",
+          "qrRequiredClockOut": "boolean"
+        },
+        "showClock": "boolean",
+        "state": "string",
+        "timeZone": "string",
+        "today": {
+          "breakMinutes": "number",
+          "date": "string",
+          "workedMinutes": "number"
+        }
+      }
+    }
+  },
+  "GET me/time-tracking (nicht verknüpft)": {
+    "status": 409,
+    "shape": {
+      "error": "string"
+    }
+  },
+  "GET me/wish-free-requests": {
+    "status": 200,
+    "shape": {
+      "requests": [
+        {
+          "date": "string",
+          "dateLabel": "string",
+          "dbId": "string",
+          "employeeId": "string",
+          "employeeName": "string",
+          "id": "string",
+          "location": "string",
+          "reason": "string",
+          "role": "string",
+          "status": "string"
+        }
+      ]
+    }
+  },
+  "GET permission-config": {
+    "status": 200,
+    "shape": {
+      "areas": [
+        {
+          "description": "string",
+          "fileRelevant": "boolean",
+          "id": "string",
+          "label": "string",
+          "supportsAssignedScope": "boolean",
+          "supportsScope": "boolean",
+          "parentAreaId": "string"
+        }
+      ],
+      "levels": [
+        "string"
+      ],
+      "scopes": [
+        "string"
+      ]
+    }
+  },
+  "GET tenants": {
+    "status": 200,
+    "shape": {
+      "tenants": [
+        {
+          "id": "string",
+          "industry": "null",
+          "logoUrl": "null",
+          "name": "string",
+          "primaryColor": "string",
+          "role": "string",
+          "slug": "string"
+        }
+      ]
+    }
+  },
+  "GET tenants/[tenant]/employees": {
+    "status": 200,
+    "shape": {
+      "employees": [
+        {
+          "address": "string",
+          "addressFields": {
+            "careOf": "string",
+            "city": "string",
+            "country": "string",
+            "houseNumber": "string",
+            "postalCode": "string",
+            "street": "string"
+          },
+          "birthDate": "string",
+          "birthPlace": "string",
+          "contract": "string",
+          "contractDetails": {
+            "clauses": [],
+            "collectiveAgreement": "string",
+            "compensation": "string",
+            "compensationGross": "string",
+            "contractType": "string",
+            "department": "string",
+            "entryDate": "string",
+            "exitDate": "string",
+            "fixedTerm": "string",
+            "linkedFileMeta": "string",
+            "linkedFileName": "string",
+            "noticePeriod": "string",
+            "parties": "string",
+            "position": "string",
+            "probation": "string",
+            "supervisor": "string",
+            "vacation": "string",
+            "workingTime": "string",
+            "workLocation": "string"
+          },
+          "dbId": "string",
+          "email": "string",
+          "emergencyContacts": [],
+          "employeeNumber": "string",
+          "endDate": "string",
+          "fileFolders": [],
+          "files": [],
+          "hasAccount": "boolean",
+          "healthInsurance": "string",
+          "iban": "string",
+          "id": "string",
+          "infoRequests": [],
+          "initials": "string",
+          "key": "string",
+          "location": "string",
+          "locations": [],
+          "maritalStatus": "string",
+          "maternityProtectionActive": "boolean",
+          "maternityProtectionNote": "string",
+          "name": "string",
+          "nationality": "string",
+          "payrollStatements": [],
+          "phone": "string",
+          "privateAddress": "string",
+          "privateAddressFields": {
+            "careOf": "string",
+            "city": "string",
+            "country": "string",
+            "houseNumber": "string",
+            "postalCode": "string",
+            "street": "string"
+          },
+          "role": "string",
+          "shifts": [],
+          "socialSecurityNumber": "string",
+          "startDate": "string",
+          "status": "string",
+          "taxId": "string",
+          "team": "string",
+          "teams": [],
+          "tenure": "string",
+          "timeline": [
+            {
+              "date": "string",
+              "title": "string",
+              "tone": "string"
+            }
+          ],
+          "vacationCarryover": "number",
+          "vacationManualCorrection": "number",
+          "vacationRemaining": "number",
+          "vacationTaken": "number",
+          "vacationTotal": "number",
+          "weeklyHours": "string"
+        }
+      ]
+    }
+  },
+  "GET tenants/[tenant]/employees (Mitarbeiter-Rolle)": {
+    "status": 200,
+    "shape": {
+      "employees": []
+    }
+  },
+  "GET tenants/[tenant]/employees/[employeeHandle]": {
+    "status": 200,
+    "shape": {
+      "employee": {
+        "address": "string",
+        "addressFields": {
+          "careOf": "string",
+          "city": "string",
+          "country": "string",
+          "houseNumber": "string",
+          "postalCode": "string",
+          "street": "string"
+        },
+        "birthDate": "string",
+        "birthPlace": "string",
+        "contract": "string",
+        "contractDetails": {
+          "clauses": [],
+          "collectiveAgreement": "string",
+          "compensation": "string",
+          "compensationGross": "string",
+          "contractType": "string",
+          "department": "string",
+          "entryDate": "string",
+          "exitDate": "string",
+          "fixedTerm": "string",
+          "linkedFileMeta": "string",
+          "linkedFileName": "string",
+          "noticePeriod": "string",
+          "parties": "string",
+          "position": "string",
+          "probation": "string",
+          "supervisor": "string",
+          "vacation": "string",
+          "workingTime": "string",
+          "workLocation": "string"
+        },
+        "dbId": "string",
+        "email": "string",
+        "emergencyContacts": [],
+        "employeeNumber": "string",
+        "endDate": "string",
+        "fileFolders": [],
+        "files": [],
+        "hasAccount": "boolean",
+        "healthInsurance": "string",
+        "iban": "string",
+        "id": "string",
+        "infoRequests": [],
+        "initials": "string",
+        "key": "string",
+        "location": "string",
+        "locations": [],
+        "maritalStatus": "string",
+        "maternityProtectionActive": "boolean",
+        "maternityProtectionNote": "string",
+        "name": "string",
+        "nationality": "string",
+        "payrollStatements": [],
+        "phone": "string",
+        "privateAddress": "string",
+        "privateAddressFields": {
+          "careOf": "string",
+          "city": "string",
+          "country": "string",
+          "houseNumber": "string",
+          "postalCode": "string",
+          "street": "string"
+        },
+        "role": "string",
+        "shifts": [],
+        "socialSecurityNumber": "string",
+        "startDate": "string",
+        "status": "string",
+        "taxId": "string",
+        "team": "string",
+        "teams": [],
+        "tenure": "string",
+        "timeline": [
+          {
+            "date": "string",
+            "title": "string",
+            "tone": "string"
+          }
+        ],
+        "vacationCarryover": "number",
+        "vacationManualCorrection": "number",
+        "vacationRemaining": "number",
+        "vacationTaken": "number",
+        "vacationTotal": "number",
+        "weeklyHours": "string"
+      }
+    }
+  },
+  "GET tenants/[tenant]/employees/[employeeHandle]/contracts": {
+    "status": 200,
+    "shape": {
+      "contracts": []
+    }
+  },
+  "GET tenants/[tenant]/employees/[employeeHandle]/contracts (mit Vertrag)": {
+    "status": 200,
+    "shape": {
+      "contracts": [
+        {
+          "compensation": "string",
+          "contractType": "string",
+          "createdAt": "string",
+          "department": "string",
+          "employeeId": "string",
+          "endDate": "string",
+          "file": {
+            "accessRoleIdsJson": [],
+            "accessRoleNamesJson": [],
+            "accessUserIdsJson": [],
+            "accessUserNamesJson": [],
+            "assignedEmployeeId": "string",
+            "assignedEmployeeName": "string",
+            "assignedLocationId": "string",
+            "assignedLocationName": "string",
+            "bucket": "string",
+            "createdAt": "string",
+            "deletedAt": "null",
+            "deletedByName": "string",
+            "deletionBatchId": "null",
+            "description": "string",
+            "displayName": "string",
+            "documentType": "string",
+            "employeeId": "string",
+            "expiresAt": "string",
+            "extension": "string",
+            "folderName": "string",
+            "folderSlug": "string",
+            "hiddenFromEmployee": "boolean",
+            "id": "string",
+            "locationId": "null",
+            "mimeType": "string",
+            "originalName": "string",
+            "ownerName": "string",
+            "parent": "null",
+            "parentId": "null",
+            "provider": "string",
+            "reminderAt": "string",
+            "replacedAt": "null",
+            "sizeBytes": "number",
+            "status": "string",
+            "storageKey": "string",
+            "tagsJson": [],
+            "teamId": "null",
+            "tenantId": "string",
+            "updatedAt": "string",
+            "uploadedById": "string",
+            "uploadedByName": "string",
+            "validFrom": "string",
+            "version": "number"
+          },
+          "fileId": "string",
+          "id": "string",
+          "notes": "string",
+          "noticePeriod": "string",
+          "position": "string",
+          "probationEndDate": "string",
+          "startDate": "string",
+          "status": "string",
+          "tenantId": "string",
+          "terminationDate": "string",
+          "terminationReason": "string",
+          "title": "string",
+          "updatedAt": "string",
+          "vacationDays": "number",
+          "weeklyHours": "string",
+          "workLocation": "string"
+        }
+      ]
+    }
+  },
+  "GET tenants/[tenant]/employees/[employeeHandle]/payroll-statements": {
+    "status": 200,
+    "shape": {
+      "statements": [
+        {
+          "createdAt": "string",
+          "fileId": "string",
+          "fileName": "string",
+          "gross": "string",
+          "id": "string",
+          "issuedAt": "string",
+          "net": "string",
+          "period": "string",
+          "status": "string"
+        }
+      ]
+    }
+  },
+  "GET tenants/[tenant]/employees/folder-templates": {
+    "status": 200,
+    "shape": {
+      "templates": []
+    }
+  },
+  "GET tenants/[tenant]/files": {
+    "status": 200,
+    "shape": {
+      "currentFolderPath": "string",
+      "files": [],
+      "folderOptions": [
+        {
+          "fileCount": "number",
+          "locked": "boolean",
+          "name": "string",
+          "owner": "string",
+          "path": "string",
+          "slug": "string",
+          "updatedAt": "string"
+        }
+      ],
+      "folders": [
+        {
+          "fileCount": "number",
+          "locked": "boolean",
+          "name": "string",
+          "owner": "string",
+          "path": "string",
+          "slug": "string",
+          "updatedAt": "string"
+        }
+      ],
+      "metrics": [
+        {
+          "caption": "string",
+          "label": "string",
+          "value": "string"
+        }
+      ],
+      "uploadOptions": {
+        "employees": [
+          {
+            "id": "string",
+            "name": "string"
+          }
+        ],
+        "locations": [
+          {
+            "id": "string",
+            "name": "string"
+          }
+        ],
+        "roles": [
+          {
+            "id": "string",
+            "name": "string"
+          }
+        ],
+        "users": [
+          {
+            "id": "string",
+            "name": "string"
+          }
+        ]
+      },
+      "visibleFiles": []
+    }
+  },
+  "GET tenants/[tenant]/files (Mitarbeiter)": {
+    "status": 200,
+    "shape": {
+      "files": [
+        {
+          "documentType": "string",
+          "folder": "string",
+          "folderSlug": "string",
+          "hiddenFromEmployee": "boolean",
+          "id": "string",
+          "mimeType": "string",
+          "name": "string",
+          "sizeBytes": "number",
+          "updatedAt": "string",
+          "version": "number"
+        }
+      ],
+      "folders": [
+        {
+          "fileCount": "number",
+          "hiddenFromEmployee": "boolean",
+          "id": "string",
+          "locked": "boolean",
+          "name": "string",
+          "slug": "string",
+          "updatedAt": "string"
+        }
+      ]
+    }
+  },
+  "GET tenants/[tenant]/files/[fileId]/access-token": {
+    "status": 200,
+    "shape": {
+      "contentType": "string",
+      "expiresInSeconds": "number",
+      "fileName": "string",
+      "url": "string"
+    }
+  },
+  "GET tenants/[tenant]/files/[fileId]/signed-url": {
+    "status": 200,
+    "shape": {
+      "url": "string"
+    }
+  },
+  "GET tenants/[tenant]/files/deleted": {
+    "status": 200,
+    "shape": {
+      "deletions": [
+        {
+          "batchId": "string",
+          "deletedAt": "string",
+          "deletedByName": "string",
+          "fileCount": "number",
+          "folderCount": "number",
+          "kind": "string",
+          "name": "string",
+          "path": "string",
+          "restorableUntil": "string"
+        }
+      ]
+    }
+  },
+  "GET tenants/[tenant]/info-requests": {
+    "status": 200,
+    "shape": {
+      "infoRequests": [
+        {
+          "dueAt": "string",
+          "employeeId": "string",
+          "employeeInitials": "string",
+          "employeeKey": "string",
+          "employeeName": "string",
+          "fileRequested": "boolean",
+          "hasResponseFile": "boolean",
+          "id": "string",
+          "location": "string",
+          "message": "string",
+          "requestedAt": "string",
+          "requestedBy": "string",
+          "status": "string",
+          "team": "string",
+          "title": "string"
+        }
+      ]
+    }
+  },
+  "GET tenants/[tenant]/locations": {
+    "status": 200,
+    "shape": {
+      "locations": [
+        {
+          "accentClassName": "string",
+          "activeToday": "number",
+          "address": {
+            "careOf": "string",
+            "city": "string",
+            "country": "string",
+            "houseNumber": "string",
+            "postalCode": "string",
+            "street": "string"
+          },
+          "dbId": "string",
+          "effectiveMinStaffing": "number",
+          "email": "null",
+          "employeeCount": "number",
+          "id": "string",
+          "key": "string",
+          "kind": "string",
+          "leadEmail": "null",
+          "leadEmployeeId": "null",
+          "leadInitials": "null",
+          "leadName": "null",
+          "leadPhone": "null",
+          "name": "string",
+          "openingHours": [
+            {
+              "mode": "string",
+              "ranges": [
+                {
+                  "breakMinutes": "number",
+                  "end": "string",
+                  "start": "string"
+                }
+              ],
+              "weekday": "string"
+            }
+          ],
+          "openPositions": "number",
+          "shiftCount": "number",
+          "shiftMinStaffing": "null",
+          "status": "string",
+          "usesDefaultOpeningHours": "boolean",
+          "utilization": "string",
+          "utilizationCaption": "string"
+        }
+      ]
+    }
+  },
+  "GET tenants/[tenant]/locations/[locationHandle]": {
+    "status": 200,
+    "shape": {
+      "location": {
+        "accentClassName": "string",
+        "activeToday": "number",
+        "address": {
+          "careOf": "string",
+          "city": "string",
+          "country": "string",
+          "houseNumber": "string",
+          "postalCode": "string",
+          "street": "string"
+        },
+        "dbId": "string",
+        "effectiveMinStaffing": "number",
+        "email": "null",
+        "employeeCount": "number",
+        "id": "string",
+        "key": "string",
+        "kind": "string",
+        "leadEmail": "null",
+        "leadEmployeeId": "null",
+        "leadInitials": "null",
+        "leadName": "null",
+        "leadPhone": "null",
+        "name": "string",
+        "openingHours": [
+          {
+            "mode": "string",
+            "ranges": [
+              {
+                "breakMinutes": "number",
+                "end": "string",
+                "start": "string"
+              }
+            ],
+            "weekday": "string"
+          }
+        ],
+        "openPositions": "number",
+        "shiftCount": "number",
+        "shiftMinStaffing": "null",
+        "status": "string",
+        "usesDefaultOpeningHours": "boolean",
+        "utilization": "string",
+        "utilizationCaption": "string"
+      }
+    }
+  },
+  "GET tenants/[tenant]/reminders": {
+    "status": 200,
+    "shape": {
+      "reminders": [
+        {
+          "category": "string",
+          "createdByName": "string",
+          "daysLeft": "number",
+          "dueDate": "string",
+          "id": "string",
+          "linkedFiles": [],
+          "notes": "string",
+          "priority": "string",
+          "status": "string",
+          "subject": "string",
+          "teamId": "null",
+          "teamName": "null",
+          "title": "string"
+        }
+      ]
+    }
+  },
+  "GET tenants/[tenant]/reminders/file-options": {
+    "status": 200,
+    "shape": {
+      "files": []
+    }
+  },
+  "GET tenants/[tenant]/roles": {
+    "status": 200,
+    "shape": {
+      "roles": [
+        {
+          "appOverviewEnabled": "boolean",
+          "canDelete": {
+            "audit": "boolean",
+            "contracts": "boolean",
+            "employeeFiles": "boolean",
+            "employees": "boolean",
+            "files": "boolean",
+            "locations": "boolean",
+            "mutterschutz": "boolean",
+            "payroll": "boolean",
+            "reminders": "boolean",
+            "roles": "boolean",
+            "sensitiveData": "boolean",
+            "settings": "boolean",
+            "shifts": "boolean",
+            "sickness": "boolean",
+            "teams": "boolean",
+            "timeTracking": "boolean",
+            "vacation": "boolean"
+          },
+          "canEditFiles": {
+            "audit": "boolean",
+            "contracts": "boolean",
+            "employeeFiles": "boolean",
+            "employees": "boolean",
+            "files": "boolean",
+            "locations": "boolean",
+            "mutterschutz": "boolean",
+            "payroll": "boolean",
+            "reminders": "boolean",
+            "roles": "boolean",
+            "sensitiveData": "boolean",
+            "settings": "boolean",
+            "shifts": "boolean",
+            "sickness": "boolean",
+            "teams": "boolean",
+            "timeTracking": "boolean",
+            "vacation": "boolean"
+          },
+          "canUploadFiles": {
+            "audit": "boolean",
+            "contracts": "boolean",
+            "employeeFiles": "boolean",
+            "employees": "boolean",
+            "files": "boolean",
+            "locations": "boolean",
+            "mutterschutz": "boolean",
+            "payroll": "boolean",
+            "reminders": "boolean",
+            "roles": "boolean",
+            "sensitiveData": "boolean",
+            "settings": "boolean",
+            "shifts": "boolean",
+            "sickness": "boolean",
+            "teams": "boolean",
+            "timeTracking": "boolean",
+            "vacation": "boolean"
+          },
+          "canViewAudit": {
+            "audit": "boolean",
+            "contracts": "boolean",
+            "employeeFiles": "boolean",
+            "employees": "boolean",
+            "files": "boolean",
+            "locations": "boolean",
+            "mutterschutz": "boolean",
+            "payroll": "boolean",
+            "reminders": "boolean",
+            "roles": "boolean",
+            "sensitiveData": "boolean",
+            "settings": "boolean",
+            "shifts": "boolean",
+            "sickness": "boolean",
+            "teams": "boolean",
+            "timeTracking": "boolean",
+            "vacation": "boolean"
+          },
+          "canViewFiles": {
+            "audit": "boolean",
+            "contracts": "boolean",
+            "employeeFiles": "boolean",
+            "employees": "boolean",
+            "files": "boolean",
+            "locations": "boolean",
+            "mutterschutz": "boolean",
+            "payroll": "boolean",
+            "reminders": "boolean",
+            "roles": "boolean",
+            "sensitiveData": "boolean",
+            "settings": "boolean",
+            "shifts": "boolean",
+            "sickness": "boolean",
+            "teams": "boolean",
+            "timeTracking": "boolean",
+            "vacation": "boolean"
+          },
+          "description": "string",
+          "id": "string",
+          "isSystem": "boolean",
+          "key": "string",
+          "members": "number",
+          "name": "string",
+          "permissions": {
+            "audit": "string",
+            "contracts": "string",
+            "employeeFiles": "string",
+            "employees": "string",
+            "files": "string",
+            "locations": "string",
+            "mutterschutz": "string",
+            "payroll": "string",
+            "reminders": "string",
+            "roles": "string",
+            "sensitiveData": "string",
+            "settings": "string",
+            "shifts": "string",
+            "sickness": "string",
+            "teams": "string",
+            "timeTracking": "string",
+            "vacation": "string"
+          },
+          "scopes": {
+            "audit": "string",
+            "contracts": "string",
+            "employeeFiles": "string",
+            "employees": "string",
+            "files": "string",
+            "locations": "string",
+            "mutterschutz": "string",
+            "payroll": "string",
+            "reminders": "string",
+            "roles": "string",
+            "sensitiveData": "string",
+            "settings": "string",
+            "shifts": "string",
+            "sickness": "string",
+            "teams": "string",
+            "timeTracking": "string",
+            "vacation": "string"
+          },
+          "shiftsLevel": {
+            "audit": "null",
+            "contracts": "null",
+            "employeeFiles": "null",
+            "employees": "null",
+            "files": "null",
+            "locations": "null",
+            "mutterschutz": "null",
+            "payroll": "null",
+            "reminders": "null",
+            "roles": "null",
+            "sensitiveData": "null",
+            "settings": "null",
+            "shifts": "null",
+            "sickness": "null",
+            "teams": "null",
+            "timeTracking": "null",
+            "vacation": "null"
+          }
+        }
+      ]
+    }
+  },
+  "GET tenants/[tenant]/roles/[roleId]": {
+    "status": 200,
+    "shape": {
+      "role": {
+        "appOverviewEnabled": "boolean",
+        "canDelete": {
+          "audit": "boolean",
+          "contracts": "boolean",
+          "employeeFiles": "boolean",
+          "employees": "boolean",
+          "files": "boolean",
+          "locations": "boolean",
+          "mutterschutz": "boolean",
+          "payroll": "boolean",
+          "reminders": "boolean",
+          "roles": "boolean",
+          "sensitiveData": "boolean",
+          "settings": "boolean",
+          "shifts": "boolean",
+          "sickness": "boolean",
+          "teams": "boolean",
+          "timeTracking": "boolean",
+          "vacation": "boolean"
+        },
+        "canEditFiles": {
+          "audit": "boolean",
+          "contracts": "boolean",
+          "employeeFiles": "boolean",
+          "employees": "boolean",
+          "files": "boolean",
+          "locations": "boolean",
+          "mutterschutz": "boolean",
+          "payroll": "boolean",
+          "reminders": "boolean",
+          "roles": "boolean",
+          "sensitiveData": "boolean",
+          "settings": "boolean",
+          "shifts": "boolean",
+          "sickness": "boolean",
+          "teams": "boolean",
+          "timeTracking": "boolean",
+          "vacation": "boolean"
+        },
+        "canUploadFiles": {
+          "audit": "boolean",
+          "contracts": "boolean",
+          "employeeFiles": "boolean",
+          "employees": "boolean",
+          "files": "boolean",
+          "locations": "boolean",
+          "mutterschutz": "boolean",
+          "payroll": "boolean",
+          "reminders": "boolean",
+          "roles": "boolean",
+          "sensitiveData": "boolean",
+          "settings": "boolean",
+          "shifts": "boolean",
+          "sickness": "boolean",
+          "teams": "boolean",
+          "timeTracking": "boolean",
+          "vacation": "boolean"
+        },
+        "canViewAudit": {
+          "audit": "boolean",
+          "contracts": "boolean",
+          "employeeFiles": "boolean",
+          "employees": "boolean",
+          "files": "boolean",
+          "locations": "boolean",
+          "mutterschutz": "boolean",
+          "payroll": "boolean",
+          "reminders": "boolean",
+          "roles": "boolean",
+          "sensitiveData": "boolean",
+          "settings": "boolean",
+          "shifts": "boolean",
+          "sickness": "boolean",
+          "teams": "boolean",
+          "timeTracking": "boolean",
+          "vacation": "boolean"
+        },
+        "canViewFiles": {
+          "audit": "boolean",
+          "contracts": "boolean",
+          "employeeFiles": "boolean",
+          "employees": "boolean",
+          "files": "boolean",
+          "locations": "boolean",
+          "mutterschutz": "boolean",
+          "payroll": "boolean",
+          "reminders": "boolean",
+          "roles": "boolean",
+          "sensitiveData": "boolean",
+          "settings": "boolean",
+          "shifts": "boolean",
+          "sickness": "boolean",
+          "teams": "boolean",
+          "timeTracking": "boolean",
+          "vacation": "boolean"
+        },
+        "description": "string",
+        "id": "string",
+        "isSystem": "boolean",
+        "key": "string",
+        "members": "number",
+        "name": "string",
+        "permissions": {
+          "audit": "string",
+          "contracts": "string",
+          "employeeFiles": "string",
+          "employees": "string",
+          "files": "string",
+          "locations": "string",
+          "mutterschutz": "string",
+          "payroll": "string",
+          "reminders": "string",
+          "roles": "string",
+          "sensitiveData": "string",
+          "settings": "string",
+          "shifts": "string",
+          "sickness": "string",
+          "teams": "string",
+          "timeTracking": "string",
+          "vacation": "string"
+        },
+        "scopes": {
+          "audit": "string",
+          "contracts": "string",
+          "employeeFiles": "string",
+          "employees": "string",
+          "files": "string",
+          "locations": "string",
+          "mutterschutz": "string",
+          "payroll": "string",
+          "reminders": "string",
+          "roles": "string",
+          "sensitiveData": "string",
+          "settings": "string",
+          "shifts": "string",
+          "sickness": "string",
+          "teams": "string",
+          "timeTracking": "string",
+          "vacation": "string"
+        },
+        "shiftsLevel": {
+          "audit": "null",
+          "contracts": "null",
+          "employeeFiles": "null",
+          "employees": "null",
+          "files": "null",
+          "locations": "null",
+          "mutterschutz": "null",
+          "payroll": "null",
+          "reminders": "null",
+          "roles": "null",
+          "sensitiveData": "null",
+          "settings": "null",
+          "shifts": "null",
+          "sickness": "null",
+          "teams": "null",
+          "timeTracking": "null",
+          "vacation": "null"
+        }
+      }
+    }
+  },
+  "GET tenants/[tenant]/sickness-reports": {
+    "status": 200,
+    "shape": {
+      "chart": [
+        {
+          "count": "number",
+          "current": "boolean",
+          "height": "number",
+          "month": "string",
+          "monthIso": "string"
+        }
+      ],
+      "current": [
+        {
+          "certificateStatus": "string",
+          "days": "string",
+          "employeeId": "string",
+          "endDateIso": "string",
+          "id": "string",
+          "initials": "string",
+          "location": "string",
+          "name": "string",
+          "note": "string",
+          "reportChannel": "string",
+          "since": "string",
+          "startDateIso": "string",
+          "status": "string"
+        }
+      ],
+      "history": [],
+      "metrics": [
+        {
+          "caption": "string",
+          "label": "string",
+          "tone": "string",
+          "value": "string"
+        }
+      ]
+    }
+  },
+  "GET tenants/[tenant]/teams": {
+    "status": 200,
+    "shape": {
+      "teams": [
+        {
+          "colorClassName": "string",
+          "dbId": "string",
+          "description": "string",
+          "id": "string",
+          "key": "string",
+          "leadEmployeeId": "string",
+          "leadName": "string",
+          "locations": [
+            "string"
+          ],
+          "members": [
+            {
+              "contract": "string",
+              "employeeId": "string",
+              "isLead": "boolean",
+              "location": "string",
+              "memberId": "string",
+              "name": "string",
+              "role": "string",
+              "status": "string"
+            }
+          ],
+          "name": "string"
+        }
+      ]
+    }
+  },
+  "GET tenants/[tenant]/teams/[teamHandle]": {
+    "status": 200,
+    "shape": {
+      "team": {
+        "colorClassName": "string",
+        "dbId": "string",
+        "description": "string",
+        "id": "string",
+        "key": "string",
+        "leadEmployeeId": "string",
+        "leadName": "string",
+        "locations": [
+          "string"
+        ],
+        "members": [
+          {
+            "contract": "string",
+            "employeeId": "string",
+            "isLead": "boolean",
+            "location": "string",
+            "memberId": "string",
+            "name": "string",
+            "role": "string",
+            "status": "string"
+          }
+        ],
+        "name": "string"
+      }
+    }
+  },
+  "GET tenants/[tenant]/teams/[teamHandle]/assignable-employees": {
+    "status": 200,
+    "shape": {
+      "employees": []
+    }
+  },
+  "GET tenants/[tenant]/vacation-requests": {
+    "status": 200,
+    "shape": {
+      "requests": [
+        {
+          "days": "string",
+          "dbId": "string",
+          "employeeId": "string",
+          "endDate": "string",
+          "endDateIso": "string",
+          "id": "string",
+          "initials": "string",
+          "key": "string",
+          "location": "string",
+          "name": "string",
+          "note": "string",
+          "startDate": "string",
+          "startDateIso": "string",
+          "status": "string",
+          "team": "string"
+        }
+      ]
+    }
+  },
+  "GET tenants/[tenant]/wish-free-requests": {
+    "status": 200,
+    "shape": {
+      "requests": [
+        {
+          "date": "string",
+          "dateLabel": "string",
+          "dbId": "string",
+          "employeeId": "string",
+          "employeeName": "string",
+          "id": "string",
+          "location": "string",
+          "reason": "string",
+          "role": "string",
+          "status": "string"
+        }
+      ]
+    }
+  },
+  "PATCH me/info-requests/[requestId]": {
+    "status": 200,
+    "shape": {
+      "infoRequest": {
+        "dueAt": "null",
+        "fileRequested": "boolean",
+        "hasResponseFile": "boolean",
+        "id": "string",
+        "message": "string",
+        "requestedAt": "string",
+        "requestedBy": "string",
+        "respondedAt": "string",
+        "responseMessage": "string",
+        "status": "string",
+        "title": "string"
+      }
+    }
+  },
+  "PATCH me/preferences": {
+    "status": 200,
+    "shape": {
+      "status": "boolean"
+    }
+  },
+  "PATCH me/profile": {
+    "status": 200,
+    "shape": {
+      "status": "boolean"
+    }
+  },
+  "PATCH me/team-shifts/[shiftId]": {
+    "status": 200,
+    "shape": {
+      "status": "boolean"
+    }
+  },
+  "PATCH tenants/[tenant]/employees/[employeeHandle]": {
+    "status": 200,
+    "shape": {
+      "employee": {
+        "address": "string",
+        "addressFields": {
+          "careOf": "string",
+          "city": "string",
+          "country": "string",
+          "houseNumber": "string",
+          "postalCode": "string",
+          "street": "string"
+        },
+        "birthDate": "string",
+        "birthPlace": "string",
+        "contract": "string",
+        "contractDetails": {
+          "clauses": [],
+          "collectiveAgreement": "string",
+          "compensation": "string",
+          "compensationGross": "string",
+          "contractType": "string",
+          "department": "string",
+          "entryDate": "string",
+          "exitDate": "string",
+          "fixedTerm": "string",
+          "linkedFileMeta": "string",
+          "linkedFileName": "string",
+          "noticePeriod": "string",
+          "parties": "string",
+          "position": "string",
+          "probation": "string",
+          "supervisor": "string",
+          "vacation": "string",
+          "workingTime": "string",
+          "workLocation": "string"
+        },
+        "dbId": "string",
+        "email": "string",
+        "emergencyContacts": [],
+        "employeeNumber": "string",
+        "endDate": "string",
+        "fileFolders": [],
+        "files": [],
+        "hasAccount": "boolean",
+        "healthInsurance": "string",
+        "iban": "string",
+        "id": "string",
+        "infoRequests": [],
+        "initials": "string",
+        "key": "string",
+        "location": "string",
+        "locations": [],
+        "maritalStatus": "string",
+        "maternityProtectionActive": "boolean",
+        "maternityProtectionNote": "string",
+        "name": "string",
+        "nationality": "string",
+        "payrollStatements": [],
+        "phone": "string",
+        "privateAddress": "string",
+        "privateAddressFields": {
+          "careOf": "string",
+          "city": "string",
+          "country": "string",
+          "houseNumber": "string",
+          "postalCode": "string",
+          "street": "string"
+        },
+        "role": "string",
+        "shifts": [],
+        "socialSecurityNumber": "string",
+        "startDate": "string",
+        "status": "string",
+        "taxId": "string",
+        "team": "string",
+        "teams": [],
+        "tenure": "string",
+        "timeline": [
+          {
+            "date": "string",
+            "title": "string",
+            "tone": "string"
+          }
+        ],
+        "vacationCarryover": "number",
+        "vacationManualCorrection": "number",
+        "vacationRemaining": "number",
+        "vacationTaken": "number",
+        "vacationTotal": "number",
+        "weeklyHours": "string"
+      }
+    }
+  },
+  "PATCH tenants/[tenant]/employees/[employeeHandle]/contracts/[contractId]": {
+    "status": 200,
+    "shape": {
+      "contract": {
+        "compensation": "string",
+        "contractType": "string",
+        "createdAt": "string",
+        "department": "string",
+        "employeeId": "string",
+        "endDate": "string",
+        "fileId": "string",
+        "id": "string",
+        "notes": "string",
+        "noticePeriod": "string",
+        "position": "string",
+        "probationEndDate": "string",
+        "startDate": "string",
+        "status": "string",
+        "tenantId": "string",
+        "terminationDate": "string",
+        "terminationReason": "string",
+        "title": "string",
+        "updatedAt": "string",
+        "vacationDays": "number",
+        "weeklyHours": "string",
+        "workLocation": "string"
+      }
+    }
+  },
+  "PATCH tenants/[tenant]/files/[fileId]": {
+    "status": 200,
+    "shape": {
+      "file": {
+        "hiddenFromEmployee": "boolean",
+        "id": "string"
+      }
+    }
+  },
+  "PATCH tenants/[tenant]/files/folders": {
+    "status": 200,
+    "shape": {
+      "folder": {
+        "hiddenFromEmployee": "boolean",
+        "id": "string",
+        "name": "string",
+        "path": "string"
+      }
+    }
+  },
+  "PATCH tenants/[tenant]/info-requests/[requestId]": {
+    "status": 200,
+    "shape": {
+      "infoRequest": {
+        "createdAt": "string",
+        "dueAt": "null",
+        "employeeId": "string",
+        "fileRequested": "boolean",
+        "id": "string",
+        "message": "string",
+        "requestedBy": "string",
+        "respondedAt": "string",
+        "responseFileId": "null",
+        "responseMessage": "string",
+        "status": "string",
+        "tenantId": "string",
+        "title": "string",
+        "updatedAt": "string"
+      }
+    }
+  },
+  "PATCH tenants/[tenant]/locations/[locationHandle]": {
+    "status": 200,
+    "shape": {
+      "location": {
+        "accentClassName": "string",
+        "activeToday": "number",
+        "address": {
+          "careOf": "string",
+          "city": "string",
+          "country": "string",
+          "houseNumber": "string",
+          "postalCode": "string",
+          "street": "string"
+        },
+        "dbId": "string",
+        "effectiveMinStaffing": "number",
+        "email": "null",
+        "employeeCount": "number",
+        "id": "string",
+        "key": "string",
+        "kind": "string",
+        "leadEmail": "null",
+        "leadEmployeeId": "null",
+        "leadInitials": "null",
+        "leadName": "null",
+        "leadPhone": "null",
+        "name": "string",
+        "openingHours": [
+          {
+            "mode": "string",
+            "ranges": [
+              {
+                "breakMinutes": "number",
+                "end": "string",
+                "start": "string"
+              }
+            ],
+            "weekday": "string"
+          }
+        ],
+        "openPositions": "number",
+        "shiftCount": "number",
+        "shiftMinStaffing": "null",
+        "status": "string",
+        "usesDefaultOpeningHours": "boolean",
+        "utilization": "string",
+        "utilizationCaption": "string"
+      }
+    }
+  },
+  "PATCH tenants/[tenant]/reminders/[reminderId]": {
+    "status": 200,
+    "shape": {
+      "reminder": {
+        "category": "string",
+        "completedAt": "null",
+        "createdAt": "string",
+        "createdById": "string",
+        "createdByName": "string",
+        "dueDate": "string",
+        "id": "string",
+        "key": "string",
+        "linkedFilesJson": [],
+        "notes": "string",
+        "priority": "string",
+        "status": "string",
+        "subject": "string",
+        "teamId": "null",
+        "tenantId": "string",
+        "title": "string",
+        "updatedAt": "string"
+      }
+    }
+  },
+  "PATCH tenants/[tenant]/roles/[roleId]": {
+    "status": 200,
+    "shape": {
+      "status": "boolean"
+    }
+  },
+  "PATCH tenants/[tenant]/sickness-reports/[reportId]": {
+    "status": 200,
+    "shape": {
+      "report": {
+        "attachmentFileId": "null",
+        "certificateStatus": "string",
+        "closedAt": "null",
+        "createdAt": "string",
+        "employeeId": "string",
+        "endDate": "null",
+        "id": "string",
+        "note": "string",
+        "reportChannel": "string",
+        "reportedById": "string",
+        "reportedByName": "string",
+        "startDate": "string",
+        "status": "string",
+        "tenantId": "string",
+        "updatedAt": "string"
+      }
+    }
+  },
+  "PATCH tenants/[tenant]/teams/[teamHandle]": {
+    "status": 200,
+    "shape": {
+      "team": {
+        "colorClassName": "string",
+        "dbId": "string",
+        "description": "string",
+        "id": "string",
+        "key": "string",
+        "leadEmployeeId": "string",
+        "leadName": "string",
+        "locations": [
+          "string"
+        ],
+        "members": [
+          {
+            "contract": "string",
+            "employeeId": "string",
+            "isLead": "boolean",
+            "location": "string",
+            "memberId": "string",
+            "name": "string",
+            "role": "string",
+            "status": "string"
+          }
+        ],
+        "name": "string"
+      }
+    }
+  },
+  "PATCH tenants/[tenant]/teams/[teamHandle]/members/[memberId]": {
+    "status": 200,
+    "shape": {
+      "status": "boolean"
+    }
+  },
+  "PATCH tenants/[tenant]/vacation-requests/[requestId]": {
+    "status": 200,
+    "shape": {
+      "status": "boolean"
+    }
+  },
+  "POST me/account/deletion (ohne Passwort)": {
+    "status": 400,
+    "shape": {
+      "details": {
+        "errors": [],
+        "properties": {
+          "password": {
+            "errors": [
+              "string"
+            ]
+          }
+        }
+      },
+      "error": "string"
+    }
+  },
+  "POST me/employee-link (fremde Akte)": {
+    "status": 403,
+    "shape": {
+      "error": "string"
+    }
+  },
+  "POST me/employee-link (neu anlegen)": {
+    "status": 201,
+    "shape": {
+      "employee": {
+        "address": "string",
+        "addressFields": {
+          "careOf": "string",
+          "city": "string",
+          "country": "string",
+          "houseNumber": "string",
+          "postalCode": "string",
+          "street": "string"
+        },
+        "birthDate": "string",
+        "birthPlace": "string",
+        "contract": "string",
+        "contractDetails": {
+          "clauses": [],
+          "collectiveAgreement": "string",
+          "compensation": "string",
+          "compensationGross": "string",
+          "contractType": "string",
+          "department": "string",
+          "entryDate": "string",
+          "exitDate": "string",
+          "fixedTerm": "string",
+          "linkedFileMeta": "string",
+          "linkedFileName": "string",
+          "noticePeriod": "string",
+          "parties": "string",
+          "position": "string",
+          "probation": "string",
+          "supervisor": "string",
+          "vacation": "string",
+          "workingTime": "string",
+          "workLocation": "string"
+        },
+        "dbId": "string",
+        "email": "string",
+        "emergencyContacts": [],
+        "employeeNumber": "string",
+        "endDate": "string",
+        "fileFolders": [],
+        "files": [],
+        "hasAccount": "boolean",
+        "healthInsurance": "string",
+        "iban": "string",
+        "id": "string",
+        "infoRequests": [],
+        "initials": "string",
+        "key": "string",
+        "location": "string",
+        "locations": [],
+        "maritalStatus": "string",
+        "maternityProtectionActive": "boolean",
+        "maternityProtectionNote": "string",
+        "name": "string",
+        "nationality": "string",
+        "payrollStatements": [],
+        "phone": "string",
+        "privateAddress": "string",
+        "privateAddressFields": {
+          "careOf": "string",
+          "city": "string",
+          "country": "string",
+          "houseNumber": "string",
+          "postalCode": "string",
+          "street": "string"
+        },
+        "role": "string",
+        "shifts": [],
+        "socialSecurityNumber": "string",
+        "startDate": "string",
+        "status": "string",
+        "taxId": "string",
+        "team": "string",
+        "teams": [],
+        "tenure": "string",
+        "timeline": [
+          {
+            "date": "string",
+            "title": "string",
+            "tone": "string"
+          }
+        ],
+        "vacationCarryover": "number",
+        "vacationManualCorrection": "number",
+        "vacationRemaining": "number",
+        "vacationTaken": "number",
+        "vacationTotal": "number",
+        "weeklyHours": "string"
+      }
+    }
+  },
+  "POST me/notifications-feed/[id]/read": {
+    "status": 200,
+    "shape": {
+      "status": "boolean"
+    }
+  },
+  "POST me/notifications-feed/read-all": {
+    "status": 200,
+    "shape": {
+      "status": "boolean"
+    }
+  },
+  "POST me/push-subscriptions": {
+    "status": 201,
+    "shape": {
+      "status": "boolean"
+    }
+  },
+  "POST me/sickness-reports": {
+    "status": 201,
+    "shape": {
+      "report": {
+        "attachmentFileId": "null",
+        "certificateStatus": "string",
+        "closedAt": "null",
+        "createdAt": "string",
+        "employeeId": "string",
+        "endDate": "null",
+        "id": "string",
+        "note": "string",
+        "reportChannel": "string",
+        "reportedById": "string",
+        "reportedByName": "string",
+        "startDate": "string",
+        "status": "string",
+        "tenantId": "string",
+        "updatedAt": "string"
+      }
+    }
+  },
+  "POST me/team-shifts": {
+    "status": 201,
+    "shape": {
+      "shift": {
+        "breakMinutes": "number",
+        "conflict": "boolean",
+        "createdAt": "string",
+        "date": "string",
+        "employeeId": "string",
+        "endTime": "string",
+        "id": "string",
+        "key": "string",
+        "locationId": "string",
+        "note": "string",
+        "startTime": "string",
+        "team": "string",
+        "teamId": "string",
+        "tenantId": "string",
+        "updatedAt": "string",
+        "weekday": "string"
+      }
+    }
+  },
+  "POST me/team-shifts (2)": {
+    "status": 201,
+    "shape": {
+      "shift": {
+        "breakMinutes": "number",
+        "conflict": "boolean",
+        "createdAt": "string",
+        "date": "string",
+        "employeeId": "null",
+        "endTime": "string",
+        "id": "string",
+        "key": "string",
+        "locationId": "string",
+        "note": "string",
+        "startTime": "string",
+        "team": "string",
+        "teamId": "null",
+        "tenantId": "string",
+        "updatedAt": "string",
+        "weekday": "string"
+      }
+    }
+  },
+  "POST me/team-shifts/publish": {
+    "status": 200,
+    "shape": {
+      "notified": "number",
+      "publishedAt": "string",
+      "status": "string"
+    }
+  },
+  "POST me/team-shifts/publish (2)": {
+    "status": 200,
+    "shape": {
+      "notified": "number",
+      "publishedAt": "string",
+      "status": "string"
+    }
+  },
+  "POST me/team-shifts/reset": {
+    "status": 200,
+    "shape": {
+      "restored": "number"
+    }
+  },
+  "POST me/team-shifts/unpublish": {
+    "status": 200,
+    "shape": {
+      "publishedAt": "string",
+      "status": "string"
+    }
+  },
+  "POST me/time-tracking breakEnd": {
+    "status": 200,
+    "shape": {
+      "status": {
+        "canClockIn": "boolean",
+        "clockableShift": "null",
+        "currentBreakStartAt": "null",
+        "enabled": "boolean",
+        "nextShift": {
+          "date": "string",
+          "endAt": "string",
+          "endTime": "string",
+          "id": "string",
+          "location": "string",
+          "plannedMinutes": "number",
+          "startAt": "string",
+          "startTime": "string"
+        },
+        "openEntry": {
+          "autoClosed": "boolean",
+          "breakDeducted": "boolean",
+          "breakMinutes": "number",
+          "breakMinutesOverride": "null",
+          "breaks": [
+            {
+              "endAt": "string",
+              "endTime": "string",
+              "startAt": "string",
+              "startTime": "string"
+            }
+          ],
+          "clockedBreakMinutes": "number",
+          "clockInAt": "string",
+          "clockInLocation": "null",
+          "clockInTime": "string",
+          "clockOutAt": "null",
+          "clockOutLocation": "null",
+          "clockOutTime": "null",
+          "corrected": "boolean",
+          "date": "string",
+          "employeeId": "string",
+          "grossMinutes": "number",
+          "id": "string",
+          "isOpen": "boolean",
+          "note": "string",
+          "shift": "null",
+          "source": "string",
+          "workedMinutes": "number"
+        },
+        "serverTime": "string",
+        "settings": {
+          "autoBreakDeduction": "boolean",
+          "breaksEnabled": "boolean",
+          "clockInLeadMinutes": "number",
+          "clockInMode": "string",
+          "qrRequired": "boolean",
+          "qrRequiredClockOut": "boolean"
+        },
+        "showClock": "boolean",
+        "state": "string",
+        "timeZone": "string",
+        "today": {
+          "breakMinutes": "number",
+          "date": "string",
+          "workedMinutes": "number"
+        }
+      }
+    }
+  },
+  "POST me/time-tracking breakStart": {
+    "status": 200,
+    "shape": {
+      "status": {
+        "canClockIn": "boolean",
+        "clockableShift": "null",
+        "currentBreakStartAt": "string",
+        "enabled": "boolean",
+        "nextShift": {
+          "date": "string",
+          "endAt": "string",
+          "endTime": "string",
+          "id": "string",
+          "location": "string",
+          "plannedMinutes": "number",
+          "startAt": "string",
+          "startTime": "string"
+        },
+        "openEntry": {
+          "autoClosed": "boolean",
+          "breakDeducted": "boolean",
+          "breakMinutes": "number",
+          "breakMinutesOverride": "null",
+          "breaks": [
+            {
+              "endAt": "null",
+              "endTime": "null",
+              "startAt": "string",
+              "startTime": "string"
+            }
+          ],
+          "clockedBreakMinutes": "number",
+          "clockInAt": "string",
+          "clockInLocation": "null",
+          "clockInTime": "string",
+          "clockOutAt": "null",
+          "clockOutLocation": "null",
+          "clockOutTime": "null",
+          "corrected": "boolean",
+          "date": "string",
+          "employeeId": "string",
+          "grossMinutes": "number",
+          "id": "string",
+          "isOpen": "boolean",
+          "note": "string",
+          "shift": "null",
+          "source": "string",
+          "workedMinutes": "number"
+        },
+        "serverTime": "string",
+        "settings": {
+          "autoBreakDeduction": "boolean",
+          "breaksEnabled": "boolean",
+          "clockInLeadMinutes": "number",
+          "clockInMode": "string",
+          "qrRequired": "boolean",
+          "qrRequiredClockOut": "boolean"
+        },
+        "showClock": "boolean",
+        "state": "string",
+        "timeZone": "string",
+        "today": {
+          "breakMinutes": "number",
+          "date": "string",
+          "workedMinutes": "number"
+        }
+      }
+    }
+  },
+  "POST me/time-tracking clockIn": {
+    "status": 200,
+    "shape": {
+      "status": {
+        "canClockIn": "boolean",
+        "clockableShift": "null",
+        "currentBreakStartAt": "null",
+        "enabled": "boolean",
+        "nextShift": {
+          "date": "string",
+          "endAt": "string",
+          "endTime": "string",
+          "id": "string",
+          "location": "string",
+          "plannedMinutes": "number",
+          "startAt": "string",
+          "startTime": "string"
+        },
+        "openEntry": {
+          "autoClosed": "boolean",
+          "breakDeducted": "boolean",
+          "breakMinutes": "number",
+          "breakMinutesOverride": "null",
+          "breaks": [],
+          "clockedBreakMinutes": "number",
+          "clockInAt": "string",
+          "clockInLocation": "null",
+          "clockInTime": "string",
+          "clockOutAt": "null",
+          "clockOutLocation": "null",
+          "clockOutTime": "null",
+          "corrected": "boolean",
+          "date": "string",
+          "employeeId": "string",
+          "grossMinutes": "number",
+          "id": "string",
+          "isOpen": "boolean",
+          "note": "string",
+          "shift": "null",
+          "source": "string",
+          "workedMinutes": "number"
+        },
+        "serverTime": "string",
+        "settings": {
+          "autoBreakDeduction": "boolean",
+          "breaksEnabled": "boolean",
+          "clockInLeadMinutes": "number",
+          "clockInMode": "string",
+          "qrRequired": "boolean",
+          "qrRequiredClockOut": "boolean"
+        },
+        "showClock": "boolean",
+        "state": "string",
+        "timeZone": "string",
+        "today": {
+          "breakMinutes": "number",
+          "date": "string",
+          "workedMinutes": "number"
+        }
+      }
+    }
+  },
+  "POST me/time-tracking clockOut": {
+    "status": 200,
+    "shape": {
+      "status": {
+        "canClockIn": "boolean",
+        "clockableShift": "null",
+        "currentBreakStartAt": "null",
+        "enabled": "boolean",
+        "nextShift": {
+          "date": "string",
+          "endAt": "string",
+          "endTime": "string",
+          "id": "string",
+          "location": "string",
+          "plannedMinutes": "number",
+          "startAt": "string",
+          "startTime": "string"
+        },
+        "openEntry": "null",
+        "serverTime": "string",
+        "settings": {
+          "autoBreakDeduction": "boolean",
+          "breaksEnabled": "boolean",
+          "clockInLeadMinutes": "number",
+          "clockInMode": "string",
+          "qrRequired": "boolean",
+          "qrRequiredClockOut": "boolean"
+        },
+        "showClock": "boolean",
+        "state": "string",
+        "timeZone": "string",
+        "today": {
+          "breakMinutes": "number",
+          "date": "string",
+          "workedMinutes": "number"
+        }
+      }
+    }
+  },
+  "POST me/time-tracking clockOut (nicht eingestempelt)": {
+    "status": 409,
+    "shape": {
+      "error": "string"
+    }
+  },
+  "POST me/vacation-requests": {
+    "status": 201,
+    "shape": {
+      "request": {
+        "createdAt": "string",
+        "days": "number",
+        "decidedAt": "null",
+        "decidedBy": "string",
+        "employeeId": "string",
+        "endDate": "string",
+        "id": "string",
+        "key": "string",
+        "note": "string",
+        "startDate": "string",
+        "status": "string",
+        "tenantId": "string",
+        "updatedAt": "string"
+      }
+    }
+  },
+  "POST me/wish-free-requests": {
+    "status": 201,
+    "shape": {
+      "request": {
+        "date": "string",
+        "dateLabel": "string",
+        "dbId": "string",
+        "employeeId": "string",
+        "employeeName": "string",
+        "id": "string",
+        "location": "string",
+        "reason": "string",
+        "role": "string",
+        "status": "string"
+      }
+    }
+  },
+  "POST me/wish-free-requests (2)": {
+    "status": 201,
+    "shape": {
+      "request": {
+        "date": "string",
+        "dateLabel": "string",
+        "dbId": "string",
+        "employeeId": "string",
+        "employeeName": "string",
+        "id": "string",
+        "location": "string",
+        "reason": "string",
+        "role": "string",
+        "status": "string"
+      }
+    }
+  },
+  "POST me/wish-free-requests (3)": {
+    "status": 201,
+    "shape": {
+      "request": {
+        "date": "string",
+        "dateLabel": "string",
+        "dbId": "string",
+        "employeeId": "string",
+        "employeeName": "string",
+        "id": "string",
+        "location": "string",
+        "reason": "string",
+        "role": "string",
+        "status": "string"
+      }
+    }
+  },
+  "POST tenants/[tenant]/employees": {
+    "status": 201,
+    "shape": {
+      "employee": {
+        "address": "string",
+        "addressFields": {
+          "careOf": "string",
+          "city": "string",
+          "country": "string",
+          "houseNumber": "string",
+          "postalCode": "string",
+          "street": "string"
+        },
+        "birthDate": "string",
+        "birthPlace": "string",
+        "contract": "string",
+        "contractDetails": {
+          "clauses": [],
+          "collectiveAgreement": "string",
+          "compensation": "string",
+          "compensationGross": "string",
+          "contractType": "string",
+          "department": "string",
+          "entryDate": "string",
+          "exitDate": "string",
+          "fixedTerm": "string",
+          "linkedFileMeta": "string",
+          "linkedFileName": "string",
+          "noticePeriod": "string",
+          "parties": "string",
+          "position": "string",
+          "probation": "string",
+          "supervisor": "string",
+          "vacation": "string",
+          "workingTime": "string",
+          "workLocation": "string"
+        },
+        "dbId": "string",
+        "email": "string",
+        "emergencyContacts": [],
+        "employeeNumber": "string",
+        "endDate": "string",
+        "fileFolders": [],
+        "files": [],
+        "hasAccount": "boolean",
+        "healthInsurance": "string",
+        "iban": "string",
+        "id": "string",
+        "infoRequests": [],
+        "initials": "string",
+        "key": "string",
+        "location": "string",
+        "locations": [],
+        "maritalStatus": "string",
+        "maternityProtectionActive": "boolean",
+        "maternityProtectionNote": "string",
+        "name": "string",
+        "nationality": "string",
+        "payrollStatements": [],
+        "phone": "string",
+        "privateAddress": "string",
+        "privateAddressFields": {
+          "careOf": "string",
+          "city": "string",
+          "country": "string",
+          "houseNumber": "string",
+          "postalCode": "string",
+          "street": "string"
+        },
+        "role": "string",
+        "shifts": [],
+        "socialSecurityNumber": "string",
+        "startDate": "string",
+        "status": "string",
+        "taxId": "string",
+        "team": "string",
+        "teams": [],
+        "tenure": "string",
+        "timeline": [
+          {
+            "date": "string",
+            "title": "string",
+            "tone": "string"
+          }
+        ],
+        "vacationCarryover": "number",
+        "vacationManualCorrection": "number",
+        "vacationRemaining": "number",
+        "vacationTaken": "number",
+        "vacationTotal": "number",
+        "weeklyHours": "string"
+      }
+    }
+  },
+  "POST tenants/[tenant]/employees (2)": {
+    "status": 201,
+    "shape": {
+      "employee": {
+        "address": "string",
+        "addressFields": {
+          "careOf": "string",
+          "city": "string",
+          "country": "string",
+          "houseNumber": "string",
+          "postalCode": "string",
+          "street": "string"
+        },
+        "birthDate": "string",
+        "birthPlace": "string",
+        "contract": "string",
+        "contractDetails": {
+          "clauses": [],
+          "collectiveAgreement": "string",
+          "compensation": "string",
+          "compensationGross": "string",
+          "contractType": "string",
+          "department": "string",
+          "entryDate": "string",
+          "exitDate": "string",
+          "fixedTerm": "string",
+          "linkedFileMeta": "string",
+          "linkedFileName": "string",
+          "noticePeriod": "string",
+          "parties": "string",
+          "position": "string",
+          "probation": "string",
+          "supervisor": "string",
+          "vacation": "string",
+          "workingTime": "string",
+          "workLocation": "string"
+        },
+        "dbId": "string",
+        "email": "string",
+        "emergencyContacts": [],
+        "employeeNumber": "string",
+        "endDate": "string",
+        "fileFolders": [],
+        "files": [],
+        "hasAccount": "boolean",
+        "healthInsurance": "string",
+        "iban": "string",
+        "id": "string",
+        "infoRequests": [],
+        "initials": "string",
+        "key": "string",
+        "location": "string",
+        "locations": [],
+        "maritalStatus": "string",
+        "maternityProtectionActive": "boolean",
+        "maternityProtectionNote": "string",
+        "name": "string",
+        "nationality": "string",
+        "payrollStatements": [],
+        "phone": "string",
+        "privateAddress": "string",
+        "privateAddressFields": {
+          "careOf": "string",
+          "city": "string",
+          "country": "string",
+          "houseNumber": "string",
+          "postalCode": "string",
+          "street": "string"
+        },
+        "role": "string",
+        "shifts": [],
+        "socialSecurityNumber": "string",
+        "startDate": "string",
+        "status": "string",
+        "taxId": "string",
+        "team": "string",
+        "teams": [],
+        "tenure": "string",
+        "timeline": [
+          {
+            "date": "string",
+            "title": "string",
+            "tone": "string"
+          }
+        ],
+        "vacationCarryover": "number",
+        "vacationManualCorrection": "number",
+        "vacationRemaining": "number",
+        "vacationTaken": "number",
+        "vacationTotal": "number",
+        "weeklyHours": "string"
+      }
+    }
+  },
+  "POST tenants/[tenant]/employees (3)": {
+    "status": 201,
+    "shape": {
+      "employee": {
+        "address": "string",
+        "addressFields": {
+          "careOf": "string",
+          "city": "string",
+          "country": "string",
+          "houseNumber": "string",
+          "postalCode": "string",
+          "street": "string"
+        },
+        "birthDate": "string",
+        "birthPlace": "string",
+        "contract": "string",
+        "contractDetails": {
+          "clauses": [],
+          "collectiveAgreement": "string",
+          "compensation": "string",
+          "compensationGross": "string",
+          "contractType": "string",
+          "department": "string",
+          "entryDate": "string",
+          "exitDate": "string",
+          "fixedTerm": "string",
+          "linkedFileMeta": "string",
+          "linkedFileName": "string",
+          "noticePeriod": "string",
+          "parties": "string",
+          "position": "string",
+          "probation": "string",
+          "supervisor": "string",
+          "vacation": "string",
+          "workingTime": "string",
+          "workLocation": "string"
+        },
+        "dbId": "string",
+        "email": "string",
+        "emergencyContacts": [],
+        "employeeNumber": "string",
+        "endDate": "string",
+        "fileFolders": [],
+        "files": [],
+        "hasAccount": "boolean",
+        "healthInsurance": "string",
+        "iban": "string",
+        "id": "string",
+        "infoRequests": [],
+        "initials": "string",
+        "key": "string",
+        "location": "string",
+        "locations": [],
+        "maritalStatus": "string",
+        "maternityProtectionActive": "boolean",
+        "maternityProtectionNote": "string",
+        "name": "string",
+        "nationality": "string",
+        "payrollStatements": [],
+        "phone": "string",
+        "privateAddress": "string",
+        "privateAddressFields": {
+          "careOf": "string",
+          "city": "string",
+          "country": "string",
+          "houseNumber": "string",
+          "postalCode": "string",
+          "street": "string"
+        },
+        "role": "string",
+        "shifts": [],
+        "socialSecurityNumber": "string",
+        "startDate": "string",
+        "status": "string",
+        "taxId": "string",
+        "team": "string",
+        "teams": [],
+        "tenure": "string",
+        "timeline": [
+          {
+            "date": "string",
+            "title": "string",
+            "tone": "string"
+          }
+        ],
+        "vacationCarryover": "number",
+        "vacationManualCorrection": "number",
+        "vacationRemaining": "number",
+        "vacationTaken": "number",
+        "vacationTotal": "number",
+        "weeklyHours": "string"
+      }
+    }
+  },
+  "POST tenants/[tenant]/employees/[employeeHandle]/info-requests": {
+    "status": 201,
+    "shape": {
+      "infoRequest": {
+        "createdAt": "string",
+        "dueAt": "null",
+        "employeeId": "string",
+        "fileRequested": "boolean",
+        "id": "string",
+        "message": "string",
+        "requestedBy": "string",
+        "respondedAt": "null",
+        "responseFileId": "null",
+        "responseMessage": "string",
+        "status": "string",
+        "tenantId": "string",
+        "title": "string",
+        "updatedAt": "string"
+      }
+    }
+  },
+  "POST tenants/[tenant]/employees/[employeeHandle]/invite": {
+    "status": 201,
+    "shape": {
+      "invitation": {
+        "acceptedAt": "null",
+        "createdAt": "string",
+        "email": "string",
+        "employeeId": "string",
+        "expiresAt": "string",
+        "id": "string",
+        "invitedByName": "string",
+        "role": "string",
+        "status": "string",
+        "tenant": {
+          "name": "string"
+        },
+        "tenantId": "string",
+        "token": "string",
+        "updatedAt": "string"
+      }
+    }
+  },
+  "POST tenants/[tenant]/employees/[employeeHandle]/offboard": {
+    "status": 200,
+    "shape": {
+      "status": "boolean"
+    }
+  },
+  "POST tenants/[tenant]/employees/[employeeHandle]/reactivate": {
+    "status": 200,
+    "shape": {
+      "status": "boolean"
+    }
+  },
+  "POST tenants/[tenant]/employees/folder-templates": {
+    "status": 201,
+    "shape": {
+      "template": {
+        "appliedTo": "number",
+        "id": "string",
+        "name": "string"
+      }
+    }
+  },
+  "POST tenants/[tenant]/files/deleted/[batchId]": {
+    "status": 200,
+    "shape": {
+      "restored": {
+        "fileCount": "number",
+        "folderCount": "number",
+        "kind": "string",
+        "name": "string"
+      }
+    }
+  },
+  "POST tenants/[tenant]/files/folders": {
+    "status": 201,
+    "shape": {
+      "folder": {
+        "createdAt": "string",
+        "deletedAt": "null",
+        "deletedByName": "string",
+        "deletionBatchId": "null",
+        "employeeId": "null",
+        "hiddenFromEmployee": "boolean",
+        "id": "string",
+        "locationId": "null",
+        "locked": "boolean",
+        "name": "string",
+        "ownerName": "string",
+        "parentId": "null",
+        "path": "string",
+        "pinHash": "null",
+        "scope": "string",
+        "slug": "string",
+        "status": "string",
+        "teamId": "null",
+        "templateId": "null",
+        "tenantId": "string",
+        "updatedAt": "string"
+      }
+    }
+  },
+  "POST tenants/[tenant]/files/folders (Mitarbeiter)": {
+    "status": 201,
+    "shape": {
+      "folder": {
+        "createdAt": "string",
+        "deletedAt": "null",
+        "deletedByName": "string",
+        "deletionBatchId": "null",
+        "employeeId": "string",
+        "hiddenFromEmployee": "boolean",
+        "id": "string",
+        "locationId": "null",
+        "locked": "boolean",
+        "name": "string",
+        "ownerName": "string",
+        "parentId": "null",
+        "path": "string",
+        "pinHash": "null",
+        "scope": "string",
+        "slug": "string",
+        "status": "string",
+        "teamId": "null",
+        "templateId": "null",
+        "tenantId": "string",
+        "updatedAt": "string"
+      }
+    }
+  },
+  "POST tenants/[tenant]/locations": {
+    "status": 201,
+    "shape": {
+      "location": {
+        "accentClassName": "string",
+        "activeToday": "number",
+        "address": {
+          "careOf": "string",
+          "city": "string",
+          "country": "string",
+          "houseNumber": "string",
+          "postalCode": "string",
+          "street": "string"
+        },
+        "dbId": "string",
+        "effectiveMinStaffing": "number",
+        "email": "null",
+        "employeeCount": "number",
+        "id": "string",
+        "key": "string",
+        "kind": "string",
+        "leadEmail": "null",
+        "leadEmployeeId": "null",
+        "leadInitials": "null",
+        "leadName": "null",
+        "leadPhone": "null",
+        "name": "string",
+        "openingHours": [
+          {
+            "mode": "string",
+            "ranges": [
+              {
+                "breakMinutes": "number",
+                "end": "string",
+                "start": "string"
+              }
+            ],
+            "weekday": "string"
+          }
+        ],
+        "openPositions": "number",
+        "shiftCount": "number",
+        "shiftMinStaffing": "null",
+        "status": "string",
+        "usesDefaultOpeningHours": "boolean",
+        "utilization": "string",
+        "utilizationCaption": "string"
+      }
+    }
+  },
+  "POST tenants/[tenant]/locations/[locationHandle]/employees": {
+    "status": 200,
+    "shape": {
+      "location": {
+        "accentClassName": "string",
+        "activeToday": "number",
+        "addressId": "string",
+        "bundesland": "null",
+        "clockQrToken": "null",
+        "createdAt": "string",
+        "employeeCount": "number",
+        "id": "string",
+        "key": "string",
+        "kind": "string",
+        "leadEmail": "string",
+        "leadEmployeeId": "null",
+        "leadInitials": "string",
+        "leadName": "string",
+        "leadPhone": "string",
+        "name": "string",
+        "openingHoursJson": [],
+        "openPositions": "number",
+        "shiftCount": "number",
+        "shiftMinStaffing": "null",
+        "status": "string",
+        "tenantId": "string",
+        "updatedAt": "string",
+        "utilization": "string",
+        "utilizationCaption": "string"
+      }
+    }
+  },
+  "POST tenants/[tenant]/reminders": {
+    "status": 201,
+    "shape": {
+      "reminder": {
+        "category": "string",
+        "completedAt": "null",
+        "createdAt": "string",
+        "createdById": "string",
+        "createdByName": "string",
+        "dueDate": "string",
+        "id": "string",
+        "key": "string",
+        "linkedFilesJson": [],
+        "notes": "string",
+        "priority": "string",
+        "status": "string",
+        "subject": "string",
+        "teamId": "null",
+        "tenantId": "string",
+        "title": "string",
+        "updatedAt": "string"
+      }
+    }
+  },
+  "POST tenants/[tenant]/reminders/[reminderId]/complete": {
+    "status": 200,
+    "shape": {
+      "status": "boolean"
+    }
+  },
+  "POST tenants/[tenant]/roles": {
+    "status": 201,
+    "shape": {
+      "role": {
+        "appOverviewEnabled": "boolean",
+        "createdAt": "string",
+        "description": "string",
+        "id": "string",
+        "isSystem": "boolean",
+        "key": "string",
+        "name": "string",
+        "tenantId": "string",
+        "updatedAt": "string"
+      }
+    }
+  },
+  "POST tenants/[tenant]/sickness-reports": {
+    "status": 201,
+    "shape": {
+      "report": {
+        "attachmentFileId": "null",
+        "certificateStatus": "string",
+        "closedAt": "null",
+        "createdAt": "string",
+        "employeeId": "string",
+        "endDate": "null",
+        "id": "string",
+        "note": "string",
+        "reportChannel": "string",
+        "reportedById": "string",
+        "reportedByName": "string",
+        "startDate": "string",
+        "status": "string",
+        "tenantId": "string",
+        "updatedAt": "string"
+      }
+    }
+  },
+  "POST tenants/[tenant]/sickness-reports/[reportId]/close": {
+    "status": 200,
+    "shape": {
+      "report": {
+        "attachmentFileId": "null",
+        "certificateStatus": "string",
+        "closedAt": "string",
+        "createdAt": "string",
+        "employeeId": "string",
+        "endDate": "string",
+        "id": "string",
+        "note": "string",
+        "reportChannel": "string",
+        "reportedById": "string",
+        "reportedByName": "string",
+        "startDate": "string",
+        "status": "string",
+        "tenantId": "string",
+        "updatedAt": "string"
+      }
+    }
+  },
+  "POST tenants/[tenant]/teams": {
+    "status": 201,
+    "shape": {
+      "team": {
+        "colorClassName": "string",
+        "dbId": "string",
+        "description": "string",
+        "id": "string",
+        "key": "string",
+        "leadEmployeeId": "null",
+        "leadName": "null",
+        "locations": [
+          "string"
+        ],
+        "members": [],
+        "name": "string"
+      }
+    }
+  },
+  "POST tenants/[tenant]/teams/[teamHandle]/lead": {
+    "status": 200,
+    "shape": {
+      "status": "boolean"
+    }
+  },
+  "POST tenants/[tenant]/teams/[teamHandle]/members": {
+    "status": 201,
+    "shape": {
+      "status": "boolean"
+    }
+  },
+  "POST tenants/[tenant]/teams/[teamHandle]/members (2)": {
+    "status": 201,
+    "shape": {
+      "status": "boolean"
+    }
+  },
+  "POST tenants/[tenant]/vacation-requests": {
+    "status": 201,
+    "shape": {
+      "request": {
+        "createdAt": "string",
+        "days": "number",
+        "decidedAt": "null",
+        "decidedBy": "string",
+        "employeeId": "string",
+        "endDate": "string",
+        "id": "string",
+        "key": "string",
+        "note": "string",
+        "startDate": "string",
+        "status": "string",
+        "tenantId": "string",
+        "updatedAt": "string"
+      }
+    }
+  },
+  "POST tenants/[tenant]/vacation-requests/[requestId]/approve": {
+    "status": 200,
+    "shape": {
+      "status": "boolean"
+    }
+  },
+  "POST tenants/[tenant]/vacation-requests/[requestId]/reject": {
+    "status": 200,
+    "shape": {
+      "status": "boolean"
+    }
+  },
+  "POST tenants/[tenant]/wish-free-requests": {
+    "status": 201,
+    "shape": {
+      "request": {
+        "createdAt": "string",
+        "date": "string",
+        "decidedAt": "string",
+        "decidedBy": "string",
+        "employeeId": "string",
+        "id": "string",
+        "key": "string",
+        "reason": "string",
+        "rejectReason": "string",
+        "status": "string",
+        "tenantId": "string",
+        "updatedAt": "string"
+      }
+    }
+  },
+  "POST tenants/[tenant]/wish-free-requests/[requestId]/approve": {
+    "status": 200,
+    "shape": {
+      "status": "boolean"
+    }
+  },
+  "POST tenants/[tenant]/wish-free-requests/[requestId]/reject": {
+    "status": 200,
+    "shape": {
+      "status": "boolean"
+    }
+  }
+}

@@ -9,6 +9,10 @@ export default defineConfig({
       "server-only": fileURLToPath(
         new URL("./tests/stubs/server-only.ts", import.meta.url),
       ),
+      // Außerhalb eines Next-Requests wirft das echte Modul — siehe Stub.
+      "next/headers": fileURLToPath(
+        new URL("./tests/stubs/next-headers.ts", import.meta.url),
+      ),
     },
   },
   test: {
