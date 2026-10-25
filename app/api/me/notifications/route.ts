@@ -3,6 +3,7 @@ import { getEmployeesForTenant, getEmployeeLimitForTenant } from "@/lib/employee
 import { getRemindersForTenant } from "@/lib/reminders";
 import { getISOWeekFromDate, getShiftPlanForTenant } from "@/lib/shift-service";
 import { getVacationRequestsForTenant } from "@/lib/vacation-service";
+import { getSicknessForTenant } from "@/lib/sickness";
 import { getNotificationPreferences } from "@/lib/settings-service";
 import { checkRateLimit, tooManyRequests } from "@/lib/rate-limit";
 import { headers } from "next/headers";
@@ -45,7 +46,7 @@ export async function GET(request: Request) {
   }
 
   const { year, week } = getISOWeekFromDate(new Date());
-  const [vacations, reminders, shiftPlan, employees, preferences, employeeLimit] =
+  const [vacations, reminders, shiftPlan, employees, preferences, employeeLimit, sickness] =
     await Promise.all([
       tryLoad(getVacationRequestsForTenant(tenant)),
       tryLoad(getRemindersForTenant(tenant)),
@@ -53,6 +54,7 @@ export async function GET(request: Request) {
       tryLoad(getEmployeesForTenant(tenant)),
       tryLoad(getNotificationPreferences(tenant)),
       tryLoad(getEmployeeLimitForTenant(tenant)),
+      tryLoad(getSicknessForTenant(tenant)),
     ]);
 
   const notifications: Array<{
@@ -121,5 +123,14 @@ export async function GET(request: Request) {
       }
     : null;
 
-  return NextResponse.json({ notifications, usage });
+  // Zähler für die Badges der Dashboard-Seitenleiste (additiv — die App
+  // liest nur `notifications`/`usage`). `null` = Bereich nicht sichtbar.
+  const counts = {
+    pendingVacations: vacations
+      ? vacations.filter((item) => item.status === "pending").length
+      : null,
+    activeSickness: sickness ? sickness.current.length : null,
+  };
+
+  return NextResponse.json({ notifications, usage, counts });
 }

@@ -1,6 +1,5 @@
-import NavigationSidebar, {
-  type NavigationTenantItem,
-} from "@/components/Navigation";
+import DashboardShell from "@/components/navigation/DashboardShell";
+import type { NavigationTenantItem } from "@/components/navigation/types";
 import { auth } from "@/lib/auth";
 import { getOwnScheduledDeletion } from "@/lib/account-service";
 import { isStripeConfigured } from "@/lib/stripe/client";
@@ -9,12 +8,9 @@ import { getTenantsForUser } from "@/lib/tenants";
 import { getTranslations } from "next-intl/server";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import "./dashboard.css";
 
-const tenantMarkClasses = [
-  "sidebar-tenant-mark-blue",
-  "sidebar-tenant-mark-green",
-  "sidebar-tenant-mark-purple",
-];
+const tenantMarkColors = ["#2a6fdb", "#c9622a", "#168a8a", "#8b6ed4"];
 
 function getInitials(name: string) {
   const initials = name
@@ -67,7 +63,7 @@ export default async function AuthLayout ({
         role: getRoleLabel(membership.role, t),
         mark: getInitials(membership.tenant.name),
         href: `/u/${membership.tenant.slug}`,
-        colorClass: tenantMarkClasses[index % tenantMarkClasses.length],
+        color: tenantMarkColors[index % tenantMarkColors.length],
         slug: membership.tenant.slug,
         permissions: computePermissionLevels(membership),
         country: membership.tenant.country,
@@ -131,21 +127,16 @@ export default async function AuthLayout ({
     }));
 
     return (
-        <div className="fixed inset-0 flex w-full overflow-hidden">
-            <NavigationSidebar
-                tenants={tenants}
-                user={{
-                    name: session.user.name || session.user.email,
-                    email: session.user.email,
-                    initials: getInitials(session.user.name || session.user.email),
-                }}
-                isStripeConfigured={isStripeConfigured()}
-            />
-            <main className="main-content">
-                <div className="container">
-                    {children}
-                </div>
-            </main>
-        </div>
+        <DashboardShell
+            tenants={tenants}
+            user={{
+                name: session.user.name || session.user.email,
+                email: session.user.email,
+                initials: getInitials(session.user.name || session.user.email),
+            }}
+            isStripeConfigured={isStripeConfigured()}
+        >
+            {children}
+        </DashboardShell>
     )
 }

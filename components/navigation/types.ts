@@ -8,7 +8,8 @@ export type NavigationTenantItem = {
   role: string;
   mark: string;
   href: string;
-  colorClass: string;
+  /** Hintergrundfarbe des Mandanten-Kürzels im Umschalter. */
+  color: string;
   slug?: string;
   permissions?: Record<TenantPermissionArea, PermissionLevel>;
   country?: string;

@@ -30,7 +30,8 @@
       "switchTenant": "Unternehmen wechseln",
       "unknownCompany": "Unbekanntes Unternehmen",
       "selectCompany": "Unternehmen auswählen",
-      "noCompanyActive": "Kein Unternehmen aktiv"
+      "noCompanyActive": "Kein Unternehmen aktiv",
+      "yourCompanies": "Ihre Unternehmen"
     },
     "footer": {
       "settings": "Einstellungen",
@@ -52,7 +53,20 @@
       "allRead": "Alles gelesen",
       "markAllRead": "Als gelesen markieren",
       "markRead": "Gelesen",
-      "empty": "Keine Benachrichtigungen – alles erledigt."
+      "empty": "Keine Benachrichtigungen – alles erledigt.",
+      "newCount": "{count} neu",
+      "settings": "Benachrichtigungs-Einstellungen",
+      "filterLabel": "Filter",
+      "tabs": {
+        "all": "Alle",
+        "unread": "Ungelesen",
+        "requests": "Anfragen"
+      },
+      "open": "Ansehen",
+      "openRequest": "Antrag öffnen",
+      "emptyTitle": "Alles erledigt",
+      "emptyUnread": "Keine ungelesenen Benachrichtigungen.",
+      "emptyRequests": "Keine offenen Anfragen."
     },
     "settings": {
       "dialogLabel": "Einstellungen",
@@ -234,6 +248,20 @@
         "reminderPushNeedsMobilePush": "Hinweis: Push-Benachrichtigungen sind unter „Benachrichtigungen“ derzeit ausgeschaltet — dort zusätzlich „Mobile Push“ aktivieren.",
         "worksCouncilHint": "Hinweis: Gibt es in Ihrem Betrieb einen Betriebsrat, ist die Einführung einer Stempeluhr in der Regel mitbestimmungspflichtig (§ 87 Abs. 1 Nr. 6 BetrVG). Bitte stimmen Sie die Aktivierung vorher mit dem Betriebsrat ab."
       }
+    },
+    "sidebarLabel": "Seitenleiste",
+    "sections": {
+      "personal": "Persönlich",
+      "staff": "Personal",
+      "organisation": "Organisation",
+      "analysis": "Auswertung"
+    },
+    "search": {
+      "title": "Suchen",
+      "placeholder": "Suchen…",
+      "dialogLabel": "Schnellsuche",
+      "inputPlaceholder": "Seite suchen…",
+      "empty": "Keine Treffer."
     }
   },
   "Employees": {

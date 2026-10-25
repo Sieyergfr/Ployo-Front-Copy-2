@@ -30,7 +30,8 @@
       "switchTenant": "Switch company",
       "unknownCompany": "Unknown company",
       "selectCompany": "Select company",
-      "noCompanyActive": "No company active"
+      "noCompanyActive": "No company active",
+      "yourCompanies": "Your companies"
     },
     "footer": {
       "settings": "Settings",
@@ -52,7 +53,20 @@
       "allRead": "All caught up",
       "markAllRead": "Mark as read",
       "markRead": "Read",
-      "empty": "No notifications — all caught up."
+      "empty": "No notifications — all caught up.",
+      "newCount": "{count} new",
+      "settings": "Notification settings",
+      "filterLabel": "Filter",
+      "tabs": {
+        "all": "All",
+        "unread": "Unread",
+        "requests": "Requests"
+      },
+      "open": "View",
+      "openRequest": "Open request",
+      "emptyTitle": "All done",
+      "emptyUnread": "No unread notifications.",
+      "emptyRequests": "No open requests."
     },
     "settings": {
       "dialogLabel": "Settings",
@@ -234,6 +248,20 @@
         "reminderPushNeedsMobilePush": "Note: push notifications are currently switched off under “Notifications” — enable “Mobile push” there as well.",
         "worksCouncilHint": "Note: if your company has a works council, introducing a time clock is usually subject to co-determination (Section 87(1) No. 6 BetrVG). Please agree on the activation with the works council beforehand."
       }
+    },
+    "sidebarLabel": "Sidebar",
+    "sections": {
+      "personal": "Personal",
+      "staff": "Staff",
+      "organisation": "Organisation",
+      "analysis": "Analytics"
+    },
+    "search": {
+      "title": "Search",
+      "placeholder": "Search…",
+      "dialogLabel": "Quick search",
+      "inputPlaceholder": "Search pages…",
+      "empty": "No results."
     }
   },
   "Employees": {
