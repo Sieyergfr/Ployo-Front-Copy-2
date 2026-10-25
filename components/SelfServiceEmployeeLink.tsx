@@ -123,7 +123,7 @@ export function UnlinkOwnEmployeeButton({
   return (
     <button
       type="button"
-      className="btn btn-secondary btn-sm text-danger"
+      className="db-btn2 db-focus inline-flex min-h-[38px] cursor-pointer items-center rounded-[9px] border border-[#ecebe7] bg-[#f2f1ed] px-3 py-2 text-[13px] font-medium text-ink"
       onClick={() =>
         openPopup({
           title: t("unlinkConfirm"),
@@ -133,8 +133,66 @@ export function UnlinkOwnEmployeeButton({
         })
       }
     >
-      {t("unlinkConfirm")}
+      {t("unlinkButton")}
     </button>
+  );
+}
+
+const avatarColors = ["#c9622a", "#2a5bc9", "#1d8a65", "#7a3c9c", "#b7791f", "#4a5568"];
+
+/** Profilauswahl direkt auf der Seite (neues Design "Mein Bereich", nicht verknüpft). */
+export function LinkProfilePicker({
+  tenant,
+  unlinkedEmployees,
+}: {
+  tenant: string;
+  unlinkedEmployees: UnlinkedEmployee[];
+}) {
+  const t = useTranslations("SelfServiceEmployeeLink");
+  const [state, formAction, isPending] = useActionState(linkOwnEmployeeAction, initialState);
+
+  if (unlinkedEmployees.length === 0) {
+    return <p className="m-0 text-[13px] leading-[1.55] text-[#6e6e6b]">{t("noUnlinkedProfile")}</p>;
+  }
+
+  return (
+    <form action={formAction} className="flex flex-col gap-2">
+      <input type="hidden" name="tenant" value={tenant} />
+      <span className="font-mono text-[10px] tracking-[0.12em] text-[#6e6e6b] uppercase">{t("chooseProfile")}</span>
+      <div className="flex max-h-[360px] flex-col gap-2 overflow-y-auto">
+        {unlinkedEmployees.map((employee, index) => (
+          <label
+            key={employee.id}
+            className="db-pick flex cursor-pointer items-center gap-3 rounded-[12px] border border-[#e4e3df] bg-[#fafaf8] px-3.5 py-3 has-[:checked]:border-[rgba(139,110,212,0.6)] has-[:checked]:bg-white has-[:checked]:shadow-[0_0_0_3px_rgba(139,110,212,0.12)]"
+          >
+            <span
+              className="flex size-9 shrink-0 items-center justify-center rounded-full text-[12px] font-bold text-white"
+              style={{ background: avatarColors[index % avatarColors.length] }}
+            >
+              {employee.initials}
+            </span>
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span className="truncate text-[14px] font-semibold text-ink">{employee.name}</span>
+              <span className="truncate text-[12.5px] text-[#6e6e6b]">
+                {[employee.role, employee.location].filter(Boolean).join(" · ")}
+              </span>
+            </span>
+            <input type="radio" name="employeeId" value={employee.id} required className="size-[18px] accent-[#7a5fd0]" />
+          </label>
+        ))}
+      </div>
+      <span className="text-[12px] text-[#6e6e6b]">{t("onlyUnlinkedHint")}</span>
+      <FormErrorBanner message={state.error} />
+      <div className="mt-3">
+        <button
+          type="submit"
+          disabled={isPending}
+          className="db-cta db-focus relative inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 overflow-hidden rounded-[10px] border border-[rgba(167,142,232,0.45)] bg-ink px-[18px] py-2.5 text-[14px] font-semibold text-white disabled:opacity-60"
+        >
+          <span>{isPending ? t("linking") : t("linkMe")}</span>
+        </button>
+      </div>
+    </form>
   );
 }
 

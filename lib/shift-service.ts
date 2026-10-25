@@ -826,6 +826,72 @@ export async function getMyShiftsForCurrentWeek(
   };
 }
 
+export type MyRangeShift = MyShift & { date: string };
+
+/**
+ * Eigene veröffentlichte Schichten in einem Zeitraum (z. B. Monatskalender
+ * in "Mein Bereich"). Liest wie `getMyShiftsForCurrentWeek` ausschließlich
+ * den Schnappschuss der Veröffentlichung, nur über mehrere Wochen.
+ * `null`, wenn das Konto mit keiner Personalakte verknüpft ist.
+ */
+export async function getMyPublishedShiftsInRange(
+  tenantSlug: string,
+  range: { from: string; to: string },
+): Promise<MyRangeShift[] | null> {
+  const access = await requireTenantMembership(tenantSlug);
+  const employee = await prisma.tenantEmployee.findFirst({
+    where: { tenantId: access.tenantId, userId: access.userId },
+    select: { id: true },
+  });
+
+  if (!employee) {
+    return null;
+  }
+
+  const weeks: Array<{ year: number; week: number }> = [];
+  const cursor = new Date(`${range.from}T12:00:00Z`);
+  const end = new Date(`${range.to}T12:00:00Z`);
+
+  // Höchstens ~6 Wochen je Monat; die Obergrenze schützt vor riesigen Zeiträumen.
+  while (cursor <= end && weeks.length < 60) {
+    const key = getISOWeekFromDate(cursor);
+
+    if (!weeks.some((item) => item.year === key.year && item.week === key.week)) {
+      weeks.push(key);
+    }
+
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+
+  const records = await prisma.tenantShiftWeek.findMany({
+    where: {
+      tenantId: access.tenantId,
+      status: "published",
+      OR: weeks.map((item) => ({ year: item.year, week: item.week })),
+    },
+    select: { publishedShiftsJson: true },
+  });
+
+  return records
+    .flatMap((record) => (record.publishedShiftsJson ?? []) as PublishedShiftSnapshotEntry[])
+    .filter(
+      (entry) =>
+        entry.employeeId === employee.id && entry.date >= range.from && entry.date <= range.to,
+    )
+    .map((entry) => ({
+      id: entry.id,
+      date: entry.date,
+      startTime: entry.startTime,
+      endTime: entry.endTime,
+      time: entry.time,
+      location: entry.location,
+      locationAccentClassName: entry.locationAccentClassName,
+      note: entry.note,
+      breakMinutes: entry.breakMinutes,
+    }))
+    .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime));
+}
+
 function todayIsoDate(): string {
   return new Date().toISOString().slice(0, 10);
 }

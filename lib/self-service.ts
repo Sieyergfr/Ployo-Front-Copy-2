@@ -56,6 +56,8 @@ export type SelfServiceEmployee = {
   vacationTaken: number;
   /** Bereits in `vacationRemaining` enthalten — separat für eine Anzeige "davon X Tage Resturlaub". */
   vacationCarryover: number;
+  /** Vertragliche Wochenstunden als Freitext (z. B. "40", "37,5 Std."), "" ohne Angabe. Optional für ältere Clients. */
+  weeklyHours?: string;
 };
 
 /**
@@ -366,6 +368,7 @@ export async function getMySelfServiceOverview(
       vacationTaken: vacationAccount.vacationTaken,
       /** Bereits in `vacationRemaining` enthalten — separat für eine Anzeige "davon X Tage Resturlaub". */
       vacationCarryover: vacationAccount.vacationCarryover,
+      weeklyHours: employeeRecord.weeklyHours,
     },
     vacationRequests: vacationRequests.map((request) => ({
       id: request.id,

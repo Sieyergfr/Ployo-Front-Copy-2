@@ -127,6 +127,19 @@ export type NotificationMessage =
       rejectReason: string;
     }
   | {
+      key: "newTimeCorrectionRequest";
+      tenantName: string;
+      employeeName: string;
+      date: string;
+    }
+  | {
+      key: "timeCorrectionDecided";
+      tenantName: string;
+      date: string;
+      status: "approved" | "rejected";
+      note: string;
+    }
+  | {
       key: "reminderDigest";
       tenantName: string;
       /** `dueDate` ist hier bereits der gespeicherte Anzeigewert der Erinnerung. */
@@ -409,6 +422,54 @@ export function renderNotification(
           )
         : paragraph(
             `Ihre Wunschfrei-Anfrage für den <strong>${escapeHtml(date)}</strong> bei ${escapeHtml(message.tenantName)} wurde <strong>${decision}</strong>.${escapeHtml(reasonLine)}`,
+          );
+
+      return { subject, text, html };
+    }
+
+    case "newTimeCorrectionRequest": {
+      const date = formatNotificationDate(message.date, locale);
+      const subject = isEn
+        ? `Time correction request from ${message.employeeName}`
+        : `Korrekturantrag von ${message.employeeName}`;
+      const text = isEn
+        ? `${message.employeeName} requested a time correction for ${date} at ${message.tenantName}.`
+        : `${message.employeeName} hat bei ${message.tenantName} eine Zeitkorrektur für den ${date} beantragt.`;
+      const html = isEn
+        ? paragraph(
+            `${escapeHtml(message.employeeName)} requested a time correction for <strong>${escapeHtml(date)}</strong> at ${escapeHtml(message.tenantName)}.`,
+          )
+        : paragraph(
+            `${escapeHtml(message.employeeName)} hat bei ${escapeHtml(message.tenantName)} eine Zeitkorrektur für den <strong>${escapeHtml(date)}</strong> beantragt.`,
+          );
+
+      return { subject, text, html };
+    }
+
+    case "timeCorrectionDecided": {
+      const date = formatNotificationDate(message.date, locale);
+      const decision = isEn
+        ? message.status === "approved"
+          ? "approved"
+          : "rejected"
+        : message.status === "approved"
+          ? "genehmigt"
+          : "abgelehnt";
+      const noteLine = message.note
+        ? isEn
+          ? ` Note: ${message.note}`
+          : ` Hinweis: ${message.note}`
+        : "";
+      const subject = isEn ? `Time correction ${decision}` : `Zeitkorrektur ${decision}`;
+      const text = isEn
+        ? `Your time correction for ${date} at ${message.tenantName} was ${decision}.${noteLine}`
+        : `Ihre Zeitkorrektur für den ${date} bei ${message.tenantName} wurde ${decision}.${noteLine}`;
+      const html = isEn
+        ? paragraph(
+            `Your time correction for <strong>${escapeHtml(date)}</strong> at ${escapeHtml(message.tenantName)} was <strong>${decision}</strong>.${escapeHtml(noteLine)}`,
+          )
+        : paragraph(
+            `Ihre Zeitkorrektur für den <strong>${escapeHtml(date)}</strong> bei ${escapeHtml(message.tenantName)} wurde <strong>${decision}</strong>.${escapeHtml(noteLine)}`,
           );
 
       return { subject, text, html };

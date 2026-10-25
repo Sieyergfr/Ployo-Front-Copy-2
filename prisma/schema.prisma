@@ -447,6 +447,7 @@ model Tenant {
   employees                   TenantEmployee[]
   vacationRequests            TenantVacationRequest[]
   wishFreeRequests            TenantWishFreeRequest[]
+  timeCorrectionRequests      TenantTimeCorrectionRequest[]
   shifts                      TenantShift[]
   shiftTemplates              TenantShiftTemplate[]
   shiftWeeks                  TenantShiftWeek[]
@@ -887,6 +888,7 @@ model TenantEmployee {
   invitations                 TenantInvitation[]
   vacationRequests            TenantVacationRequest[]
   wishFreeRequests            TenantWishFreeRequest[]
+  timeCorrectionRequests      TenantTimeCorrectionRequest[]
   shifts                      TenantShift[]
   storageFiles                TenantFile[]
   storageFileFolders          TenantFileFolder[]
@@ -1452,9 +1454,44 @@ model TenantTimeEntry {
   clockInLocation      TenantLocation?   @relation("TimeEntryClockInLocation", fields: [clockInLocationId], references: [id], onDelete: SetNull)
   clockOutLocation     TenantLocation?   @relation("TimeEntryClockOutLocation", fields: [clockOutLocationId], references: [id], onDelete: SetNull)
   breaks               TenantTimeBreak[]
+  correctionRequests   TenantTimeCorrectionRequest[]
 
   @@index([tenantId, clockInAt])
   @@index([employeeId, clockInAt])
+}
+
+/**
+ * Korrekturantrag eines Mitarbeiters zu einem Arbeitstag ("Zeit korrigieren"):
+ * gewünschtes Kommen/Gehen + Grund, entschieden von der Teamleitung bzw.
+ * Verwaltung (timeTracking:write). Mit `timeEntryId` bezieht er sich auf einen
+ * vorhandenen Eintrag, ohne auf einen fehlenden Tag (wird beim Genehmigen
+ * nachgetragen). Status: pending | approved | rejected | withdrawn.
+ */
+model TenantTimeCorrectionRequest {
+  id                    String           @id @default(cuid())
+  tenantId              String
+  employeeId            String
+  timeEntryId           String?
+  /// Kalendertag (Ortszeit des Betriebs), YYYY-MM-DD.
+  date                  String
+  /// Gewünschte Zeiten "HH:MM" (Ortszeit); Ende ≤ Beginn heißt über Mitternacht.
+  requestedStartTime    String
+  requestedEndTime      String
+  /// Gewünschte Pausendauer; `null` = gestempelte bzw. gesetzliche Pause.
+  requestedBreakMinutes Int?
+  reason                String           @default("")
+  status                String           @default("pending")
+  decidedAt             DateTime?
+  decidedBy             String           @default("")
+  decisionNote          String           @default("")
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+  tenant                Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee              TenantEmployee   @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  timeEntry             TenantTimeEntry? @relation(fields: [timeEntryId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, status])
+  @@index([employeeId, date])
 }
 
 /**

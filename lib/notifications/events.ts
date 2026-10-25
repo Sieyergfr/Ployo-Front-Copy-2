@@ -443,3 +443,66 @@ export async function notifyEmployeeOfExpiringVacationCarryover(input: {
 
   return true;
 }
+
+/** Neuer Korrekturantrag ("Zeit korrigieren") an die Verwaltung. */
+export async function notifyManagersOfTimeCorrectionRequest(input: {
+  tenantId: string;
+  tenantName: string;
+  employeeName: string;
+  requestId: string;
+  date: string;
+}) {
+  const managers = await getTenantManagers(input.tenantId);
+
+  await Promise.all(
+    managers.map((manager) =>
+      dispatchNotification({
+        userId: manager.userId,
+        email: manager.user.email,
+        message: {
+          key: "newTimeCorrectionRequest",
+          tenantName: input.tenantName,
+          employeeName: input.employeeName,
+          date: input.date,
+        },
+        tenantId: input.tenantId,
+        category: "system",
+        entityType: "time-correction-request",
+        entityId: input.requestId,
+      }),
+    ),
+  );
+}
+
+/** Entscheidung über einen Korrekturantrag an den Mitarbeiter. */
+export async function notifyEmployeeOfTimeCorrectionDecision(input: {
+  tenantId: string;
+  tenantName: string;
+  employeeId: string;
+  requestId: string;
+  date: string;
+  status: "approved" | "rejected";
+  note: string;
+}) {
+  const account = await getEmployeeAccount(input.employeeId);
+
+  if (!account) {
+    return;
+  }
+
+  await dispatchNotification({
+    userId: account.userId,
+    email: account.email,
+    message: {
+      key: "timeCorrectionDecided",
+      tenantName: input.tenantName,
+      date: input.date,
+      status: input.status,
+      note: input.note,
+    },
+    tenantId: input.tenantId,
+    category: "system",
+    entityType: "time-correction-request",
+    entityId: input.requestId,
+  });
+}

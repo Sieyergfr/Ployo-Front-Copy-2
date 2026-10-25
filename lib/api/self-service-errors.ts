@@ -1,5 +1,5 @@
 import { REPORT_ERRORS } from "@/lib/report-hours";
-import { TIME_TRACKING_ERROR_STATUS } from "@/lib/time-tracking";
+import { TIME_CORRECTION_ERROR_STATUS, TIME_TRACKING_ERROR_STATUS } from "@/lib/time-tracking";
 
 /**
  * Gemeinsames Fehler-Mapping für alle Route Handler unter `/api/me/*` und
@@ -139,6 +139,12 @@ function classifySelfServiceError(message: string): number | null {
 
   if (timeTrackingStatus !== undefined) {
     return timeTrackingStatus;
+  }
+
+  const timeCorrectionStatus = TIME_CORRECTION_ERROR_STATUS.get(message);
+
+  if (timeCorrectionStatus !== undefined) {
+    return timeCorrectionStatus;
   }
 
   // lib/reports-service.ts — feste Meldungen der Stunden-Reports.

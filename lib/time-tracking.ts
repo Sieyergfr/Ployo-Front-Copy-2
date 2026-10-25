@@ -406,6 +406,25 @@ export const TIME_TRACKING_ERRORS = {
   qrInvalid: "Dieser QR-Code gehört zu keinem aktiven Standort Ihres Betriebs.",
 } as const;
 
+/** Feste Meldungen der Korrekturanträge (lib/time-correction-service.ts) samt HTTP-Status. */
+export const TIME_CORRECTION_ERRORS = {
+  notLinked: "Ihr Konto ist noch keiner Personalakte zugeordnet. Bitte an HR wenden.",
+  invalid: "Bitte Datum, Kommen und Gehen angeben.",
+  future: "Korrekturen sind nur für vergangene Tage oder heute möglich.",
+  duplicate: "Für diesen Tag ist bereits ein Korrekturantrag offen.",
+  notFound: "Korrekturantrag nicht gefunden.",
+  notPending: "Über diesen Antrag wurde bereits entschieden.",
+} as const;
+
+export const TIME_CORRECTION_ERROR_STATUS: ReadonlyMap<string, number> = new Map([
+  [TIME_CORRECTION_ERRORS.notLinked, 409],
+  [TIME_CORRECTION_ERRORS.invalid, 400],
+  [TIME_CORRECTION_ERRORS.future, 400],
+  [TIME_CORRECTION_ERRORS.duplicate, 409],
+  [TIME_CORRECTION_ERRORS.notFound, 404],
+  [TIME_CORRECTION_ERRORS.notPending, 409],
+]);
+
 export const TIME_TRACKING_ERROR_STATUS: ReadonlyMap<string, number> = new Map([
   [TIME_TRACKING_ERRORS.disabled, 403],
   [TIME_TRACKING_ERRORS.alreadyClockedIn, 409],

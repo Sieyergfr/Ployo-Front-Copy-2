@@ -41,3 +41,18 @@ export function isKnownTeamColor(value: string) {
 export function isKnownLocationKind(value: string) {
   return (locationKinds as readonly string[]).includes(value);
 }
+
+const tokenHex: Record<string, string> = {
+  "bg-ink": "#0E0E0E",
+  "bg-success": "#357A52",
+  "bg-danger": "#B4332A",
+};
+
+/** Hex-Farbe einer Paletten-Klasse (z. B. für Inline-Styles in Diagrammen); Fallback Grau. */
+export function paletteHex(className: string | null | undefined, fallback = "#8F8F8A") {
+  if (!className) {
+    return fallback;
+  }
+
+  return tokenHex[className] ?? /#[0-9a-f]{6}/i.exec(className)?.[0] ?? fallback;
+}
