@@ -31,7 +31,7 @@ export function EmployeeEditFormAndBar({
   tenant: string;
   employeeId: string;
   employeeHandle: string;
-  activeTab: "contract" | "home";
+  activeTab: "contract" | "home" | "data";
   cancelHref: string;
   isEditing: boolean;
   children: ReactNode;

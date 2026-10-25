@@ -93,6 +93,11 @@ export type VacationRequest = {
   days: string;
   note?: string;
   status: VacationRequestStatus;
+  /** Beantragt am (ISO-Zeitpunkt). */
+  createdAt?: string;
+  /** Entschieden am / von — nur bei genehmigten oder abgelehnten Anträgen. */
+  decidedAt?: string | null;
+  decidedBy?: string;
 };
 
 /**

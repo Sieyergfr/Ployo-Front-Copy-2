@@ -94,6 +94,8 @@ export type PayrollStatement = {
   fileName: string;
   storageFileId: string;
   status: "available" | "corrected";
+  /** Erster Abruf durch den Mitarbeiter selbst; `null` = noch nicht geöffnet. */
+  firstViewedAt?: string | null;
 };
 
 export const infoRequestStatuses = ["open", "uploaded", "review", "cancelled"] as const;
@@ -207,6 +209,9 @@ export type Employee = {
   email: string;
   phone: string;
   hasAccount?: boolean;
+  /** App-Zugang für diesen Betrieb gesperrt (M2); `null`/fehlend = frei. */
+  appAccessLockedAt?: string | null;
+  appAccessLockReason?: string;
   address: string;
   addressFields?: {
     street: string;
@@ -240,3 +245,65 @@ export const employeeStatusConfig = {
   EmployeeStatus,
   { label: string; tone: "success" | "muted" | "neutral" | "danger" }
 >;
+
+/** Platzhalter für Felder ohne Leserecht (siehe lib/employee-service.ts). */
+const REDACTED_VALUE = "•••";
+
+export const employeeProfileFields = [
+  "birthDate",
+  "privateAddress",
+  "phone",
+  "taxId",
+  "socialSecurityNumber",
+  "healthInsurance",
+  "iban",
+  "emergencyContact",
+  "weeklyHours",
+  "startDate",
+] as const;
+
+export type EmployeeProfileField = (typeof employeeProfileFields)[number];
+
+/**
+ * Fehlende Angaben der Personalakte ("Akte vollständig"). Redigierte Felder
+ * (ohne Leserecht) zählen weder als vorhanden noch als fehlend.
+ */
+export function employeeProfileGaps(employee: Employee) {
+  const values: Record<EmployeeProfileField, string | boolean> = {
+    birthDate: employee.birthDate,
+    privateAddress: employee.privateAddress,
+    phone: employee.phone,
+    taxId: employee.taxId,
+    socialSecurityNumber: employee.socialSecurityNumber,
+    healthInsurance: employee.healthInsurance,
+    iban: employee.iban,
+    emergencyContact: employee.emergencyContacts.length > 0,
+    weeklyHours: employee.weeklyHours,
+    startDate: employee.startDate,
+  };
+  const known = employeeProfileFields.filter((field) => values[field] !== REDACTED_VALUE);
+  const missing = known.filter((field) => {
+    const value = values[field];
+
+    return typeof value === "boolean" ? !value : !value.trim();
+  });
+
+  return {
+    missing,
+    total: known.length,
+    percent: known.length ? Math.round(((known.length - missing.length) / known.length) * 100) : 100,
+  };
+}
+
+/** Jahre seit Eintritt (Bruchteil), `null` ohne gültiges Datum. */
+export function yearsSince(startDate: string, today = new Date()) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(startDate);
+
+  if (!match) {
+    return null;
+  }
+
+  const start = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+
+  return Math.max(0, (today.getTime() - start) / (365.25 * 86_400_000));
+}

@@ -15,6 +15,7 @@ import {
   updateTenantEmployee,
 } from "@/lib/employee-service";
 import { createTenantInvitation } from "@/lib/settings-service";
+import { setEmployeeAppAccessLock } from "@/lib/employee-access-lock";
 import { createEmployeeFolderTemplate } from "@/lib/employee-folder-templates";
 import {
   contractStatuses,
@@ -168,8 +169,28 @@ export async function createEmployeeAction(
     };
   }
 
+  // "Zur Mitarbeiter-App einladen" direkt beim Anlegen (neues Design). Ein
+  // Fehler beim Einladen macht das Anlegen nicht rückgängig — die Einladung
+  // lässt sich in der Akte jederzeit erneut senden.
+  let invited = false;
+
+  if (formData.get("inviteToApp") === "on" && employeeInput.email) {
+    try {
+      await createTenantInvitation({
+        tenantSlug: tenant,
+        email: employeeInput.email,
+        role: "EMPLOYEE",
+        source: "Personalakte",
+        employeeId: employee.id,
+      });
+      invited = true;
+    } catch {
+      invited = false;
+    }
+  }
+
   revalidatePath(employeesPath(tenant));
-  redirect(employeePath(tenant, employee.key ?? employee.id));
+  redirect(`${employeePath(tenant, employee.key ?? employee.id)}${invited ? "?invited=1" : ""}`);
 }
 
 export async function updateEmployeeAction(
@@ -280,7 +301,9 @@ export async function updateEmployeeAction(
     redirect(
       activeTab === "contract"
         ? `${employeePath(tenant, employee.key ?? employee.id)}?tab=contract`
-        : employeePath(tenant, employee.key ?? employee.id),
+        : activeTab === "data"
+          ? `${employeePath(tenant, employee.key ?? employee.id)}?tab=data`
+          : employeePath(tenant, employee.key ?? employee.id),
     );
   }, "Mitarbeiter speichern");
 }
@@ -886,4 +909,116 @@ export async function deleteEmployeeDocumentSlotFileAction(
     revalidatePath(path);
     redirect(path);
   }, "Datei entfernen");
+}
+
+/** App-Zugang sperren bzw. freigeben (M2). Ohne Weiterleitung — die Akte lädt neu. */
+export async function setEmployeeAccessLockAction(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  return withActionErrorHandling(async () => {
+    const tenant = formString(formData, "tenant");
+    const employeeId = formString(formData, "employeeId");
+    const employeeHandle = formString(formData, "employeeHandle");
+
+    if (!tenant || !employeeId) {
+      throw new Error("Mitarbeiter wurde nicht gefunden.");
+    }
+
+    await setEmployeeAppAccessLock({
+      tenantSlug: tenant,
+      employeeId,
+      locked: formString(formData, "locked") === "1",
+      reason: formString(formData, "reason"),
+    });
+
+    revalidatePath(employeesPath(tenant));
+
+    if (employeeHandle) {
+      revalidatePath(employeePath(tenant, employeeHandle));
+    }
+
+    return { success: true };
+  }, "App-Zugang ändern");
+}
+
+export type EmployeeImportRow = {
+  firstName: string;
+  lastName: string;
+  email?: string;
+  employeeNumber?: string;
+  location?: string;
+  team?: string;
+  contract?: string;
+  weeklyHours?: string;
+  startDate?: string;
+};
+
+export type EmployeeImportResult = {
+  error?: string;
+  created?: number;
+  failed?: Array<{ row: number; name: string; error: string }>;
+};
+
+/**
+ * CSV-Import (neues Design, "Importieren"): legt jede Zeile wie das
+ * Anlegen-Formular über `createTenantEmployee` an — gleiche Prüfungen
+ * (Pflichtfelder, eindeutige E-Mail, Tarifgrenze, bekannte Standorte/Teams).
+ * Fehlerhafte Zeilen werden übersprungen und gemeldet.
+ */
+export async function importEmployeesAction(
+  _prevState: EmployeeImportResult,
+  formData: FormData,
+): Promise<EmployeeImportResult> {
+  const tenant = formString(formData, "tenant");
+  let rows: EmployeeImportRow[] = [];
+
+  try {
+    rows = JSON.parse(formString(formData, "rows") || "[]") as EmployeeImportRow[];
+  } catch {
+    return { error: "Die Importdaten konnten nicht gelesen werden." };
+  }
+
+  if (!tenant || !Array.isArray(rows) || rows.length === 0) {
+    return { error: "Keine Zeilen zum Importieren." };
+  }
+
+  if (rows.length > 500) {
+    return { error: "Bitte höchstens 500 Zeilen auf einmal importieren." };
+  }
+
+  let created = 0;
+  const failed: NonNullable<EmployeeImportResult["failed"]> = [];
+
+  for (const [index, row] of rows.entries()) {
+    const name = `${row.firstName ?? ""} ${row.lastName ?? ""}`.trim();
+
+    try {
+      await createTenantEmployee({
+        tenantSlug: tenant,
+        firstName: String(row.firstName ?? "").trim(),
+        lastName: String(row.lastName ?? "").trim(),
+        email: String(row.email ?? "").trim(),
+        employeeNumber: String(row.employeeNumber ?? "").trim(),
+        location: String(row.location ?? "").trim(),
+        team: String(row.team ?? "").trim(),
+        contract: String(row.contract ?? "").trim() || "Unbefristet",
+        weeklyHours: String(row.weeklyHours ?? "").trim(),
+        startDate: String(row.startDate ?? "").trim(),
+        role: "Mitarbeiter",
+        status: "active",
+      });
+      created += 1;
+    } catch (error) {
+      failed.push({
+        row: index + 2,
+        name: name || "–",
+        error: error instanceof Error ? error.message : "Unbekannter Fehler",
+      });
+    }
+  }
+
+  revalidatePath(employeesPath(tenant));
+
+  return { created, failed };
 }

@@ -38,6 +38,9 @@ type VacationRecord = {
   status: string;
   note: string;
   employeeId: string;
+  createdAt?: Date;
+  decidedAt?: Date | null;
+  decidedBy?: string;
   employee: {
     id: string;
     key: string;
@@ -291,6 +294,9 @@ function toVacationRequest(record: VacationRecord): VacationRequest {
     days: daysLabel(record.days),
     note: record.note,
     status: normalizeStatus(record.status),
+    createdAt: record.createdAt?.toISOString(),
+    decidedAt: record.decidedAt?.toISOString() ?? null,
+    decidedBy: record.decidedBy ?? "",
   };
 }
 
@@ -1021,4 +1027,71 @@ export async function runVacationCarryoverRollover(now: Date = new Date(), tenan
   }
 
   return { checked: employees.length, rolledOver, remindersSent, flaggedForReview };
+}
+
+/**
+ * Manueller Hinweis auf verfallenden Resturlaub ("Hinweisen" im Tab
+ * Urlaubskonten). Dieselbe Benachrichtigung wie der Jahres-Cron; ein
+ * tatsächlicher Zustellversuch setzt `vacationCarryoverRemindedAt`, falls noch
+ * leer — das ist der rechtlich nötige Hinweis (BUrlG §7 Abs. 3).
+ */
+export async function remindEmployeesOfVacationCarryover(input: {
+  tenantSlug: string;
+  employeeIds: string[];
+}) {
+  const access = await requireTenantAccess(input.tenantSlug, "vacation", "write");
+  const tenant = await prisma.tenant.findUnique({ where: { id: access.tenantId }, select: { name: true } });
+  const employees = await prisma.tenantEmployee.findMany({
+    where: {
+      tenantId: access.tenantId,
+      id: { in: input.employeeIds.slice(0, 500) },
+      status: { not: "former" },
+      vacationCarryover: { gt: 0 },
+    },
+    select: { id: true, name: true, vacationCarryover: true, vacationCarryoverExpiresAt: true, vacationCarryoverRemindedAt: true },
+  });
+  let delivered = 0;
+  let withoutAccount = 0;
+
+  for (const employee of employees) {
+    await assertEmployeeInScope(access, employee.id);
+
+    const expiresAt =
+      employee.vacationCarryoverExpiresAt?.toISOString().slice(0, 10) ??
+      `${new Date().getUTCFullYear()}-03-31`;
+    const sent = await notifyEmployeeOfExpiringVacationCarryover({
+      tenantId: access.tenantId,
+      tenantName: tenant?.name ?? "",
+      employeeId: employee.id,
+      days: employee.vacationCarryover,
+      expiresAt,
+    });
+
+    if (!sent) {
+      withoutAccount += 1;
+      continue;
+    }
+
+    delivered += 1;
+
+    if (!employee.vacationCarryoverRemindedAt) {
+      await prisma.tenantEmployee.update({
+        where: { id: employee.id },
+        data: { vacationCarryoverRemindedAt: new Date() },
+      });
+    }
+
+    await recordTenantAudit({
+      tenantId: access.tenantId,
+      actorId: access.userId,
+      actorName: access.userName,
+      action: "Hinweis auf Resturlaub-Verfall gesendet",
+      source: "Urlaub",
+      entityType: "employee",
+      entityId: employee.id,
+      detail: `${employee.name} · ${employee.vacationCarryover} Tage bis ${expiresAt}`,
+    });
+  }
+
+  return { delivered, withoutAccount };
 }

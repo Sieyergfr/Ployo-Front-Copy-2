@@ -47,7 +47,9 @@ export function DbCard({
   return (
     <section
       className={cx(
-        "db-card box-border rounded-[16px] border border-[#ecebe7] bg-white p-6",
+        "db-card box-border rounded-[16px] border border-[#ecebe7] bg-white",
+        // Eigene Innenabstände (p-0, p-[18px] …) ersetzen den Standard statt mit ihm zu kollidieren.
+        !/(^|\s)p-/.test(className ?? "") && "p-6",
         className,
       )}
       {...props}

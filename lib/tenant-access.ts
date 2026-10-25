@@ -130,6 +130,30 @@ export type TenantAccessOptions = {
   allowBillingBlocked?: boolean;
 };
 
+/**
+ * Gesperrter App-Zugang (TenantEmployee.appAccessLockedAt): Das verknüpfte
+ * Konto verliert den Zugriff auf diesen Betrieb, im Web wie in der App.
+ * Inhaber sind ausgenommen (die Sperre darf einen Betrieb nie aussperren).
+ * Feste Meldung, die lib/api/self-service-errors.ts auf 401 abbildet — die
+ * App reagiert darauf wie auf eine abgelaufene Sitzung.
+ */
+export const TENANT_ACCESS_LOCKED_MESSAGE =
+  "Ihr Zugang zu diesem Betrieb wurde gesperrt. Bitte wenden Sie sich an Ihre Verwaltung.";
+
+function lockedEmployeeSelect(userId: string) {
+  return {
+    where: { userId, appAccessLockedAt: { not: null } },
+    select: { id: true },
+    take: 1,
+  } as const;
+}
+
+function assertNotLocked(membershipRole: string, lockedEmployees: Array<{ id: string }>) {
+  if (membershipRole !== "OWNER" && lockedEmployees.length > 0) {
+    throw new Error(TENANT_ACCESS_LOCKED_MESSAGE);
+  }
+}
+
 /** Wirft "SUBSCRIPTION_REQUIRED", wenn der Mandant wegen des Abos gesperrt ist (lib/billing-access.ts). */
 function assertBillingAccess(tenant: TenantBillingFields, options?: TenantAccessOptions) {
   if (options?.allowBillingBlocked) return;
@@ -158,6 +182,7 @@ export async function resolveTenantAccessForUser(
           slug: true,
           settings: { select: { twoFactorRequired: true } },
           ...tenantBillingSelect,
+          employees: lockedEmployeeSelect(user.id),
         },
       },
       roleRef: {
@@ -186,6 +211,8 @@ export async function resolveTenantAccessForUser(
   if (membership.tenant.settings?.twoFactorRequired && !user.twoFactorEnabled) {
     throw new Error("TWO_FACTOR_REQUIRED");
   }
+
+  assertNotLocked(membership.role, membership.tenant.employees);
 
   assertBillingAccess(membership.tenant, options);
 
@@ -276,6 +303,7 @@ export async function requireTenantMembership(
           slug: true,
           settings: { select: { twoFactorRequired: true } },
           ...tenantBillingSelect,
+          employees: lockedEmployeeSelect(user.id),
         },
       },
     },
@@ -286,6 +314,8 @@ export async function requireTenantMembership(
   if (membership.tenant.settings?.twoFactorRequired && !user.twoFactorEnabled) {
     throw new Error("TWO_FACTOR_REQUIRED");
   }
+
+  assertNotLocked(membership.role, membership.tenant.employees);
 
   assertBillingAccess(membership.tenant, options);
 
@@ -726,7 +756,10 @@ export async function withAccessRedirect<T>(
   try {
     return await load();
   } catch (err) {
-    if (err instanceof Error && err.message === "FORBIDDEN") {
+    if (
+      err instanceof Error &&
+      (err.message === "FORBIDDEN" || err.message === TENANT_ACCESS_LOCKED_MESSAGE)
+    ) {
       const { redirect } = await import("next/navigation");
       redirect(`/u/${tenantSlug}/kein-zugriff`);
     }

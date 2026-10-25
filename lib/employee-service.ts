@@ -60,6 +60,8 @@ type EmployeeRecord = {
   id: string;
   key: string;
   userId?: string | null;
+  appAccessLockedAt?: Date | null;
+  appAccessLockReason?: string;
   initials: string;
   name: string;
   employeeNumber: string;
@@ -165,6 +167,7 @@ type PayrollStatementRecord = {
   gross: string;
   net: string;
   status: string;
+  firstViewedAt?: Date | null;
   file: { id: string; displayName: string };
 };
 
@@ -846,6 +849,8 @@ function toEmployee(
     email: record.email,
     phone: record.phone,
     hasAccount: Boolean(record.userId),
+    appAccessLockedAt: record.appAccessLockedAt?.toISOString() ?? null,
+    appAccessLockReason: record.appAccessLockReason ?? "",
     address: formatAddress(decryptedWorkAddress),
     addressFields: addressDefaults(decryptedWorkAddress),
     vacationRemaining: record.vacationRemaining,
@@ -865,6 +870,7 @@ function toEmployee(
       fileName: statement.file.displayName,
       storageFileId: statement.file.id,
       status: statement.status === "corrected" ? "corrected" : "available",
+      firstViewedAt: statement.firstViewedAt?.toISOString() ?? null,
     })),
     infoRequests: (record.infoRequests ?? []).map((request) => ({
       id: request.id,

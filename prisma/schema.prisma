@@ -875,6 +875,9 @@ model TenantEmployee {
   /// Verschlüsselt wie birthDate/legalHoldReason (lib/encryption.ts) — z. B.
   /// für ein handschriftliches "geschützt bis ca. TT.MM.JJJJ".
   maternityProtectionNote     String                         @default("")
+  /// App-/Dashboard-Zugang für diesen Betrieb gesperrt (nur das verknüpfte Konto, nicht die Akte).
+  appAccessLockedAt           DateTime?
+  appAccessLockReason         String                         @default("")
   /// Zeitpunkt, an dem Kategorie-1-Stammdaten automatisch anonymisiert wurden
   /// (siehe cron/cleanup). null = noch nicht anonymisiert.
   piiAnonymizedAt             DateTime?
@@ -1173,6 +1176,8 @@ model TenantPayrollStatement {
   gross      String                 @default("")
   net        String                 @default("")
   status     PayrollStatementStatus @default(available)
+  /// Erster Abruf durch den Mitarbeiter selbst ("gesehen"); `null` = noch nicht geöffnet.
+  firstViewedAt DateTime?
   createdAt  DateTime               @default(now())
   updatedAt  DateTime               @updatedAt
   tenantId   String

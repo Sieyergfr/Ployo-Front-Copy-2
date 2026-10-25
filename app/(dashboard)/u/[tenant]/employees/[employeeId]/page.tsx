@@ -1,4 +1,3 @@
-import { DataTableStatus } from "@/components/DataTable";
 import AddressFields from "@/components/AddressFields";
 import AuditLogPanel from "@/components/AuditLogPanel";
 import DatePickerField from "@/components/DatePickerField";
@@ -34,7 +33,7 @@ import { getLocationsForTenant } from "@/lib/location-service";
 import { getTeamsForTenant } from "@/lib/team-service";
 import {
   CONTRACT_FILE_NOT_UPLOADED,
-  employeeStatusConfig,
+
   type EmployeeStatus,
   type Employee,
   type EmployeeTimelineItem,
@@ -42,10 +41,21 @@ import {
 import { getRolesForTenant } from "@/lib/role-service";
 import {
   ArrowLeft,
+  ArrowRight,
   BriefcaseBusiness,
   Pencil,
-  UserPlus,
 } from "lucide-react";
+import { AccessLockButton } from "@/components/dashboard/employees/EmployeeAccessButtons";
+import { EmployeeAvatar, EmployeeStatusChip } from "@/components/dashboard/employees/EmployeesTable";
+import { DbCard } from "@/components/dashboard/ui";
+import TimeEntriesDays, { TimeTotals } from "@/components/TimeEntriesDays";
+import TimePeriodNav from "@/components/TimePeriodNav";
+import { getEmployeeAbsences } from "@/lib/employee-insights";
+import { buildEmployeeWorkStats } from "@/lib/employee-overview";
+import { employeeProfileGaps, yearsSince } from "@/lib/employees";
+import { parseWeeklyHours } from "@/lib/my-times";
+import { getTenantTimeEntries } from "@/lib/time-tracking-service";
+import { getLocale } from "next-intl/server";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { CSSProperties, ReactNode } from "react";
@@ -558,7 +568,8 @@ export default async function EmployeeDetailPage({
   searchParams,
 }: PageProps<"/u/[tenant]/employees/[employeeId]">) {
   const { tenant, employeeId } = await params;
-  const { tab, edit, invited, folder } = await searchParams;
+  const query = await searchParams;
+  const { tab, edit, invited, folder } = query;
   const activeFolder = typeof folder === "string" ? folder : undefined;
   const t = await getTranslations("EmployeeDetail");
   const tAddress = await getTranslations("AddressFields");
@@ -614,49 +625,189 @@ export default async function EmployeeDetailPage({
       : Promise.resolve([]),
   ]);
 
-  const status = employeeStatusConfig[employee.status];
-  const isFilesTab = tab === "files" && canViewEmployeeFiles;
-  const isContractTab = tab === "contract" && canViewContracts;
-  const isPayrollTab = tab === "payroll" && canViewPayrollStatements;
-  const isHomeTab = !isFilesTab && !isContractTab && !isPayrollTab;
-  const isEditableTab = isHomeTab || isContractTab;
+  const recordTabs = [
+    "overview",
+    "data",
+    "contract",
+    "files",
+    "absences",
+    "times",
+    "payroll",
+    "requests",
+    "log",
+  ] as const;
+  type RecordTab = (typeof recordTabs)[number];
+  const locale = await getLocale();
+  const intlLocale = locale === "en" ? "en-GB" : "de-DE";
+  const tUi = await getTranslations("EmployeeRecord");
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const weekday = (new Date(`${todayIso}T00:00:00Z`).getUTCDay() + 6) % 7;
+  const statsFrom = new Date(Date.parse(`${todayIso}T00:00:00Z`) - (weekday + 84) * 86_400_000)
+    .toISOString()
+    .slice(0, 10);
+  const [absences, statsEntries] = await Promise.all([
+    employee.dbId
+      ? getEmployeeAbsences({ tenantSlug: tenant, employeeId: employee.dbId, team: employee.team })
+      : Promise.resolve(null),
+    employee.dbId
+      ? getTenantTimeEntries({ tenantSlug: tenant, employeeId: employee.dbId, from: statsFrom, to: todayIso }).catch(
+          () => null,
+        )
+      : Promise.resolve(null),
+  ]);
+  const timeTrackingVisible = Boolean(statsEntries?.timeTrackingEnabled);
+  const absencesVisible = Boolean(absences && (absences.vacations !== null || absences.sickness !== null));
+  const tabVisible: Record<RecordTab, boolean> = {
+    overview: true,
+    data: true,
+    contract: canViewContracts,
+    files: canViewEmployeeFiles,
+    absences: absencesVisible,
+    times: timeTrackingVisible,
+    payroll: canViewPayrollStatements,
+    requests: true,
+    log: true,
+  };
+  const requestedTab = (recordTabs as readonly string[]).includes(String(tab)) ? (tab as RecordTab) : null;
+  // Früher war die Startseite der Akte die Stammdaten-Ansicht; ein altes
+  // `?edit=1` ohne Tab öffnet deshalb weiterhin die Stammdaten.
+  const activeTab: RecordTab =
+    requestedTab && tabVisible[requestedTab] ? requestedTab : edit === "1" ? "data" : "overview";
+  const isFilesTab = activeTab === "files";
+  const isContractTab = activeTab === "contract";
+  const isDataTab = activeTab === "data";
+  const isEditableTab = isDataTab || isContractTab;
   const isEditing = edit === "1" && isEditableTab && canEditEmployee;
   const employeeHref = `/u/${tenant}/employees/${employee.id}`;
-  const activeTabHref = isContractTab ? `${employeeHref}?tab=contract` : employeeHref;
+  const tabHref = (id: RecordTab) => (id === "overview" ? employeeHref : `${employeeHref}?tab=${id}`);
+  const activeTabHref = tabHref(activeTab);
   const auditEntries = canViewEmployeeAudit
     ? await getAuditLogsForEntity({
         tenantSlug: tenant,
         entityType: "employee",
         entityId: employee.dbId ?? employee.id,
-        take: 10,
+        take: 20,
       })
     : [];
-  const employeeEditHref = isContractTab
-    ? `${employeeHref}?tab=contract&edit=1`
-    : `${employeeHref}?edit=1`;
+  const employeeEditHref = isContractTab ? `${employeeHref}?tab=contract&edit=1` : `${employeeHref}?tab=data&edit=1`;
   const contractEditHref = `${employeeHref}?tab=contract&edit=1`;
-  const showContractDetailsPrompt = isHomeTab && canViewContracts && !hasContractDetails(employee);
-  const vacationPercent = Math.round(
-    (employee.vacationTaken / employee.vacationTotal) * 100,
-  );
+  const showContractDetailsPrompt = isDataTab && canViewContracts && !hasContractDetails(employee);
+  const vacationPercent = Math.round((employee.vacationTaken / Math.max(1, employee.vacationTotal)) * 100);
   const statusOptions: EmployeeStatus[] = ["active", "vacation", "absent"];
   const invitation =
-    employee.email && !employee.hasAccount
-      ? await getInvitationStatusForEmail(tenant, employee.email)
-      : null;
-  const hasPendingInvitation =
-    invitation?.status === "PENDING" && !invitation.expired;
+    employee.email && !employee.hasAccount ? await getInvitationStatusForEmail(tenant, employee.email) : null;
+  const hasPendingInvitation = invitation?.status === "PENDING" && !invitation.expired;
   const invitationHint = hasPendingInvitation
     ? t("invitationPending")
     : invitation?.status === "PENDING" && invitation.expired
       ? t("invitationExpired")
       : null;
   const wasInvited = invited === "1" && Boolean(employee.email);
-  const roleOptions = roles.length > 0
-    ? roles.map((role) => role.name)
-    : [t("defaultRoleName")];
+  const roleOptions = roles.length > 0 ? roles.map((role) => role.name) : [t("defaultRoleName")];
   const teamOptions = teams.map((team) => team.name);
   const locationOptions = locations.map((location) => location.name);
+  const gaps = employeeProfileGaps(employee);
+  const years = yearsSince(employee.startDate);
+  const dateFormat = new Intl.DateTimeFormat(intlLocale, { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" });
+  const formatDate = (value: string | null | undefined) =>
+    value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? dateFormat.format(new Date(`${value}T12:00:00Z`)) : (value ?? "");
+  const tenure =
+    years === null
+      ? ""
+      : Math.floor(years) > 0
+        ? tUi("tenure", { years: Math.floor(years), months: Math.floor((years % 1) * 12) })
+        : tUi("tenureMonths", { months: Math.floor(years * 12) });
+  const weeklyHours = parseWeeklyHours(employee.weeklyHours);
+  const stats = statsEntries
+    ? buildEmployeeWorkStats({
+        days: statsEntries.days,
+        today: statsEntries.today,
+        weeklyTargetMinutes: weeklyHours ? weeklyHours * 60 : null,
+      })
+    : null;
+  const hours = new Intl.NumberFormat(intlLocale, { maximumFractionDigits: 1 });
+  const openInfoRequests = employee.infoRequests.filter((request) => request.status === "open").length;
+  const exitDate = employee.contractDetails?.exitDate ?? "";
+  const daysToExit = /^\d{4}-\d{2}-\d{2}$/.test(exitDate)
+    ? Math.round((Date.parse(`${exitDate}T00:00:00Z`) - Date.parse(`${todayIso}T00:00:00Z`)) / 86_400_000)
+    : null;
+  const attentionItems: Array<{ tone: string; title: string; text: string; href?: string; link?: string }> = [];
+
+  if (daysToExit !== null && daysToExit >= 0 && daysToExit <= 120 && employee.status !== "former") {
+    attentionItems.push({
+      tone: "#e07b00",
+      title: tUi("attention.fixedTermTitle", { date: formatDate(exitDate) }),
+      text: tUi("attention.fixedTermText", { days: daysToExit }),
+      href: canViewContracts ? tabHref("contract") : undefined,
+      link: tUi("attention.toContracts"),
+    });
+  }
+
+  if (gaps.missing.length > 0) {
+    attentionItems.push({
+      tone: "#8b6ed4",
+      title: tUi("attention.missingTitle", { count: gaps.missing.length }),
+      text: tUi("attention.missingText"),
+      href: tabHref("requests"),
+      link: tUi("attention.sendRequest"),
+    });
+  }
+
+  if (stats && stats.overtimeMinutes > 10 * 60) {
+    attentionItems.push({
+      tone: "#b4332a",
+      title: tUi("attention.overtimeTitle"),
+      text: tUi("attention.overtimeText", { hours: hours.format(stats.overtimeMinutes / 60) }),
+      href: tabHref("times"),
+      link: tUi("attention.viewTimes"),
+    });
+  }
+
+  if (openInfoRequests > 0) {
+    attentionItems.push({
+      tone: "#2a6fdb",
+      title: tUi("attention.openRequestsTitle", { count: openInfoRequests }),
+      text: tUi("attention.openRequestsText"),
+      href: tabHref("requests"),
+      link: tUi("attention.viewRequests"),
+    });
+  }
+
+  const period = query.period === "month" ? "month" : "week";
+  const timesView =
+    activeTab === "times" && employee.dbId
+      ? await getTenantTimeEntries({
+          tenantSlug: tenant,
+          employeeId: employee.dbId,
+          period,
+          date: typeof query.date === "string" ? query.date : undefined,
+        }).catch(() => null)
+      : null;
+  const vacationStatus: Record<string, { label: string; color: string; bg: string }> = {
+    pending: { label: tUi("absences.pending"), color: "#9a5b00", bg: "rgba(224,123,0,0.10)" },
+    approved: { label: tUi("absences.approved"), color: "#1f5d2c", bg: "rgba(53,122,82,0.10)" },
+    rejected: { label: tUi("absences.rejected"), color: "#b4332a", bg: "rgba(180,51,42,0.08)" },
+  };
+  const tabCounts: Partial<Record<RecordTab, number>> = {
+    contract: contracts.length,
+    files: employee.files.length + employee.fileFolders.length,
+    payroll: employee.payrollStatements.length,
+    requests: openInfoRequests,
+  };
+  const kpiCard = (label: string, value: string, unit: string, hint: string, hintColor = "#6e6e6b") => (
+    <DbCard className="db-insight flex flex-col gap-2 p-5" key={label}>
+      <span className="text-[13px] font-medium text-[#6e6e6b]">{label}</span>
+      <span className="flex items-baseline gap-1.5">
+        <span className="font-display text-[32px] leading-none font-semibold tracking-[-1px]">{value}</span>
+        <span className="text-[14px] text-[#6e6e6b]">{unit}</span>
+      </span>
+      <span className="text-[13px]" style={{ color: hintColor }}>
+        {hint}
+      </span>
+    </DbCard>
+  );
+  const smallButton =
+    "db-btn2 db-focus inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-[10px] border border-[#ecebe7] bg-[#f2f1ed] px-4 text-[14px] font-semibold text-ink no-underline disabled:cursor-default disabled:opacity-60";
 
   return (
     <>
@@ -665,216 +816,554 @@ export default async function EmployeeDetailPage({
         tenant={tenant}
         employeeId={employee.dbId ?? ""}
         employeeHandle={employee.id}
-        activeTab={isContractTab ? "contract" : "home"}
+        activeTab={isContractTab ? "contract" : "data"}
         cancelHref={activeTabHref}
         isEditing={isEditing}
       >
-      <div className="mb-[22px] flex flex-wrap items-center gap-3.5">
-        <Link href={`/u/${tenant}/employees`} className="btn btn-secondary btn-sm">
-          <ArrowLeft size={14} />
-          {t("backToEmployees")}
-        </Link>
-        <span className="font-mono text-[11px] uppercase tracking-[0.5px] text-muted">
-          {t("personnelFileOf", { number: employee.employeeNumber })}
-        </span>
-      </div>
-
-      <section className="mb-4 flex flex-wrap items-center gap-[22px] rounded-card border border-border bg-white p-7">
-        <span className="flex size-[72px] shrink-0 items-center justify-center rounded-full bg-ink text-[24px] font-semibold text-white">
-          {employee.initials}
-        </span>
-
-        <div className="min-w-[200px] flex-1">
-          <h1 className="m-0 font-display text-[clamp(26px,3vw,34px)] font-semibold leading-[1.05] tracking-[-1px] text-ink">
-            {isEditing ? (
-              <input
-                className="input max-w-[420px] bg-white font-display text-[26px] font-semibold text-ink sm:text-[34px]"
-                name="name"
-                defaultValue={employee.name}
-                aria-label={t("nameAriaLabel")}
-                required
-                maxLength={100}
-              />
-            ) : (
-              employee.name
-            )}
-          </h1>
-          <div className="mt-[7px] text-[14px] text-muted-2">
-            {employee.role} {"\u00b7"}{" "}
-            {employee.teams?.length ? employee.teams.join(", ") : employee.team} {"\u00b7"}{" "}
-            {employee.locations?.length ? employee.locations.join(", ") : employee.location}
-          </div>
-          <div className="mt-[11px] flex flex-wrap items-center gap-3">
-            <DataTableStatus label={status.label} tone={status.tone} />
-            {employee.status === "former" && employee.endDate && (
-              <span className="font-mono text-[12px] text-danger">
-                {t("departureLabel", { date: employee.endDate })}
-              </span>
-            )}
-            <span className="font-mono text-[12px] text-muted">
-              {employee.employeeNumber}
-            </span>
-            {employee.hasAccount ? (
-              <span className="font-mono text-[12px] text-muted">
-                {t("accountLinked")}
-              </span>
-            ) : invitationHint ? (
-              <span className="font-mono text-[12px] text-muted">
-                {invitationHint}
-              </span>
-            ) : null}
-          </div>
+        <div className="mb-4 flex items-center gap-2 text-[14px]">
+          <Link
+            href={`/u/${tenant}/employees`}
+            className="db-btn2 inline-flex min-h-9 items-center gap-1.5 rounded-[9px] border border-[#ecebe7] bg-white px-3 font-medium text-ink no-underline"
+          >
+            <ArrowLeft size={14} />
+            {t("backToEmployees")}
+          </Link>
+          <span className="text-[#9a9a96]">/</span>
+          <span className="font-medium">{employee.name}</span>
         </div>
 
-        <div className="flex flex-wrap gap-[9px]">
-          {isEditing ? (
-            canDeleteEmployee && (
-              <EmployeeDeleteButton
-                className="btn btn-secondary btn-sm text-danger"
-                description={t("deleteConfirmDescription", { name: employee.name })}
-              >
-                {t("delete")}
-              </EmployeeDeleteButton>
-            )
-          ) : (
-            <>
-              <EmployeeInfoRequestButton
-                tenant={tenant}
-                employeeId={employee.dbId ?? ""}
-                employeeHandle={employee.id}
-                employeeName={employee.name}
-              />
-              {canInvite &&
-                !employee.hasAccount &&
-                (employee.email ? (
-                  <EmployeeInviteButton
-                    label={hasPendingInvitation ? t("inviteAgain") : t("invite")}
+        <DbCard className="relative mb-5 overflow-hidden p-0">
+          <div className="db-hero-glow opacity-40" aria-hidden="true" />
+          <div className="relative flex flex-wrap items-center gap-x-6 gap-y-4 px-6 pt-6 pb-5">
+            <EmployeeAvatar employee={employee} size={76} />
+            <div className="flex min-w-[220px] flex-1 flex-col gap-2">
+              <h1 className="m-0 font-display text-[clamp(26px,3vw,34px)] leading-[1.05] font-semibold tracking-[-1px]">
+                {isEditing && isDataTab ? (
+                  <input
+                    className="input max-w-[420px] bg-white font-display text-[26px] font-semibold text-ink"
+                    name="name"
+                    defaultValue={employee.name}
+                    aria-label={t("nameAriaLabel")}
+                    required
+                    maxLength={100}
                   />
                 ) : (
-                  <button
-                    type="button"
-                    className="btn btn-secondary btn-sm"
-                    disabled
-                    title={t("inviteDisabledTitle")}
-                  >
-                    <UserPlus size={14} />
-                    {t("invite")}
-                  </button>
+                  employee.name
+                )}
+              </h1>
+              <span className="flex flex-wrap items-center gap-2">
+                <EmployeeStatusChip status={employee.status} label={tUi(`status.${employee.status}`)} />
+                {employee.status === "former" && employee.endDate && (
+                  <span className="text-[12.5px] text-[#b4332a]">{t("departureLabel", { date: employee.endDate })}</span>
+                )}
+              </span>
+              <span className="text-[13.5px] text-[#6e6e6b]">
+                {[
+                  employee.employeeNumber,
+                  employee.role,
+                  employee.startDate ? `${tUi("since", { date: formatDate(employee.startDate) })}${tenure ? ` (${tenure})` : ""}` : "",
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </span>
+              <span className="flex flex-wrap gap-1.5">
+                {(employee.teams?.length ? employee.teams : [employee.team]).filter(Boolean).map((team) => (
+                  <span key={team} className="rounded-[6px] bg-[#f2f1ed] px-2 py-0.5 text-[12.5px]">
+                    {team}
+                  </span>
                 ))}
-              {canEditEmployee && employee.status === "former" && (
-                <ReactivateEmployeeButton
-                  tenant={tenant}
-                  employeeId={employee.dbId ?? ""}
-                  employeeHandle={employee.id}
+                {(employee.locations?.length ? employee.locations : [employee.location]).filter(Boolean).map((location) => (
+                  <span key={location} className="inline-flex items-center gap-1.5 rounded-[6px] border border-[#ecebe7] bg-white px-2 py-0.5 text-[12.5px]">
+                    <span className="size-1.5 rounded-[2px] bg-[#8b6ed4]" />
+                    {location}
+                  </span>
+                ))}
+                <span
+                  className={`inline-flex items-center gap-1.5 rounded-[6px] px-2 py-0.5 text-[12.5px] ${
+                    employee.appAccessLockedAt
+                      ? "bg-[rgba(180,51,42,0.08)] text-[#b4332a]"
+                      : employee.hasAccount
+                        ? "bg-[rgba(53,122,82,0.10)] text-[#1f5d2c]"
+                        : "bg-[#f2f1ed] text-[#6e6e6b]"
+                  }`}
+                >
+                  <span className="size-1.5 rounded-full bg-current" />
+                  {employee.appAccessLockedAt
+                    ? tUi("accessLocked")
+                    : employee.hasAccount
+                      ? t("accountLinked")
+                      : (invitationHint ?? tUi("noAppAccount"))}
+                </span>
+              </span>
+            </div>
+
+            {gaps.total > 0 && (
+              <div className="flex items-center gap-3 rounded-[14px] border border-[#ecebe7] bg-white/80 px-4 py-3">
+                <span
+                  className="relative size-[46px] shrink-0 rounded-full"
+                  style={{ background: `conic-gradient(#8b6ed4 0 ${gaps.percent}%, #ecebe7 0)` }}
+                >
+                  <span className="absolute inset-[5px] flex items-center justify-center rounded-full bg-white text-[11px] font-semibold">
+                    {gaps.percent}%
+                  </span>
+                </span>
+                <span className="flex flex-col">
+                  <span className="text-[14px] font-semibold">{tUi("recordComplete")}</span>
+                  <span className={`text-[12.5px] ${gaps.missing.length ? "text-[#9a5b00]" : "text-[#1f5d2c]"}`}>
+                    {gaps.missing.length ? tUi("missingCount", { count: gaps.missing.length }) : tUi("allComplete")}
+                  </span>
+                </span>
+              </div>
+            )}
+
+            <div className="flex flex-wrap items-center gap-2">
+              {isEditing ? (
+                canDeleteEmployee && (
+                  <EmployeeDeleteButton
+                    className={`${smallButton} text-[#b4332a]`}
+                    description={t("deleteConfirmDescription", { name: employee.name })}
+                  >
+                    {t("delete")}
+                  </EmployeeDeleteButton>
+                )
+              ) : (
+                <>
+                  {canInvite && !employee.hasAccount && employee.email && (
+                    <EmployeeInviteButton label={hasPendingInvitation ? t("inviteAgain") : tUi("inviteToApp")} />
+                  )}
+                  <EmployeeInfoRequestButton
+                    tenant={tenant}
+                    employeeId={employee.dbId ?? ""}
+                    employeeHandle={employee.id}
+                    employeeName={employee.name}
+                    className={smallButton}
+                    label={tUi("sendRequest")}
+                  />
+                  {canEditEmployee && (
+                    <Link href={employeeEditHref} className={smallButton}>
+                      <Pencil size={14} />
+                      {t("edit")}
+                    </Link>
+                  )}
+                  {canEditEmployee && employee.hasAccount && employee.dbId && (
+                    <AccessLockButton
+                      tenant={tenant}
+                      employeeId={employee.dbId}
+                      employeeHandle={employee.id}
+                      employeeName={employee.name}
+                      locked={Boolean(employee.appAccessLockedAt)}
+                      className={smallButton}
+                    />
+                  )}
+                  {canEditEmployee && employee.status === "former" && (
+                    <ReactivateEmployeeButton tenant={tenant} employeeId={employee.dbId ?? ""} employeeHandle={employee.id} />
+                  )}
+                  {canEditEmployee && employee.status !== "former" && (
+                    <OffboardEmployeeButton
+                      tenant={tenant}
+                      employeeId={employee.dbId ?? ""}
+                      employeeHandle={employee.id}
+                      employeeName={employee.name}
+                    />
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+
+          <nav aria-label={tUi("tabsLabel")} className="relative flex gap-6 overflow-x-auto border-t border-[#ecebe7] px-6">
+            {recordTabs
+              .filter((id) => tabVisible[id])
+              .map((id) => {
+                const active = activeTab === id;
+                const count = tabCounts[id];
+
+                return (
+                  <Link
+                    key={id}
+                    href={tabHref(id)}
+                    aria-current={active ? "page" : undefined}
+                    className={`-mb-px inline-flex items-center gap-1.5 border-b-2 py-3.5 text-[14px] whitespace-nowrap no-underline ${
+                      active ? "border-[#8b6ed4] font-semibold text-ink" : "border-transparent font-medium text-[#6e6e6b]"
+                    }`}
+                  >
+                    {tUi(`tabs.${id}`)}
+                    {count !== undefined && count > 0 && (
+                      <span
+                        className={`rounded-full px-1.5 text-[11px] font-semibold ${
+                          id === "requests" ? "bg-[#fff1d6] text-[#9a5b00]" : "bg-[#f2f1ed] text-[#6e6e6b]"
+                        }`}
+                      >
+                        {count}
+                      </span>
+                    )}
+                  </Link>
+                );
+              })}
+          </nav>
+        </DbCard>
+
+        {employee.appAccessLockedAt && (
+          <div className="mb-4 rounded-[12px] border border-[rgba(180,51,42,0.25)] bg-[rgba(180,51,42,0.05)] px-5 py-3.5 text-[13px]">
+            {tUi("lockedBanner", { date: formatDate(employee.appAccessLockedAt.slice(0, 10)) })}
+            {employee.appAccessLockReason ? ` · ${employee.appAccessLockReason}` : ""}
+          </div>
+        )}
+
+        {wasInvited && (
+          <div className="mb-4 rounded-[12px] border border-[rgba(53,122,82,0.25)] bg-[rgba(53,122,82,0.05)] px-5 py-3.5 text-[13px] text-ink">
+            {t.rich("invitedBanner", {
+              email: employee.email,
+              b: (chunks) => <span className="font-medium">{chunks}</span>,
+            })}
+          </div>
+        )}
+
+        {activeTab === "overview" && (
+          <div className="flex flex-col gap-5">
+            <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(210px,1fr))]">
+              {stats &&
+                kpiCard(
+                  tUi("kpi.overtime"),
+                  `${stats.overtimeMinutes > 0 ? "+" : ""}${hours.format(stats.overtimeMinutes / 60)}`,
+                  tUi("hours"),
+                  tUi("kpi.last12Weeks"),
+                  stats.overtimeMinutes > 10 * 60 ? "#9a5b00" : "#6e6e6b",
+                )}
+              {stats &&
+                kpiCard(
+                  tUi("kpi.monthHours", {
+                    month: new Intl.DateTimeFormat(intlLocale, { month: "long", timeZone: "UTC" }).format(new Date(`${todayIso}T12:00:00Z`)),
+                  }),
+                  hours.format(stats.monthWorkedMinutes / 60),
+                  stats.monthPlannedMinutes > 0 ? tUi("ofHours", { hours: hours.format(stats.monthPlannedMinutes / 60) }) : tUi("hours"),
+                  stats.monthPlannedMinutes > 0
+                    ? tUi("kpi.ofTarget", { percent: Math.round((stats.monthWorkedMinutes / stats.monthPlannedMinutes) * 100) })
+                    : tUi("kpi.noPlan"),
+                )}
+              {kpiCard(
+                tUi("kpi.vacationLeft"),
+                String(employee.vacationRemaining),
+                tUi("days"),
+                employee.vacationCarryover > 0 ? tUi("kpi.carryoverExpires", { days: employee.vacationCarryover }) : tUi("kpi.ofTotal", { total: employee.vacationTotal }),
+                employee.vacationCarryover > 0 ? "#9a5b00" : "#6e6e6b",
+              )}
+              {absences?.sickDaysThisYear !== null &&
+                absences?.sickDaysThisYear !== undefined &&
+                kpiCard(
+                  tUi("kpi.sickDays", { year: todayIso.slice(0, 4) }),
+                  String(absences.sickDaysThisYear),
+                  tUi("days"),
+                  absences.teamAverageSickDays !== null ? tUi("kpi.teamAverage", { days: hours.format(absences.teamAverageSickDays) }) : "",
+                  absences.teamAverageSickDays !== null && absences.sickDaysThisYear <= absences.teamAverageSickDays ? "#1f5d2c" : "#6e6e6b",
+                )}
+            </div>
+
+            <div className="db-body grid items-start gap-5 [grid-template-columns:minmax(0,1.35fr)_minmax(0,0.95fr)]">
+              {stats ? (
+                <DbCard>
+                  <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
+                    <h2 className="m-0 font-display text-[19px] font-semibold tracking-[-0.4px]">{tUi("weeklyHoursTitle")}</h2>
+                    <span className="text-[13px] text-[#6e6e6b]">
+                      {weeklyHours ? tUi("weeklyHoursMeta", { hours: hours.format(weeklyHours) }) : tUi("weeklyHoursMetaPlanned")}
+                    </span>
+                  </div>
+                  {(() => {
+                    const target = weeklyHours ? weeklyHours * 60 : 0;
+                    const max = Math.max(target, ...stats.weeks.map((week) => Math.max(week.worked, week.planned)), 60);
+
+                    return (
+                      <div className="relative">
+                        {target > 0 && (
+                          <div
+                            aria-hidden="true"
+                            className="absolute right-0 left-0 border-t border-dashed border-[#c9c8c3]"
+                            style={{ bottom: `calc(${(target / max) * 180}px + 40px)` }}
+                          >
+                            <span className="absolute -top-4 right-0 font-mono text-[9.5px] text-[#9a9a96] uppercase">{tUi("target")}</span>
+                          </div>
+                        )}
+                        <div className="flex items-end gap-1.5">
+                          {stats.weeks.map((week) => {
+                            const below = target > 0 && week.planned > 0 && week.worked < target * 0.6 && !week.isCurrent;
+
+                            return (
+                              <div key={week.monday} className="flex min-w-0 flex-1 flex-col items-center gap-1">
+                                <div className="flex h-[180px] w-full items-end">
+                                  <div
+                                    className="w-full rounded-[6px]"
+                                    title={`${hours.format(week.worked / 60)} ${tUi("hours")}`}
+                                    style={{
+                                      height: `${Math.max(2, (week.worked / max) * 180)}px`,
+                                      background: below
+                                        ? "repeating-linear-gradient(135deg, rgba(180,51,42,0.35) 0 3px, rgba(180,51,42,0.08) 3px 7px)"
+                                        : week.isCurrent
+                                          ? "linear-gradient(180deg, #a78ee8, #8b6ed4)"
+                                          : target > 0 && week.worked >= target
+                                            ? "#8b6ed4"
+                                            : "#c9b8f5",
+                                    }}
+                                  />
+                                </div>
+                                <span className="text-[12px] font-semibold">{hours.format(week.worked / 60)}</span>
+                                <span className="font-mono text-[9.5px] text-[#9a9a96]">
+                                  {(() => {
+                                    const date = new Date(`${week.monday}T00:00:00Z`);
+                                    const thursday = new Date(date);
+
+                                    thursday.setUTCDate(date.getUTCDate() + 3);
+
+                                    const firstThursday = new Date(Date.UTC(thursday.getUTCFullYear(), 0, 4));
+
+                                    return 1 + Math.round((thursday.getTime() - firstThursday.getTime()) / (7 * 86_400_000));
+                                  })()}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </DbCard>
+              ) : (
+                <DbCard>
+                  <h2 className="m-0 mb-2 font-display text-[19px] font-semibold tracking-[-0.4px]">{t("employmentTitle")}</h2>
+                  <p className="m-0 text-[13px] text-[#6e6e6b]">{tUi("noTimeTracking")}</p>
+                </DbCard>
+              )}
+
+              <DbCard>
+                <h2 className="m-0 mb-4 font-display text-[19px] font-semibold tracking-[-0.4px]">{tUi("attentionTitle")}</h2>
+                {attentionItems.length === 0 ? (
+                  <p className="m-0 text-[13px] text-[#6e6e6b]">{tUi("attention.none")}</p>
+                ) : (
+                  <div className="flex flex-col gap-2.5">
+                    {attentionItems.map((item) => (
+                      <div
+                        key={item.title}
+                        className="flex gap-3 rounded-[12px] border border-[#ecebe7] bg-[#fafaf8] p-3.5"
+                        style={{ boxShadow: `inset 3px 0 0 ${item.tone}` }}
+                      >
+                        <span className="flex flex-col gap-0.5 pl-1">
+                          <span className="text-[14px] font-semibold">{item.title}</span>
+                          <span className="text-[13px] text-[#6e6e6b]">{item.text}</span>
+                          {item.href && (
+                            <Link href={item.href} className="mt-0.5 inline-flex w-fit items-center gap-1 text-[13px] font-semibold text-[#6b4fc4] no-underline">
+                              {item.link}
+                              <ArrowRight size={13} />
+                            </Link>
+                          )}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </DbCard>
+            </div>
+
+            {stats && (
+              <div className="grid gap-5 [grid-template-columns:repeat(auto-fit,minmax(240px,1fr))]">
+                <DbCard>
+                  <h2 className="m-0 mb-3 font-display text-[18px] font-semibold tracking-[-0.4px]">{tUi("locationsTitle")}</h2>
+                  {stats.locations.length === 0 && <p className="m-0 text-[13px] text-[#6e6e6b]">{tUi("noShifts")}</p>}
+                  {stats.locations.slice(0, 4).map((location) => (
+                    <div key={location.name} className="mb-2.5">
+                      <span className="mb-1 flex justify-between text-[13.5px]">
+                        <span className="inline-flex items-center gap-1.5">
+                          <span className="size-2 rounded-[2px] bg-[#8b6ed4]" />
+                          {location.name}
+                        </span>
+                        <strong className="font-semibold">{location.percent}%</strong>
+                      </span>
+                      <span className="block h-1.5 overflow-hidden rounded-full bg-[#f2f1ed]">
+                        <span className="block h-full rounded-full bg-[#8b6ed4]" style={{ width: `${location.percent}%` }} />
+                      </span>
+                    </div>
+                  ))}
+                </DbCard>
+                <DbCard>
+                  <h2 className="m-0 mb-3 font-display text-[18px] font-semibold tracking-[-0.4px]">{tUi("shiftTypesTitle")}</h2>
+                  {stats.shiftTypes ? (
+                    <>
+                      <span className="flex h-3 gap-0.5 overflow-hidden rounded-full">
+                        {[
+                          { value: stats.shiftTypes.early, color: "#e8a93c" },
+                          { value: stats.shiftTypes.late, color: "#8b6ed4" },
+                          { value: stats.shiftTypes.night, color: "#2f3e4e" },
+                        ]
+                          .filter((part) => part.value > 0)
+                          .map((part) => (
+                            <span key={part.color} style={{ flex: part.value, background: part.color }} />
+                          ))}
+                      </span>
+                      <span className="mt-3 flex flex-wrap gap-4 text-[13px]">
+                        {[
+                          { label: tUi("early"), value: stats.shiftTypes.early, color: "#e8a93c" },
+                          { label: tUi("late"), value: stats.shiftTypes.late, color: "#8b6ed4" },
+                          { label: tUi("night"), value: stats.shiftTypes.night, color: "#2f3e4e" },
+                        ].map((part) => (
+                          <span key={part.label} className="inline-flex items-center gap-1.5 text-[#6e6e6b]">
+                            <span className="size-2 rounded-full" style={{ background: part.color }} />
+                            {part.label} <strong className="font-semibold text-ink">{part.value}%</strong>
+                          </span>
+                        ))}
+                      </span>
+                    </>
+                  ) : (
+                    <p className="m-0 text-[13px] text-[#6e6e6b]">{tUi("noShifts")}</p>
+                  )}
+                </DbCard>
+                <DbCard>
+                  <h2 className="m-0 mb-3 font-display text-[18px] font-semibold tracking-[-0.4px]">{tUi("punctualityTitle")}</h2>
+                  {stats.punctualityPercent !== null ? (
+                    <span className="flex items-baseline gap-2">
+                      <span className="font-display text-[34px] leading-none font-semibold tracking-[-1px]">{stats.punctualityPercent} %</span>
+                      <span className="text-[13px] text-[#6e6e6b]">{tUi("punctualHint")}</span>
+                    </span>
+                  ) : (
+                    <p className="m-0 text-[13px] text-[#6e6e6b]">{tUi("noShifts")}</p>
+                  )}
+                  {stats.averageBreakMinutes !== null && (
+                    <p className="m-0 mt-2 text-[13px] text-[#6e6e6b]">
+                      {tUi("averageBreak", { minutes: stats.averageBreakMinutes })} ·{" "}
+                      {stats.breaksOk ? tUi("breaksOk") : tUi("breaksShort")}
+                    </p>
+                  )}
+                </DbCard>
+              </div>
+            )}
+          </div>
+        )}
+
+        {isFilesTab && (
+          <FilesTab
+            employee={employee}
+            tenant={tenant}
+            employeeHref={employeeHref}
+            uploadOptions={uploadOptions}
+            canManageFiles={canManageFiles}
+            canDeleteFiles={canDeleteFiles}
+            activeFolder={activeFolder}
+            t={t}
+          />
+        )}
+
+        {activeTab === "payroll" && (
+          <PayrollTab employee={employee} tenant={tenant} canManage={canManagePayrollStatements} t={t} />
+        )}
+
+        {isContractTab && (
+          <ContractTab
+            employee={employee}
+            tenant={tenant}
+            contracts={contracts as EmployeeContractItem[]}
+            canManagePayroll={canManageContracts}
+            locationOptions={locationOptions}
+            t={t}
+          />
+        )}
+
+        {activeTab === "absences" && absences && (
+          <div className="grid items-start gap-5 [grid-template-columns:repeat(auto-fit,minmax(320px,1fr))]">
+            {absences.vacations !== null && (
+              <DbCard>
+                <h2 className="m-0 mb-3 font-display text-[18px] font-semibold tracking-[-0.4px]">{tUi("absences.vacationTitle")}</h2>
+                {absences.vacations.length === 0 && <p className="m-0 text-[13px] text-[#6e6e6b]">{tUi("absences.none")}</p>}
+                {absences.vacations.map((request) => {
+                  const style = vacationStatus[request.status] ?? vacationStatus.pending;
+
+                  return (
+                    <div key={request.id} className="flex items-center justify-between gap-3 border-t border-[#ecebe7] py-2.5 first-of-type:border-t-0">
+                      <span className="flex flex-col">
+                        <span className="text-[14px] font-medium">
+                          {formatDate(request.startDate)} – {formatDate(request.endDate)}
+                        </span>
+                        <span className="text-[12.5px] text-[#6e6e6b]">
+                          {tUi("dayCount", { count: request.days })}
+                          {request.note ? ` · ${request.note}` : ""}
+                        </span>
+                      </span>
+                      <span className="rounded-[7px] px-2 py-[3px] text-[12px] font-medium" style={{ color: style.color, background: style.bg }}>
+                        {style.label}
+                      </span>
+                    </div>
+                  );
+                })}
+              </DbCard>
+            )}
+            {absences.sickness !== null && (
+              <DbCard>
+                <h2 className="m-0 mb-3 font-display text-[18px] font-semibold tracking-[-0.4px]">{tUi("absences.sicknessTitle")}</h2>
+                {absences.sickness.length === 0 && <p className="m-0 text-[13px] text-[#6e6e6b]">{tUi("absences.none")}</p>}
+                {absences.sickness.map((report) => (
+                  <div key={report.id} className="flex items-center justify-between gap-3 border-t border-[#ecebe7] py-2.5 first-of-type:border-t-0">
+                    <span className="flex flex-col">
+                      <span className="text-[14px] font-medium">
+                        {formatDate(report.startDate)} – {report.endDate ? formatDate(report.endDate) : tUi("absences.open")}
+                      </span>
+                      <span className="text-[12.5px] text-[#6e6e6b]">
+                        {tUi("dayCount", { count: report.days })} · {tUi(`absences.certificate.${report.certificateStatus}`)}
+                      </span>
+                    </span>
+                    <span
+                      className={`rounded-[7px] px-2 py-[3px] text-[12px] font-medium ${report.status === "open" ? "bg-[rgba(180,51,42,0.08)] text-[#b4332a]" : "bg-[#f2f1ed] text-[#6e6e6b]"}`}
+                    >
+                      {report.status === "open" ? tUi("absences.sickOpen") : tUi("absences.sickClosed")}
+                    </span>
+                  </div>
+                ))}
+              </DbCard>
+            )}
+          </div>
+        )}
+
+        {activeTab === "times" && (
+          <div className="flex flex-col gap-4">
+            {timesView ? (
+              <>
+                <TimePeriodNav
+                  basePath={employeeHref}
+                  period={period}
+                  range={timesView}
+                  today={timesView.today}
+                  extraParams={{ tab: "times" }}
                 />
-              )}
-              {canEditEmployee && employee.status !== "former" && (
-                <OffboardEmployeeButton
-                  tenant={tenant}
-                  employeeId={employee.dbId ?? ""}
-                  employeeHandle={employee.id}
-                  employeeName={employee.name}
-                />
-              )}
-              {canEditEmployee && (
-                <Link href={employeeEditHref} className="btn btn-secondary btn-sm">
-                  <Pencil size={14} />
-                  {t("edit")}
-                </Link>
-              )}
-            </>
-          )}
-        </div>
-      </section>
-
-      {wasInvited && (
-        <div className="mb-4 rounded-card border border-success/25 bg-success/5 px-5 py-3.5 text-[13px] text-ink">
-          {t.rich("invitedBanner", {
-            email: employee.email,
-            b: (chunks) => <span className="font-medium">{chunks}</span>,
-          })}
-        </div>
-      )}
-
-      <div className="mb-5 flex gap-[26px] border-b border-border">
-        <Link
-          href={employeeHref}
-          className={`mb-[-1px] inline-flex items-center gap-2 border-b-2 px-0.5 py-3 text-[14px] ${
-            isHomeTab
-              ? "border-ink font-semibold text-ink"
-              : "border-transparent font-medium text-muted"
-          }`}
-        >
-          {t("tabHome")}
-        </Link>
-        {canViewContracts && (
-          <Link
-            href={`${employeeHref}?tab=contract`}
-            className={`mb-[-1px] inline-flex items-center gap-2 border-b-2 px-0.5 py-3 text-[14px] ${
-              isContractTab
-                ? "border-ink font-semibold text-ink"
-                : "border-transparent font-medium text-muted"
-            }`}
-          >
-            {t("tabContract")}
-            <span className="font-mono text-[11px] text-muted">{contracts.length}</span>
-          </Link>
+                <TimeTotals totals={timesView.totals} />
+                <TimeEntriesDays days={timesView.days} today={timesView.today} />
+              </>
+            ) : (
+              <DbCard>
+                <p className="m-0 text-[13px] text-[#6e6e6b]">{tUi("noTimeTracking")}</p>
+              </DbCard>
+            )}
+            <DbCard>
+              <h2 className="m-0 mb-3 font-display text-[18px] font-semibold tracking-[-0.4px]">{t("shiftsThisWeek")}</h2>
+              <div className="flex flex-col gap-2">
+                {employee.shifts.map((shift) => (
+                  <ShiftRow key={shift.day} shift={shift} />
+                ))}
+              </div>
+            </DbCard>
+          </div>
         )}
-        {canViewEmployeeFiles && (
-          <Link
-            href={`${employeeHref}?tab=files`}
-            className={`mb-[-1px] inline-flex items-center gap-2 border-b-2 px-0.5 py-3 text-[14px] ${
-              isFilesTab
-                ? "border-ink font-semibold text-ink"
-                : "border-transparent font-medium text-muted"
-            }`}
-          >
-            {t("tabFiles")}
-            <span className="font-mono text-[11px] text-muted">
-              {employee.files.length + employee.fileFolders.length}
-            </span>
-          </Link>
-        )}
-        {canViewPayrollStatements && (
-          <Link
-            href={`${employeeHref}?tab=payroll`}
-            className={`mb-[-1px] inline-flex items-center gap-2 border-b-2 px-0.5 py-3 text-[14px] ${
-              isPayrollTab
-                ? "border-ink font-semibold text-ink"
-                : "border-transparent font-medium text-muted"
-            }`}
-          >
-            {t("tabPayroll")}
-            <span className="font-mono text-[11px] text-muted">
-              {employee.payrollStatements.length}
-            </span>
-          </Link>
-        )}
-      </div>
 
-      {isFilesTab ? (
-        <FilesTab
-          employee={employee}
-          tenant={tenant}
-          employeeHref={employeeHref}
-          uploadOptions={uploadOptions}
-          canManageFiles={canManageFiles}
-          canDeleteFiles={canDeleteFiles}
-          activeFolder={activeFolder}
-          t={t}
-        />
-      ) : isPayrollTab ? (
-        <PayrollTab employee={employee} tenant={tenant} canManage={canManagePayrollStatements} t={t} />
-      ) : isContractTab ? (
-        <ContractTab
-          employee={employee}
-          tenant={tenant}
-          contracts={contracts as EmployeeContractItem[]}
-          canManagePayroll={canManageContracts}
-          locationOptions={locationOptions}
-          t={t}
-        />
-      ) : (
+        {activeTab === "requests" && (
+          <InfoRequestsCard employee={employee} tenant={tenant} employeeHandle={employee.id} canManage={canEditEmployee} t={t} />
+        )}
+
+        {activeTab === "log" && (
+          <div className="grid items-start gap-5 [grid-template-columns:repeat(auto-fit,minmax(320px,1fr))]">
+            <DetailCard title={t("historyTitle")} className="[&>h2]:mb-4">
+              {employee.timeline.map((item, index) => (
+                <TimelineItem key={`${item.title}-${item.date}`} item={item} isLast={index === employee.timeline.length - 1} />
+              ))}
+            </DetailCard>
+            {canViewEmployeeAudit && <AuditLogPanel entries={auditEntries} />}
+          </div>
+        )}
+
+        {isDataTab && (
         <div className="flex flex-col gap-4">
           {showContractDetailsPrompt && (
             <ContractDetailsPrompt
@@ -1175,21 +1664,9 @@ export default async function EmployeeDetailPage({
               )}
             </DetailCard>
 
-            <DetailCard title={t("shiftsThisWeek")} className="[&>h2]:mb-3.5">
-              <div className="flex flex-col gap-2">
-                {employee.shifts.map((shift) => (
-                  <ShiftRow key={shift.day} shift={shift} />
-                ))}
-              </div>
-            </DetailCard>
+            
 
-              <InfoRequestsCard
-                employee={employee}
-                tenant={tenant}
-                employeeHandle={employee.id}
-                canManage={canEditEmployee}
-                t={t}
-              />
+              
             </div>
 
             <div className="flex flex-col gap-4">
@@ -1232,74 +1709,48 @@ export default async function EmployeeDetailPage({
               )}
             </DetailCard>
 
-            <DetailCard title={t("historyTitle")} className="[&>h2]:mb-4">
-              {employee.timeline.map((item, index) => (
-                <TimelineItem
-                  key={`${item.title}-${item.date}`}
-                  item={item}
-                  isLast={index === employee.timeline.length - 1}
-                />
-              ))}
-              </DetailCard>
+            
             </div>
           </div>
         </div>
-      )}
+        )}
 
-      {deletionEligibility && (
-        <div className="mt-4">
-          <DetailCard title={t("retentionTitle")}>
-            <p className="mb-4 text-[13px] leading-[1.55] text-muted-2">
-              {t("retentionDescription")}
-            </p>
-            <form id="employee-retention-form" className="flex flex-col gap-2">
-              <input type="hidden" name="tenant" value={tenant} />
-              <input type="hidden" name="employeeId" value={employee.dbId ?? ""} />
-              <input type="hidden" name="employeeHandle" value={employee.id} />
-              {deletionEligibility.map((entry: CategoryEligibility) => (
-                <label
-                  key={entry.category}
-                  className={`flex items-start gap-2.5 rounded-btn border px-3 py-2.5 text-[13px] ${
-                    entry.eligible
-                      ? "border-danger/25 bg-danger/5"
-                      : "border-border-light bg-bg text-muted-2"
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    name="categories"
-                    value={entry.category}
-                    disabled={!entry.eligible}
-                    className="mt-0.5"
-                  />
-                  <span>
-                    <span className="font-semibold text-ink">
-                      {RETENTION_POLICIES[entry.category].beschreibung}
+        {deletionEligibility && activeTab === "log" && (
+          <div className="mt-5">
+            <DetailCard title={t("retentionTitle")}>
+              <p className="mb-4 text-[13px] leading-[1.55] text-muted-2">{t("retentionDescription")}</p>
+              <form id="employee-retention-form" className="flex flex-col gap-2">
+                <input type="hidden" name="tenant" value={tenant} />
+                <input type="hidden" name="employeeId" value={employee.dbId ?? ""} />
+                <input type="hidden" name="employeeHandle" value={employee.id} />
+                {deletionEligibility.map((entry: CategoryEligibility) => (
+                  <label
+                    key={entry.category}
+                    className={`flex items-start gap-2.5 rounded-btn border px-3 py-2.5 text-[13px] ${
+                      entry.eligible ? "border-danger/25 bg-danger/5" : "border-border-light bg-bg text-muted-2"
+                    }`}
+                  >
+                    <input type="checkbox" name="categories" value={entry.category} disabled={!entry.eligible} className="mt-0.5" />
+                    <span>
+                      <span className="font-semibold text-ink">{RETENTION_POLICIES[entry.category].beschreibung}</span>
+                      <br />
+                      {entry.reason}
                     </span>
-                    <br />
-                    {entry.reason}
-                  </span>
-                </label>
-              ))}
-            </form>
-            <div className="mt-3 flex justify-end">
-              <RetentionDeleteButton
-                className="btn btn-secondary btn-sm text-danger"
-                title={t("retentionDeleteSelected")}
-                description={t("retentionDeleteConfirmDescription")}
-              >
-                {t("retentionDeleteSelected")}
-              </RetentionDeleteButton>
-            </div>
-          </DetailCard>
-        </div>
-      )}
-
-      {canViewEmployeeAudit && (
-        <div className="mt-4">
-          <AuditLogPanel entries={auditEntries} />
-        </div>
-      )}
+                  </label>
+                ))}
+              </form>
+              <div className="mt-3 flex justify-end">
+                <RetentionDeleteButton
+                  className="btn btn-secondary btn-sm text-danger"
+                  title={t("retentionDeleteSelected")}
+                  description={t("retentionDeleteConfirmDescription")}
+                >
+                  {t("retentionDeleteSelected")}
+                </RetentionDeleteButton>
+              </div>
+            </DetailCard>
+          </div>
+        )}
       </EmployeeEditFormAndBar>
     </>
   );

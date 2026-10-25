@@ -238,7 +238,7 @@ export default async function SelfServicePage({
     ...(payroll ?? []).slice(0, 2).map((statement) => ({
       id: statement.fileId,
       name: t("payslip", { period: statement.period }),
-      isNew: statement.issuedAt >= recentLimit,
+      isNew: statement.firstViewedAt === null || (statement.firstViewedAt === undefined && statement.issuedAt >= recentLimit),
     })),
     ...documents
       .filter((document) => !payrollFileIds.has(document.id))

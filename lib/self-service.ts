@@ -974,6 +974,8 @@ export type SelfServicePayrollStatement = {
   /** Für `GET /api/me/documents/[fileId]/download`. */
   fileId: string;
   fileName: string;
+  /** Erster eigener Abruf (ISO); `null` = noch nicht geöffnet ("Neu"). Optional für ältere Clients. */
+  firstViewedAt?: string | null;
 };
 
 export async function getMyPayrollStatements(
@@ -1018,6 +1020,7 @@ export async function getMyPayrollStatements(
       status: statement.status === "corrected" ? ("corrected" as const) : ("available" as const),
       fileId: statement.fileId,
       fileName: statement.file.displayName || statement.file.originalName,
+      firstViewedAt: statement.firstViewedAt?.toISOString() ?? null,
     }));
 }
 
@@ -1066,6 +1069,12 @@ export async function getMyDocumentDownloadUrl(input: {
   }
 
   requireFileAcl(file, access);
+
+  // Lohnabrechnung "gesehen" (M3): erster eigener Abruf, danach unverändert.
+  await prisma.tenantPayrollStatement.updateMany({
+    where: { fileId: file.id, employeeId: employee.id, firstViewedAt: null },
+    data: { firstViewedAt: new Date() },
+  });
 
   return createReadSignedUrl({
     bucket: file.bucket,

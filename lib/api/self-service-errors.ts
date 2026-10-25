@@ -1,4 +1,5 @@
 import { REPORT_ERRORS } from "@/lib/report-hours";
+import { TENANT_ACCESS_LOCKED_MESSAGE } from "@/lib/tenant-access";
 import { TIME_CORRECTION_ERROR_STATUS, TIME_TRACKING_ERROR_STATUS } from "@/lib/time-tracking";
 
 /**
@@ -34,6 +35,9 @@ import { TIME_CORRECTION_ERROR_STATUS, TIME_TRACKING_ERROR_STATUS } from "@/lib/
  * potenziell interne Fehlermeldung durchrutscht.
  */
 const KNOWN_ACTION_GUARD_MESSAGES = new Set([
+  // lib/employee-access-lock.ts (App-Zugang sperren, M2)
+  "Den eigenen Zugang können Sie nicht sperren.",
+  "Der Zugang des Inhabers kann nicht gesperrt werden.",
   "Bitte angeben, welche Information benötigt wird.",
   "Bitte die Vertrags-PDF auswählen.",
   "Bitte die vollständige Adresse angeben.",
@@ -131,6 +135,12 @@ const KNOWN_ACTION_GUARD_MESSAGES = new Set([
 function classifySelfServiceError(message: string): number | null {
   if (KNOWN_ACTION_GUARD_MESSAGES.has(message)) {
     return 400;
+  }
+
+  // Gesperrter App-Zugang (TenantEmployee.appAccessLockedAt): 401 wie eine
+  // abgelaufene Sitzung — damit kommt auch die bisherige App zurecht.
+  if (message === TENANT_ACCESS_LOCKED_MESSAGE) {
+    return 401;
   }
 
   // lib/time-tracking-service.ts — feste Stempeluhr-/Korrekturmeldungen mit

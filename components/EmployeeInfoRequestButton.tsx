@@ -108,11 +108,15 @@ export default function EmployeeInfoRequestButton({
   employeeId,
   employeeHandle,
   employeeName,
+  className = "btn btn-primary btn-sm",
+  label,
 }: {
   tenant: string;
   employeeId: string;
   employeeHandle: string;
   employeeName: string;
+  className?: string;
+  label?: string;
 }) {
   const { openPopup, closePopup } = useUniversalPopup();
   const t = useTranslations("EmployeeInfoRequestButton");
@@ -120,7 +124,7 @@ export default function EmployeeInfoRequestButton({
   return (
     <button
       type="button"
-      className="btn btn-primary btn-sm"
+      className={className}
       onClick={() =>
         openPopup({
           title: t("popupTitle"),
@@ -137,7 +141,7 @@ export default function EmployeeInfoRequestButton({
       }
     >
       <MessageSquarePlus size={14} />
-      {t("button")}
+      {label ?? t("button")}
     </button>
   );
 }
