@@ -739,25 +739,6 @@
     "createTemplate": "Ordnervorlage anlegen",
     "trigger": "Ordnervorlage"
   },
-  "FilesListClient": {
-    "searchPlaceholderInFolder": "Dateiname, Typ oder Zuweisung",
-    "searchPlaceholderRoot": "Ordner- oder Dateiname, Typ, Zuweisung",
-    "noSearchResults": "Keine Treffer für diese Suche."
-  },
-  "FilesBrowser": {
-    "fileCountByOwner": "{count} Dateien · {owner}",
-    "lockedSuffix": " / geschützt",
-    "allFolders": "Alle Ordner",
-    "subfolder": "Unterordner",
-    "createFolder": "Ordner erstellen",
-    "title": "Dateiablage",
-    "subtitleRoot": "Ordner und Dateien",
-    "filesInFolder": "Dateien in diesem Ordner",
-    "recentlyChanged": "Zuletzt geändert",
-    "emptyFiles": "Keine Dateien in diesem Ordner.",
-    "emptyFilesRoot": "Noch keine Dateien hochgeladen.",
-    "home": "Home"
-  },
   "FilesPageContent": {
     "uploadedByLabel": "Hochgeladen von",
     "uploadedAtLabel": "Hochgeladen am",

@@ -59,10 +59,18 @@ export async function searchTenant(tenantSlug: string, rawQuery: string): Promis
         },
         select: { key: true, name: true, role: true, team: true, location: true, employeeNumber: true },
         orderBy: { name: "asc" },
-        take: PER_GROUP,
+        take: PER_GROUP * 4,
       });
+      const needle = query.toLocaleLowerCase("de");
+      // Treffer im Namen bzw. in der Personalnummer vor Treffern in Rolle/Team/Standort.
+      const rank = (row: (typeof rows)[number]) =>
+        row.name.toLocaleLowerCase("de").startsWith(needle)
+          ? 0
+          : row.name.toLocaleLowerCase("de").includes(needle) || row.employeeNumber.toLocaleLowerCase("de").includes(needle)
+            ? 1
+            : 2;
 
-      return rows.map<SearchResult>((row) => ({
+      return [...rows].sort((a, b) => rank(a) - rank(b)).slice(0, PER_GROUP).map<SearchResult>((row) => ({
         kind: "employee",
         id: row.key,
         title: row.name,

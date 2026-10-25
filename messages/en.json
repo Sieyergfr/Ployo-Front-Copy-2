@@ -739,25 +739,6 @@
     "createTemplate": "Create folder template",
     "trigger": "Folder template"
   },
-  "FilesListClient": {
-    "searchPlaceholderInFolder": "File name, type, or assignment",
-    "searchPlaceholderRoot": "Folder or file name, type, assignment",
-    "noSearchResults": "No matches for this search."
-  },
-  "FilesBrowser": {
-    "fileCountByOwner": "{count} files · {owner}",
-    "lockedSuffix": " / protected",
-    "allFolders": "All folders",
-    "subfolder": "Subfolder",
-    "createFolder": "Create folder",
-    "title": "File storage",
-    "subtitleRoot": "Folders and files",
-    "filesInFolder": "Files in this folder",
-    "recentlyChanged": "Recently changed",
-    "emptyFiles": "No files in this folder.",
-    "emptyFilesRoot": "No files uploaded yet.",
-    "home": "Home"
-  },
   "FilesPageContent": {
     "uploadedByLabel": "Uploaded by",
     "uploadedAtLabel": "Uploaded on",

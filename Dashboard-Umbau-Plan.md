@@ -286,3 +286,26 @@ ist die Stelle mit `TODO(app-multi-item-requests)` markiert. Auch in `To-Do.md` 
    anfordern. Einverstanden?
 6. **Branch:** Ich arbeite auf `claude/affectionate-noether-axt94e`, wo auch Landing/Auth liegen.
    Soll der Dashboard-Umbau dort weiterlaufen, oder auf einen eigenen Branch?
+
+---
+
+## 7. Umsetzungsstand (26.10.2026)
+
+Alle Seiten aus Phase 1 und die Migrationen M1–M8 sind gebaut, getestet und auf
+`claude/affectionate-noether-axt94e` gepusht. **Noch nicht live** — Release über
+`scripts/release-dashboard.sh` (erst `--dry-run`, dann ohne Option; Backup, Probelauf und
+Rückfrage sind eingebaut).
+
+Abweichungen vom Plan:
+- **M1:** zusätzlich `sharedWithEmployees` (Schalter „für Mitarbeitende sichtbar“), weil das Design
+  zwischen „nur Verwaltung (ggf. bestimmte Rollen)“ und „für Mitarbeitende (alle/Teams/Standorte)“
+  unterscheidet. Ordner werden nur umbenannt, nicht verschoben (ihr Pfad ist zugleich die Adresse der
+  Dateien); verschoben werden Dateien.
+- **M4 nicht umgesetzt:** `overtimeThresholdMinutes` und die App-Schalter gehören in die
+  Einstellungen, die vom Umbau ausgenommen sind. Die Zeiterfassung nutzt vorerst feste Werte
+  (1 Std. über Plan, 10 Std. pro Tag). Die App-Schalter brauchen noch eine Klärung.
+- **M5:** `contactEmail` ersetzt die bisherige Vermischung mit der E-Mail der Leitung.
+- **M8:** Annehmen ändert den veröffentlichten Schnappschuss nicht (Regel 4); eine veröffentlichte
+  Woche gilt danach als geändert und wird regulär neu veröffentlicht.
+
+Ausstehend in `ployo-app`: siehe `To-Do.md`, Abschnitt „App-Update ausstehend“.
