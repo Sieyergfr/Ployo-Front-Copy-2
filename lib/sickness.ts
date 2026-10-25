@@ -8,7 +8,7 @@ import {
   resolveScopeFilter,
 } from "@/lib/tenant-access";
 import { notifyManagersOfNewSicknessReport } from "@/lib/notifications/events";
-import { notifyIfAbsenceConflictsWithPublishedShifts } from "@/lib/shift-service";
+import { getISOWeekFromDate, notifyIfAbsenceConflictsWithPublishedShifts } from "@/lib/shift-service";
 import { calculateVacationWorkDays, parseVacationWorkDays } from "@/lib/vacations";
 import type { Bundesland } from "@/lib/german-holidays";
 
@@ -139,8 +139,10 @@ function normalizeReportChannel(
   return reportChannels.includes(value as ReportChannel) ? (value as ReportChannel) : fallback;
 }
 
-export async function getSicknessForTenant(tenantSlug: string): Promise<SicknessDashboardData> {
-  const access = await requireTenantAccess(tenantSlug, "sickness", "read");
+type SicknessAccess = Awaited<ReturnType<typeof requireTenantAccess>>;
+
+/** Mitarbeiter- und Meldungsfilter für den "sickness"-Scope der Rolle. */
+async function sicknessScopeWhere(access: SicknessAccess) {
   const scopeFilter = await resolveScopeFilter(access);
   // "sickness" unterstützt (bisher) keinen "assigned"-Scope — sollte er
   // dennoch auftreten, nichts treffen statt stillschweigend alles zu zeigen.
@@ -162,6 +164,51 @@ export async function getSicknessForTenant(tenantSlug: string): Promise<Sickness
         : scopeFilter.type === "team"
           ? { tenantId: access.tenantId, employeeId: { in: scopeFilter.teammateIds } }
           : { tenantId: access.tenantId, employeeId: "__none__" };
+
+  return { employeeWhere, reportWhere };
+}
+
+/**
+ * Aktive (nicht ausgeschiedene) Mitarbeiter im Scope mit ihren Arbeitstagen
+ * und dem Bundesland ihres Standorts — Grundlage der Soll-Arbeitstage.
+ */
+async function loadWorkCalendars(
+  access: SicknessAccess,
+  employeeWhere: Awaited<ReturnType<typeof sicknessScopeWhere>>["employeeWhere"],
+) {
+  const employeesForRate = await prisma.tenantEmployee.findMany({
+    where: { ...employeeWhere, status: { not: "former" } },
+    select: { id: true, location: true, workDaysJson: true, startDate: true },
+  });
+  const locationNames = Array.from(
+    new Set(employeesForRate.map((employee) => employee.location).filter(Boolean)),
+  );
+  const bundeslandByLocation = new Map(
+    locationNames.length
+      ? (
+          await prisma.tenantLocation.findMany({
+            where: { tenantId: access.tenantId, name: { in: locationNames } },
+            select: { name: true, bundesland: true },
+          })
+        ).map((location) => [location.name, location.bundesland as Bundesland | null])
+      : [],
+  );
+  const workCalendarByEmployeeId = new Map(
+    employeesForRate.map((employee) => [
+      employee.id,
+      {
+        workDays: parseVacationWorkDays(employee.workDaysJson),
+        bundesland: employee.location ? bundeslandByLocation.get(employee.location) ?? null : null,
+      },
+    ]),
+  );
+
+  return { employeesForRate, workCalendarByEmployeeId };
+}
+
+export async function getSicknessForTenant(tenantSlug: string): Promise<SicknessDashboardData> {
+  const access = await requireTenantAccess(tenantSlug, "sickness", "read");
+  const { employeeWhere, reportWhere } = await sicknessScopeWhere(access);
   const now = startOfUtcDay();
   const sixMonthsAgo = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 5, 1));
   // `startDate` kann in der Zukunft liegen (z. B. "ab Montag krankgemeldet")
@@ -208,32 +255,7 @@ export async function getSicknessForTenant(tenantSlug: string): Promise<Sickness
   // Urlaubsverbrauch (lib/vacations.ts calculateVacationWorkDays).
   const monthStartIso = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-01`;
   const todayIso = now.toISOString().slice(0, 10);
-  const employeesForRate = await prisma.tenantEmployee.findMany({
-    where: { ...employeeWhere, status: { not: "former" } },
-    select: { id: true, location: true, workDaysJson: true, startDate: true },
-  });
-  const locationNames = Array.from(
-    new Set(employeesForRate.map((employee) => employee.location).filter(Boolean)),
-  );
-  const bundeslandByLocation = new Map(
-    locationNames.length
-      ? (
-          await prisma.tenantLocation.findMany({
-            where: { tenantId: access.tenantId, name: { in: locationNames } },
-            select: { name: true, bundesland: true },
-          })
-        ).map((location) => [location.name, location.bundesland as Bundesland | null])
-      : [],
-  );
-  const workCalendarByEmployeeId = new Map(
-    employeesForRate.map((employee) => [
-      employee.id,
-      {
-        workDays: parseVacationWorkDays(employee.workDaysJson),
-        bundesland: employee.location ? bundeslandByLocation.get(employee.location) ?? null : null,
-      },
-    ]),
-  );
+  const { employeesForRate, workCalendarByEmployeeId } = await loadWorkCalendars(access, employeeWhere);
   const expectedWorkDaysThisMonth = employeesForRate.reduce((sum, employee) => {
     const rangeStart = employee.startDate && employee.startDate > monthStartIso ? employee.startDate : monthStartIso;
 
@@ -328,6 +350,98 @@ export async function getSicknessForTenant(tenantSlug: string): Promise<Sickness
         ? record.attachmentFile.displayName || record.attachmentFile.originalName
         : undefined,
     })),
+  };
+}
+
+export type SicknessRateTrend = {
+  /** Krankenquote der letzten 30 Tage in Prozent (inkl. heute). */
+  rate30: number;
+  /** Dieselbe Quote für die 30 Tage davor — für den Vergleich. */
+  previousRate30: number;
+  /** Quote je ISO-Woche, älteste zuerst, die laufende Woche bis heute. */
+  weeks: Array<{ week: number; rate: number }>;
+};
+
+/**
+ * Krankenquote (Krankheitstage / Soll-Arbeitstage, wie `getSicknessForTenant`)
+ * für die Übersicht: letzte 30 Tage, Vergleichszeitraum und Wochenverlauf.
+ * Anders als die Monatskennzahl zählt hier jede Meldung, die den Zeitraum
+ * überschneidet, nur mit ihren Tagen innerhalb des Zeitraums.
+ */
+export async function getSicknessRateTrend(
+  tenantSlug: string,
+  weekCount = 12,
+): Promise<SicknessRateTrend> {
+  const access = await requireTenantAccess(tenantSlug, "sickness", "read");
+  const { employeeWhere, reportWhere } = await sicknessScopeWhere(access);
+  const { employeesForRate, workCalendarByEmployeeId } = await loadWorkCalendars(access, employeeWhere);
+  const today = startOfUtcDay();
+  const todayIso = today.toISOString().slice(0, 10);
+  const isoDaysAgo = (days: number) => new Date(today.getTime() - days * dayMs).toISOString().slice(0, 10);
+  const mondayOffset = (today.getUTCDay() + 6) % 7;
+  const firstMondayIso = isoDaysAgo(mondayOffset + (weekCount - 1) * 7);
+  const earliestIso = firstMondayIso < isoDaysAgo(59) ? firstMondayIso : isoDaysAgo(59);
+  const records = await prisma.tenantSicknessReport.findMany({
+    where: {
+      ...reportWhere,
+      startDate: { lte: today },
+      OR: [{ endDate: null }, { endDate: { gte: new Date(`${earliestIso}T00:00:00.000Z`) } }],
+    },
+    select: { employeeId: true, startDate: true, endDate: true },
+  });
+
+  function rateForRange(from: string, to: string) {
+    const expected = employeesForRate.reduce((sum, employee) => {
+      const rangeStart = employee.startDate && employee.startDate > from ? employee.startDate : from;
+
+      if (rangeStart > to) {
+        return sum;
+      }
+
+      const calendar = workCalendarByEmployeeId.get(employee.id)!;
+
+      return sum + calculateVacationWorkDays(rangeStart, to, calendar.workDays, calendar.bundesland);
+    }, 0);
+    const sick = records.reduce((sum, record) => {
+      const calendar = workCalendarByEmployeeId.get(record.employeeId);
+
+      if (!calendar) {
+        return sum;
+      }
+
+      const recordStart = record.startDate.toISOString().slice(0, 10);
+      const recordEnd = (record.endDate ?? today).toISOString().slice(0, 10);
+      const start = recordStart > from ? recordStart : from;
+      const end = recordEnd < to ? recordEnd : to;
+
+      if (end < start) {
+        return sum;
+      }
+
+      return sum + calculateVacationWorkDays(start, end, calendar.workDays, calendar.bundesland);
+    }, 0);
+
+    return expected > 0 ? (sick / expected) * 100 : 0;
+  }
+
+  const weeks = Array.from({ length: weekCount }, (_, index) => {
+    const monday = new Date(`${firstMondayIso}T00:00:00.000Z`);
+
+    monday.setUTCDate(monday.getUTCDate() + index * 7);
+
+    const from = monday.toISOString().slice(0, 10);
+    const sunday = new Date(monday.getTime() + 6 * dayMs).toISOString().slice(0, 10);
+
+    return {
+      week: getISOWeekFromDate(monday).week,
+      rate: rateForRange(from, sunday < todayIso ? sunday : todayIso),
+    };
+  });
+
+  return {
+    rate30: rateForRange(isoDaysAgo(29), todayIso),
+    previousRate30: rateForRange(isoDaysAgo(59), isoDaysAgo(30)),
+    weeks,
   };
 }
 

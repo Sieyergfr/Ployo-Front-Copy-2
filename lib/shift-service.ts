@@ -914,6 +914,7 @@ export async function getShiftPlanningSettings(tenantSlug: string) {
           shiftBreakRule: true,
           shiftPresetsJson: true,
           defaultOpeningHoursJson: true,
+          minRestHours: true,
         },
       })
     : null;
@@ -921,6 +922,7 @@ export async function getShiftPlanningSettings(tenantSlug: string) {
   return {
     weekStart: settings?.weekStart ?? "monday",
     minStaffing: settings?.shiftMinStaffing ?? 3,
+    minRestHours: settings?.minRestHours ?? 11,
     breakRule: settings?.shiftBreakRule ?? "30-6",
     presets: parseShiftPresets(settings?.shiftPresetsJson ?? []),
     defaultOpeningHours: parseOpeningHoursDays(settings?.defaultOpeningHoursJson ?? []),
