@@ -1,3 +1,4 @@
+import type { InfoRequestItemView } from "@/lib/info-request-items";
 export type EmployeeStatus = "active" | "vacation" | "absent" | "former";
 
 /**
@@ -116,6 +117,8 @@ export type InfoRequest = {
   /** Datei-ID der Antwort — für Ansehen/Herunterladen im Detail-Drawer. */
   responseFileId?: string;
   responseFileName?: string;
+  /** Elemente einer mehrteiligen Anfrage (M7); leer bei klassischen Anfragen. */
+  items?: InfoRequestItemView[];
 };
 
 export type EmployeeShift = {

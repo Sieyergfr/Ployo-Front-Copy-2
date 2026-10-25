@@ -237,6 +237,24 @@ Die Planung bietet eine offene Schicht oder eine Vertretung (eingeteilte Person 
 
 `POST /api/me/shift-offers/[offerId]` Body `{ tenant, decision: "accept"|"decline" }` → `200 { "status": "accepted"|"declined" }`. Beim Annehmen gelten dieselben Regeln wie beim Einteilen (`409` mit Klartext bei Überschneidung, Ruhezeit, Höchstarbeitszeit, Jugend-/Mutterschutz, Abwesenheit). `409` „Die Schicht ist bereits vergeben.“ bzw. „Auf dieses Angebot wurde bereits geantwortet.“, `404` unbekanntes/fremdes Angebot. Ist die Woche bereits veröffentlicht, gilt sie danach als geändert; die Schicht erscheint in `/api/me/shifts` nach dem erneuten Veröffentlichen (dabei kommt die übliche Benachrichtigung). Rate-Limit 30/h.
 
+### Mehrteilige Info-Anfragen (Elemente) — neu, App-Update ausstehend
+
+Info-Anfragen können jetzt aus mehreren Elementen bestehen (`items`, je `{ "id", "kind": "document"|"field", "label", "required", "status": "open"|"provided", "value", "fileId", "fileName", "respondedAt" }`). Das Feld steht zusätzlich in `infoRequests[]` von `/api/me/overview` und in der Antwort von `PATCH /api/me/info-requests/[requestId]`; bei klassischen Anfragen ist es leer.
+
+**Übergang für die alte App** (`TODO(app-multi-item-requests)`, Rückbau nach App-Update + Mindestversion): `message` enthält bei mehrteiligen Anfragen zusätzlich eine Aufzählung der Elemente, `fileRequested` ist gesetzt, sobald ein Pflicht-Dokument dabei ist. Eine Antwort über `PATCH /api/me/info-requests/[requestId]` (Nachricht + Datei) wird dem ersten offenen Dokument bzw. der ersten offenen Angabe zugeordnet.
+
+`POST /api/me/info-requests/[requestId]/items/[itemId]` (`multipart/form-data`: `tenant`, `value` bei einer Angabe, `file` bei einem Dokument) → `200 { "infoRequest": … }`. Sind alle Pflicht-Elemente beantwortet, wechselt die Anfrage auf `uploaded` (mit Datei) bzw. `review`. `400` fehlende Angabe/Datei, `404` unbekanntes Element, `409` storniert. Rate-Limit 60/h.
+
+Anlegen (Verwaltung): `POST /api/tenants/[tenant]/employees/[employeeHandle]/info-requests` nimmt zusätzlich `items: [{ kind, label, required }]` an; `title` darf dann leer sein (wird aus den Elementen abgeleitet).
+
+### Freigegebene Ordner (`/api/me/shared-files`) — neu, App-Update ausstehend
+
+Ordner der zentralen Ablage, die die Verwaltung für Mitarbeitende freigegeben hat (alle oder nur bestimmte Teams/Standorte; nie PIN-geschützte oder rollen-eingeschränkte Ordner).
+
+`GET /api/me/shared-files?tenant=<slug>` → `200 { "folders": [{ "id", "name", "path", "files": [{ "id", "name", "type", "sizeBytes", "updatedAt" }] }] }` — ohne verknüpfte Personalakte leer. Rate-Limit 60/60s.
+
+`GET /api/me/shared-files/[fileId]/download?tenant=<slug>` → `200 { "url" }` (signierte Download-URL), `404` wenn die Datei nicht (mehr) freigegeben ist. Rate-Limit 60/60s.
+
 ## 4. Schichtplanung
 
 Enthält sowohl die reinen Lese-Endpunkte (jedes Tenant-Mitglied) als auch Manager-Schreibrechte für einzelne Schichten (`/api/me/team-shifts*`, Bestandsschutz — historisch zuerst gebaut, s. Konventionen) und die neuen Admin-Endpunkte für Vorlagen und Wunschfrei (`/api/tenants/[tenant]/*`).
@@ -402,7 +420,9 @@ Bei (neuer) Mitarbeiterzuordnung wird bei allen drei Operationen automatisch ein
 
 `GET /locations/[locationHandle]` → `200 { "location": {...} }`, `404` falls unbekannt. Rate-Limit 60/60s.
 
-`PATCH /locations/[locationHandle]` — **echtes Partial-Update**: nicht mitgeschickte Felder werden serverseitig mit dem aktuellen Stand aufgefüllt (die zugrundeliegende Funktion selbst erwartet den vollständigen Datensatz inkl. Kennzahlen). Body (alles optional): `{ "name", "kind", "status", "address", "employeeCount", "activeToday", "shiftCount", "openPositions", "utilization", "utilizationCaption", "leadName", "leadInitials", "leadPhone", "leadEmail", "accentClassName" }`. `200 { "location": {...} }`. Auth: `requireLocationManager`. Rate-Limit 60/Stunde.
+`PATCH /locations/[locationHandle]` — **echtes Partial-Update**: nicht mitgeschickte Felder werden serverseitig mit dem aktuellen Stand aufgefüllt (die zugrundeliegende Funktion selbst erwartet den vollständigen Datensatz inkl. Kennzahlen). Body (alles optional): `{ "name", "kind", "status", "address", "employeeCount", "activeToday", "shiftCount", "openPositions", "utilization", "utilizationCaption", "leadName", "leadInitials", "leadPhone", "leadEmail", "contactEmail", "accentClassName" }`. `contactEmail` ist die Kontakt-E-Mail des Standorts (unabhängig von der Leitung; fehlt das Feld, bleibt sie unverändert). `200 { "location": {...} }`. Auth: `requireLocationManager`. Rate-Limit 60/Stunde.
+
+Antworten enthalten zusätzlich `contactEmail` (Kontakt-E-Mail, `null` wenn leer); `email` liefert diese Adresse, sonst wie bisher die der Leitung. `openPositions` behält seine Bedeutung (offene Stellen).
 
 `DELETE /locations/[locationHandle]` — Auth: `locations:read` + `canDelete`, sonst `403 FORBIDDEN`. `200 { status: true }`. Rate-Limit 30/Stunde.
 

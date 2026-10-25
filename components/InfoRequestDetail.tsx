@@ -70,7 +70,15 @@ export function InfoRequestRow({
           </span>
         </div>
         <div className="mt-2 flex flex-wrap gap-2">
-          {request.fileRequested && (
+          {(request.items?.length ?? 0) > 0 && (
+            <span className="rounded-[7px] border border-border-light px-2 py-[3px] font-mono text-[10px] text-muted">
+              {t("itemsProgress", {
+                done: request.items!.filter((item) => item.status === "provided").length,
+                total: request.items!.length,
+              })}
+            </span>
+          )}
+          {request.fileRequested && !request.items?.length && (
             <span className="rounded-[7px] border border-border-light px-2 py-[3px] font-mono text-[10px] text-muted">
               {t("fileRequested")}
             </span>
@@ -119,6 +127,40 @@ export function InfoRequestRow({
                 <p className="m-0 whitespace-pre-wrap text-[13px] leading-[1.55] text-ink">
                   {request.message}
                 </p>
+              </Block>
+            )}
+
+            {(request.items?.length ?? 0) > 0 && (
+              <Block icon={<CheckCircle2 size={14} />} title={t("itemsTitle")}>
+                <div className="flex flex-col">
+                  {request.items!.map((item) => (
+                    <div key={item.id} className="flex flex-wrap items-center gap-2 border-t border-border-soft py-2.5 first:border-t-0 first:pt-0">
+                      <span className="flex min-w-0 flex-1 flex-col">
+                        <span className="text-[13px] font-semibold text-ink">
+                          {item.label}
+                          {!item.required && <span className="ml-1.5 font-normal text-muted">({t("optional")})</span>}
+                        </span>
+                        <span className="text-[12px] text-muted">
+                          {item.kind === "document" ? t("kindDocument") : t("kindField")}
+                          {item.status === "provided" && item.kind === "field" && item.value ? ` · ${item.value}` : ""}
+                        </span>
+                      </span>
+                      {item.status === "provided" ? (
+                        item.kind === "document" && item.fileId ? (
+                          <OwnerFileActions tenant={tenant} storageFileId={item.fileId} name={item.fileName ?? item.label} />
+                        ) : (
+                          <span className="rounded-[7px] border border-success/25 bg-success/10 px-2 py-[3px] font-mono text-[10px] font-semibold text-success">
+                            {t("itemProvided")}
+                          </span>
+                        )
+                      ) : (
+                        <span className="rounded-[7px] border border-warning/25 bg-warning/10 px-2 py-[3px] font-mono text-[10px] font-semibold text-[#7A4E00]">
+                          {t("itemOpen")}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </Block>
             )}
 

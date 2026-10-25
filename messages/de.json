@@ -334,7 +334,29 @@
     "saving": "Wird gespeichert...",
     "saveRequest": "Anfrage speichern",
     "popupTitle": "Info anfragen",
-    "button": "Info anfragen"
+    "button": "Info anfragen",
+    "titlePlaceholderOptional": "Optional – z. B. Unterlagen für die Lohnabrechnung",
+    "itemsLabel": "Was brauchst du?",
+    "itemKind": "Typ",
+    "kindDocument": "Dokument",
+    "kindField": "Angabe",
+    "documentPlaceholder": "Welches Dokument?",
+    "fieldPlaceholder": "Welche Angabe?",
+    "itemLabel": "Bezeichnung",
+    "required": "Pflicht",
+    "optional": "Optional",
+    "removeItem": "Element entfernen",
+    "addItem": "Weiteres Element",
+    "quickAdd": "Schnell hinzufügen",
+    "quick": {
+      "idCard": "Personalausweis",
+      "taxId": "Steuer-ID",
+      "socialSecurity": "Sozialversicherungsnummer",
+      "healthInsurance": "Krankenkasse",
+      "iban": "IBAN",
+      "healthCertificate": "Gesundheitszeugnis",
+      "residencePermit": "Aufenthaltstitel"
+    }
   },
   "Auth": {
     "header": {
@@ -1671,7 +1693,14 @@
     "requestCancelled": "Die Anfrage wurde storniert.",
     "noResponseReceived": "Noch keine Antwort eingegangen.",
     "uploadedFileTitle": "Hochgeladene Datei",
-    "responseFileDefaultName": "Antwortdatei"
+    "responseFileDefaultName": "Antwortdatei",
+    "itemsProgress": "{done} von {total} erledigt",
+    "itemsTitle": "Angeforderte Elemente",
+    "optional": "optional",
+    "kindDocument": "Dokument",
+    "kindField": "Angabe",
+    "itemProvided": "Erledigt",
+    "itemOpen": "Offen"
   },
   "EmployeeDocumentSlots": {
     "sectionTitle": "Ausweisdokumente & Zertifikate",
@@ -2828,7 +2857,19 @@
     "shiftOfferReplaces": "Vertretung für {name}",
     "shiftOfferAccept": "Übernehmen",
     "shiftOfferDecline": "Ablehnen",
-    "sharedFolder": "Geteilt · {name}"
+    "sharedFolder": "Geteilt · {name}",
+    "infoRequestsTitle": "Angefragt von der Verwaltung",
+    "infoRequestsSubtitle": "Bitte die fehlenden Unterlagen und Angaben ergänzen.",
+    "optional": "optional",
+    "itemDone": "Erledigt",
+    "itemSave": "Speichern",
+    "itemUpload": "Datei wählen",
+    "itemUploading": "Wird hochgeladen…",
+    "dueOn": "bis {date}",
+    "infoRequestAnswer": "Antwort (optional)",
+    "infoRequestSend": "Senden",
+    "infoRequestSent": "Gesendet",
+    "infoRequestError": "Konnte nicht gesendet werden."
   },
   "MyTimes": {
     "title": "Meine Zeiten",

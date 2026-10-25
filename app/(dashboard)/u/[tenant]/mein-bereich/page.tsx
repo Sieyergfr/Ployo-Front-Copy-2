@@ -1,6 +1,7 @@
 import ClockHero from "@/components/dashboard/ClockHero";
 import MyDocumentLink from "@/components/dashboard/MyDocumentLink";
 import MyQuickActions from "@/components/dashboard/MyQuickActions";
+import MyInfoRequests from "@/components/dashboard/MyInfoRequests";
 import MyShiftOffers from "@/components/dashboard/MyShiftOffers";
 import { DbCard, DbCardTitle, DbPageHead } from "@/components/dashboard/ui";
 import { LinkProfilePicker, UnlinkOwnEmployeeButton } from "@/components/SelfServiceEmployeeLink";
@@ -151,7 +152,7 @@ export default async function SelfServicePage({
     );
   }
 
-  const { employee, vacationRequests, sicknessReports, documents, profileFields, profileCompleteness } = overview;
+  const { employee, vacationRequests, sicknessReports, documents, profileFields, profileCompleteness, infoRequests } = overview;
   const today = zonedToday(timeZone);
   const monthParam = typeof query.monat === "string" && /^\d{4}-\d{2}$/.test(query.monat) ? query.monat : today.date.slice(0, 7);
   const monthStart = `${monthParam}-01`;
@@ -309,6 +310,8 @@ export default async function SelfServicePage({
           <MyProfileCompletionCard tenant={tenant} profileFields={profileFields} completeness={profileCompleteness} />
         </div>
       )}
+
+      <MyInfoRequests tenant={tenant} requests={infoRequests} />
 
       <MyShiftOffers tenant={tenant} offers={shiftOffers ?? []} locale={intlLocale} />
 

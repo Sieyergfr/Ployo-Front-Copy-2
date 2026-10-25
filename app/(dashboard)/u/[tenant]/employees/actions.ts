@@ -359,8 +359,19 @@ export async function createEmployeeInfoRequestAction(
   const employeeId = formString(formData, "employeeId");
   const employeeHandle = formString(formData, "employeeHandle");
   const title = formString(formData, "title");
+  // Mehrteilige Anfrage (M7): je Zeile Typ, Bezeichnung und Pflicht.
+  const kinds = formData.getAll("itemKind").map(String);
+  const labels = formData.getAll("itemLabel").map(String);
+  const required = formData.getAll("itemRequired").map(String);
+  const items = labels
+    .map((label, index) => ({
+      kind: kinds[index] === "field" ? ("field" as const) : ("document" as const),
+      label: label.trim(),
+      required: required[index] !== "0",
+    }))
+    .filter((item) => item.label);
 
-  if (!tenant || !employeeId || !employeeHandle || !title) {
+  if (!tenant || !employeeId || !employeeHandle || (!title && items.length === 0)) {
     return { error: "Bitte angeben, welche Information benötigt wird." };
   }
 
@@ -373,6 +384,7 @@ export async function createEmployeeInfoRequestAction(
       dueAt: formString(formData, "dueAt"),
       dueTime: formString(formData, "dueTime"),
       fileRequested: formData.get("fileRequested") === "on",
+      items,
     });
   } catch (error) {
     return {

@@ -334,7 +334,29 @@
     "saving": "Saving...",
     "saveRequest": "Save request",
     "popupTitle": "Request info",
-    "button": "Request info"
+    "button": "Request info",
+    "titlePlaceholderOptional": "Optional – e.g. documents for payroll",
+    "itemsLabel": "What do you need?",
+    "itemKind": "Type",
+    "kindDocument": "Document",
+    "kindField": "Detail",
+    "documentPlaceholder": "Which document?",
+    "fieldPlaceholder": "Which detail?",
+    "itemLabel": "Label",
+    "required": "Required",
+    "optional": "Optional",
+    "removeItem": "Remove item",
+    "addItem": "Add item",
+    "quickAdd": "Quick add",
+    "quick": {
+      "idCard": "ID card",
+      "taxId": "Tax ID",
+      "socialSecurity": "Social security number",
+      "healthInsurance": "Health insurance",
+      "iban": "IBAN",
+      "healthCertificate": "Health certificate",
+      "residencePermit": "Residence permit"
+    }
   },
   "Auth": {
     "header": {
@@ -1671,7 +1693,14 @@
     "requestCancelled": "The request was cancelled.",
     "noResponseReceived": "No response received yet.",
     "uploadedFileTitle": "Uploaded file",
-    "responseFileDefaultName": "Response file"
+    "responseFileDefaultName": "Response file",
+    "itemsProgress": "{done} of {total} done",
+    "itemsTitle": "Requested items",
+    "optional": "optional",
+    "kindDocument": "Document",
+    "kindField": "Detail",
+    "itemProvided": "Done",
+    "itemOpen": "Open"
   },
   "EmployeeDocumentSlots": {
     "sectionTitle": "ID documents & certificates",
@@ -2828,7 +2857,19 @@
     "shiftOfferReplaces": "Covering for {name}",
     "shiftOfferAccept": "Take shift",
     "shiftOfferDecline": "Decline",
-    "sharedFolder": "Shared · {name}"
+    "sharedFolder": "Shared · {name}",
+    "infoRequestsTitle": "Requested by HR",
+    "infoRequestsSubtitle": "Please add the missing documents and details.",
+    "optional": "optional",
+    "itemDone": "Done",
+    "itemSave": "Save",
+    "itemUpload": "Choose file",
+    "itemUploading": "Uploading…",
+    "dueOn": "due {date}",
+    "infoRequestAnswer": "Answer (optional)",
+    "infoRequestSend": "Send",
+    "infoRequestSent": "Sent",
+    "infoRequestError": "Could not be sent."
   },
   "MyTimes": {
     "title": "My times",

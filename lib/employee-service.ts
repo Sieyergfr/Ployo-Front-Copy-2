@@ -1,3 +1,9 @@
+import {
+  deriveInfoRequestTitle,
+  normalizeInfoRequestItems,
+  type InfoRequestItemInput,
+  type InfoRequestItemView,
+} from "@/lib/info-request-items";
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
@@ -132,7 +138,40 @@ type InfoRequestRecord = {
   respondedAt: Date | null;
   responseFileId: string | null;
   responseFile?: { displayName: string } | null;
+  items?: InfoRequestItemRecord[];
 };
+
+type InfoRequestItemRecord = {
+  id: string;
+  kind: string;
+  label: string;
+  required: boolean;
+  status: string;
+  value: string;
+  fileId: string | null;
+  respondedAt: Date | null;
+  file?: { displayName: string } | null;
+};
+
+/** Elemente mehrteiliger Info-Anfragen (M7) — in jeder Abfrage gleich geladen. */
+const infoRequestItemsInclude = {
+  orderBy: { position: "asc" as const },
+  include: { file: { select: { displayName: true } } },
+};
+
+function toInfoRequestItemView(item: InfoRequestItemRecord): InfoRequestItemView {
+  return {
+    id: item.id,
+    kind: item.kind === "field" ? "field" : "document",
+    label: item.label,
+    required: item.required,
+    status: item.status === "provided" ? "provided" : "open",
+    value: item.value,
+    fileId: item.fileId,
+    fileName: item.file?.displayName ?? null,
+    respondedAt: item.respondedAt?.toISOString() ?? null,
+  };
+}
 
 type TimelineRecord = {
   title: string;
@@ -893,6 +932,7 @@ function toEmployee(
       hasResponseFile: Boolean(request.responseFileId),
       responseFileId: request.responseFileId ?? undefined,
       responseFileName: request.responseFile?.displayName || undefined,
+      items: (request.items ?? []).map(toInfoRequestItemView),
     })),
     shifts,
     timeline: (record.timeline ?? []).map((entry) => ({
@@ -1187,7 +1227,7 @@ export async function getEmployeesForTenant(
       },
       infoRequests: {
         orderBy: { createdAt: "desc" },
-        include: { responseFile: { select: { displayName: true } } },
+        include: { responseFile: { select: { displayName: true } }, items: infoRequestItemsInclude },
       },
       timeline: { orderBy: { createdAt: "desc" } },
       contractDetails: true,
@@ -1301,7 +1341,7 @@ export async function getEmployeeForTenant(tenantSlug: string, employeeHandle: s
       },
       infoRequests: {
         orderBy: { createdAt: "desc" },
-        include: { responseFile: { select: { displayName: true } } },
+        include: { responseFile: { select: { displayName: true } }, items: infoRequestItemsInclude },
       },
       timeline: { orderBy: { createdAt: "desc" } },
       contractDetails: true,
@@ -1746,7 +1786,7 @@ export async function createTenantEmployeeRecord({
       },
       infoRequests: {
         orderBy: { createdAt: "desc" },
-        include: { responseFile: { select: { displayName: true } } },
+        include: { responseFile: { select: { displayName: true } }, items: infoRequestItemsInclude },
       },
       timeline: { orderBy: { createdAt: "desc" } },
       contractDetails: true,
@@ -2528,7 +2568,7 @@ export async function updateTenantEmployee(input: EmployeeMutationInput & { empl
       workAddress: true,
       infoRequests: {
         orderBy: { createdAt: "desc" },
-        include: { responseFile: { select: { displayName: true } } },
+        include: { responseFile: { select: { displayName: true } }, items: infoRequestItemsInclude },
       },
       timeline: { orderBy: { createdAt: "desc" } },
       contractDetails: true,
@@ -2912,6 +2952,7 @@ type TenantInfoRequestRecord = {
   respondedAt: Date | null;
   responseFileId: string | null;
   responseFile?: { displayName: string } | null;
+  items?: InfoRequestItemRecord[];
   employeeId: string;
   employee: {
     id: string;
@@ -2941,6 +2982,7 @@ function toTenantInfoRequest(record: TenantInfoRequestRecord) {
     hasResponseFile: Boolean(record.responseFileId),
     responseFileId: record.responseFileId ?? undefined,
     responseFileName: record.responseFile?.displayName || undefined,
+    items: (record.items ?? []).map(toInfoRequestItemView),
     employeeId: record.employee.id,
     employeeKey: record.employee.key,
     employeeInitials: record.employee.initials,
@@ -2998,6 +3040,7 @@ export async function getInfoRequestsForTenant(tenantSlug: string) {
         },
       },
       responseFile: { select: { displayName: true } },
+      items: infoRequestItemsInclude,
     },
   });
 
@@ -3012,11 +3055,14 @@ export async function createEmployeeInfoRequest(input: {
   dueAt?: string;
   dueTime?: string;
   fileRequested: boolean;
+  /** Mehrteilige Anfrage (M7): Dokumente/Angaben, je Pflicht oder optional. */
+  items?: Array<Partial<InfoRequestItemInput>>;
 }) {
   await requireEmployeeManager(input.tenantSlug);
 
   const access = await requireTenantAccess(input.tenantSlug, "employees", "write");
-  const title = input.title.trim();
+  const items = normalizeInfoRequestItems(input.items);
+  const title = deriveInfoRequestTitle(input.title, items);
 
   if (!title) {
     throw new Error("Bitte angeben, welche Information benötigt wird.");
@@ -3049,8 +3095,13 @@ export async function createEmployeeInfoRequest(input: {
       message: input.message?.trim() || "",
       requestedBy: access.userName,
       dueAt,
-      fileRequested: input.fileRequested,
+      // Für die alte App (TODO(app-multi-item-requests)): ein Pflicht-Dokument
+      // unter den Elementen heißt "Datei erforderlich".
+      fileRequested: input.fileRequested || items.some((item) => item.kind === "document" && item.required),
       status: "open",
+      items: items.length
+        ? { create: items.map((item, position) => ({ ...item, position })) }
+        : undefined,
     },
   });
 

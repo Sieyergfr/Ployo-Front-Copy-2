@@ -174,7 +174,12 @@ function classifySelfServiceError(message: string): number | null {
     return 409;
   }
 
-  if (message === FILE_FOLDER_ERRORS.nameRequired || message === "Dateiname ist erforderlich.") {
+  if (
+    message === FILE_FOLDER_ERRORS.nameRequired ||
+    message === "Dateiname ist erforderlich." ||
+    // lib/self-service.ts submitMyInfoRequestItem() (M7)
+    message === "Bitte eine Angabe machen."
+  ) {
     return 400;
   }
 

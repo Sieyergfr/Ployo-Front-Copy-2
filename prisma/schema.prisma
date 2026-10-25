@@ -1056,6 +1056,8 @@ model TenantFile {
   sicknessAttachments  TenantSicknessReport[]
   infoRequestResponse  TenantEmployeeInfoRequest?
 
+  infoRequestItem TenantEmployeeInfoRequestItem? @relation("InfoRequestItemFile")
+
   @@index([tenantId, status])
   @@index([tenantId, folderSlug])
   @@index([employeeId])
@@ -1134,26 +1136,54 @@ model TenantEmployeeContractDetails {
 }
 
 model TenantEmployeeInfoRequest {
-  id              String            @id @default(cuid())
+  id              String                          @id @default(cuid())
   title           String
-  message         String            @default("")
+  message         String                          @default("")
   requestedBy     String
   dueAt           DateTime?
-  fileRequested   Boolean           @default(false)
-  status          InfoRequestStatus @default(open)
-  responseMessage String            @default("")
+  fileRequested   Boolean                         @default(false)
+  status          InfoRequestStatus               @default(open)
+  responseMessage String                          @default("")
   respondedAt     DateTime?
-  responseFileId  String?           @unique
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
+  responseFileId  String?                         @unique
+  createdAt       DateTime                        @default(now())
+  updatedAt       DateTime                        @updatedAt
   tenantId        String
   employeeId      String
-  tenant          Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  employee        TenantEmployee    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  responseFile    TenantFile?       @relation(fields: [responseFileId], references: [id], onDelete: SetNull)
+  tenant          Tenant                          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee        TenantEmployee                  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  responseFile    TenantFile?                     @relation(fields: [responseFileId], references: [id], onDelete: SetNull)
+  items           TenantEmployeeInfoRequestItem[]
 
   @@index([tenantId, employeeId, status])
   @@index([employeeId, createdAt])
+}
+
+/**
+ * Einzelnes Element einer mehrteiligen Info-Anfrage (M7): ein Dokument oder
+ * eine Angabe, Pflicht oder optional. Anfragen ohne Elemente funktionieren
+ * wie bisher (Nachricht + optional eine Datei).
+ */
+model TenantEmployeeInfoRequestItem {
+  id          String                    @id @default(cuid())
+  requestId   String
+  position    Int                       @default(0)
+  /// "document" | "field"
+  kind        String                    @default("document")
+  label       String
+  required    Boolean                   @default(true)
+  /// "open" | "provided"
+  status      String                    @default("open")
+  /// Antwort bei einer Angabe.
+  value       String                    @default("")
+  fileId      String?                   @unique
+  respondedAt DateTime?
+  createdAt   DateTime                  @default(now())
+  updatedAt   DateTime                  @updatedAt
+  request     TenantEmployeeInfoRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  file        TenantFile?               @relation("InfoRequestItemFile", fields: [fileId], references: [id], onDelete: SetNull)
+
+  @@index([requestId, position])
 }
 
 /**

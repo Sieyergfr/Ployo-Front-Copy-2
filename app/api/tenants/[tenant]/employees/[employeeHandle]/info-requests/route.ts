@@ -32,9 +32,13 @@ export async function POST(
     message?: string;
     dueAt?: string;
     fileRequested?: boolean;
+    /** Mehrteilige Anfrage (M7): `[{ kind: "document" | "field", label, required }]`. */
+    items?: Array<{ kind?: "document" | "field"; label?: string; required?: boolean }>;
   } | null;
 
-  if (!body?.title?.trim()) {
+  const hasItems = Array.isArray(body?.items) && body.items.some((item) => item?.label?.trim());
+
+  if (!body?.title?.trim() && !hasItems) {
     return Response.json(
       { error: "Bitte angeben, welche Information benötigt wird." },
       { status: 400 },
@@ -51,10 +55,11 @@ export async function POST(
     const infoRequest = await createEmployeeInfoRequest({
       tenantSlug: tenant,
       employeeId: employee.dbId,
-      title: body.title,
-      message: body.message,
-      dueAt: body.dueAt,
-      fileRequested: Boolean(body.fileRequested),
+      title: body?.title ?? "",
+      message: body?.message,
+      dueAt: body?.dueAt,
+      fileRequested: Boolean(body?.fileRequested),
+      items: Array.isArray(body?.items) ? body.items : undefined,
     });
 
     return Response.json({ infoRequest }, { status: 201 });

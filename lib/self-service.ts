@@ -1,6 +1,7 @@
 import "server-only";
 import { getTimeEntriesForEmployeeExport, type TimeEntryView } from "@/lib/time-tracking-service";
 import { randomUUID } from "node:crypto";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireTenantMembership } from "@/lib/tenant-access";
 import { canAccessFileAcl, requireFileAcl } from "@/lib/file-access";
@@ -16,6 +17,13 @@ import { buildStorageKey, getFileExtension } from "@/lib/storage/key-builder";
 import { createReadSignedUrl } from "@/lib/storage/signed-url";
 import { uploadObject } from "@/lib/storage/upload";
 import { fileToBuffer } from "@/lib/storage/storage.service";
+import {
+  INFO_REQUEST_ITEM_ERRORS,
+  infoRequestItemsComplete,
+  legacyInfoRequestMessage,
+  legacyResponseTargets,
+  type InfoRequestItemView,
+} from "@/lib/info-request-items";
 
 /**
  * `emergencyContactsJson` ist eine `String`-Spalte (Migration
@@ -213,6 +221,12 @@ export type SelfServiceInfoRequest = {
   responseMessage: string;
   respondedAt: string | null;
   hasResponseFile: boolean;
+  /**
+   * Elemente einer mehrteiligen Anfrage (M7) — neu, die alte App ignoriert
+   * das Feld und liest stattdessen die Aufzählung in `message`
+   * (TODO(app-multi-item-requests)).
+   */
+  items?: InfoRequestItemView[];
 };
 
 export type SelfServiceOverview = {
@@ -226,6 +240,37 @@ export type SelfServiceOverview = {
   profileFields: MyProfileFields | null;
   profileCompleteness: ProfileCompleteness | null;
 };
+
+const infoRequestItemsQuery = {
+  orderBy: { position: "asc" as const },
+  include: { file: { select: { displayName: true } } },
+};
+
+type InfoRequestItemRow = {
+  id: string;
+  kind: string;
+  label: string;
+  required: boolean;
+  status: string;
+  value: string;
+  fileId: string | null;
+  respondedAt: Date | null;
+  file?: { displayName: string } | null;
+};
+
+function toItemView(item: InfoRequestItemRow): InfoRequestItemView {
+  return {
+    id: item.id,
+    kind: item.kind === "field" ? "field" : "document",
+    label: item.label,
+    required: item.required,
+    status: item.status === "provided" ? "provided" : "open",
+    value: item.value,
+    fileId: item.fileId,
+    fileName: item.file?.displayName ?? null,
+    respondedAt: item.respondedAt?.toISOString() ?? null,
+  };
+}
 
 /** Löst den Mandanten-Mitarbeiterdatensatz auf, der mit dem eingeloggten Konto verknüpft ist (per `TenantEmployee.userId`). */
 export async function getMyEmployeeId(tenantSlug: string) {
@@ -324,6 +369,7 @@ export async function getMySelfServiceOverview(
     prisma.tenantEmployeeInfoRequest.findMany({
       where: { employeeId: employeeRecord.id },
       orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+      include: { items: infoRequestItemsQuery },
     }),
   ]);
 
@@ -402,7 +448,9 @@ export async function getMySelfServiceOverview(
     infoRequests: infoRequests.map((request) => ({
       id: request.id,
       title: request.title,
-      message: request.message,
+      // TODO(app-multi-item-requests): Elemente als Aufzählung für die alte App.
+      message: legacyInfoRequestMessage(request.message, request.items.map(toItemView)),
+      items: request.items.map(toItemView),
       requestedBy: request.requestedBy,
       requestedAt: request.createdAt.toISOString(),
       dueAt: request.dueAt ? request.dueAt.toISOString() : null,
@@ -878,13 +926,58 @@ export async function uploadMyDocument(input: {
  * `fileRequested` gesetzt hat. Status danach: `uploaded` mit Datei, sonst
  * `review` (Admin muss die reine Textantwort noch sichten).
  */
-export async function submitInfoRequestResponse(input: {
-  tenantSlug: string;
-  requestId: string;
-  message?: string;
-  file?: File;
+/** Antwortdatei einer Info-Anfrage in der Personalakte ablegen (Ordner "Info-Anfragen"). */
+async function storeInfoRequestFile(input: {
+  access: { tenantId: string; userId: string; userName: string };
+  employee: { id: string; name: string };
+  file: File;
+  description: string;
 }) {
-  const access = await requireTenantMembership(input.tenantSlug);
+  // Dieselbe Byte-/Signaturprüfung wie beim generischen Upload — der
+  // clientseitige `file.type` bzw. eine unbestätigte Endung wird NICHT
+  // übernommen (Audit-Finding H08/R04).
+  const { buffer, mimeType } = await fileToBuffer(input.file);
+  const originalName = input.file.name.trim().replace(/[\\/]+/g, "-").slice(0, 240) || "Datei";
+  const bucketConfig = getStorageBucket();
+  const storageKey = buildStorageKey(bucketConfig, {
+    tenantId: input.access.tenantId,
+    fileName: originalName,
+    ownerType: "employee",
+    ownerId: input.employee.id,
+  });
+  const uploaded = await uploadObject({
+    key: storageKey,
+    body: buffer,
+    contentType: mimeType,
+    metadata: { tenantId: input.access.tenantId, originalName },
+  });
+  const uploadedFile = await prisma.tenantFile.create({
+    data: {
+      tenantId: input.access.tenantId,
+      employeeId: input.employee.id,
+      bucket: uploaded.bucket,
+      storageKey: uploaded.key,
+      originalName,
+      displayName: originalName,
+      mimeType,
+      sizeBytes: input.file.size,
+      extension: getFileExtension(originalName),
+      folderSlug: "info-anfragen",
+      folderName: "Info-Anfragen",
+      ownerName: input.employee.name,
+      uploadedById: input.access.userId,
+      uploadedByName: input.access.userName,
+      documentType: "Sonstiges",
+      description: input.description,
+      provider: uploaded.provider,
+    },
+  });
+
+  return uploadedFile.id;
+}
+
+async function resolveInfoRequestEmployee(tenantSlug: string) {
+  const access = await requireTenantMembership(tenantSlug);
   const employee = await prisma.tenantEmployee.findFirst({
     where: { tenantId: access.tenantId, userId: access.userId },
     select: { id: true, name: true },
@@ -894,8 +987,40 @@ export async function submitInfoRequestResponse(input: {
     throw new Error("Ihr Konto ist noch keiner Personalakte zugeordnet. Bitte an HR wenden.");
   }
 
+  return { access, employee };
+}
+
+function toSelfServiceInfoRequest(
+  request: Prisma.TenantEmployeeInfoRequestGetPayload<{ include: { items: typeof infoRequestItemsQuery } }>,
+): SelfServiceInfoRequest {
+  const items = request.items.map(toItemView);
+
+  return {
+    id: request.id,
+    title: request.title,
+    message: legacyInfoRequestMessage(request.message, items),
+    requestedBy: request.requestedBy,
+    requestedAt: request.createdAt.toISOString(),
+    dueAt: request.dueAt ? request.dueAt.toISOString() : null,
+    fileRequested: request.fileRequested,
+    status: request.status as InfoRequestStatus,
+    responseMessage: request.responseMessage,
+    respondedAt: request.respondedAt ? request.respondedAt.toISOString() : null,
+    hasResponseFile: Boolean(request.responseFileId),
+    items,
+  };
+}
+
+export async function submitInfoRequestResponse(input: {
+  tenantSlug: string;
+  requestId: string;
+  message?: string;
+  file?: File;
+}) {
+  const { access, employee } = await resolveInfoRequestEmployee(input.tenantSlug);
   const infoRequest = await prisma.tenantEmployeeInfoRequest.findFirst({
     where: { id: input.requestId, tenantId: access.tenantId, employeeId: employee.id },
+    include: { items: infoRequestItemsQuery },
   });
 
   if (!infoRequest) {
@@ -911,62 +1036,51 @@ export async function submitInfoRequestResponse(input: {
   }
 
   let uploadedFileId = infoRequest.responseFileId;
+  const message = input.message?.trim() ?? "";
 
   if (input.file) {
-    // Dieselbe Byte-/Signaturprüfung wie beim generischen Upload — der
-    // clientseitige `file.type` bzw. eine unbestätigte Endung wird NICHT
-    // übernommen (Audit-Finding H08/R04).
-    const { buffer, mimeType } = await fileToBuffer(input.file);
-
-    const originalName =
-      input.file.name.trim().replace(/[\\/]+/g, "-").slice(0, 240) || "Datei";
-    const bucketConfig = getStorageBucket();
-    const storageKey = buildStorageKey(bucketConfig, {
-      tenantId: access.tenantId,
-      fileName: originalName,
-      ownerType: "employee",
-      ownerId: employee.id,
+    uploadedFileId = await storeInfoRequestFile({
+      access,
+      employee,
+      file: input.file,
+      description: `Antwort auf: ${infoRequest.title}`,
     });
-    const uploaded = await uploadObject({
-      key: storageKey,
-      body: buffer,
-      contentType: mimeType,
-      metadata: { tenantId: access.tenantId, originalName },
-    });
+  }
 
-    const uploadedFile = await prisma.tenantFile.create({
-      data: {
-        tenantId: access.tenantId,
-        employeeId: employee.id,
-        bucket: uploaded.bucket,
-        storageKey: uploaded.key,
-        originalName,
-        displayName: originalName,
-        mimeType,
-        sizeBytes: input.file.size,
-        extension: getFileExtension(originalName),
-        folderSlug: "info-anfragen",
-        folderName: "Info-Anfragen",
-        ownerName: employee.name,
-        uploadedById: access.userId,
-        uploadedByName: access.userName,
-        documentType: "Sonstiges",
-        description: `Antwort auf: ${infoRequest.title}`,
-        provider: uploaded.provider,
-      },
+  // TODO(app-multi-item-requests): Antwort der alten App (Nachricht + eine
+  // Datei) dem ersten offenen Element zuordnen; HR prüft und fordert ggf.
+  // Weiteres an. Nach App-Update + Mindestversion zurückbauen.
+  if (infoRequest.items.length > 0) {
+    const targets = legacyResponseTargets(infoRequest.items.map(toItemView), {
+      hasFile: Boolean(input.file && uploadedFileId),
+      hasMessage: Boolean(message),
     });
+    const now = new Date();
 
-    uploadedFileId = uploadedFile.id;
+    if (targets.fileItemId && uploadedFileId) {
+      await prisma.tenantEmployeeInfoRequestItem.update({
+        where: { id: targets.fileItemId },
+        data: { status: "provided", fileId: uploadedFileId, respondedAt: now },
+      });
+    }
+
+    if (targets.fieldItemId) {
+      await prisma.tenantEmployeeInfoRequestItem.update({
+        where: { id: targets.fieldItemId },
+        data: { status: "provided", value: message.slice(0, 2000), respondedAt: now },
+      });
+    }
   }
 
   const updated = await prisma.tenantEmployeeInfoRequest.update({
     where: { id: infoRequest.id },
     data: {
-      responseMessage: input.message?.trim() ?? "",
+      responseMessage: message,
       respondedAt: new Date(),
       responseFileId: uploadedFileId,
       status: uploadedFileId ? "uploaded" : "review",
     },
+    include: { items: infoRequestItemsQuery },
   });
 
   await recordTenantAudit({
@@ -980,21 +1094,101 @@ export async function submitInfoRequestResponse(input: {
     detail: infoRequest.title,
   });
 
-  const response: SelfServiceInfoRequest = {
-    id: updated.id,
-    title: updated.title,
-    message: updated.message,
-    requestedBy: updated.requestedBy,
-    requestedAt: updated.createdAt.toISOString(),
-    dueAt: updated.dueAt ? updated.dueAt.toISOString() : null,
-    fileRequested: updated.fileRequested,
-    status: updated.status as InfoRequestStatus,
-    responseMessage: updated.responseMessage,
-    respondedAt: updated.respondedAt ? updated.respondedAt.toISOString() : null,
-    hasResponseFile: Boolean(updated.responseFileId),
-  };
+  return toSelfServiceInfoRequest(updated);
+}
 
-  return response;
+/**
+ * Einzelnes Element einer mehrteiligen Info-Anfrage beantworten (M7): eine
+ * Angabe als Text oder ein Dokument als Datei. Sind alle Pflicht-Elemente
+ * beantwortet, geht die Anfrage zur Prüfung an HR ("uploaded" mit Datei,
+ * sonst "review").
+ */
+export async function submitMyInfoRequestItem(input: {
+  tenantSlug: string;
+  requestId: string;
+  itemId: string;
+  value?: string;
+  file?: File;
+}) {
+  const { access, employee } = await resolveInfoRequestEmployee(input.tenantSlug);
+  const infoRequest = await prisma.tenantEmployeeInfoRequest.findFirst({
+    where: { id: input.requestId, tenantId: access.tenantId, employeeId: employee.id },
+    include: { items: infoRequestItemsQuery },
+  });
+
+  if (!infoRequest) {
+    throw new Error("Info-Anfrage nicht gefunden.");
+  }
+
+  if (infoRequest.status === "cancelled") {
+    throw new Error(INFO_REQUEST_ITEM_ERRORS.closed);
+  }
+
+  const item = infoRequest.items.find((entry) => entry.id === input.itemId);
+
+  if (!item) {
+    throw new Error(INFO_REQUEST_ITEM_ERRORS.notFound);
+  }
+
+  const now = new Date();
+
+  if (item.kind === "field") {
+    const value = input.value?.trim() ?? "";
+
+    if (!value) {
+      throw new Error(INFO_REQUEST_ITEM_ERRORS.valueRequired);
+    }
+
+    await prisma.tenantEmployeeInfoRequestItem.update({
+      where: { id: item.id },
+      data: { status: "provided", value: value.slice(0, 2000), respondedAt: now },
+    });
+  } else {
+    if (!input.file) {
+      throw new Error(INFO_REQUEST_ITEM_ERRORS.fileRequired);
+    }
+
+    const fileId = await storeInfoRequestFile({
+      access,
+      employee,
+      file: input.file,
+      description: `${infoRequest.title}: ${item.label}`,
+    });
+
+    await prisma.tenantEmployeeInfoRequestItem.update({
+      where: { id: item.id },
+      data: { status: "provided", fileId, respondedAt: now },
+    });
+  }
+
+  const items = await prisma.tenantEmployeeInfoRequestItem.findMany({
+    where: { requestId: infoRequest.id },
+    orderBy: { position: "asc" },
+  });
+  const complete = infoRequestItemsComplete(items.map((entry) => ({ required: entry.required, status: entry.status === "provided" ? "provided" : "open" })));
+  const updated = await prisma.tenantEmployeeInfoRequest.update({
+    where: { id: infoRequest.id },
+    data: complete
+      ? {
+          status: items.some((entry) => entry.fileId) ? "uploaded" : "review",
+          respondedAt: now,
+        }
+      : {},
+    include: { items: infoRequestItemsQuery },
+  });
+
+  await recordTenantAudit({
+    tenantId: access.tenantId,
+    actorId: access.userId,
+    actorName: access.userName,
+    action: "Info-Anfrage beantwortet (Self-Service)",
+    source: "Mein Bereich",
+    entityType: "employee",
+    entityId: employee.id,
+    detail: `${infoRequest.title}: ${item.label}`,
+  });
+
+  return toSelfServiceInfoRequest(updated);
 }
 
 /**
