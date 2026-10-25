@@ -105,7 +105,7 @@ function LocationCard({ location, tenant, t }: { location: Location; tenant: str
         {[
           [t("employees"), location.employeeCount, false],
           [t("shifts"), location.shiftCount, false],
-          [t("open"), location.openPositions, location.openPositions > 0],
+          [t("open"), location.openShiftCount ?? 0, (location.openShiftCount ?? 0) > 0],
         ].map(([label, value, danger]) => (
           <span key={String(label)} className="flex flex-col gap-1 rounded-[10px] bg-[#fafaf8] px-3 py-2.5">
             <span className="font-mono text-[9.5px] tracking-[0.1em] text-[#9a9a96] uppercase">{label}</span>
@@ -248,7 +248,7 @@ export function LocationsListClient({
                     <td className="max-w-[260px] truncate px-4 py-3 text-[#3d3d3a]">{location.address}</td>
                     <td className="px-4 py-3 font-semibold">{location.employeeCount}</td>
                     <td className="px-4 py-3 font-semibold">{location.shiftCount}</td>
-                    <td className={`px-4 py-3 font-semibold ${location.openPositions > 0 ? "text-[#b4332a]" : ""}`}>{location.openPositions}</td>
+                    <td className={`px-4 py-3 font-semibold ${(location.openShiftCount ?? 0) > 0 ? "text-[#b4332a]" : ""}`}>{location.openShiftCount ?? 0}</td>
                     <td className="px-4 py-3">
                       <LeadAvatar location={location} t={t} />
                     </td>

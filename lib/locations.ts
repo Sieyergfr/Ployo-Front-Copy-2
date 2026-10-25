@@ -60,6 +60,8 @@ export type Location = {
   activeToday: number;
   shiftCount: number;
   openPositions: number;
+  /** Unbesetzte Schichten dieser Woche (live berechnet). */
+  openShiftCount?: number;
   /** Effektive Öffnungszeiten (eigene Angabe, sonst Mandanten-Standard, sonst eingebauter Standard). */
   openingHours: OpeningHoursDay[];
   /** true = Standort hat keine eigene Öffnungszeiten hinterlegt, übernimmt den Mandanten-Standard. */

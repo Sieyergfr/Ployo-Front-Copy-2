@@ -7,7 +7,6 @@ import {
   notifyShiftOfferAccepted,
 } from "@/lib/notifications/events";
 import { prisma } from "@/lib/prisma";
-import type { Prisma } from "@prisma/client";
 import {
   assertArbzgCompliant,
   buildAbsenceCheck,
@@ -416,15 +415,14 @@ export async function getMyShiftOffers(tenantSlug: string): Promise<MyShiftOffer
     .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime));
 }
 
-type PublishedEntry = { key?: string; employeeId: string | null } & Record<string, unknown>;
-
 /**
  * Annehmen oder ablehnen. Beim Annehmen wird die Schicht nur übertragen,
  * solange sie noch so eingeteilt ist wie beim Anfragen (sonst "bereits
  * vergeben"); die übrigen offenen Angebote derselben Schicht werden
- * geschlossen. Ist die Woche veröffentlicht, wird der veröffentlichte Stand
- * gleich mit angepasst — die angenommene Schicht soll sofort in "Meine
- * Schichten" stehen, ohne dass der Plan neu veröffentlicht werden muss.
+ * geschlossen. Der veröffentlichte Schnappschuss (`publishedShiftsJson`)
+ * bleibt bewusst unangetastet: eine veröffentlichte Woche zeigt danach
+ * "Geändert", und erst das erneute Veröffentlichen benachrichtigt die
+ * Person über den gewohnten Weg.
  */
 export async function respondToMyShiftOffer(input: {
   tenantSlug: string;
@@ -497,7 +495,6 @@ export async function respondToMyShiftOffer(input: {
     employeeMaternityProtectionActive: employee.maternityProtectionActive,
   });
 
-  const bounds = weekBounds(shift.date);
   const accepted = await prisma.$transaction(async (tx) => {
     const { count } = await tx.tenantShift.updateMany({
       where: { id: shift.id, employeeId: offer.replacedEmployeeId },
@@ -515,23 +512,6 @@ export async function respondToMyShiftOffer(input: {
       where: { shiftId: shift.id, status: "pending", id: { not: offer.id } },
       data: { status: "closed", respondedAt: now },
     });
-
-    const week = await tx.tenantShiftWeek.findUnique({
-      where: { tenantId_year_week: { tenantId: access.tenantId, year: bounds.year, week: bounds.week } },
-      select: { id: true, status: true, publishedShiftsJson: true },
-    });
-    const snapshot = Array.isArray(week?.publishedShiftsJson) ? (week.publishedShiftsJson as PublishedEntry[]) : null;
-
-    if (week?.status === "published" && snapshot?.some((entry) => entry.key === shift.key)) {
-      await tx.tenantShiftWeek.update({
-        where: { id: week.id },
-        data: {
-          publishedShiftsJson: snapshot.map((entry) =>
-            entry.key === shift.key ? { ...entry, employeeId: employee.id } : entry,
-          ) as Prisma.InputJsonValue,
-        },
-      });
-    }
 
     return true;
   });

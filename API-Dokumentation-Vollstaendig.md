@@ -235,7 +235,7 @@ Die Planung bietet eine offene Schicht oder eine Vertretung (eingeteilte Person 
 
 `GET /api/me/shift-offers?tenant=<slug>` → `200 { "offers": [{ "id", "date", "startTime", "endTime", "breakMinutes", "location", "team", "replacesFirstName": string|null, "createdAt" }] }` — nur offene Angebote ab heute, deren Schicht noch so besetzt ist wie beim Anfragen; nach Datum sortiert. `409` Konto ohne Personalakte. Rate-Limit 60/60s.
 
-`POST /api/me/shift-offers/[offerId]` Body `{ tenant, decision: "accept"|"decline" }` → `200 { "status": "accepted"|"declined" }`. Beim Annehmen gelten dieselben Regeln wie beim Einteilen (`409` mit Klartext bei Überschneidung, Ruhezeit, Höchstarbeitszeit, Jugend-/Mutterschutz, Abwesenheit). `409` „Die Schicht ist bereits vergeben.“ bzw. „Auf dieses Angebot wurde bereits geantwortet.“, `404` unbekanntes/fremdes Angebot. Ist die Woche veröffentlicht, steht die Schicht danach sofort in `/api/me/shifts`. Rate-Limit 30/h.
+`POST /api/me/shift-offers/[offerId]` Body `{ tenant, decision: "accept"|"decline" }` → `200 { "status": "accepted"|"declined" }`. Beim Annehmen gelten dieselben Regeln wie beim Einteilen (`409` mit Klartext bei Überschneidung, Ruhezeit, Höchstarbeitszeit, Jugend-/Mutterschutz, Abwesenheit). `409` „Die Schicht ist bereits vergeben.“ bzw. „Auf dieses Angebot wurde bereits geantwortet.“, `404` unbekanntes/fremdes Angebot. Ist die Woche bereits veröffentlicht, gilt sie danach als geändert; die Schicht erscheint in `/api/me/shifts` nach dem erneuten Veröffentlichen (dabei kommt die übliche Benachrichtigung). Rate-Limit 30/h.
 
 ## 4. Schichtplanung
 

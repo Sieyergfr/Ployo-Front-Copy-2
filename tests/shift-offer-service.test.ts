@@ -197,7 +197,13 @@ describe("Vertretung finden und anbieten", () => {
     const snapshot = week.publishedShiftsJson as Array<{ key: string; employeeId: string | null }>;
 
     expect(updated.employeeId).toBe(annaId);
-    expect(snapshot.find((entry) => entry.key === shift.key)?.employeeId).toBe(annaId);
+    // Der veröffentlichte Schnappschuss bleibt unangetastet — die Woche gilt
+    // danach als geändert und wird regulär neu veröffentlicht.
+    expect(snapshot.find((entry) => entry.key === shift.key)?.employeeId).toBe(carlId);
+    currentUserId = ownerUserId;
+    const plan = await shifts.getShiftPlanForTenant({ tenantSlug, year: target.year, week: target.week });
+
+    expect(plan?.hasUnpublishedChanges).toBe(true);
     expect(dispatched).toContainEqual({ userId: ownerUserId, key: "shiftOfferAccepted" });
 
     // Bens Angebot ist damit geschlossen.

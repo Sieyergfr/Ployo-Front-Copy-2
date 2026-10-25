@@ -344,9 +344,10 @@ function toLocation(
     // Live aus tatsächlich geplanten Schichten dieser Woche statt aus dem nie
     // aktualisierten `shiftCount`-Feld — siehe To-Do "Standorte: Schichten-Anzahl falsch".
     shiftCount: (record.shifts ?? []).length,
-    // Live wie `shiftCount`: offene (unbesetzte) Schichten dieser Woche statt
-    // des nie aktualisierten `openPositions`-Felds.
-    openPositions: record.shifts ? record.shifts.filter((shift) => !shift.employeeId).length : record.openPositions,
+    openPositions: record.openPositions,
+    // Live wie `shiftCount`: unbesetzte Schichten dieser Woche. Eigenes Feld,
+    // weil die App `openPositions` als "Offene Stellen" anzeigt.
+    openShiftCount: (record.shifts ?? []).filter((shift) => !shift.employeeId).length,
     openingHours,
     usesDefaultOpeningHours: openingHoursOverride.length === 0,
     shiftMinStaffing: record.shiftMinStaffing,
@@ -519,7 +520,7 @@ export function getLocationMetrics(
     0,
   );
   const openShifts = locations.reduce(
-    (total, location) => total + location.openPositions,
+    (total, location) => total + (location.openShiftCount ?? 0),
     0,
   );
 
