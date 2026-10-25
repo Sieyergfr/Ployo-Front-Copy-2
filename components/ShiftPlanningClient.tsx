@@ -1,16 +1,14 @@
 "use client";
 
 import {
-  applyShiftTemplateAction,
   approveWishFreeRequestAction,
+  copyPreviousShiftWeekAction,
   createShiftAction,
   createWishFreeRequestAction,
   deleteShiftAction,
-  deleteShiftTemplateAction,
   publishShiftWeekAction,
   resetShiftWeekAction,
   rejectWishFreeRequestAction,
-  saveShiftTemplateAction,
   unpublishShiftWeekAction,
   updateShiftAction,
   updateShiftTemplateAction,
@@ -20,14 +18,19 @@ import {
   type ShiftPlanningSettings,
 } from "@/components/ActionDrawers";
 import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
+import { DbModal } from "@/components/dashboard/DbDrawer";
+import ShiftOfferDrawer from "@/components/dashboard/shifts/ShiftOfferDrawer";
+import ShiftTemplatesDrawer, { type ShiftTemplateSummary } from "@/components/dashboard/shifts/ShiftTemplatesDrawer";
+import { ctaClass, DbCard, DbPageHead, secondaryClass, smallActionClass } from "@/components/dashboard/ui";
 import DatePickerField from "@/components/DatePickerField";
 import FormSubmitButton from "@/components/FormSubmitButton";
 import { ListSearchBox } from "@/components/ListSearchBox";
-import PageHeader from "@/components/PageHeader";
 import { useActionStateWithToast } from "@/components/Toasts";
+import { paletteHex } from "@/lib/org-options";
 import {
   type ShiftLocationOption,
   type ShiftEmployeeOption,
+  type ShiftWeekAbsence,
 } from "@/lib/shift-service";
 import { type Shift, type ShiftDay } from "@/lib/shifts";
 import { calculateBreakMinutes } from "@/lib/shift-break-rule";
@@ -39,39 +42,37 @@ import {
   type WishFreeRequestStatus,
 } from "@/lib/wish-free";
 import {
-  AlertCircle,
-  AlertTriangle,
-  CalendarDays,
   CalendarX,
   Check,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Pencil,
+  Coffee,
+  Copy,
+  LayoutGrid,
   Plus,
   RotateCcw,
   Save,
   Send,
+  Settings,
   Undo2,
   X,
 } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useTranslations } from "next-intl";
 
 type T = ReturnType<typeof useTranslations>;
 
-type ShiftTemplateSummary = {
-  id: string;
-  name: string;
-  entries: ShiftTemplateEntry[];
-};
-
 type ShiftPlanningClientProps = {
   tenant: string;
+  tenantName: string;
   year: number;
   week: number;
-  weekLabel: string;
+  currentYear: number;
+  currentWeek: number;
+  todayIso: string;
   weekRange: string;
   conflictCount: number;
   status: "draft" | "published";
@@ -84,9 +85,17 @@ type ShiftPlanningClientProps = {
   wishFreeRequests: WishFreeRequest[];
   shiftSettings: ShiftPlanningSettings;
   templates: ShiftTemplateSummary[];
+  /** Abwesenheiten je Tag (Urlaub/Krankheit) für die "Abwesend"-Liste. */
+  absences?: ShiftWeekAbsence[];
+  /** Offene Schichtangebote je Schicht-ID. */
+  offerCounts?: Record<string, number>;
+  /** Feiertage der Woche: Datum → Name. */
+  holidays?: Record<string, string>;
   canManage?: boolean;
   canDelete?: boolean;
   canManageSettings?: boolean;
+  /** Krankheitsbezug nur mit Leserecht auf Krankmeldungen zeigen, sonst neutral "Abwesend". */
+  canSeeSickness?: boolean;
 };
 
 type DrawerState = {
@@ -156,44 +165,48 @@ function getAdjacentWeek(year: number, week: number, direction: -1 | 1) {
 function ShiftCard({
   shift,
   onClick,
-  t,
+  offerCount,
+  ui,
 }: {
   shift: Shift;
   onClick: () => void;
-  t: T;
+  offerCount: number;
+  ui: T;
 }) {
   const isOpen = !shift.assignee;
-  const accentClassName = shift.locationAccentClassName ?? "bg-border";
+  const color = paletteHex(shift.locationAccentClassName, "#c9c8c3");
+  const breakMinutes = shift.breakMinutes ?? 0;
+  const title = [
+    shift.conflict && shift.conflictReason ? ui("conflictTitle", { reason: shift.conflictReason }) : null,
+    offerCount > 0 ? ui("offerPending", { count: offerCount }) : null,
+    shift.location,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <button
       type="button"
-      className={`relative flex w-full cursor-pointer flex-col gap-[3px] overflow-hidden rounded-[9px] border py-[9px] pr-2.5 pl-4 text-left font-sans transition-colors ${
-        shift.conflict
-          ? "border-danger/25 bg-danger/5 hover:border-danger/40"
-          : "border-border bg-white hover:border-muted hover:bg-bg"
+      title={title || undefined}
+      className={`db-focus relative flex w-full cursor-pointer flex-col gap-[2px] rounded-[10px] border bg-white py-2 pr-2.5 pl-4 text-left font-sans transition-colors hover:border-[#d9d8d3] hover:shadow-[0_2px_8px_rgba(14,14,14,0.05)] ${
+        shift.conflict ? "border-[rgba(180,51,42,0.35)]" : "border-[#ecebe7]"
       }`}
       onClick={onClick}
     >
-      <span className={`absolute inset-y-0 left-0 w-1 ${accentClassName}`} />
-      <div className="flex items-center justify-between gap-2">
-        <span className="font-mono text-[11.5px] font-semibold text-ink">
-          {shift.time}
-        </span>
-        {shift.conflict && <AlertCircle size={13} className="text-danger" />}
-      </div>
-      {isOpen ? (
-        <div className="text-[11px] text-[#C0BFBA]">{t("openShift")}</div>
-      ) : (
-        <>
-          <div className="truncate text-[12px] font-semibold text-ink">
-            {shift.assignee}
-          </div>
-          <div className="truncate text-[10.5px] text-muted">
-            {shift.location} {"\u00b7"} {shift.team}
-          </div>
-        </>
-      )}
+      <span className="absolute top-2 bottom-2 left-[7px] w-[3px] rounded-full" style={{ background: color }} />
+      <span className={`truncate text-[13px] font-semibold ${isOpen ? "text-[#c9622a]" : "text-ink"}`}>
+        {isOpen ? ui("openAssign") : shift.assignee}
+      </span>
+      <span className="text-[12.5px] text-[#3d3d3a] tabular-nums">{shift.time}</span>
+      <span className="inline-flex items-center gap-1 text-[11.5px] text-[#9a9a96]">
+        <Coffee size={11} />
+        {breakMinutes > 0 ? ui("breakMinutes", { minutes: breakMinutes }) : ui("noBreak")}
+      </span>
+      {shift.conflict ? (
+        <span className="absolute -top-1 -right-1 size-2.5 rounded-full border-2 border-white bg-[#b4332a]" />
+      ) : offerCount > 0 ? (
+        <span className="absolute -top-1 -right-1 size-2.5 rounded-full border-2 border-white bg-[#2a5bc9]" />
+      ) : null}
     </button>
   );
 }
@@ -212,10 +225,8 @@ function WishFreeBlock({
   }
 
   return (
-    <div
-      className="wish-free-stripes rounded-[9px] border border-ink/10 px-3 py-2.5 text-left"
-    >
-      <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
+    <div className="wish-free-stripes col-span-2 rounded-[10px] border border-ink/10 px-3 py-2.5 text-left">
+      <div className="font-mono text-[9.5px] font-semibold tracking-[0.08em] text-[#6e6e6b] uppercase">
         {t("wishFree")}
       </div>
       <div className="mt-1.5 flex flex-wrap gap-1.5">
@@ -223,7 +234,7 @@ function WishFreeBlock({
           <button
             key={request.dbId}
             type="button"
-            className="cursor-pointer rounded-md bg-white/80 px-1.5 py-0.5 text-left text-[12px] font-semibold leading-snug text-ink transition-colors hover:bg-border-soft"
+            className="cursor-pointer rounded-md bg-white/80 px-1.5 py-0.5 text-left text-[12px] leading-snug font-semibold text-ink transition-colors hover:bg-border-soft"
             onClick={() => onRequestClick(request)}
           >
             {request.employeeName}
@@ -785,6 +796,7 @@ function ShiftDrawer({
   presets,
   breakRule,
   onClose,
+  onFindSubstitute,
   canManage,
   canDelete,
   t,
@@ -798,6 +810,7 @@ function ShiftDrawer({
   presets: ShiftPlanningSettings["presets"];
   breakRule: string;
   onClose: () => void;
+  onFindSubstitute: (shiftId: string) => void;
   canManage: boolean;
   canDelete: boolean;
   t: T;
@@ -807,6 +820,7 @@ function ShiftDrawer({
   const [, createFormAction] = useActionStateWithToast(createShiftAction);
   const [, updateFormAction] = useActionStateWithToast(updateShiftAction);
   const [, deleteFormAction] = useActionStateWithToast(deleteShiftAction);
+  const tUi = useTranslations("ShiftUi");
 
   if (!drawer) {
     return null;
@@ -1026,6 +1040,19 @@ function ShiftDrawer({
             />
           </div>
           </fieldset>
+
+          {canManage &&
+            shift?.dbId &&
+            (!shift.assignee || shift.conflictKind === "vacation" || shift.conflictKind === "sickness") && (
+              <button
+                type="button"
+                className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-[10px] border border-[rgba(139,110,212,0.4)] bg-[rgba(167,142,232,0.08)] px-4 py-2.5 text-[13.5px] font-semibold text-[#5b3fb0] transition-colors hover:bg-[rgba(167,142,232,0.14)]"
+                onClick={() => onFindSubstitute(shift.dbId!)}
+              >
+                <Send size={15} />
+                {shift.assignee ? tUi("findSubstitute") : tUi("offerShift")}
+              </button>
+            )}
 
           <div className="mt-1 flex justify-end gap-2.5 border-t border-border-soft pt-4">
             <button type="button" className="btn btn-secondary" onClick={onClose}>
@@ -1320,9 +1347,12 @@ function TemplateEditDrawer({
 
 export default function ShiftPlanningClient({
   tenant,
+  tenantName,
   year,
   week,
-  weekLabel,
+  currentYear,
+  currentWeek,
+  todayIso,
   weekRange,
   conflictCount,
   status,
@@ -1334,20 +1364,26 @@ export default function ShiftPlanningClient({
   wishFreeRequests,
   shiftSettings,
   templates,
+  absences = [],
+  offerCounts = {},
+  holidays = {},
   canManage = true,
   canDelete = canManage,
   canManageSettings = true,
+  canSeeSickness = false,
 }: ShiftPlanningClientProps) {
   const t = useTranslations("ShiftPlanningClient");
+  const ui = useTranslations("ShiftUi");
   const router = useRouter();
   const [, publishFormAction] = useActionStateWithToast(publishShiftWeekAction);
   const [, resetFormAction] = useActionStateWithToast(resetShiftWeekAction);
   const [, unpublishFormAction] = useActionStateWithToast(unpublishShiftWeekAction);
-  const [, applyTemplateFormAction] = useActionStateWithToast(applyShiftTemplateAction);
-  const [, saveTemplateFormAction] = useActionStateWithToast(saveShiftTemplateAction);
-  const [, deleteTemplateFormAction] = useActionStateWithToast(deleteShiftTemplateAction);
+  const [, copyFormAction] = useActionStateWithToast(copyPreviousShiftWeekAction);
   const [drawer, setDrawer] = useState<DrawerState | null>(null);
   const [editingTemplate, setEditingTemplate] = useState<ShiftTemplateSummary | null>(null);
+  const [dialog, setDialog] = useState<"templates" | "publish" | "unpublish" | "copy" | null>(null);
+  const [offerShiftId, setOfferShiftId] = useState<string | null>(null);
+  const [locationFilter, setLocationFilter] = useState<string>("all");
   const [isWishFreeDrawerOpen, setIsWishFreeDrawerOpen] = useState(false);
   const [isCreatingWishFreeRequest, setIsCreatingWishFreeRequest] = useState(false);
   const [wishFreeFilter, setWishFreeFilter] = useState<WishFreeFilter>("open");
@@ -1372,6 +1408,41 @@ export default function ShiftPlanningClient({
 
     return grouped;
   }, [wishFreeRequests]);
+  const absencesByDate = useMemo(() => {
+    const grouped = new Map<string, ShiftWeekAbsence[]>();
+
+    for (const absence of absences) {
+      grouped.set(absence.date, [...(grouped.get(absence.date) ?? []), absence]);
+    }
+
+    return grouped;
+  }, [absences]);
+  const allShifts = days.flatMap((day) => day.shifts);
+  const openShiftCount = allShifts.filter((shift) => !shift.assignee).length;
+  const warningCount = days.filter((day) => day.understaffed).length;
+  const locationCounts = new Map<string, number>();
+
+  for (const shift of allShifts) {
+    const key = shift.locationId ?? "none";
+
+    locationCounts.set(key, (locationCounts.get(key) ?? 0) + 1);
+  }
+
+  const isPublished = status === "published";
+  const weekOffset = (year - currentYear) * 52 + (week - currentWeek);
+  const relativeLabel =
+    weekOffset === 0 ? ui("thisWeek") : weekOffset === 1 ? ui("nextWeekLabel") : weekOffset === -1 ? ui("lastWeekLabel") : null;
+  const visibleShifts = (day: ShiftDay) =>
+    locationFilter === "all"
+      ? day.shifts
+      : day.shifts.filter((shift) => (shift.locationId ?? "none") === locationFilter);
+  const weekHidden = (
+    <>
+      <input type="hidden" name="tenant" value={tenant} />
+      <input type="hidden" name="year" value={year} />
+      <input type="hidden" name="week" value={week} />
+    </>
+  );
 
   function navigateWeek(direction: -1 | 1) {
     const next = getAdjacentWeek(year, week, direction);
@@ -1405,318 +1476,319 @@ export default function ShiftPlanningClient({
   // Ein Tag wird zweimal gerendert: als Spalte im Querscroll-Wochenraster
   // (`md:`+) und als eigener Abschnitt in der gestapelten Tagesansicht
   // (unterhalb `md:`) — gleicher Inhalt, damit beide Ansichten nie
-  // auseinanderlaufen. `isFirst` steuert nur den Trenner (links bei Spalten,
-  // oben bei gestapelten Abschnitten).
-  function renderShiftDay(day: ShiftDay, isFirst: boolean) {
+  // auseinanderlaufen.
+  function renderShiftDay(day: ShiftDay) {
+    const shifts = visibleShifts(day);
+    const openCount = shifts.filter((shift) => !shift.assignee).length;
+    const hasConflict = shifts.some((shift) => shift.conflict);
+    const holiday = holidays[day.id];
+    const isToday = day.id === todayIso;
+    const dayAbsences = absencesByDate.get(day.id) ?? [];
+
     return (
       <div
         key={day.id}
-        className={`flex flex-col md:min-h-[calc(100svh-280px)] ${
-          isFirst ? "" : "border-t border-border md:border-t-0 md:border-l"
-        }`}
+        className={`flex flex-col rounded-[14px] border ${isToday ? "border-[rgba(139,110,212,0.45)]" : "border-[#ecebe7]"} ${day.isWeekend ? "bg-[#faf8f6]" : "bg-white"}`}
       >
-        <div
-          className={`border-b border-border px-2.5 py-3 text-center ${
-            day.understaffed
-              ? "bg-danger/10"
-              : day.isWeekend
-                ? "bg-bg"
-                : "bg-white"
-          }`}
-        >
-          <div
-            className={`font-mono text-[11px] font-semibold ${
-              day.isWeekend ? "text-ink" : "text-muted"
-            }`}
-          >
-            {day.weekday}
-          </div>
-          <div className="mt-0.5 font-mono text-[9px] text-[#B0B0AB]">
-            {day.date}
-          </div>
-          {day.understaffed && (
-            <div
-              className="mt-1 flex items-center justify-center gap-1 font-mono text-[9px] font-semibold text-danger"
-              title={t("understaffedTitle", {
-                staffed: day.staffedCount ?? 0,
-                min: shiftSettings.minStaffing,
-              })}
-            >
-              <AlertTriangle size={10} />
-              {day.staffedCount ?? 0}/{shiftSettings.minStaffing}
-            </div>
+        <div className="flex items-start justify-between gap-2 border-b border-[#f0efeb] px-3 pt-3 pb-2.5">
+          <span className="flex min-w-0 flex-col gap-0.5">
+            <span className="flex items-center gap-1.5" title={holiday}>
+              <span className="font-display text-[15px] font-semibold">{day.weekday}</span>
+              <span className={`text-[13px] ${holiday ? "text-[#b4332a]" : "text-[#6e6e6b]"}`}>{day.date}.</span>
+              {holiday && <span className="size-2 rounded-full border-[1.5px] border-[#b4332a]" />}
+            </span>
+            <span className="text-[12px] text-[#9a9a96]">
+              {ui("shiftCount", { count: shifts.length })}
+              {openCount > 0 && <span className="font-medium text-[#c9622a]"> · {ui("openCount", { count: openCount })}</span>}
+            </span>
+          </span>
+          {(hasConflict || day.understaffed) && (
+            <span
+              className={`mt-1 size-2.5 shrink-0 rounded-full ${hasConflict ? "bg-[#b4332a] shadow-[0_0_0_3px_rgba(180,51,42,0.15)]" : "bg-[#e07b00] shadow-[0_0_0_3px_rgba(224,123,0,0.15)]"}`}
+              title={
+                day.understaffed
+                  ? ui("understaffed", { staffed: day.staffedCount ?? 0, min: shiftSettings.minStaffing })
+                  : ui("legendConflict")
+              }
+            />
           )}
         </div>
-        <div className="flex min-h-[130px] flex-1 flex-col gap-1.5 p-2">
+        <div className="grid flex-1 grid-cols-2 content-start gap-2 p-2 md:flex md:flex-col">
           <WishFreeBlock
             requests={approvedWishFreeByDate.get(day.id) ?? []}
             onRequestClick={openWishFreeRequest}
             t={t}
           />
-          {day.shifts.map((shift) => (
+          {shifts.map((shift) => (
             <ShiftCard
               key={shift.dbId ?? shift.id}
               shift={shift}
+              offerCount={shift.dbId ? (offerCounts[shift.dbId] ?? 0) : 0}
               onClick={() => setDrawer({ day, shift })}
-              t={t}
+              ui={ui}
             />
           ))}
           {canManage && (
             <button
               type="button"
               aria-label={t("addShiftAria", { weekday: day.weekday })}
-              title={t("addShift")}
-              className="flex w-full cursor-pointer items-center justify-center rounded-[9px] border-[1.5px] border-dashed border-[#DEDAD4] bg-transparent p-[7px] text-[#C0BFBA] transition-colors hover:border-muted hover:text-muted-2"
+              className="col-span-2 flex min-h-9 w-full cursor-pointer items-center justify-center gap-1.5 rounded-[10px] border-[1.5px] border-dashed border-[#dedad4] bg-transparent text-[13px] font-medium text-[#6e6e6b] transition-colors hover:border-[#9a9a96] hover:text-ink"
               onClick={() => setDrawer({ day })}
             >
-              <Plus size={15} strokeWidth={1.8} />
+              <Plus size={14} />
+              {ui("addShift")}
             </button>
+          )}
+          {dayAbsences.length > 0 && (
+            <div className="col-span-2 mt-1 flex flex-col gap-1.5 px-1">
+              <span className="font-mono text-[9.5px] tracking-[0.1em] text-[#9a9a96] uppercase">{ui("absent")}</span>
+              {dayAbsences.map((absence) => (
+                <span key={absence.employeeId} className="flex items-center gap-1.5 text-[12.5px]">
+                  <span className="rounded-[4px] bg-[#f2f1ed] px-1 font-mono text-[9px] font-semibold text-[#6e6e6b]">
+                    {absence.initials}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-[#3d3d3a]">{absence.name.trim().split(/\s+/)[0]}</span>
+                  <span
+                    className={`text-[11.5px] font-medium ${absence.kind === "vacation" ? "text-[#168a8a]" : canSeeSickness ? "text-[#b4332a]" : "text-[#6e6e6b]"}`}
+                  >
+                    {absence.kind === "vacation" ? ui("absenceVacation") : canSeeSickness ? ui("absenceSick") : ui("absenceOther")}
+                  </span>
+                </span>
+              ))}
+            </div>
           )}
         </div>
       </div>
     );
   }
 
+  const chipBase =
+    "db-focus inline-flex min-h-8 cursor-pointer items-center gap-1.5 rounded-[9px] border px-3 text-[13px] font-semibold transition-colors";
+  const statusChip = isPublished && !hasUnpublishedChanges
+    ? { dot: "#357a52", bg: "rgba(53,122,82,0.08)", color: "#1f5d2c", label: ui("statusPublished"), hint: publishedAt ? formatPublishedAt(publishedAt) : "" }
+    : isPublished
+      ? { dot: "#e07b00", bg: "#fff7ea", color: "#9a5b00", label: ui("statusChanged"), hint: ui("statusChangedHint") }
+      : { dot: "#e07b00", bg: "#fff7ea", color: "#9a5b00", label: ui("statusDraft"), hint: ui("statusDraftHint") };
+  const legendLocations = locations.filter((location) => locationCounts.has(location.id));
+
   return (
     <>
-      <div className="relative left-1/2 w-[calc(100vw-236px)] -translate-x-1/2 px-[clamp(24px,4vw,60px)] max-md:w-screen max-md:px-4">
-        <PageHeader
-          eyebrow={t("eyebrow")}
-          title={t("pageTitle")}
-          subtitle={<span className="font-mono">{weekLabel} {"\u00b7"} {weekRange}</span>}
-          className="mb-7"
-        >
-          {/* Veröffentlicht, aber seither bearbeitet: die Badge zeigt bewusst
-              wieder "Entwurf" — der aktuelle Stand ist für Mitarbeiter noch
-              nicht sichtbar (sie sehen den Schnappschuss der letzten
-              Veröffentlichung). */}
-          {status === "published" && !hasUnpublishedChanges ? (
-            <div className="inline-flex items-center gap-2 rounded-[10px] border border-success/20 bg-success/10 px-3.5 py-2.5">
-              <span className="size-[7px] shrink-0 rounded-full bg-success" />
-              <span className="font-mono text-[12px] font-semibold text-success">
-                {t("published")}{publishedAt ? ` · ${formatPublishedAt(publishedAt)}` : ""}
-              </span>
-            </div>
-          ) : status === "published" ? (
-            <div className="inline-flex items-center gap-2 rounded-[10px] border border-warning/25 bg-warning/10 px-3.5 py-2.5">
-              <span className="size-[7px] shrink-0 rounded-full bg-warning" />
-              <span className="font-mono text-[12px] font-semibold text-[#7A4E00]">
-                {t("draftUnpublishedChanges")}
-              </span>
-            </div>
-          ) : (
-            <div className="inline-flex items-center gap-2 rounded-[10px] border border-border bg-bg px-3.5 py-2.5">
-              <span className="size-[7px] shrink-0 rounded-full bg-muted" />
-              <span className="font-mono text-[12px] font-semibold text-muted-2">
-                {t("draft")}
-              </span>
-            </div>
-          )}
-          {canManage && (
-            <form action={publishFormAction}>
-              <input type="hidden" name="tenant" value={tenant} />
-              <input type="hidden" name="year" value={year} />
-              <input type="hidden" name="week" value={week} />
-              <FormSubmitButton
-                Icon={Send}
-                pendingLabel={t("publishing")}
-                className="btn btn-secondary"
-              >
-                {status === "published" ? t("publishAgain") : t("publish")}
-              </FormSubmitButton>
-            </form>
-          )}
-          {canManage && status === "published" && hasUnpublishedChanges && (
-            <form id="shift-week-reset-form" action={resetFormAction}>
-              <input type="hidden" name="tenant" value={tenant} />
-              <input type="hidden" name="year" value={year} />
-              <input type="hidden" name="week" value={week} />
-              <ConfirmSubmitButton
-                form="shift-week-reset-form"
-                className="btn btn-secondary"
-                title={t("discardChangesTitle")}
-                confirmLabel={t("resetLabel")}
-                description={t("resetConfirmDescription")}
-              >
-                <Undo2 size={15} />
-                {t("resetToPublished")}
-              </ConfirmSubmitButton>
-            </form>
-          )}
-          {canManage && status === "published" && (
-            <form action={unpublishFormAction}>
-              <input type="hidden" name="tenant" value={tenant} />
-              <input type="hidden" name="year" value={year} />
-              <input type="hidden" name="week" value={week} />
-              <FormSubmitButton
-                Icon={RotateCcw}
-                pendingLabel={t("unpublishing")}
-                className="btn btn-secondary"
-              >
-                {t("backToDraft")}
-              </FormSubmitButton>
-            </form>
-          )}
-          <div className="inline-flex items-center gap-2 rounded-[10px] border border-danger/20 bg-danger/10 px-3.5 py-2.5">
-            <span className="size-[7px] shrink-0 rounded-full bg-danger" />
-            <span className="font-mono text-[12px] font-semibold text-danger">
-              {t("conflictsOpenCount", { count: conflictCount })}
-            </span>
-          </div>
-          <ShiftSettingsDrawerButton
-            tenant={tenant}
-            year={year}
-            week={week}
-            settings={shiftSettings}
-            canManage={canManageSettings}
-          />
+      <DbPageHead
+        eyebrow={tenantName}
+        title={t("pageTitle")}
+        subtitle={ui("subtitle", { company: tenantName })}
+        actions={
+          <>
+            <button type="button" className={`${secondaryClass} relative`} onClick={openWishFreeDrawer}>
+              <CalendarX size={16} />
+              {t("wishFree")}
+              {openWishFreeCount > 0 && (
+                <span
+                  aria-label={t("openWishFreeRequestsAria", { count: openWishFreeCount })}
+                  className="absolute -top-1 -right-1 size-3 rounded-full border-2 border-white bg-[#e07b00]"
+                />
+              )}
+            </button>
+            {canManage && (
+              <button type="button" className={secondaryClass} onClick={() => setDialog("templates")}>
+                <LayoutGrid size={16} />
+                {ui("templates")}
+              </button>
+            )}
+            <ShiftSettingsDrawerButton
+              tenant={tenant}
+              year={year}
+              week={week}
+              settings={shiftSettings}
+              canManage={canManageSettings}
+              className={`${secondaryClass} px-3`}
+              ariaLabel={ui("settings")}
+            >
+              <Settings size={17} />
+            </ShiftSettingsDrawerButton>
+            {canManage && (!isPublished || hasUnpublishedChanges) && (
+              conflictCount > 0 ? (
+                <button type="button" className={ctaClass} onClick={() => setDialog("publish")}>
+                  <Send size={16} />
+                  {isPublished ? ui("publishAgain") : ui("publish")}
+                </button>
+              ) : (
+                <form action={publishFormAction}>
+                  {weekHidden}
+                  <FormSubmitButton Icon={Send} pendingLabel={t("publishing")} className={ctaClass}>
+                    {isPublished ? ui("publishAgain") : ui("publish")}
+                  </FormSubmitButton>
+                </form>
+              )
+            )}
+          </>
+        }
+      />
+
+      <DbCard className="mb-4 flex flex-col gap-3.5 p-4">
+        <div className="flex flex-wrap items-center gap-2.5">
           <button
             type="button"
-            className="relative inline-flex cursor-pointer items-center gap-2 rounded-[10px] border border-border bg-white px-3.5 py-2.5 text-[13px] font-semibold text-ink transition-colors hover:border-muted hover:bg-bg"
-            onClick={openWishFreeDrawer}
+            className={`${smallActionClass} size-10 justify-center px-0`}
+            onClick={() => navigateWeek(-1)}
+            aria-label={t("previousWeek")}
           >
-            <CalendarX size={15} />
-            {t("wishFree")}
-            {openWishFreeCount > 0 && (
-              <span
-                aria-label={t("openWishFreeRequestsAria", { count: openWishFreeCount })}
-                className="absolute -right-1.5 -top-1.5 size-3 rounded-full border-2 border-white bg-warning"
-              />
-            )}
+            <ChevronLeft size={16} />
           </button>
-          <div className="inline-flex items-center gap-1 rounded-xl border border-border bg-white p-1">
-            <button
-              type="button"
-              className="flex size-8 cursor-pointer items-center justify-center rounded-lg text-muted transition-colors hover:bg-bg hover:text-ink"
-              onClick={() => navigateWeek(-1)}
-              aria-label={t("previousWeek")}
-            >
-              <ChevronLeft size={15} />
-            </button>
-            <span className="min-w-[118px] rounded-lg px-3 py-2 text-center font-mono text-[12px] font-semibold text-ink">
-              {t("weekLabel", { week, year })}
+          <span className="flex min-h-10 flex-col justify-center rounded-[10px] border border-[#ecebe7] bg-white px-3.5 py-1">
+            <span className="flex items-baseline gap-1.5">
+              <span className="font-display text-[16px] font-semibold">{ui("weekTitle", { week })}</span>
+              {relativeLabel && <span className="text-[12px] font-semibold text-[#8b6ed4]">· {relativeLabel}</span>}
             </span>
-            <button
-              type="button"
-              className="flex size-8 cursor-pointer items-center justify-center rounded-lg text-muted transition-colors hover:bg-bg hover:text-ink"
-              onClick={() => navigateWeek(1)}
-              aria-label={t("nextWeek")}
+            <span className="text-[12px] text-[#6e6e6b]">{weekRange}</span>
+          </span>
+          <button
+            type="button"
+            className={`${smallActionClass} size-10 justify-center px-0`}
+            onClick={() => navigateWeek(1)}
+            aria-label={t("nextWeek")}
+          >
+            <ChevronRight size={16} />
+          </button>
+          {weekOffset !== 0 && (
+            <Link href={`/u/${tenant}/schichtplanung`} className="px-1.5 text-[13.5px] font-semibold text-[#8b6ed4] no-underline hover:underline">
+              {ui("thisWeek")}
+            </Link>
+          )}
+          <span className="flex flex-1 flex-wrap items-center justify-end gap-2">
+            {conflictCount > 0 && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-[rgba(180,51,42,0.08)] px-3 py-1 text-[12.5px] font-semibold text-[#b4332a]">
+                <span className="size-1.5 rounded-full bg-[#b4332a]" />
+                {ui("conflicts", { count: conflictCount })}
+              </span>
+            )}
+            {warningCount > 0 && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-[#fff7ea] px-3 py-1 text-[12.5px] font-semibold text-[#9a5b00]">
+                <span className="size-1.5 rounded-full bg-[#e07b00]" />
+                {ui("warnings", { count: warningCount })}
+              </span>
+            )}
+            {openShiftCount > 0 && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-[#fff7ea] px-3 py-1 text-[12.5px] font-semibold text-[#9a5b00]">
+                <span className="size-1.5 rounded-full bg-[#e07b00]" />
+                {ui("openShifts", { count: openShiftCount })}
+              </span>
+            )}
+            <span
+              className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[12.5px] font-semibold"
+              style={{ background: statusChip.bg, color: statusChip.color }}
             >
-              <ChevronRight size={15} />
-            </button>
-          </div>
-        </PageHeader>
-
-        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-white px-4 py-3">
-          <CalendarDays size={15} className="text-muted" />
-          <span className="font-mono text-[11px] text-muted">{t("planningLabel")}</span>
-          <span className="text-[12.5px] text-muted-2">
-            {t("planningSummary", { employeeCount: employees.length, locationCount: locations.length })}
+              <span className="size-1.5 rounded-full" style={{ background: statusChip.dot }} />
+              {statusChip.label}
+              {statusChip.hint && <span className="font-normal">· {statusChip.hint}</span>}
+            </span>
           </span>
         </div>
 
         {canManage && (
-        <div className="mb-3 flex flex-wrap items-center gap-3 rounded-xl border border-border bg-white px-4 py-3">
-          <span className="font-mono text-[11px] text-muted">{t("weekTemplatesLabel")}</span>
-
-          {templates.length > 0 ? (
-            <form action={applyTemplateFormAction} className="flex items-center gap-2">
-              <input type="hidden" name="tenant" value={tenant} />
-              <input type="hidden" name="year" value={year} />
-              <input type="hidden" name="week" value={week} />
-              <select
-                name="templateId"
-                className="input input-mono cursor-pointer bg-white text-[12px]"
-                defaultValue=""
-                required
-              >
-                <option value="" disabled>
-                  {t("selectTemplate")}
-                </option>
-                {templates.map((template) => (
-                  <option key={template.id} value={template.id}>
-                    {template.name} ({template.entries.length})
-                  </option>
-                ))}
-              </select>
-              <FormSubmitButton className="btn btn-secondary btn-sm" pendingLabel={t("applying")}>
-                {t("applyToThisWeek")}
-              </FormSubmitButton>
-            </form>
-          ) : (
-            <span className="text-[12px] text-muted-2">{t("noTemplatesSaved")}</span>
-          )}
-
-          <form action={saveTemplateFormAction} className="ml-auto flex items-center gap-2">
-            <input type="hidden" name="tenant" value={tenant} />
-            <input type="hidden" name="year" value={year} />
-            <input type="hidden" name="week" value={week} />
-            <input
-              type="text"
-              name="templateName"
-              placeholder={t("templateNameLabel")}
-              className="input text-[12px]"
-              required
-            />
-            <FormSubmitButton
-              Icon={Save}
-              className="btn btn-secondary btn-sm"
-              pendingLabel={t("saving")}
-            >
-              {t("saveAsTemplate")}
-            </FormSubmitButton>
-          </form>
-
-          {templates.length > 0 && (
-            <div className="flex w-full flex-wrap items-center gap-1.5 border-t border-border-soft pt-2.5">
-              {templates.map((template) => (
-                <span
-                  key={template.id}
-                  className="flex items-center gap-1 rounded-[7px] bg-border-soft py-0.5 pr-1 pl-2"
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" className={smallActionClass} onClick={() => setDialog("copy")}>
+              <Copy size={14} />
+              {ui("copyPrevious")}
+            </button>
+            {isPublished && hasUnpublishedChanges && (
+              <form id="shift-week-reset-form" action={resetFormAction}>
+                {weekHidden}
+                <ConfirmSubmitButton
+                  form="shift-week-reset-form"
+                  className={smallActionClass}
+                  title={t("discardChangesTitle")}
+                  confirmLabel={t("resetLabel")}
+                  description={t("resetConfirmDescription")}
                 >
-                  <span className="font-mono text-[10px] text-muted-2">
-                    {template.name} ({template.entries.length})
-                  </span>
-                  <button
-                    type="button"
-                    aria-label={t("editTemplateAria", { name: template.name })}
-                    title={t("editTemplate")}
-                    className="flex size-5 cursor-pointer items-center justify-center rounded-[5px] text-muted transition-colors hover:bg-bg hover:text-ink"
-                    onClick={() => setEditingTemplate(template)}
-                  >
-                    <Pencil size={10} />
-                  </button>
-                  {canDelete && (
-                    <form action={deleteTemplateFormAction}>
-                      <input type="hidden" name="tenant" value={tenant} />
-                      <input type="hidden" name="templateId" value={template.id} />
-                      <button
-                        type="submit"
-                        aria-label={t("deleteTemplateAria", { name: template.name })}
-                        title={t("deleteTemplateTitle")}
-                        className="flex size-5 cursor-pointer items-center justify-center rounded-[5px] text-muted transition-colors hover:bg-danger/10 hover:text-danger"
-                      >
-                        <X size={11} />
-                      </button>
-                    </form>
-                  )}
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
+                  <Undo2 size={14} />
+                  {ui("reset")}
+                </ConfirmSubmitButton>
+              </form>
+            )}
+            {isPublished && (
+              <button type="button" className={smallActionClass} onClick={() => setDialog("unpublish")}>
+                <RotateCcw size={14} />
+                {ui("unpublish")}
+              </button>
+            )}
+          </div>
         )}
 
-        <section className="overflow-hidden rounded-card border border-border bg-white">
-          <div className="hidden overflow-x-auto md:block">
-            <div className="grid min-w-[900px] [grid-template-columns:repeat(7,minmax(150px,1fr))]">
-              {days.map((day, index) => renderShiftDay(day, index === 0))}
-            </div>
+        {locations.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className={`${chipBase} ${locationFilter === "all" ? "border-ink bg-ink text-white" : "border-[#ecebe7] bg-white text-ink hover:bg-[#fafaf8]"}`}
+              onClick={() => setLocationFilter("all")}
+            >
+              <LayoutGrid size={13} />
+              {ui("allLocations")}
+              <span className={`text-[11.5px] font-normal ${locationFilter === "all" ? "text-white/70" : "text-[#9a9a96]"}`}>{allShifts.length}</span>
+            </button>
+            {locations.map((location) => (
+              <button
+                key={location.id}
+                type="button"
+                className={`${chipBase} ${locationFilter === location.id ? "border-ink bg-ink text-white" : "border-[#ecebe7] bg-white text-ink hover:bg-[#fafaf8]"}`}
+                onClick={() => setLocationFilter(location.id)}
+              >
+                <span className="size-2 rounded-full" style={{ background: paletteHex(location.accentClassName) }} />
+                {location.name}
+                <span className={`text-[11.5px] font-normal ${locationFilter === location.id ? "text-white/70" : "text-[#9a9a96]"}`}>
+                  {locationCounts.get(location.id) ?? 0}
+                </span>
+              </button>
+            ))}
+            {locationCounts.has("none") && (
+              <button
+                type="button"
+                className={`${chipBase} ${locationFilter === "none" ? "border-ink bg-ink text-white" : "border-[#ecebe7] bg-white text-ink hover:bg-[#fafaf8]"}`}
+                onClick={() => setLocationFilter("none")}
+              >
+                {ui("noLocation")}
+                <span className="text-[11.5px] font-normal opacity-70">{locationCounts.get("none")}</span>
+              </button>
+            )}
           </div>
-          <div className="flex flex-col md:hidden">
-            {days.map((day, index) => renderShiftDay(day, index === 0))}
+        )}
+      </DbCard>
+
+      <DbCard className="p-3">
+        <div className="hidden overflow-x-auto md:block">
+          <div className="grid min-w-[1050px] gap-2 [grid-template-columns:repeat(7,minmax(140px,1fr))]">
+            {days.map((day) => renderShiftDay(day))}
           </div>
-        </section>
+        </div>
+        <div className="flex flex-col gap-3 md:hidden">{days.map((day) => renderShiftDay(day))}</div>
+      </DbCard>
+
+      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 px-1 text-[12.5px] text-[#3d3d3a]">
+        {legendLocations.length > 0 && (
+          <span className="font-mono text-[10px] tracking-[0.12em] text-[#9a9a96] uppercase">{ui("legendLocations")}</span>
+        )}
+        {legendLocations.map((location) => (
+          <span key={location.id} className="inline-flex items-center gap-1.5">
+            <span className="h-3 w-[3px] rounded-full" style={{ background: paletteHex(location.accentClassName) }} />
+            {location.name}
+          </span>
+        ))}
+        <span className="inline-flex items-center gap-1.5">
+          <span className="size-2 rounded-full bg-[#b4332a]" />
+          {ui("legendConflict")}
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="size-2 rounded-full bg-[#e07b00]" />
+          {ui("legendWarning")}
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="size-2 rounded-full bg-[#2a5bc9]" />
+          {ui("legendOffer")}
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="size-2 rounded-full border-[1.5px] border-[#b4332a]" />
+          {ui("legendHoliday")}
+        </span>
       </div>
 
       <ShiftDrawer
@@ -1729,6 +1801,10 @@ export default function ShiftPlanningClient({
         presets={shiftSettings.presets}
         breakRule={shiftSettings.breakRule}
         onClose={() => setDrawer(null)}
+        onFindSubstitute={(shiftId) => {
+          setDrawer(null);
+          setOfferShiftId(shiftId);
+        }}
         canManage={canManage}
         canDelete={canDelete}
         t={t}
@@ -1744,6 +1820,85 @@ export default function ShiftPlanningClient({
         onClose={() => setEditingTemplate(null)}
         t={t}
       />
+
+      {dialog === "templates" && (
+        <ShiftTemplatesDrawer
+          tenant={tenant}
+          year={year}
+          week={week}
+          templates={templates}
+          canDelete={canDelete}
+          onEdit={(template) => {
+            setDialog(null);
+            setEditingTemplate(template);
+          }}
+          onClose={() => setDialog(null)}
+        />
+      )}
+
+      {offerShiftId && <ShiftOfferDrawer tenant={tenant} shiftId={offerShiftId} onClose={() => setOfferShiftId(null)} />}
+
+      {dialog === "copy" && (
+        <DbModal title={ui("copyConfirmTitle")} onClose={() => setDialog(null)}>
+          <p className="m-0 mb-5 text-[14px] leading-[1.55] text-[#3d3d3a]">{ui("copyConfirmText", { week })}</p>
+          <form action={copyFormAction} className="flex justify-end gap-2">
+            {weekHidden}
+            <button type="button" className={secondaryClass} onClick={() => setDialog(null)}>
+              {t("cancel")}
+            </button>
+            <FormSubmitButton Icon={Copy} className={ctaClass} pendingLabel={ui("copying")}>
+              {ui("copyConfirm")}
+            </FormSubmitButton>
+          </form>
+        </DbModal>
+      )}
+
+      {dialog === "publish" && (
+        <DbModal title={ui("publishConflictsTitle")} onClose={() => setDialog(null)}>
+          <p className="m-0 mb-5 text-[14px] leading-[1.55] text-[#3d3d3a]">{ui("publishConflictsText", { count: conflictCount })}</p>
+          <form action={publishFormAction} className="flex justify-end gap-2">
+            {weekHidden}
+            <button type="button" className={secondaryClass} onClick={() => setDialog(null)}>
+              {ui("reviewFirst")}
+            </button>
+            <FormSubmitButton Icon={Send} className={ctaClass} pendingLabel={t("publishing")}>
+              {ui("publishAnyway")}
+            </FormSubmitButton>
+          </form>
+        </DbModal>
+      )}
+
+      {dialog === "unpublish" && (
+        <DbModal title={ui("unpublishTitle", { week })} subtitle={ui("unpublishText")} onClose={() => setDialog(null)}>
+          <form action={unpublishFormAction} className="flex flex-col gap-4">
+            {weekHidden}
+            <ul className="m-0 flex flex-col gap-1.5 rounded-[12px] border border-[#ecebe7] bg-[#fafaf8] py-3.5 pr-4 pl-8 text-[13px] text-[#3d3d3a]">
+              <li>{ui("unpublishPoint1")}</li>
+              <li>{ui("unpublishPoint2")}</li>
+              <li>{ui("unpublishPoint3")}</li>
+            </ul>
+            <label className="flex cursor-pointer items-center justify-between gap-3.5 rounded-[12px] border border-[#ecebe7] bg-[#fafaf8] px-3.5 py-3">
+              <span className="flex flex-col gap-0.5">
+                <span className="text-[13.5px] font-semibold">{ui("notifyTeam")}</span>
+                <span className="text-[12.5px] text-[#6e6e6b]">{ui("notifyTeamHint")}</span>
+              </span>
+              <input type="checkbox" name="notifyTeam" defaultChecked className="peer sr-only" />
+              <span
+                aria-hidden="true"
+                className="relative h-[22px] w-[38px] shrink-0 rounded-full bg-[#d9d8d3] transition-colors peer-checked:bg-[#8b6ed4] peer-focus-visible:ring-2 peer-focus-visible:ring-[#8b6ed4]/40 after:absolute after:top-[2px] after:left-[2px] after:size-[18px] after:rounded-full after:bg-white after:shadow-[0_1px_3px_rgba(0,0,0,0.25)] after:transition-all peer-checked:after:left-[18px]"
+              />
+            </label>
+            <div className="flex justify-end gap-2">
+              <button type="button" className={secondaryClass} onClick={() => setDialog(null)}>
+                {t("cancel")}
+              </button>
+              <FormSubmitButton Icon={RotateCcw} className={ctaClass} pendingLabel={t("unpublishing")}>
+                {ui("unpublishConfirm")}
+              </FormSubmitButton>
+            </div>
+          </form>
+        </DbModal>
+      )}
 
       {isWishFreeDrawerOpen && (
         <WishFreeDrawer

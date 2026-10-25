@@ -93,6 +93,8 @@ export async function buildTenantExport(tenantSlug: string) {
     files,
     payrollStatements,
     timeEntries,
+    timeCorrectionRequests,
+    shiftOffers,
   ] = await Promise.all([
     prisma.tenant.findUnique({
       where: { id: tenantId },
@@ -161,6 +163,8 @@ export async function buildTenantExport(tenantSlug: string) {
           orderBy: { clockInAt: "asc" },
         })
       : Promise.resolve([]),
+    timeTrackingScope ? prisma.tenantTimeCorrectionRequest.findMany({ where: { tenantId } }) : Promise.resolve([]),
+    shiftsScope ? prisma.tenantShiftOffer.findMany({ where: { tenantId } }) : Promise.resolve([]),
   ]);
 
   const session = await auth.api.getSession({ headers: await headers() });
@@ -290,6 +294,10 @@ export async function buildTenantExport(tenantSlug: string) {
     scopeIncludesEmployee(vacationScope, request.employeeId, employeesById),
   );
   const scopedShifts = shifts.filter(shiftAllowed);
+  const scopedTimeCorrectionRequests = timeCorrectionRequests.filter((request) =>
+    scopeIncludesEmployee(timeTrackingScope, request.employeeId, employeesById),
+  );
+  const scopedShiftOffers = shiftOffers.filter((offer) => shiftAllowed({ employeeId: offer.employeeId }));
   const scopedFiles = files.filter(fileAllowed);
   const scopedTimeEntries = timeEntries.filter((entry) =>
     scopeIncludesEmployee(timeTrackingScope, entry.employeeId, employeesById),
@@ -339,6 +347,8 @@ export async function buildTenantExport(tenantSlug: string) {
     files: scopedFiles,
     payrollStatements: decryptedPayrollStatements,
     timeEntries: scopedTimeEntries,
+    timeCorrectionRequests: scopedTimeCorrectionRequests,
+    shiftOffers: scopedShiftOffers,
     hinweis:
       "Dateiinhalte (Dokumente) sind nicht eingebettet — die Originale stehen einzeln im Dateien-Bereich zum Download bereit. Audit-Protokolle unterliegen der in den Einstellungen konfigurierten Aufbewahrungsfrist und sind nicht Teil dieses Exports." +
       (redactedAreas.length

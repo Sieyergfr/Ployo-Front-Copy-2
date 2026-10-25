@@ -489,6 +489,27 @@ export type PersonalakteExport = SelfServiceOverview & {
   consentRecords: SelfServiceConsentRecord[];
   /** Gestempelte Arbeitszeiten (Zeiterfassung) inkl. Pausen und Korrekturen. */
   timeEntries: TimeEntryView[];
+  /** Eigene Korrekturanträge ("Zeit korrigieren"). */
+  timeCorrectionRequests?: Array<{
+    date: string;
+    requestedStartTime: string;
+    requestedEndTime: string;
+    requestedBreakMinutes: number | null;
+    reason: string;
+    status: string;
+    decisionNote: string;
+    createdAt: string;
+    decidedAt: string | null;
+  }>;
+  /** Angebotene Schichten (Vertretung / offene Schicht) samt eigener Antwort. */
+  shiftOffers?: Array<{
+    date: string;
+    startTime: string;
+    endTime: string;
+    status: string;
+    createdAt: string;
+    respondedAt: string | null;
+  }>;
 };
 
 /**
@@ -534,11 +555,23 @@ export async function getMyPersonalakteExport(tenantSlug: string): Promise<Perso
       notifications: [],
       consentRecords: mappedConsentRecords,
       timeEntries: [],
+      timeCorrectionRequests: [],
+      shiftOffers: [],
     };
   }
 
   const employeeId = overview.employee.id;
-  const [contracts, contractDetails, payrollStatements, timeline, employeeRecord, notifications, timeEntries] =
+  const [
+    contracts,
+    contractDetails,
+    payrollStatements,
+    timeline,
+    employeeRecord,
+    notifications,
+    timeEntries,
+    timeCorrectionRequests,
+    shiftOffers,
+  ] =
     await Promise.all([
       prisma.tenantEmployeeContract.findMany({
         where: { employeeId },
@@ -559,6 +592,15 @@ export async function getMyPersonalakteExport(tenantSlug: string): Promise<Perso
         orderBy: { createdAt: "desc" },
       }),
       getTimeEntriesForEmployeeExport(access.tenantId, employeeId),
+      prisma.tenantTimeCorrectionRequest.findMany({
+        where: { tenantId: access.tenantId, employeeId },
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.tenantShiftOffer.findMany({
+        where: { tenantId: access.tenantId, employeeId },
+        include: { shift: { select: { date: true, startTime: true, endTime: true } } },
+        orderBy: { createdAt: "desc" },
+      }),
     ]);
 
   return {
@@ -616,6 +658,25 @@ export async function getMyPersonalakteExport(tenantSlug: string): Promise<Perso
     })),
     consentRecords: mappedConsentRecords,
     timeEntries,
+    timeCorrectionRequests: timeCorrectionRequests.map((request) => ({
+      date: request.date,
+      requestedStartTime: request.requestedStartTime,
+      requestedEndTime: request.requestedEndTime,
+      requestedBreakMinutes: request.requestedBreakMinutes,
+      reason: request.reason,
+      status: request.status,
+      decisionNote: request.decisionNote,
+      createdAt: request.createdAt.toISOString(),
+      decidedAt: request.decidedAt?.toISOString() ?? null,
+    })),
+    shiftOffers: shiftOffers.map((offer) => ({
+      date: offer.shift.date,
+      startTime: offer.shift.startTime,
+      endTime: offer.shift.endTime,
+      status: offer.status,
+      createdAt: offer.createdAt.toISOString(),
+      respondedAt: offer.respondedAt?.toISOString() ?? null,
+    })),
   };
 }
 

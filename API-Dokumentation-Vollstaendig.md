@@ -219,6 +219,24 @@ Ployo-weite Popups für die Mitarbeiter-App (nicht mandantengebunden, Inhalt aus
 
 `POST /api/me/app-popups/[popupId]/dismiss` → `200 { "ok": true }` — als geschlossen merken (idempotent), `404` unbekanntes Popup. Rate-Limit 60/60s.
 
+### Korrekturanträge (`/api/me/time-corrections`) — neu, App-Update ausstehend
+
+Mitarbeiter beantragen Kommen/Gehen für einen vergangenen Tag; die Verwaltung (Bereich `timeTracking`, Schreibrecht im eigenen Scope) entscheidet im Web unter Zeiterfassung → Korrekturen.
+
+`GET /api/me/time-corrections?tenant=<slug>` → `200 { "requests": [{ "id", "date", "timeEntryId", "currentStartTime", "currentEndTime", "requestedStartTime", "requestedEndTime", "requestedBreakMinutes", "reason", "status": "pending"|"approved"|"rejected"|"withdrawn", "createdAt", "decidedAt", "decidedBy", "decisionNote", … }] }` — die letzten 50, neueste zuerst. Rate-Limit 60/60s.
+
+`POST /api/me/time-corrections` Body `{ tenant, date: "YYYY-MM-DD", startTime: "HH:MM", endTime: "HH:MM", breakMinutes?: number|null, reason?: string }` → `201 { "request": … }`. `400` ungültige Angaben bzw. Tag in der Zukunft, `409` bereits offener Antrag für den Tag oder Konto ohne Personalakte. Rate-Limit 20/h.
+
+`DELETE /api/me/time-corrections/[requestId]?tenant=<slug>` → `200 { "status": true }` — offenen eigenen Antrag zurückziehen; `409` bereits entschieden, `404` unbekannt. Rate-Limit 30/h.
+
+### Schichtangebote (`/api/me/shift-offers`) — neu, App-Update ausstehend
+
+Die Planung bietet eine offene Schicht oder eine Vertretung (eingeteilte Person abwesend) per Push an (`entityType: "shift-offer"`, `entityId`: Angebots-ID). Wer zuerst annimmt, bekommt die Schicht; die übrigen offenen Angebote derselben Schicht werden geschlossen. Bis zum App-Update lassen sich Angebote im Web unter „Mein Bereich“ annehmen.
+
+`GET /api/me/shift-offers?tenant=<slug>` → `200 { "offers": [{ "id", "date", "startTime", "endTime", "breakMinutes", "location", "team", "replacesFirstName": string|null, "createdAt" }] }` — nur offene Angebote ab heute, deren Schicht noch so besetzt ist wie beim Anfragen; nach Datum sortiert. `409` Konto ohne Personalakte. Rate-Limit 60/60s.
+
+`POST /api/me/shift-offers/[offerId]` Body `{ tenant, decision: "accept"|"decline" }` → `200 { "status": "accepted"|"declined" }`. Beim Annehmen gelten dieselben Regeln wie beim Einteilen (`409` mit Klartext bei Überschneidung, Ruhezeit, Höchstarbeitszeit, Jugend-/Mutterschutz, Abwesenheit). `409` „Die Schicht ist bereits vergeben.“ bzw. „Auf dieses Angebot wurde bereits geantwortet.“, `404` unbekanntes/fremdes Angebot. Ist die Woche veröffentlicht, steht die Schicht danach sofort in `/api/me/shifts`. Rate-Limit 30/h.
+
 ## 4. Schichtplanung
 
 Enthält sowohl die reinen Lese-Endpunkte (jedes Tenant-Mitglied) als auch Manager-Schreibrechte für einzelne Schichten (`/api/me/team-shifts*`, Bestandsschutz — historisch zuerst gebaut, s. Konventionen) und die neuen Admin-Endpunkte für Vorlagen und Wunschfrei (`/api/tenants/[tenant]/*`).

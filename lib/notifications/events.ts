@@ -506,3 +506,120 @@ export async function notifyEmployeeOfTimeCorrectionDecision(input: {
     entityId: input.requestId,
   });
 }
+
+/** Schicht wird einem Mitarbeiter angeboten (Vertretung / offene Schicht). */
+export async function notifyEmployeeOfShiftOffer(input: {
+  tenantId: string;
+  tenantName: string;
+  employeeId: string;
+  offerId: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  location: string;
+}) {
+  const flags = await getTenantNotificationFlags(input.tenantId);
+
+  if (!flags.shiftAlerts) {
+    return false;
+  }
+
+  const account = await getEmployeeAccount(input.employeeId);
+
+  if (!account) {
+    return false;
+  }
+
+  await dispatchNotification({
+    userId: account.userId,
+    email: account.email,
+    message: {
+      key: "shiftOffered",
+      tenantName: input.tenantName,
+      date: input.date,
+      startTime: input.startTime,
+      endTime: input.endTime,
+      location: input.location,
+    },
+    tenantId: input.tenantId,
+    category: "shift",
+    entityType: "shift-offer",
+    entityId: input.offerId,
+  });
+
+  return true;
+}
+
+/** Ein angebotene Schicht wurde angenommen — an die Person, die angefragt hat. */
+export async function notifyShiftOfferAccepted(input: {
+  tenantId: string;
+  tenantName: string;
+  recipientUserId: string;
+  employeeName: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+}) {
+  const user = await prisma.user.findUnique({
+    where: { id: input.recipientUserId },
+    select: { email: true },
+  });
+
+  if (!user) {
+    return;
+  }
+
+  await dispatchNotification({
+    userId: input.recipientUserId,
+    email: user.email,
+    message: {
+      key: "shiftOfferAccepted",
+      tenantName: input.tenantName,
+      employeeName: input.employeeName,
+      date: input.date,
+      startTime: input.startTime,
+      endTime: input.endTime,
+    },
+    tenantId: input.tenantId,
+    category: "shift",
+    entityType: "shift-conflict",
+    entityId: input.date,
+  });
+}
+
+/** Veröffentlichter Plan wurde zurückgezogen ("Team benachrichtigen"). */
+export async function notifyEmployeeOfShiftPlanWithdrawn(input: {
+  tenantId: string;
+  tenantName: string;
+  employeeId: string;
+  year: number;
+  week: number;
+  weekRange: string;
+}) {
+  const flags = await getTenantNotificationFlags(input.tenantId);
+
+  if (!flags.shiftAlerts) {
+    return;
+  }
+
+  const account = await getEmployeeAccount(input.employeeId);
+
+  if (!account) {
+    return;
+  }
+
+  await dispatchNotification({
+    userId: account.userId,
+    email: account.email,
+    message: {
+      key: "shiftPlanWithdrawn",
+      tenantName: input.tenantName,
+      week: input.week,
+      weekRange: input.weekRange,
+    },
+    tenantId: input.tenantId,
+    category: "shift",
+    entityType: "shift-week",
+    entityId: `${input.year}-W${String(input.week).padStart(2, "0")}`,
+  });
+}

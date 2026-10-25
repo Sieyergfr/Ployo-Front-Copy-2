@@ -9,7 +9,9 @@ import {
   linkOwnTenantEmployee,
   unlinkOwnTenantEmployee,
 } from "@/lib/employee-service";
-import { type ActionState, parseAction } from "@/lib/action-state";
+import { type ActionState, parseAction, withActionErrorHandling } from "@/lib/action-state";
+import { respondToMyShiftOffer } from "@/lib/shift-offer-service";
+import { SHIFT_OFFER_ERRORS } from "@/lib/shift-offers";
 import { revalidatePath } from "next/cache";
 
 function selfServicePath(tenant: string) {
@@ -301,4 +303,27 @@ export async function reportMySicknessAction(
   revalidatePath(selfServicePath(parsed.data.tenant));
 
   return {};
+}
+
+/** Angebotene Schicht annehmen oder ablehnen (Web-Gegenstück zu `/api/me/shift-offers/[offerId]`). */
+export async function respondShiftOfferAction(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  return withActionErrorHandling(async () => {
+    const tenant = formString(formData, "tenant");
+    const offerId = formString(formData, "offerId");
+    const decision = formString(formData, "decision");
+
+    if (!tenant || !offerId || (decision !== "accept" && decision !== "decline")) {
+      throw new Error(SHIFT_OFFER_ERRORS.invalidDecision);
+    }
+
+    await respondToMyShiftOffer({ tenantSlug: tenant, offerId, decision });
+
+    revalidatePath(selfServicePath(tenant));
+    revalidatePath(`/u/${tenant}/schichtplanung`);
+
+    return { success: true };
+  }, "Schichtangebot beantworten");
 }

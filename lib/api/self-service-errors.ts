@@ -1,5 +1,6 @@
 import { REPORT_ERRORS } from "@/lib/report-hours";
 import { TENANT_ACCESS_LOCKED_MESSAGE } from "@/lib/tenant-access";
+import { SHIFT_OFFER_ERROR_STATUS } from "@/lib/shift-offers";
 import { TIME_CORRECTION_ERROR_STATUS, TIME_TRACKING_ERROR_STATUS } from "@/lib/time-tracking";
 
 /**
@@ -39,6 +40,8 @@ const KNOWN_ACTION_GUARD_MESSAGES = new Set([
   "Den eigenen Zugang können Sie nicht sperren.",
   "Der Zugang des Inhabers kann nicht gesperrt werden.",
   "Korrekturantrag konnte nicht bearbeitet werden.",
+  "Vorwoche konnte nicht kopiert werden.",
+  "Schicht konnte nicht angeboten werden.",
   "Bitte angeben, welche Information benötigt wird.",
   "Bitte die Vertrags-PDF auswählen.",
   "Bitte die vollständige Adresse angeben.",
@@ -158,6 +161,12 @@ function classifySelfServiceError(message: string): number | null {
     return timeCorrectionStatus;
   }
 
+  const shiftOfferStatus = SHIFT_OFFER_ERROR_STATUS.get(message);
+
+  if (shiftOfferStatus !== undefined) {
+    return shiftOfferStatus;
+  }
+
   // lib/reports-service.ts — feste Meldungen der Stunden-Reports.
   if ((Object.values(REPORT_ERRORS) as string[]).includes(message)) {
     return message === REPORT_ERRORS.rateLimited ? 429 : message === REPORT_ERRORS.emailNotConfigured ? 503 : 400;
@@ -224,6 +233,13 @@ function classifySelfServiceError(message: string): number | null {
     // sich mit einer bestehenden Schicht derselben Person. Fehlte bisher, die
     // App zeigte deshalb nur "Es ist ein Fehler aufgetreten."
     message.startsWith("Konflikt mit bestehender Schicht:") ||
+    // lib/shift-service.ts assertArbzgCompliant() — weitere Arbeitszeitregeln
+    // (Ruhezeit, Höchstarbeitszeit, Jugend-/Mutterschutz); erreichbar u. a.
+    // beim Annehmen einer angebotenen Schicht.
+    message.startsWith("Ruhezeit unterschritten:") ||
+    message.startsWith("Schicht überschreitet die Höchstarbeitszeit") ||
+    message.startsWith("Schicht verstößt gegen") ||
+    message.startsWith("Verlängerung über 8h/Tag") ||
     // lib/retention-service.ts assertFileDeletionAllowed() (Legal Hold/
     // Aufbewahrungsfrist) sowie lib/storage/storage.service.ts
     // softDeleteTenantFileFolder()/restoreTenantFileDeletion().

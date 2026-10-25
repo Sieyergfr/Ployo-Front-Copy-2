@@ -448,6 +448,7 @@ model Tenant {
   vacationRequests            TenantVacationRequest[]
   wishFreeRequests            TenantWishFreeRequest[]
   timeCorrectionRequests      TenantTimeCorrectionRequest[]
+  shiftOffers                 TenantShiftOffer[]
   shifts                      TenantShift[]
   shiftTemplates              TenantShiftTemplate[]
   shiftWeeks                  TenantShiftWeek[]
@@ -892,6 +893,7 @@ model TenantEmployee {
   vacationRequests            TenantVacationRequest[]
   wishFreeRequests            TenantWishFreeRequest[]
   timeCorrectionRequests      TenantTimeCorrectionRequest[]
+  shiftOffers                 TenantShiftOffer[]
   shifts                      TenantShift[]
   storageFiles                TenantFile[]
   storageFileFolders          TenantFileFolder[]
@@ -1303,6 +1305,7 @@ model TenantShift {
   employee     TenantEmployee? @relation(fields: [employeeId], references: [id], onDelete: SetNull)
   location     TenantLocation? @relation(fields: [locationId], references: [id], onDelete: SetNull)
   teamRef      TenantTeam?     @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  offers       TenantShiftOffer[]
 
   @@unique([tenantId, key])
   @@index([tenantId])
@@ -1310,6 +1313,35 @@ model TenantShift {
   @@index([locationId])
   @@index([date])
   @@index([teamId])
+}
+
+/**
+ * Angebot einer Schicht an einen Mitarbeiter (Vertretung oder offene Schicht).
+ * Wer zuerst annimmt, bekommt die Schicht; die übrigen offenen Angebote
+ * derselben Schicht werden dabei geschlossen.
+ */
+model TenantShiftOffer {
+  id                 String         @id @default(cuid())
+  tenantId           String
+  shiftId            String
+  /// Angefragte Person.
+  employeeId         String
+  /// Bisher eingeteilte Person (Vertretungsfall) — `null` bei einer offenen Schicht.
+  /// Annehmen klappt nur, solange die Schicht noch so eingeteilt ist.
+  replacedEmployeeId String?
+  /// "pending" | "accepted" | "declined" | "closed"
+  status             String         @default("pending")
+  createdBy          String         @default("")
+  respondedAt        DateTime?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  tenant             Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  shift              TenantShift    @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  employee           TenantEmployee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status])
+  @@index([shiftId])
+  @@index([employeeId, status])
 }
 
 /**

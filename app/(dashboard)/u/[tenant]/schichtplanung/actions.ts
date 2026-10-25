@@ -1,7 +1,13 @@
 "use server";
 
 import {
+  getShiftOfferCandidates,
+  offerShiftToEmployees,
+  type ShiftOfferContext,
+} from "@/lib/shift-offer-service";
+import {
   applyShiftTemplateToWeek,
+  copyPreviousShiftWeek,
   createTenantShift,
   deleteShiftTemplate,
   deleteTenantShift,
@@ -124,7 +130,12 @@ export async function unpublishShiftWeekAction(
       throw new Error("Schichtplan konnte nicht auf Entwurf zurückgesetzt werden.");
     }
 
-    await unpublishShiftWeek({ tenantSlug: tenant, year, week });
+    await unpublishShiftWeek({
+      tenantSlug: tenant,
+      year,
+      week,
+      notifyTeam: formString(formData, "notifyTeam") === "on",
+    });
 
     revalidateShiftViews(formData, tenant);
     redirect(redirectPath(formData, tenant));
@@ -404,4 +415,72 @@ export async function rejectWishFreeRequestAction(
     revalidateShiftViews(formData, tenant);
     redirect(redirectPath(formData, tenant));
   }, "Wunschfrei-Anfrage ablehnen");
+}
+
+/** "Vorwoche kopieren" — Schichten der Vorwoche in die angezeigte Woche übernehmen. */
+export async function copyPreviousShiftWeekAction(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  return withActionErrorHandling(async () => {
+    const tenant = formString(formData, "tenant");
+    const year = Number.parseInt(formString(formData, "year"), 10);
+    const week = Number.parseInt(formString(formData, "week"), 10);
+
+    if (!tenant || !year || !week) {
+      throw new Error("Vorwoche konnte nicht kopiert werden.");
+    }
+
+    await copyPreviousShiftWeek({ tenantSlug: tenant, year, week });
+
+    revalidateShiftViews(formData, tenant);
+    redirect(redirectPath(formData, tenant));
+  }, "Vorwoche kopieren");
+}
+
+export type ShiftOfferCandidatesResult =
+  | { ok: true; context: ShiftOfferContext }
+  | { ok: false; error: string };
+
+/** Passende Personen für eine Schicht laden (Vertretung finden). */
+export async function loadShiftOfferCandidatesAction(
+  tenant: string,
+  shiftId: string,
+): Promise<ShiftOfferCandidatesResult> {
+  const result = await withActionErrorHandling(async () => {
+    const context = await getShiftOfferCandidates({ tenantSlug: tenant, shiftId });
+
+    return { success: true, context } as ActionState & { context: ShiftOfferContext };
+  }, "Vertretung finden");
+
+  const context = (result as { context?: ShiftOfferContext }).context;
+
+  return context ? { ok: true, context } : { ok: false, error: result.error ?? "" };
+}
+
+export type ShiftOfferState = ActionState & { sent?: number; withoutAccount?: number };
+
+/** Schicht den gewählten Personen per Push anbieten. */
+export async function offerShiftAction(
+  _prevState: ShiftOfferState,
+  formData: FormData,
+): Promise<ShiftOfferState> {
+  return withActionErrorHandling(async () => {
+    const tenant = formString(formData, "tenant");
+    const shiftId = formString(formData, "shiftId");
+
+    if (!tenant || !shiftId) {
+      throw new Error("Schicht konnte nicht angeboten werden.");
+    }
+
+    const result = await offerShiftToEmployees({
+      tenantSlug: tenant,
+      shiftId,
+      employeeIds: formStrings(formData, "employeeId"),
+    });
+
+    revalidateShiftViews(formData, tenant);
+
+    return { success: true, ...result };
+  }, "Schicht anbieten");
 }

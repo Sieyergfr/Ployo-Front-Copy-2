@@ -133,6 +133,28 @@ export type NotificationMessage =
       date: string;
     }
   | {
+      key: "shiftOffered";
+      tenantName: string;
+      date: string;
+      startTime: string;
+      endTime: string;
+      location: string;
+    }
+  | {
+      key: "shiftOfferAccepted";
+      tenantName: string;
+      employeeName: string;
+      date: string;
+      startTime: string;
+      endTime: string;
+    }
+  | {
+      key: "shiftPlanWithdrawn";
+      tenantName: string;
+      week: number;
+      weekRange: string;
+    }
+  | {
       key: "timeCorrectionDecided";
       tenantName: string;
       date: string;
@@ -473,6 +495,41 @@ export function renderNotification(
           );
 
       return { subject, text, html };
+    }
+
+    case "shiftOffered": {
+      const date = formatNotificationDate(message.date, locale);
+      const where = message.location ? ` (${message.location})` : "";
+      const subject = isEn ? `Shift available on ${date}` : `Schicht frei am ${date}`;
+      const text = isEn
+        ? `${message.tenantName} is looking for someone for ${date}, ${message.startTime}–${message.endTime}${where}. Whoever accepts first gets the shift.`
+        : `${message.tenantName} sucht jemanden für ${date}, ${message.startTime}–${message.endTime}${where}. Wer zuerst zusagt, bekommt die Schicht.`;
+      const html = paragraph(escapeHtml(text));
+
+      return { subject, text, html };
+    }
+
+    case "shiftOfferAccepted": {
+      const date = formatNotificationDate(message.date, locale);
+      const subject = isEn
+        ? `${message.employeeName} takes the shift on ${date}`
+        : `${message.employeeName} übernimmt die Schicht am ${date}`;
+      const text = isEn
+        ? `${message.employeeName} accepted the shift on ${date}, ${message.startTime}–${message.endTime} at ${message.tenantName}. The plan has been updated.`
+        : `${message.employeeName} hat die Schicht am ${date}, ${message.startTime}–${message.endTime} bei ${message.tenantName} angenommen. Der Plan ist aktualisiert.`;
+
+      return { subject, text, html: paragraph(escapeHtml(text)) };
+    }
+
+    case "shiftPlanWithdrawn": {
+      const subject = isEn
+        ? `Shift plan for week ${message.week} is being revised`
+        : `Schichtplan KW ${message.week} wird überarbeitet`;
+      const text = isEn
+        ? `The shift plan for week ${message.week} (${message.weekRange}) at ${message.tenantName} has been withdrawn and is being revised. You will be notified when it is published again.`
+        : `Der Schichtplan für KW ${message.week} (${message.weekRange}) bei ${message.tenantName} wurde zurückgezogen und wird überarbeitet. Sie werden benachrichtigt, sobald er wieder veröffentlicht ist.`;
+
+      return { subject, text, html: paragraph(escapeHtml(text)) };
     }
 
     case "reminderDigest": {

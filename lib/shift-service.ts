@@ -35,6 +35,7 @@ import {
 import { decryptField } from "@/lib/encryption";
 import {
   notifyEmployeeOfShiftPlanPublished,
+  notifyEmployeeOfShiftPlanWithdrawn,
   notifyShiftPlanManagersOfAbsenceConflict,
 } from "@/lib/notifications/events";
 
@@ -212,7 +213,7 @@ function hasConflict(input: {
  * (samt Grund), wenn eine Abwesenheit NACH der Schichteinteilung hinzukam
  * (siehe `getShiftPlanForTenant`).
  */
-async function buildAbsenceCheck(
+export async function buildAbsenceCheck(
   tenantId: string,
   employeeIds: string[],
   rangeStart: string,
@@ -1334,7 +1335,7 @@ function shiftDateByMonths(dateIso: string, months: number): string {
  * kein Bundesland-Feiertagskalender, keine behördlichen Ausnahmegenehmigungen
  * (z. B. verlängerte Ausgleichszeiträume), kein Tarifvertrags-Sonderrecht.
  */
-async function assertArbzgCompliant(input: {
+export async function assertArbzgCompliant(input: {
   tenantId: string;
   employeeId: string;
   date: string;
@@ -2082,8 +2083,18 @@ export async function unpublishShiftWeek(input: {
   tenantSlug: string;
   year: number;
   week: number;
+  /** "Team benachrichtigen": alle im veröffentlichten Stand eingeteilten Personen erhalten einen Hinweis. */
+  notifyTeam?: boolean;
 }) {
   const access = await requireTenantWideShiftManager(input.tenantSlug);
+  const previous = input.notifyTeam
+    ? await prisma.tenantShiftWeek.findUnique({
+        where: {
+          tenantId_year_week: { tenantId: access.tenantId, year: input.year, week: input.week },
+        },
+        select: { status: true, publishedShiftsJson: true },
+      })
+    : null;
 
   const weekRecord = await prisma.tenantShiftWeek.upsert({
     where: {
@@ -2100,7 +2111,47 @@ export async function unpublishShiftWeek(input: {
     },
   });
 
+  let notified = 0;
+
+  if (previous?.status === "published") {
+    const snapshot = (previous.publishedShiftsJson ?? []) as PublishedShiftSnapshotEntry[];
+    const employeeIds = Array.from(
+      new Set(snapshot.map((entry) => entry.employeeId).filter((id): id is string => Boolean(id))),
+    );
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: access.tenantId },
+      select: { name: true },
+    });
+    const weekRange = formatWeekRange(getISOWeekStart(input.year, input.week));
+
+    await Promise.all(
+      employeeIds.map((employeeId) =>
+        notifyEmployeeOfShiftPlanWithdrawn({
+          tenantId: access.tenantId,
+          tenantName: tenant?.name ?? "",
+          employeeId,
+          year: input.year,
+          week: input.week,
+          weekRange,
+        }),
+      ),
+    );
+    notified = employeeIds.length;
+
+    await recordTenantAudit({
+      tenantId: access.tenantId,
+      actorId: access.userId,
+      actorName: await getActorName(),
+      action: "Schichtplan zurückgezogen",
+      source: "Schichtplanung",
+      entityType: "shift-week",
+      entityId: weekRecord.id,
+      detail: `KW ${input.week}/${input.year} · ${weekRange} · ${notified} benachrichtigt`,
+    });
+  }
+
   return {
+    notified,
     status: weekRecord.status,
     publishedAt: weekRecord.publishedAt?.toISOString() ?? null,
   };
@@ -2441,6 +2492,115 @@ export async function applyShiftTemplateToWeek(input: {
   return { created };
 }
 
+/**
+ * "Vorwoche kopieren": übernimmt alle Schichten der Vorwoche (gleicher
+ * Wochentag, gleiche Zeiten, Standort, Team, Person) in die gewählte Woche.
+ * Ist die Person in der Zielwoche an dem Tag abwesend (Urlaub/Krankheit),
+ * wird die Schicht offen übernommen statt ihr zugeteilt. Schichten, die es
+ * in der Zielwoche schon genau so gibt, werden nicht doppelt angelegt —
+ * ein versehentlicher zweiter Klick bleibt damit folgenlos.
+ */
+export async function copyPreviousShiftWeek(input: {
+  tenantSlug: string;
+  year: number;
+  week: number;
+}) {
+  const access = await requireTenantWideShiftManager(input.tenantSlug);
+  const targetStart = getISOWeekStart(input.year, input.week);
+  const sourceStart = new Date(targetStart);
+
+  sourceStart.setUTCDate(targetStart.getUTCDate() - 7);
+
+  const sourceFrom = formatDateValue(sourceStart);
+  const sourceTo = shiftDateBy(sourceFrom, 6);
+  const targetFrom = formatDateValue(targetStart);
+  const targetTo = shiftDateBy(targetFrom, 6);
+  const [sourceShifts, targetShifts] = await Promise.all([
+    prisma.tenantShift.findMany({
+      where: { tenantId: access.tenantId, date: { gte: sourceFrom, lte: sourceTo } },
+      orderBy: [{ date: "asc" }, { startTime: "asc" }],
+      include: { employee: { select: { name: true, status: true } } },
+    }),
+    prisma.tenantShift.findMany({
+      where: { tenantId: access.tenantId, date: { gte: targetFrom, lte: targetTo } },
+      select: { date: true, startTime: true, endTime: true, employeeId: true, locationId: true },
+    }),
+  ]);
+  const employeeIds = Array.from(
+    new Set(sourceShifts.map((shift) => shift.employeeId).filter((id): id is string => Boolean(id))),
+  );
+  const isAbsent = employeeIds.length
+    ? await buildAbsenceCheck(access.tenantId, employeeIds, targetFrom, targetTo)
+    : () => null;
+  const existing = new Set(
+    targetShifts.map((shift) =>
+      [shift.date, shift.startTime, shift.endTime, shift.employeeId ?? "", shift.locationId ?? ""].join("|"),
+    ),
+  );
+  let created = 0;
+  let unassigned = 0;
+  let skipped = 0;
+
+  for (const shift of sourceShifts) {
+    const date = shiftDateBy(shift.date, 7);
+    const keepEmployee =
+      shift.employeeId && shift.employee?.status !== "former" && !isAbsent(shift.employeeId, date);
+    const employeeId = keepEmployee ? shift.employeeId : null;
+    const signature = [date, shift.startTime, shift.endTime, employeeId ?? "", shift.locationId ?? ""].join("|");
+
+    if (existing.has(signature)) {
+      skipped += 1;
+      continue;
+    }
+
+    existing.add(signature);
+
+    const key = await createUniqueShiftKey({
+      tenantId: access.tenantId,
+      date,
+      startTime: shift.startTime,
+      employeeName: employeeId ? shift.employee?.name : undefined,
+    });
+
+    await prisma.tenantShift.create({
+      data: {
+        tenantId: access.tenantId,
+        key,
+        date,
+        weekday: shift.weekday,
+        startTime: shift.startTime,
+        endTime: shift.endTime,
+        breakMinutes: shift.breakMinutes,
+        employeeId,
+        locationId: shift.locationId,
+        team: shift.team,
+        teamId: shift.teamId,
+        note: shift.note,
+      },
+    });
+    created += 1;
+
+    if (shift.employeeId && !employeeId) {
+      unassigned += 1;
+    }
+  }
+
+  if (created > 0) {
+    await recordTenantAudit({
+      tenantId: access.tenantId,
+      actorId: access.userId,
+      actorName: await getActorName(),
+      action: "Vorwoche kopiert",
+      source: "Schichtplanung",
+      entityType: "shift-week",
+      entityId: `${input.year}-W${String(input.week).padStart(2, "0")}`,
+      detail: `${created} Schichten übernommen, davon ${unassigned} offen wegen Abwesenheit`,
+    });
+  }
+
+  return { created, unassigned, skipped };
+}
+
 export async function deleteShiftTemplate(input: {
   tenantSlug: string;
   templateId: string;
@@ -2472,4 +2632,69 @@ export async function deleteShiftTemplate(input: {
     entityId: template.id,
     detail: template.name,
   });
+}
+
+export type ShiftWeekAbsence = {
+  date: string;
+  employeeId: string;
+  name: string;
+  initials: string;
+  kind: "vacation" | "sickness";
+};
+
+/**
+ * Wer an welchem Tag der Woche fehlt (genehmigter Urlaub, offene
+ * Krankmeldung) — für die "Abwesend"-Liste unter jeder Tagesspalte. Nur für
+ * Planer; berücksichtigt den Schichtplan-Scope. Den Krankheitsbezug blendet
+ * die Seite für Planer ohne Leserecht auf Krankmeldungen aus.
+ */
+export async function getShiftWeekAbsences(input: {
+  tenantSlug: string;
+  year: number;
+  week: number;
+}): Promise<ShiftWeekAbsence[]> {
+  const access = await requireShiftManager(input.tenantSlug);
+  const days = buildWeekDays(input.year, input.week).map((day) => day.id);
+  const from = days[0];
+  const to = days[days.length - 1];
+  const scopeFilter = await resolveScopeFilter(access);
+  const [vacations, sicknesses] = await Promise.all([
+    prisma.tenantVacationRequest.findMany({
+      where: { tenantId: access.tenantId, status: "approved", startDate: { lte: to }, endDate: { gte: from } },
+      select: { startDate: true, endDate: true, employee: { select: { id: true, name: true, initials: true } } },
+    }),
+    prisma.tenantSicknessReport.findMany({
+      where: {
+        tenantId: access.tenantId,
+        status: "open",
+        startDate: { lte: new Date(`${to}T23:59:59.999Z`) },
+        OR: [{ endDate: null }, { endDate: { gte: new Date(`${from}T00:00:00.000Z`) } }],
+      },
+      select: { startDate: true, endDate: true, employee: { select: { id: true, name: true, initials: true } } },
+    }),
+  ]);
+  const result: ShiftWeekAbsence[] = [];
+  const seen = new Set<string>();
+  const push = (date: string, employee: { id: string; name: string; initials: string } | null, kind: ShiftWeekAbsence["kind"]) => {
+    if (!employee || seen.has(`${date}|${employee.id}`)) return;
+    if (scopeFilter.type !== "all" && !scopeAllowsTarget(scopeFilter, employee)) return;
+
+    seen.add(`${date}|${employee.id}`);
+    result.push({ date, employeeId: employee.id, name: employee.name, initials: employee.initials, kind });
+  };
+
+  for (const date of days) {
+    for (const sickness of sicknesses) {
+      const start = sickness.startDate.toISOString().slice(0, 10);
+      const end = sickness.endDate?.toISOString().slice(0, 10) ?? "9999-12-31";
+
+      if (start <= date && end >= date) push(date, sickness.employee, "sickness");
+    }
+
+    for (const vacation of vacations) {
+      if (vacation.startDate <= date && vacation.endDate >= date) push(date, vacation.employee, "vacation");
+    }
+  }
+
+  return result;
 }

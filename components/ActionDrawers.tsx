@@ -1055,12 +1055,19 @@ export function ShiftSettingsDrawerButton({
   week,
   settings,
   canManage = true,
+  className,
+  children,
+  ariaLabel,
 }: {
   tenant: string;
   year: number;
   week: number;
   settings: ShiftPlanningSettings;
   canManage?: boolean;
+  /** Eigener Auslöser im neuen Dashboard-Design (z. B. nur ein Zahnrad). */
+  className?: string;
+  children?: ReactNode;
+  ariaLabel?: string;
 }) {
   const t = useTranslations("ActionDrawers");
   const { openPopup, closePopup } = useUniversalPopup();
@@ -1136,12 +1143,17 @@ export function ShiftSettingsDrawerButton({
     <>
       <button
         type="button"
-        className="btn btn-secondary"
+        className={className ?? "btn btn-secondary"}
         title={t("shiftSettingsTitle")}
+        aria-label={ariaLabel}
         onClick={() => setIsOpen(true)}
       >
-        <Settings2 size={15} />
-        {t("settingsLabel")}
+        {children ?? (
+          <>
+            <Settings2 size={15} />
+            {t("settingsLabel")}
+          </>
+        )}
       </button>
       {isOpen && (
         <RightDrawer

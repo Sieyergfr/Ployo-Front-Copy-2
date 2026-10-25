@@ -1,14 +1,20 @@
 import ShiftPlanningClient from "@/components/ShiftPlanningClient";
+import { auth } from "@/lib/auth";
+import { getGermanHolidays } from "@/lib/german-holidays";
+import { getPendingShiftOfferCounts } from "@/lib/shift-offer-service";
 import {
   getISOWeekFromDate,
   getShiftFormOptions,
   getShiftPlanForTenant,
   getShiftPlanningSettings,
   getShiftTemplatesForTenant,
+  getShiftWeekAbsences,
 } from "@/lib/shift-service";
 import { getWishFreeRequestsForTenant } from "@/lib/wish-free-service";
 import { hasPermissionLevel } from "@/lib/roles";
 import { getTenantCapabilities, withAccessRedirect } from "@/lib/tenant-access";
+import { getTenantsForUser } from "@/lib/tenants";
+import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 
 export const metadata = {
@@ -57,13 +63,37 @@ export default async function ShiftPlanningPage({
     tenantSlug: tenant,
   });
   const capabilities = await getTenantCapabilities(tenant);
+  const canManage = hasPermissionLevel(capabilities.shifts.level, "write");
+  const shiftIds = plan.days.flatMap((day) => day.shifts.map((shift) => shift.dbId).filter((id): id is string => Boolean(id)));
+  // Nur Planer sehen Abwesenheiten und Angebote — ohne Schreibrecht bleibt
+  // der Plan eine reine Ansicht.
+  const [absences, offerCounts, session] = await Promise.all([
+    canManage ? getShiftWeekAbsences({ tenantSlug: tenant, year, week }).catch(() => []) : [],
+    canManage ? getPendingShiftOfferCounts(tenant, shiftIds).catch(() => ({})) : {},
+    auth.api.getSession({ headers: await headers() }),
+  ]);
+  const memberships = session?.user?.id ? await getTenantsForUser(session.user.id).catch(() => null) : null;
+  const tenantName = memberships?.find((item) => item.tenant.slug === tenant)?.tenant.name ?? tenant;
+  const dayIds = new Set(plan.days.map((day) => day.id));
+  const holidays = Object.fromEntries(
+    [...new Set(plan.days.map((day) => Number(day.id.slice(0, 4))))]
+      .flatMap((holidayYear) => [...getGermanHolidays(holidayYear, null)])
+      .filter(([date]) => dayIds.has(date)),
+  );
 
   return (
     <ShiftPlanningClient
       tenant={tenant}
+      tenantName={tenantName}
       year={year}
       week={week}
-      weekLabel={plan.label}
+      currentYear={currentWeek.year}
+      currentWeek={currentWeek.week}
+      todayIso={new Date().toISOString().slice(0, 10)}
+      absences={absences}
+      offerCounts={offerCounts}
+      holidays={holidays}
+      canSeeSickness={hasPermissionLevel(capabilities.sickness.level, "read")}
       weekRange={plan.range}
       conflictCount={plan.conflictCount}
       status={plan.status}
@@ -75,7 +105,7 @@ export default async function ShiftPlanningPage({
       wishFreeRequests={wishFreeRequests}
       shiftSettings={shiftSettings}
       templates={templates ?? []}
-      canManage={hasPermissionLevel(capabilities.shifts.level, "write")}
+      canManage={canManage}
       canDelete={capabilities.shifts.canDelete}
       canManageSettings={hasPermissionLevel(capabilities.settings.level, "write")}
     />

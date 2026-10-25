@@ -1,6 +1,7 @@
 import ClockHero from "@/components/dashboard/ClockHero";
 import MyDocumentLink from "@/components/dashboard/MyDocumentLink";
 import MyQuickActions from "@/components/dashboard/MyQuickActions";
+import MyShiftOffers from "@/components/dashboard/MyShiftOffers";
 import { DbCard, DbCardTitle, DbPageHead } from "@/components/dashboard/ui";
 import { LinkProfilePicker, UnlinkOwnEmployeeButton } from "@/components/SelfServiceEmployeeLink";
 import { MyProfileCompletionCard } from "@/components/SelfServiceForms";
@@ -13,6 +14,7 @@ import { getMyPayrollStatements, getMySelfServiceOverview } from "@/lib/self-ser
 import { getMyPublishedShiftsInRange, type MyRangeShift } from "@/lib/shift-service";
 import { withAccessRedirect } from "@/lib/tenant-access";
 import { getTenantsForUser } from "@/lib/tenants";
+import { getMyShiftOffers } from "@/lib/shift-offer-service";
 import { getMyTimeCorrectionRequests } from "@/lib/time-correction-service";
 import { getMyClockStatus, getMyTimeEntries } from "@/lib/time-tracking-service";
 import { getMyWishFreeRequests } from "@/lib/wish-free-service";
@@ -161,7 +163,7 @@ export default async function SelfServicePage({
   const overtimeFrom = addDays(thisMonday, -84);
   const overtimeFromClamped = employee.startDate && employee.startDate > overtimeFrom ? employee.startDate : overtimeFrom;
 
-  const [clockStatus, shifts, wishFree, corrections, payroll, weekEntries, pastEntries] = await Promise.all([
+  const [clockStatus, shifts, wishFree, corrections, payroll, weekEntries, pastEntries, shiftOffers] = await Promise.all([
     tryLoad(getMyClockStatus(tenant)),
     tryLoad(getMyPublishedShiftsInRange(tenant, { from: rangeFrom, to: rangeTo })),
     tryLoad(getMyWishFreeRequests(tenant)),
@@ -171,6 +173,7 @@ export default async function SelfServicePage({
     overtimeFromClamped < thisMonday
       ? tryLoad(getMyTimeEntries({ tenantSlug: tenant, from: overtimeFromClamped, to: addDays(thisMonday, -1) }))
       : Promise.resolve(null),
+    tryLoad(getMyShiftOffers(tenant)),
   ]);
   const timeTrackingEnabled = clockStatus?.enabled ?? false;
   const shiftList = shifts ?? [];
@@ -304,6 +307,8 @@ export default async function SelfServicePage({
           <MyProfileCompletionCard tenant={tenant} profileFields={profileFields} completeness={profileCompleteness} />
         </div>
       )}
+
+      <MyShiftOffers tenant={tenant} offers={shiftOffers ?? []} locale={intlLocale} />
 
       <MyQuickActions
         tenant={tenant}
