@@ -377,17 +377,20 @@
     "header": {
       "eyebrow": "PERSONALAKTE"
     },
-    "tabs": {
-      "login": "Anmelden",
-      "register": "Registrieren"
+    "shell": {
+      "homeAria": "Zur Ployo Startseite",
+      "backToHome": "Zur Startseite",
+      "backToLogin": "Zurück zur Anmeldung",
+      "otherAccount": "Anderes Konto"
     },
     "footer": {
       "privacy": "Datenschutz",
-      "imprint": "Impressum"
+      "imprint": "Impressum",
+      "terms": "AGB"
     },
     "login": {
       "title": "Willkommen zurück",
-      "subtitle": "Bitte melden Sie sich mit Ihrem Konto an.",
+      "subtitle": "Melden Sie sich bei Ihrem Ployo-Konto an.",
       "accountDeletionScheduled": "Ihr Konto wurde zur Löschung vorgemerkt und endgültig in 30 Tagen gelöscht. Melden Sie sich innerhalb dieser Frist erneut an, um die Löschung abzubrechen.",
       "emailLabel": "E-Mail",
       "passwordLabel": "Passwort",
@@ -398,8 +401,7 @@
       "resendVerification": "Bestätigungslink erneut senden",
       "resendingVerification": "Wird versendet...",
       "submit": "Anmelden",
-      "submitting": "Anmelden...",
-      "or": "oder",
+      "submitting": "Wird angemeldet…",
       "google": "Google",
       "apple": "Apple",
       "connecting": "Verbinden...",
@@ -415,80 +417,121 @@
       "signInErrorTitle": "Anmeldung fehlgeschlagen",
       "signInErrorFallback": "Anmeldung fehlgeschlagen.",
       "signInSuccessTitle": "Willkommen zurück",
-      "signInSuccessBody": "Sie werden weitergeleitet."
+      "signInSuccessBody": "Sie werden weitergeleitet.",
+      "emailPlaceholder": "name@firma.de",
+      "passwordPlaceholder": "Ihr Passwort",
+      "continueWithGoogle": "Mit Google",
+      "continueWithApple": "Mit Apple",
+      "orWithEmail": "oder mit E-Mail",
+      "noAccount": "Noch kein Konto?",
+      "startTrial": "14 Tage kostenlos testen"
     },
     "register": {
       "title": "Konto erstellen",
-      "subtitle": "Füllen Sie die Felder aus, um loszulegen.",
+      "subtitle": "Testen Sie Ployo 14 Tage kostenlos. Abgebucht wird erst nach der Testphase.",
       "firstNameLabel": "Vorname",
       "lastNameLabel": "Nachname",
-      "emailLabel": "E-Mail",
+      "emailLabel": "Geschäftliche E-Mail",
       "passwordLabel": "Passwort",
-      "passwordRepeatLabel": "Passwort wiederholen",
-      "termsPrefix": "Ich stimme den",
-      "termsLink": "Nutzungsbedingungen",
-      "termsMiddle": "und der",
+      "termsPrefix": "Ich akzeptiere die",
+      "termsLink": "AGB",
+      "termsMiddle": "und habe die",
       "privacyLink": "Datenschutzerklärung",
-      "termsSuffix": "zu.",
+      "termsSuffix": "gelesen.",
       "submit": "Konto erstellen",
-      "submitting": "Konto erstellen...",
-      "passwordMismatch": "Die Passwörter stimmen nicht überein.",
-      "termsRequired": "Bitte akzeptieren Sie die Nutzungsbedingungen.",
+      "submitting": "Konto wird erstellt…",
+      "termsRequired": "Bitte akzeptieren Sie die AGB, um fortzufahren.",
       "signUpErrorFallback": "Registrierung fehlgeschlagen.",
       "signUpErrorTitle": "Registrierung fehlgeschlagen",
       "accountCreatedTitle": "Konto erstellt",
       "verifyEmailBody": "Bitte bestätigen Sie Ihre E-Mail-Adresse.",
-      "redirectingBody": "Sie werden weitergeleitet."
+      "redirectingBody": "Sie werden weitergeleitet.",
+      "trialPill": "14 Tage kostenlos",
+      "firstNamePlaceholder": "Max",
+      "lastNamePlaceholder": "Mustermann",
+      "emailPlaceholder": "name@firma.de",
+      "passwordPlaceholder": "Mindestens 12 Zeichen",
+      "emailAlreadyRegistered": "Für diese E-Mail-Adresse besteht bereits ein Konto. Melden Sie sich an oder setzen Sie Ihr Passwort zurück.",
+      "haveAccount": "Bereits ein Konto?",
+      "signIn": "Anmelden"
     },
     "forgotPassword": {
-      "title": "Passwort vergessen",
-      "subtitle": "Geben Sie Ihre E-Mail ein, um einen Reset-Link anzufordern.",
+      "title": "Passwort vergessen?",
+      "subtitle": "Kein Problem. Geben Sie Ihre E-Mail-Adresse ein, und wir senden Ihnen einen Link zum Zurücksetzen.",
       "emailLabel": "E-Mail",
-      "submit": "Reset-Link anfordern",
-      "submitting": "Link anfordern...",
-      "backToLogin": "Zurück zum Login",
-      "requestedTitle": "Link angefordert",
-      "requestedBody": "Falls {email} registriert ist, kann das Passwort über den zugesendeten Link zurückgesetzt werden.",
+      "submit": "Link senden",
+      "submitting": "Wird gesendet…",
+      "backToLogin": "Zurück zur Anmeldung",
+      "requestedTitle": "E-Mail prüfen",
+      "requestedBody": "Falls für <strong>{email}</strong> ein Konto besteht, haben wir Ihnen einen Link zum Zurücksetzen gesendet.",
       "errorTitle": "Anfrage fehlgeschlagen",
       "errorFallback": "Der Reset-Link konnte nicht angefordert werden.",
       "toastSuccessTitle": "Reset-Link angefordert",
-      "toastSuccessBody": "Wenn die E-Mail existiert, wurde ein Link versendet."
+      "toastSuccessBody": "Wenn die E-Mail existiert, wurde ein Link versendet.",
+      "emailPlaceholder": "name@firma.de",
+      "noEmail": "Keine E-Mail erhalten?",
+      "resendIn": "Neuer Link in",
+      "resend": "Erneut senden",
+      "resent": "Ein neuer Link ist unterwegs.",
+      "checkSpam": "Prüfen Sie auch Ihren Spam-Ordner.",
+      "remembered": "Doch wieder eingefallen?",
+      "signIn": "Anmelden"
     },
     "resetPassword": {
-      "title": "Passwort zurücksetzen",
-      "subtitle": "Legen Sie ein neues Passwort für Ihr Konto fest.",
+      "title": "Neues Passwort festlegen",
+      "subtitle": "Wählen Sie ein sicheres Passwort für Ihr Ployo-Konto.",
       "invalidToken": "Der Reset-Link ist ungültig oder abgelaufen.",
       "passwordLabel": "Neues Passwort",
-      "passwordRepeatLabel": "Neues Passwort wiederholen",
+      "passwordRepeatLabel": "Passwort wiederholen",
       "passwordMismatch": "Die Passwörter stimmen nicht überein.",
       "submit": "Passwort speichern",
-      "submitting": "Speichern...",
-      "backToLogin": "Zurück zum Login",
+      "submitting": "Wird gespeichert…",
+      "backToLogin": "Zur Anmeldung",
       "errorTitle": "Reset fehlgeschlagen",
       "errorFallback": "Das Passwort konnte nicht geändert werden.",
       "successTitle": "Passwort geändert",
-      "successBody": "Sie können sich jetzt mit dem neuen Passwort anmelden."
+      "successBody": "Ihr neues Passwort ist gespeichert. Sie können sich jetzt damit anmelden.",
+      "passwordPlaceholder": "Mindestens {count} Zeichen",
+      "ruleLength": "Mindestens {count} Zeichen",
+      "ruleCase": "Groß- und Kleinbuchstaben",
+      "ruleNumber": "Mindestens eine Zahl",
+      "tooShort": "Das Passwort muss mindestens {count} Zeichen lang sein.",
+      "repeatRequired": "Bitte wiederholen Sie das Passwort.",
+      "passwordsMatch": "Passwörter stimmen überein"
     },
     "twoFactor": {
-      "title": "Zwei-Faktor-Bestätigung",
-      "subtitle": "Bitte geben Sie den 6-stelligen Code aus Ihrer Authenticator-App ein.",
-      "codeLabel": "Bestätigungscode",
+      "title": "Bestätigungscode",
+      "subtitle": "Öffnen Sie Ihre Authenticator-App und geben Sie den 6-stelligen Code für Ployo ein.",
+      "codeLabel": "Code aus der App",
       "backupCodeLabel": "Backup-Code",
       "submit": "Bestätigen",
       "submitting": "Wird geprüft...",
-      "useBackupCode": "Stattdessen Backup-Code verwenden",
-      "useAuthenticatorCode": "Stattdessen Authenticator-Code verwenden",
+      "useBackupCode": "Backup-Code verwenden",
+      "useAuthenticatorCode": "Code aus der App verwenden",
       "invalidCode": "Der Code ist ungültig.",
-      "errorTitle": "Bestätigung fehlgeschlagen"
+      "errorTitle": "Bestätigung fehlgeschlagen",
+      "pill": "Zwei-Faktor-Schutz",
+      "backupTitle": "Backup-Code",
+      "backupSubtitle": "Kein Zugriff auf Ihre App? Geben Sie einen Ihrer Backup-Codes ein. Jeder Code funktioniert nur einmal.",
+      "codeRefreshHint": "Der Code in Ihrer App erneuert sich alle 30 Sekunden.",
+      "trustDevice": "Diesem Gerät 30 Tage vertrauen",
+      "incompleteCode": "Bitte geben Sie den vollständigen 6-stelligen Code ein.",
+      "incompleteBackupCode": "Bitte geben Sie einen Backup-Code ein.",
+      "noAccess": "Kein Zugriff mehr?",
+      "contactSupport": "Support kontaktieren"
     },
     "confirm": {
-      "title": "E-Mail bestätigen",
-      "sentToPrefix": "Wir haben einen Bestätigungslink an",
-      "sentWithEmailSuffix": "gesendet.",
-      "sentWithoutEmail": "Ihre E-Mail-Adresse gesendet.",
-      "instructions": "Bitte prüfen Sie Ihr Postfach und klicken Sie auf den Link, um Ihr Konto zu aktivieren.",
-      "noEmailHint": "Keine E-Mail erhalten? Prüfen Sie auch Ihren Spam-Ordner oder melden Sie sich erneut an, um einen neuen Link zu erhalten.",
-      "backToLogin": "Zur Anmeldung"
+      "title": "Fast geschafft!",
+      "sentWithEmail": "Wir haben eine Bestätigung an <strong>{email}</strong> gesendet. Bitte bestätigen Sie Ihre E-Mail-Adresse, um sich anzumelden.",
+      "sentWithoutEmail": "Wir haben Ihnen eine Bestätigung per E-Mail gesendet. Bitte bestätigen Sie Ihre E-Mail-Adresse, um sich anzumelden.",
+      "backToLogin": "Zur Anmeldung",
+      "noEmail": "Keine E-Mail erhalten?",
+      "checkSpam": "Prüfen Sie auch Ihren Spam-Ordner.",
+      "resend": "Erneut senden",
+      "resending": "Wird gesendet…",
+      "resent": "Erneut gesendet",
+      "resendErrorTitle": "Versand fehlgeschlagen",
+      "resendErrorFallback": "Der Bestätigungslink konnte nicht versendet werden."
     },
     "select": {
       "title": "Unternehmen auswählen",
@@ -2049,68 +2092,310 @@
     "deleteAccount": "Konto löschen"
   },
   "LandingPage": {
-    "navFeatures": "Funktionen",
-    "navHowItWorks": "So funktioniert's",
-    "navPricing": "Preise",
-    "navCompany": "Unternehmen",
-    "signIn": "Anmelden",
-    "ctaStartShort": "Start",
-    "ctaStartFull": "Kostenlos starten",
-    "heroBadge": "NEU — Digitale Schichtplanung",
-    "heroTitle1": "Smarter HR.",
-    "heroTitle2": "Starke Teams.",
-    "heroDescription": "Ployo vereint Schichtplanung, Personalverwaltung und standortübergreifende Analyse — in einer schlanken, modernen Plattform.",
-    "ctaFreeTrial": "Kostenlos testen",
-    "ctaWatchDemo": "Demo ansehen",
-    "mockLiveLabel": "PLOYO LIVE",
-    "mockWeekLabel": "KW {week} · {year}",
-    "mockEmployees": "Mitarbeiter",
-    "mockLocations": "Standorte",
-    "mockUtilization": "Auslastung",
-    "shiftEarly": "Frühschicht",
-    "shiftLate": "Spätschicht",
-    "shiftNight": "Nachtschicht",
-    "mockActivityLabel": "Schichtplan KW 27 freigegeben",
-    "mockOpenShiftsLabel": "Offene Schichten",
-    "mockOpenShiftsCaption": "Diese Woche",
-    "featuresEyebrow": "Funktionen",
-    "featuresTitle": "Alles, was modernes HR braucht.",
-    "feature1Title": "Intelligente Schichtplanung",
-    "feature1Description": "Automatische Vorschläge basierend auf Qualifikationen, Verfügbarkeiten und gesetzlichen Vorgaben. Frühzeitige Erkennung von Unterbesetzung.",
-    "feature1Point1": "Drag-and-Drop Kalender",
-    "feature1Point2": "Automatische Konfliktprüfung",
-    "feature1Point3": "Push-Benachrichtigungen",
-    "feature2Title": "Digitale Personalakte",
-    "feature2Description": "Alle Mitarbeiterdaten DSGVO-konform an einem Ort. Verträge, Zeugnisse, Urlaubsanträge — revisionssicher und sofort abrufbar.",
-    "feature2Point1": "DSGVO-konforme Speicherung",
-    "feature2Point2": "Dokumenten-Upload & -Verwaltung",
-    "feature2Point3": "Rollenbasierte Zugriffsrechte",
-    "feature3Title": "Echtzeit-Analytics",
-    "feature3Description": "Überblick über alle Standorte in Echtzeit. Auslastung, Krankheitsquoten, Überstunden — auf einen Blick, immer aktuell.",
-    "feature3Point1": "Live-Dashboard aller Standorte",
-    "feature3Point2": "Exportierbare Berichte (Excel, PDF)",
-    "feature3Point3": "Frühwarnsystem für Engpässe",
-    "howEyebrow": "So funktioniert's",
-    "howTitle": "In drei Schritten startklar.",
-    "step1Title": "Konto einrichten",
-    "step1Description": "In wenigen Minuten registriert. Standorte anlegen, Team einladen, Rollen vergeben — sofort einsatzbereit.",
-    "step2Title": "Daten importieren",
-    "step2Description": "Mitarbeiterdaten aus Excel oder bestehenden Systemen importieren. Ployo erkennt Formate automatisch.",
-    "step3Title": "Loslegen & sparen",
-    "step3Description": "Schichtpläne erstellen, Personalakten pflegen, Analytics auswerten — und bis zu 40 Stunden im Monat einsparen.",
-    "testimonialQuote": "Ployo hat unsere Schichtplanung von 8 Stunden auf unter 45 Minuten pro Woche reduziert. Ich kann mir ein Arbeiten ohne es nicht mehr vorstellen.",
-    "testimonialRole": "HR-Leitung · Hamburg Altona",
-    "ctaEyebrow": "Jetzt starten — kostenlos",
-    "ctaTitle1": "Ihr Team verdient",
-    "ctaTitle2": "besseres HR.",
-    "ctaDescription": "14 Tage kostenlos testen. Keine Kreditkarte nötig. Jederzeit kündbar.",
-    "ctaBookDemo": "Demo buchen",
-    "footerPrivacy": "Datenschutz",
-    "footerImprint": "Impressum",
-    "footerTerms": "AGB",
-    "footerDeleteAccount": "Konto löschen",
-    "footerContact": "Kontakt",
-    "footerCopyright": "© {year} Ployo · Made in Germany"
+    "header": {
+      "homeAria": "Ployo Startseite",
+      "mainNavigation": "Hauptnavigation",
+      "navFeatures": "Funktionen",
+      "navApp": "Mitarbeiter-App",
+      "navSecurity": "Sicherheit",
+      "navPricing": "Preise",
+      "login": "Anmelden",
+      "register": "Registrieren",
+      "account": "Konto",
+      "toDashboard": "Zum Dashboard",
+      "accountSettings": "Kontoeinstellungen",
+      "logout": "Abmelden",
+      "openMenu": "Menü öffnen",
+      "closeMenu": "Menü schließen"
+    },
+    "hero": {
+      "title": "Die digitale Personalakte für Ihr Team",
+      "subtitle": "Mitarbeiterdaten, Schichtplanung, Urlaub und Krankheit, Zeiterfassung und Dokumente an einem Ort – gemacht für kleine und mittelständische Unternehmen.",
+      "primaryCta": "Kostenlos testen",
+      "secondaryCta": "Mehr erfahren"
+    },
+    "benefits": {
+      "pill": "Vorteile",
+      "title": "Alles für Ihre Personalverwaltung. An einem Ort.",
+      "subtitle": "Ployo bündelt Personalakte, Schichtplanung, Urlaub und Krankheit, Zeiterfassung und Dateiablage – übersichtlich und für Ihr ganzes Team erreichbar.",
+      "personnelFile": {
+        "title": "Digitale Personalakte",
+        "description": "Stammdaten, Verträge, Lohnabrechnungen und Dokumente zu jeder Person – sensible Daten mit eigenem Zugriffsrecht."
+      },
+      "shifts": {
+        "title": "Schichtplanung",
+        "description": "Wochenansicht mit Schichtvorlagen – Ployo warnt bei Unterbesetzung, Überschneidungen und zu kurzen Ruhezeiten."
+      },
+      "absences": {
+        "title": "Urlaub & Krankheit",
+        "description": "Urlaubsanträge mit Genehmigung, Kontingente, Krankmeldungen mit Attest und Wunschfrei-Anträge."
+      },
+      "files": {
+        "title": "Dateiablage",
+        "description": "Versionen, Ablaufdaten und Freigaben, PIN-geschützte Ordner und Wiederherstellung gelöschter Dateien innerhalb von 24 Stunden."
+      },
+      "timeTracking": {
+        "title": "Zeiterfassung",
+        "description": "Stempeluhr im Browser und in der App, Stempeln per QR-Code am Standort und einfache Korrekturen."
+      },
+      "mock": {
+        "branchCenter": "Filiale Mitte",
+        "branchNorth": "Filiale Nord",
+        "warehouse": "Lager",
+        "mon": "Mo 26.10",
+        "tue": "Di 27.10",
+        "wed": "Mi 28.10",
+        "thu": "Do 29.10",
+        "fri": "Fr 30.10",
+        "dayOffWish": "Wunschfrei",
+        "allDay": "Ganztägig",
+        "team": "Team",
+        "service": "Service",
+        "entry": "Eintritt",
+        "contract": "Vertrag",
+        "fullTime": "Vollzeit",
+        "vacation": "Urlaub",
+        "vacationDays": "18 von 28 Tagen",
+        "active": "Aktiv",
+        "week": "KW 44",
+        "published": "Veröffentlicht",
+        "pending": "Ausstehend",
+        "absent": "Abwesend",
+        "since": "ab {date}",
+        "clockedInSince": "Eingestempelt seit {time}",
+        "clockOut": "Ausstempeln",
+        "qrCode": "QR-Code"
+      }
+    },
+    "app": {
+      "pill": "Mitarbeiter-App",
+      "title": "Ihr Team hat Ployo immer dabei.",
+      "subtitle": "Mit der Ployo App haben Mitarbeitende ihren Schichtplan, ihr Urlaubskonto und ihre Dokumente immer dabei – direkt auf dem Smartphone.",
+      "imageAlt": "Ployo Mitarbeiter-App: Startseite mit nächster Schicht, Urlaubskonto, Wochenstunden und Monatsübersicht",
+      "points": {
+        "shifts": "Schichtplan jederzeit im Blick",
+        "requests": "Urlaub, Wunschfrei und Krankmeldung einreichen",
+        "clock": "Stempeln – auch per QR-Code am Standort",
+        "documents": "Eigene Dokumente und Lohnabrechnungen ansehen",
+        "push": "Push-Benachrichtigungen bei Änderungen",
+        "more": "und vieles mehr"
+      }
+    },
+    "roles": {
+      "pill": "Rollen & Berechtigungen",
+      "title": "Jeder sieht genau das, was er sehen soll.",
+      "subtitle": "Legen Sie fest, wer Personalakten, Schichtpläne, Anträge und Dokumente lesen oder bearbeiten darf – von der Geschäftsführung bis zur Aushilfe.",
+      "points": {
+        "templates": "Vorgefertigte Rollen für HR, Lohnbuchhaltung, Teamleitung und Mitarbeitende",
+        "custom": "Eigene Rollen frei anlegen",
+        "scope": "Zugriff je Bereich: alle, eigenes Team oder nur eigene Daten"
+      },
+      "pickRole": "Rolle wählen",
+      "roleTablist": "Rolle",
+      "hr": {
+        "label": "HR-Leitung",
+        "description": "Verwaltet Personalakten, Verträge, Abwesenheiten und Zeiten im ganzen Unternehmen."
+      },
+      "payroll": {
+        "label": "Lohnbuchhaltung",
+        "description": "Verwaltet Lohnabrechnungen und sensible Daten, sieht alles Weitere lesend."
+      },
+      "lead": {
+        "label": "Teamleitung",
+        "description": "Verwaltet den Schichtplan und kümmert sich um Urlaub und Zeiten des eigenen Teams."
+      },
+      "staff": {
+        "label": "Mitarbeiter",
+        "description": "Sieht die eigenen Daten, stellt Anträge und erfasst Arbeitszeiten."
+      },
+      "columnArea": "Bereich",
+      "columnAccess": "Zugriff",
+      "columnScope": "Umfang",
+      "noAccess": "Kein Zugriff",
+      "access": {
+        "manage": "Verwalten",
+        "write": "Schreiben",
+        "read": "Lesen",
+        "request": "Beantragen",
+        "report": "Melden",
+        "record": "Erfassen"
+      },
+      "scopes": {
+        "all": "Alle",
+        "team": "Eigenes Team",
+        "own": "Nur eigene",
+        "none": "–"
+      },
+      "modules": {
+        "masterData": "Stammdaten",
+        "contracts": "Verträge",
+        "payroll": "Lohnabrechnungen",
+        "sensitiveData": "Sensible Daten",
+        "vacation": "Urlaub",
+        "sickness": "Krankheit",
+        "shiftPlanning": "Schichtplanung",
+        "timeTracking": "Zeiterfassung"
+      },
+      "footnote": "Owner und Admin haben vollen Zugriff. Eigene Rollen lassen sich frei anlegen."
+    },
+    "security": {
+      "pill": "Sicherheit & Datenschutz",
+      "title": "Ihre Personaldaten in sicheren Händen.",
+      "subtitle": "Personalakten gehören zu den sensibelsten Daten eines Unternehmens. Deshalb ist Sicherheit bei Ployo kein Extra, sondern die Grundlage.",
+      "cards": {
+        "encryption": {
+          "title": "Verschlüsselung",
+          "description": "Alle Daten werden per TLS übertragen. IBAN, Steuer-ID und Sozialversicherungsnummer werden zusätzlich verschlüsselt gespeichert (AES-256)."
+        },
+        "hosting": {
+          "title": "Hosting in Deutschland",
+          "description": "Anwendung und Dokumente werden in Rechenzentren in Frankfurt am Main betrieben."
+        },
+        "processing": {
+          "title": "Auftragsverarbeitung",
+          "description": "Auftragsverarbeitungsvertrag nach Art. 28 DSGVO – auch mit allen eingesetzten Dienstleistern."
+        },
+        "access": {
+          "title": "Rollenbasierter Zugriff",
+          "description": "Nur berechtigte Personen sehen sensible Personaldaten – festgelegt über Rollen, nachvollziehbar über Audit-Logs."
+        }
+      }
+    },
+    "roadmap": {
+      "pill": "Laufend weiterentwickelt",
+      "title": "Ployo wächst mit Ihren Anforderungen.",
+      "subtitle": "Ployo wird ständig besser. So kommt eine Idee aus Ihrem Arbeitsalltag als neue Funktion zu Ihnen zurück.",
+      "step": "Schritt {number}",
+      "steps": {
+        "listen": {
+          "title": "Zuhören",
+          "description": "Wir sammeln Feedback und Wünsche von Unternehmen, die Ployo täglich nutzen."
+        },
+        "build": {
+          "title": "Entwickeln",
+          "description": "Daraus entstehen neue Funktionen und Verbesserungen für den Arbeitsalltag."
+        },
+        "test": {
+          "title": "Testen",
+          "description": "Jede Änderung durchläuft automatisierte Tests, bevor sie live geht."
+        },
+        "ship": {
+          "title": "Sofort verfügbar",
+          "description": "Neue Funktionen sind in der Web-App sofort verfügbar – ohne Installation. Die App erhält Updates über die Stores."
+        }
+      },
+      "missingFeature": "Ihnen fehlt eine Funktion?",
+      "suggestIdea": "Idee vorschlagen"
+    },
+    "pricing": {
+      "pill": "Pläne",
+      "title": "Der passende Plan für Ihr Team.",
+      "subtitle": "Feste Monatspreise je nach Teamgröße – alle Funktionen sind in jedem Plan enthalten. 14 Tage kostenlos testen und jederzeit den Plan wechseln.",
+      "billingLabel": "Abrechnung",
+      "monthly": "Monatlich",
+      "yearly": "Jährlich",
+      "recommended": "Empfohlen",
+      "perMonth": "/ Monat",
+      "plusVat": "zzgl. USt.",
+      "billedMonthly": "monatlich abgerechnet",
+      "billedYearlyAmount": "jährlich {amount} €",
+      "startTrial": "Kostenlos testen",
+      "starter": {
+        "name": "Starter",
+        "description": "Für kleine Teams bis 5 Mitarbeitende.",
+        "limit": "Bis 5 Mitarbeitende",
+        "allFeatures": "Alle Funktionen inklusive",
+        "lastPoint": "14 Tage kostenlos testen"
+      },
+      "professional": {
+        "name": "Professional",
+        "description": "Für wachsende Teams bis 25 Mitarbeitende.",
+        "limit": "Bis 25 Mitarbeitende",
+        "allFeatures": "Alle Funktionen inklusive",
+        "lastPoint": "14 Tage kostenlos testen"
+      },
+      "business": {
+        "name": "Business",
+        "description": "Für größere Betriebe bis 50 Mitarbeitende.",
+        "limit": "Bis 50 Mitarbeitende",
+        "allFeatures": "Alle Funktionen inklusive",
+        "lastPoint": "Höhere Limits auf Anfrage"
+      },
+      "includedTitle": "In jedem Plan enthalten",
+      "included": {
+        "personnelFile": "Personalakte",
+        "shiftPlanning": "Schichtplanung",
+        "vacationSickness": "Urlaub & Krankheit",
+        "timeTracking": "Zeiterfassung",
+        "files": "Dateiablage",
+        "app": "Mitarbeiter-App",
+        "roles": "Rollen & Berechtigungen"
+      },
+      "moreEmployees": "Mehr als 50 Mitarbeitende?"
+    },
+    "faq": {
+      "pill": "FAQ",
+      "title": "Häufige Fragen",
+      "subtitle": "Ihre Frage ist nicht dabei? Schreiben Sie uns, wir helfen Ihnen gerne weiter.",
+      "contact": "Kontakt aufnehmen",
+      "trial": {
+        "question": "Kann ich Ployo kostenlos testen?",
+        "answer": "Ja. Sie können Ployo 14 Tage kostenlos testen. Beim Start hinterlegen Sie Ihre Zahlungsdaten – abgebucht wird erst nach der Testphase, vorher können Sie jederzeit kündigen."
+      },
+      "audience": {
+        "question": "Für welche Unternehmen eignet sich Ployo?",
+        "answer": "Ployo ist für kleine und mittelständische Unternehmen gemacht – vom Betrieb mit wenigen Mitarbeitenden bis zum Unternehmen mit mehreren Standorten und Schichtbetrieb."
+      },
+      "app": {
+        "question": "Gibt es eine App für meine Mitarbeitenden?",
+        "answer": "Ja. Mit der Ployo App sehen Ihre Mitarbeitenden ihren Schichtplan, reichen Urlaub, Wunschfrei und Krankmeldungen ein, stempeln per QR-Code und sehen ihre Dokumente und Lohnabrechnungen."
+      },
+      "dataLocation": {
+        "question": "Wo werden meine Daten gespeichert?",
+        "answer": "Ployo wird in Rechenzentren in Frankfurt am Main betrieben. Hochgeladene Dokumente liegen in einem Objektspeicher von OVHcloud, ebenfalls in Frankfurt. Mit allen Dienstleistern bestehen Auftragsverarbeitungsverträge."
+      },
+      "plans": {
+        "question": "Welche Funktionen sind in welchem Plan enthalten?",
+        "answer": "Alle Funktionen sind in jedem Plan enthalten. Die Pläne unterscheiden sich nur in der Zahl der Mitarbeitenden: bis 5, bis 25 oder bis 50 – höhere Limits auf Anfrage."
+      },
+      "cancel": {
+        "question": "Kann ich meinen Plan wechseln oder kündigen?",
+        "answer": "Ja. Den Plan wechseln Sie jederzeit in den Einstellungen unter „Abrechnung“. Eine Mindestlaufzeit gibt es nicht: Sie kündigen jederzeit zum Ende des laufenden Abrechnungszeitraums. Ihre Daten können Sie jederzeit exportieren."
+      }
+    },
+    "cta": {
+      "title": "Bereit für weniger Papierkram?",
+      "subtitle": "Starten Sie heute mit Ployo und bringen Sie Personalakte, Schichtplanung und Urlaub an einen Ort.",
+      "primary": "Kostenlos testen",
+      "secondary": "Kontakt aufnehmen",
+      "points": {
+        "trial": "14 Tage kostenlos testen",
+        "billing": "Abbuchung erst nach 14 Tagen",
+        "cancel": "Jederzeit kündbar"
+      }
+    },
+    "footer": {
+      "tagline": "Die digitale Personalakte für kleine und mittelständische Unternehmen.",
+      "product": "Produkt",
+      "company": "Unternehmen",
+      "legal": "Rechtliches",
+      "links": {
+        "benefits": "Vorteile",
+        "app": "Mitarbeiter-App",
+        "roles": "Rollen & Berechtigungen",
+        "security": "Sicherheit",
+        "plans": "Pläne",
+        "contact": "Kontakt",
+        "faq": "FAQ",
+        "login": "Anmelden",
+        "imprint": "Impressum",
+        "privacy": "Datenschutz",
+        "terms": "AGB",
+        "deleteAccount": "Konto löschen"
+      },
+      "copyright": "© {year} Ployo. Alle Rechte vorbehalten.",
+      "madeIn": "Gemacht in München"
+    }
   },
   "LocationShiftPlanner": {
     "wishFreeStatusOpen": "Offen",

@@ -1,5 +1,5 @@
-import { SecondaryButton } from "@/components/Buttons/PrimaryButton";
-import Divider from "@/components/Divider";
+import { AuthIconBadge } from "@/components/auth/AuthCardHeader";
+import ResendVerificationButton from "@/components/auth/ResendVerificationButton";
 import { getTranslations } from "next-intl/server";
 import Link from "next/link";
 import { Mail } from "lucide-react";
@@ -18,37 +18,28 @@ export default async function ConfirmPage({
   const t = await getTranslations("Auth.confirm");
 
   return (
-    <>
-      <div className="flex items-center justify-center">
-        <div className="floating-circle animate-float">
-          <Mail size={32} />
-        </div>
-      </div>
-      <div className="flex flex-col gap-3">
-        <p className="card-heading text-center">{t("title")}</p>
-        <div className="flex flex-col items-center gap-1.5">
-          <p className="description text-center">{t("sentToPrefix")}</p>
-          {email && (
-            <div className="pill mt-2">
-              <Mail size={12} strokeWidth={2} color="#6E6E6B" />
-              <span className="pill-label">{email}</span>
-            </div>
-          )}
-          <p className="description text-center">
-            {email ? t("sentWithEmailSuffix") : t("sentWithoutEmail")}{" "}
-            {t("instructions")}
-          </p>
-        </div>
-      </div>
-      <Divider />
-      <div className="flex flex-col gap-2">
-        <p className="text-muted text-center text-xs">{t("noEmailHint")}</p>
-        <Link href="/login" className="contents">
-          <SecondaryButton>
-            <p>{t("backToLogin")}</p>
-          </SecondaryButton>
-        </Link>
-      </div>
-    </>
+    <div className="flex flex-col items-center py-2 text-center">
+      <AuthIconBadge size="lg">
+        <Mail size={28} strokeWidth={1.75} aria-hidden="true" />
+      </AuthIconBadge>
+      <h1 className="mt-6 font-display text-[26px] leading-[1.1] font-semibold tracking-[-0.8px] text-ink">
+        {t("title")}
+      </h1>
+      <p className="mt-2.5 max-w-[340px] text-[14px] leading-[1.6] text-muted-2">
+        {email
+          ? t.rich("sentWithEmail", {
+              email,
+              strong: (chunks) => <strong className="font-semibold text-ink">{chunks}</strong>,
+            })
+          : t("sentWithoutEmail")}
+      </p>
+      <Link href="/login" className="btn btn-secondary au-focus mt-7 flex min-h-12 w-full no-underline">
+        {t("backToLogin")}
+      </Link>
+      <p className="mt-[18px] text-[13px] text-muted-2">
+        {t("noEmail")}{" "}
+        {email ? <ResendVerificationButton email={email} /> : t("checkSpam")}
+      </p>
+    </div>
   );
 }

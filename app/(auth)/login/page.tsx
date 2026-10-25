@@ -1,6 +1,7 @@
-import CardHeader from "@/components/Card/CardHeader";
+import AuthCardHeader, { AuthLogoBadge } from "@/components/auth/AuthCardHeader";
 import LoginForm from "@/components/auth/LoginForm";
 import { getTranslations } from "next-intl/server";
+import Link from "next/link";
 
 export const metadata = {
   title: "Login",
@@ -25,13 +26,22 @@ export default async function LoginPage({
 
   return (
     <>
-      <CardHeader title={t("title")} subtitle={t("subtitle")} />
+      <AuthCardHeader badge={<AuthLogoBadge />} title={t("title")} subtitle={t("subtitle")} />
       {params.accountDeletionScheduled === "1" && (
-        <p className="mb-4 rounded-[10px] border border-warning/25 bg-warning/10 px-3 py-2.5 text-[12.5px] text-[#7A4E00]">
+        <p className="mt-5 rounded-[10px] border border-warning/25 bg-warning/10 px-3 py-2.5 text-[12.5px] text-[#7A4E00]">
           {t("accountDeletionScheduled")}
         </p>
       )}
       <LoginForm next={next} />
+      <p className="mt-6 text-center text-[13.5px] text-muted-2">
+        {t("noAccount")}{" "}
+        <Link
+          href="/register"
+          className="au-text-link au-focus rounded font-semibold text-ink no-underline"
+        >
+          {t("startTrial")}
+        </Link>
+      </p>
     </>
   );
 }

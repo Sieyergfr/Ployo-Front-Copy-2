@@ -377,17 +377,20 @@
     "header": {
       "eyebrow": "HR RECORDS"
     },
-    "tabs": {
-      "login": "Sign in",
-      "register": "Register"
+    "shell": {
+      "homeAria": "Go to the Ployo home page",
+      "backToHome": "Back to home",
+      "backToLogin": "Back to sign in",
+      "otherAccount": "Other account"
     },
     "footer": {
       "privacy": "Privacy",
-      "imprint": "Legal notice"
+      "imprint": "Legal notice",
+      "terms": "Terms"
     },
     "login": {
       "title": "Welcome back",
-      "subtitle": "Please sign in with your account.",
+      "subtitle": "Sign in to your Ployo account.",
       "accountDeletionScheduled": "Your account is scheduled for deletion and will be permanently removed in 30 days. Sign in again within this period to cancel the deletion.",
       "emailLabel": "Email",
       "passwordLabel": "Password",
@@ -398,8 +401,7 @@
       "resendVerification": "Resend verification link",
       "resendingVerification": "Sending...",
       "submit": "Sign in",
-      "submitting": "Signing in...",
-      "or": "or",
+      "submitting": "Signing in…",
       "google": "Google",
       "apple": "Apple",
       "connecting": "Connecting...",
@@ -415,80 +417,121 @@
       "signInErrorTitle": "Sign-in failed",
       "signInErrorFallback": "Sign-in failed.",
       "signInSuccessTitle": "Welcome back",
-      "signInSuccessBody": "You're being redirected."
+      "signInSuccessBody": "You're being redirected.",
+      "emailPlaceholder": "name@company.com",
+      "passwordPlaceholder": "Your password",
+      "continueWithGoogle": "With Google",
+      "continueWithApple": "With Apple",
+      "orWithEmail": "or with email",
+      "noAccount": "No account yet?",
+      "startTrial": "Try free for 14 days"
     },
     "register": {
       "title": "Create account",
-      "subtitle": "Fill in the fields to get started.",
+      "subtitle": "Try Ployo free for 14 days. You're only charged after the trial.",
       "firstNameLabel": "First name",
       "lastNameLabel": "Last name",
-      "emailLabel": "Email",
+      "emailLabel": "Work email",
       "passwordLabel": "Password",
-      "passwordRepeatLabel": "Repeat password",
-      "termsPrefix": "I agree to the",
-      "termsLink": "terms of use",
-      "termsMiddle": "and the",
+      "termsPrefix": "I accept the",
+      "termsLink": "terms",
+      "termsMiddle": "and have read the",
       "privacyLink": "privacy policy",
       "termsSuffix": ".",
       "submit": "Create account",
-      "submitting": "Creating account...",
-      "passwordMismatch": "The passwords don't match.",
-      "termsRequired": "Please accept the terms of use.",
+      "submitting": "Creating account…",
+      "termsRequired": "Please accept the terms to continue.",
       "signUpErrorFallback": "Registration failed.",
       "signUpErrorTitle": "Registration failed",
       "accountCreatedTitle": "Account created",
       "verifyEmailBody": "Please verify your email address.",
-      "redirectingBody": "You're being redirected."
+      "redirectingBody": "You're being redirected.",
+      "trialPill": "14 days free",
+      "firstNamePlaceholder": "Jane",
+      "lastNamePlaceholder": "Doe",
+      "emailPlaceholder": "name@company.com",
+      "passwordPlaceholder": "At least 12 characters",
+      "emailAlreadyRegistered": "An account already exists for this email address. Sign in or reset your password.",
+      "haveAccount": "Already have an account?",
+      "signIn": "Sign in"
     },
     "forgotPassword": {
-      "title": "Forgot password",
-      "subtitle": "Enter your email to request a reset link.",
+      "title": "Forgot your password?",
+      "subtitle": "No problem. Enter your email address and we'll send you a link to reset it.",
       "emailLabel": "Email",
-      "submit": "Request reset link",
-      "submitting": "Requesting link...",
+      "submit": "Send link",
+      "submitting": "Sending…",
       "backToLogin": "Back to sign in",
-      "requestedTitle": "Link requested",
-      "requestedBody": "If {email} is registered, the password can be reset via the link we sent.",
+      "requestedTitle": "Check your email",
+      "requestedBody": "If an account exists for <strong>{email}</strong>, we've sent you a link to reset your password.",
       "errorTitle": "Request failed",
       "errorFallback": "The reset link couldn't be requested.",
       "toastSuccessTitle": "Reset link requested",
-      "toastSuccessBody": "If the email exists, a link has been sent."
+      "toastSuccessBody": "If the email exists, a link has been sent.",
+      "emailPlaceholder": "name@company.com",
+      "noEmail": "Didn't get an email?",
+      "resendIn": "New link in",
+      "resend": "Resend",
+      "resent": "A new link is on its way.",
+      "checkSpam": "Please also check your spam folder.",
+      "remembered": "Remembered it after all?",
+      "signIn": "Sign in"
     },
     "resetPassword": {
-      "title": "Reset password",
-      "subtitle": "Set a new password for your account.",
+      "title": "Set a new password",
+      "subtitle": "Choose a secure password for your Ployo account.",
       "invalidToken": "The reset link is invalid or has expired.",
       "passwordLabel": "New password",
-      "passwordRepeatLabel": "Repeat new password",
+      "passwordRepeatLabel": "Repeat password",
       "passwordMismatch": "The passwords don't match.",
       "submit": "Save password",
-      "submitting": "Saving...",
-      "backToLogin": "Back to sign in",
+      "submitting": "Saving…",
+      "backToLogin": "Go to sign in",
       "errorTitle": "Reset failed",
       "errorFallback": "The password couldn't be changed.",
       "successTitle": "Password changed",
-      "successBody": "You can now sign in with your new password."
+      "successBody": "Your new password has been saved. You can now sign in with it.",
+      "passwordPlaceholder": "At least {count} characters",
+      "ruleLength": "At least {count} characters",
+      "ruleCase": "Upper- and lowercase letters",
+      "ruleNumber": "At least one number",
+      "tooShort": "The password must be at least {count} characters long.",
+      "repeatRequired": "Please repeat the password.",
+      "passwordsMatch": "Passwords match"
     },
     "twoFactor": {
-      "title": "Two-factor verification",
-      "subtitle": "Please enter the 6-digit code from your authenticator app.",
-      "codeLabel": "Verification code",
+      "title": "Verification code",
+      "subtitle": "Open your authenticator app and enter the 6-digit code for Ployo.",
+      "codeLabel": "Code from the app",
       "backupCodeLabel": "Backup code",
       "submit": "Verify",
       "submitting": "Verifying...",
-      "useBackupCode": "Use a backup code instead",
-      "useAuthenticatorCode": "Use an authenticator code instead",
+      "useBackupCode": "Use a backup code",
+      "useAuthenticatorCode": "Use a code from the app",
       "invalidCode": "The code is invalid.",
-      "errorTitle": "Verification failed"
+      "errorTitle": "Verification failed",
+      "pill": "Two-factor protection",
+      "backupTitle": "Backup code",
+      "backupSubtitle": "No access to your app? Enter one of your backup codes. Each code works only once.",
+      "codeRefreshHint": "The code in your app refreshes every 30 seconds.",
+      "trustDevice": "Trust this device for 30 days",
+      "incompleteCode": "Please enter the full 6-digit code.",
+      "incompleteBackupCode": "Please enter a backup code.",
+      "noAccess": "Lost access?",
+      "contactSupport": "Contact support"
     },
     "confirm": {
-      "title": "Verify email",
-      "sentToPrefix": "We've sent a verification link to",
-      "sentWithEmailSuffix": ".",
-      "sentWithoutEmail": "your email address.",
-      "instructions": "Please check your inbox and click the link to activate your account.",
-      "noEmailHint": "Didn't get an email? Check your spam folder or sign in again to receive a new link.",
-      "backToLogin": "Go to sign in"
+      "title": "Almost there!",
+      "sentWithEmail": "We've sent a confirmation to <strong>{email}</strong>. Please verify your email address to sign in.",
+      "sentWithoutEmail": "We've sent you a confirmation email. Please verify your email address to sign in.",
+      "backToLogin": "Go to sign in",
+      "noEmail": "Didn't get an email?",
+      "checkSpam": "Please also check your spam folder.",
+      "resend": "Resend",
+      "resending": "Sending…",
+      "resent": "Sent again",
+      "resendErrorTitle": "Sending failed",
+      "resendErrorFallback": "The verification link couldn't be sent."
     },
     "select": {
       "title": "Select company",
@@ -2049,68 +2092,310 @@
     "deleteAccount": "Delete account"
   },
   "LandingPage": {
-    "navFeatures": "Features",
-    "navHowItWorks": "How it works",
-    "navPricing": "Pricing",
-    "navCompany": "Company",
-    "signIn": "Sign in",
-    "ctaStartShort": "Start",
-    "ctaStartFull": "Start for free",
-    "heroBadge": "NEW — Digital shift planning",
-    "heroTitle1": "Smarter HR.",
-    "heroTitle2": "Stronger teams.",
-    "heroDescription": "Ployo brings together shift planning, HR management, and cross-location analytics — in one sleek, modern platform.",
-    "ctaFreeTrial": "Start for free",
-    "ctaWatchDemo": "Watch demo",
-    "mockLiveLabel": "PLOYO LIVE",
-    "mockWeekLabel": "Week {week} · {year}",
-    "mockEmployees": "Employees",
-    "mockLocations": "Locations",
-    "mockUtilization": "Utilization",
-    "shiftEarly": "Early shift",
-    "shiftLate": "Late shift",
-    "shiftNight": "Night shift",
-    "mockActivityLabel": "Week 27 schedule published",
-    "mockOpenShiftsLabel": "Open shifts",
-    "mockOpenShiftsCaption": "This week",
-    "featuresEyebrow": "Features",
-    "featuresTitle": "Everything modern HR needs.",
-    "feature1Title": "Smart shift planning",
-    "feature1Description": "Automatic suggestions based on qualifications, availability, and legal requirements. Early detection of understaffing.",
-    "feature1Point1": "Drag-and-drop calendar",
-    "feature1Point2": "Automatic conflict checking",
-    "feature1Point3": "Push notifications",
-    "feature2Title": "Digital HR records",
-    "feature2Description": "All employee data in one place, GDPR-compliant. Contracts, references, vacation requests — audit-proof and instantly available.",
-    "feature2Point1": "GDPR-compliant storage",
-    "feature2Point2": "Document upload & management",
-    "feature2Point3": "Role-based access rights",
-    "feature3Title": "Real-time analytics",
-    "feature3Description": "See all locations in real time. Utilization, sick leave rates, overtime — at a glance, always up to date.",
-    "feature3Point1": "Live dashboard for all locations",
-    "feature3Point2": "Exportable reports (Excel, PDF)",
-    "feature3Point3": "Early-warning system for staffing gaps",
-    "howEyebrow": "How it works",
-    "howTitle": "Ready to go in three steps.",
-    "step1Title": "Set up your account",
-    "step1Description": "Registered in minutes. Create locations, invite your team, assign roles — ready to go right away.",
-    "step2Title": "Import your data",
-    "step2Description": "Import employee data from Excel or your existing systems. Ployo detects formats automatically.",
-    "step3Title": "Get started & save",
-    "step3Description": "Build schedules, maintain HR records, analyze reports — and save up to 40 hours a month.",
-    "testimonialQuote": "Ployo cut our shift planning from 8 hours to under 45 minutes a week. I can't imagine working without it anymore.",
-    "testimonialRole": "Head of HR · Hamburg Altona",
-    "ctaEyebrow": "Get started now — for free",
-    "ctaTitle1": "Your team deserves",
-    "ctaTitle2": "better HR.",
-    "ctaDescription": "Try it free for 14 days. No credit card required. Cancel anytime.",
-    "ctaBookDemo": "Book a demo",
-    "footerPrivacy": "Privacy Policy",
-    "footerImprint": "Imprint",
-    "footerTerms": "Terms",
-    "footerDeleteAccount": "Delete account",
-    "footerContact": "Contact",
-    "footerCopyright": "© {year} Ployo · Made in Germany"
+    "header": {
+      "homeAria": "Ployo home page",
+      "mainNavigation": "Main navigation",
+      "navFeatures": "Features",
+      "navApp": "Employee app",
+      "navSecurity": "Security",
+      "navPricing": "Pricing",
+      "login": "Sign in",
+      "register": "Sign up",
+      "account": "Account",
+      "toDashboard": "Go to dashboard",
+      "accountSettings": "Account settings",
+      "logout": "Sign out",
+      "openMenu": "Open menu",
+      "closeMenu": "Close menu"
+    },
+    "hero": {
+      "title": "The digital personnel file for your team",
+      "subtitle": "Employee data, shift planning, vacation and sick leave, time tracking and documents in one place – built for small and mid-sized businesses.",
+      "primaryCta": "Try for free",
+      "secondaryCta": "Learn more"
+    },
+    "benefits": {
+      "pill": "Benefits",
+      "title": "Everything for your HR admin. In one place.",
+      "subtitle": "Ployo brings together personnel files, shift planning, vacation and sick leave, time tracking and file storage – clearly organised and accessible to your whole team.",
+      "personnelFile": {
+        "title": "Digital personnel file",
+        "description": "Master data, contracts, payslips and documents for every person – sensitive data with its own access right."
+      },
+      "shifts": {
+        "title": "Shift planning",
+        "description": "Weekly view with shift templates – Ployo warns about understaffing, overlaps and rest periods that are too short."
+      },
+      "absences": {
+        "title": "Vacation & sick leave",
+        "description": "Vacation requests with approval, allowances, sick notes with medical certificates and day-off requests."
+      },
+      "files": {
+        "title": "File storage",
+        "description": "Versions, expiry dates and sharing, PIN-protected folders and recovery of deleted files within 24 hours."
+      },
+      "timeTracking": {
+        "title": "Time tracking",
+        "description": "Time clock in the browser and the app, clocking in via QR code on site and easy corrections."
+      },
+      "mock": {
+        "branchCenter": "Downtown branch",
+        "branchNorth": "North branch",
+        "warehouse": "Warehouse",
+        "mon": "Mon 26.10",
+        "tue": "Tue 27.10",
+        "wed": "Wed 28.10",
+        "thu": "Thu 29.10",
+        "fri": "Fri 30.10",
+        "dayOffWish": "Day off requested",
+        "allDay": "All day",
+        "team": "Team",
+        "service": "Service",
+        "entry": "Start date",
+        "contract": "Contract",
+        "fullTime": "Full-time",
+        "vacation": "Vacation",
+        "vacationDays": "18 of 28 days",
+        "active": "Active",
+        "week": "Week 44",
+        "published": "Published",
+        "pending": "Pending",
+        "absent": "Absent",
+        "since": "from {date}",
+        "clockedInSince": "Clocked in since {time}",
+        "clockOut": "Clock out",
+        "qrCode": "QR code"
+      }
+    },
+    "app": {
+      "pill": "Employee app",
+      "title": "Your team always has Ployo with them.",
+      "subtitle": "With the Ployo app, employees always have their shift plan, vacation balance and documents at hand – right on their smartphone.",
+      "imageAlt": "Ployo employee app: home screen with next shift, vacation balance, weekly hours and monthly overview",
+      "points": {
+        "shifts": "Shift plan always in view",
+        "requests": "Submit vacation, day-off requests and sick notes",
+        "clock": "Clock in – also via QR code on site",
+        "documents": "View own documents and payslips",
+        "push": "Push notifications when things change",
+        "more": "and much more"
+      }
+    },
+    "roles": {
+      "pill": "Roles & permissions",
+      "title": "Everyone sees exactly what they should.",
+      "subtitle": "Decide who may read or edit personnel files, shift plans, requests and documents – from management to temporary staff.",
+      "points": {
+        "templates": "Ready-made roles for HR, payroll, team leads and employees",
+        "custom": "Create your own roles freely",
+        "scope": "Access per area: everyone, own team or own data only"
+      },
+      "pickRole": "Choose role",
+      "roleTablist": "Role",
+      "hr": {
+        "label": "HR lead",
+        "description": "Manages personnel files, contracts, absences and hours across the whole company."
+      },
+      "payroll": {
+        "label": "Payroll",
+        "description": "Manages payslips and sensitive data, has read access to everything else."
+      },
+      "lead": {
+        "label": "Team lead",
+        "description": "Manages the shift plan and takes care of vacation and hours for their own team."
+      },
+      "staff": {
+        "label": "Employee",
+        "description": "Sees their own data, submits requests and records working hours."
+      },
+      "columnArea": "Area",
+      "columnAccess": "Access",
+      "columnScope": "Scope",
+      "noAccess": "No access",
+      "access": {
+        "manage": "Manage",
+        "write": "Write",
+        "read": "Read",
+        "request": "Request",
+        "report": "Report",
+        "record": "Record"
+      },
+      "scopes": {
+        "all": "Everyone",
+        "team": "Own team",
+        "own": "Own only",
+        "none": "–"
+      },
+      "modules": {
+        "masterData": "Master data",
+        "contracts": "Contracts",
+        "payroll": "Payslips",
+        "sensitiveData": "Sensitive data",
+        "vacation": "Vacation",
+        "sickness": "Sick leave",
+        "shiftPlanning": "Shift planning",
+        "timeTracking": "Time tracking"
+      },
+      "footnote": "Owners and admins have full access. You can create your own roles freely."
+    },
+    "security": {
+      "pill": "Security & privacy",
+      "title": "Your personnel data in safe hands.",
+      "subtitle": "Personnel files are among a company's most sensitive data. That's why security at Ployo isn't an extra, it's the foundation.",
+      "cards": {
+        "encryption": {
+          "title": "Encryption",
+          "description": "All data is transmitted via TLS. IBAN, tax ID and social security number are additionally stored encrypted (AES-256)."
+        },
+        "hosting": {
+          "title": "Hosted in Germany",
+          "description": "The application and documents run in data centres in Frankfurt am Main."
+        },
+        "processing": {
+          "title": "Data processing agreement",
+          "description": "Data processing agreement under Art. 28 GDPR – including with all service providers we use."
+        },
+        "access": {
+          "title": "Role-based access",
+          "description": "Only authorised people see sensitive personnel data – defined via roles, traceable via audit logs."
+        }
+      }
+    },
+    "roadmap": {
+      "pill": "Continuously improved",
+      "title": "Ployo grows with your requirements.",
+      "subtitle": "Ployo keeps getting better. This is how an idea from your daily work comes back to you as a new feature.",
+      "step": "Step {number}",
+      "steps": {
+        "listen": {
+          "title": "Listen",
+          "description": "We collect feedback and requests from companies that use Ployo every day."
+        },
+        "build": {
+          "title": "Build",
+          "description": "This turns into new features and improvements for everyday work."
+        },
+        "test": {
+          "title": "Test",
+          "description": "Every change goes through automated tests before it goes live."
+        },
+        "ship": {
+          "title": "Available immediately",
+          "description": "New features are available in the web app right away – no installation. The app receives updates via the stores."
+        }
+      },
+      "missingFeature": "Missing a feature?",
+      "suggestIdea": "Suggest an idea"
+    },
+    "pricing": {
+      "pill": "Plans",
+      "title": "The right plan for your team.",
+      "subtitle": "Fixed monthly prices by team size – every plan includes all features. Try it free for 14 days and switch plans at any time.",
+      "billingLabel": "Billing",
+      "monthly": "Monthly",
+      "yearly": "Yearly",
+      "recommended": "Recommended",
+      "perMonth": "/ month",
+      "plusVat": "plus VAT",
+      "billedMonthly": "billed monthly",
+      "billedYearlyAmount": "{amount} € per year",
+      "startTrial": "Try for free",
+      "starter": {
+        "name": "Starter",
+        "description": "For small teams of up to 5 employees.",
+        "limit": "Up to 5 employees",
+        "allFeatures": "All features included",
+        "lastPoint": "Try free for 14 days"
+      },
+      "professional": {
+        "name": "Professional",
+        "description": "For growing teams of up to 25 employees.",
+        "limit": "Up to 25 employees",
+        "allFeatures": "All features included",
+        "lastPoint": "Try free for 14 days"
+      },
+      "business": {
+        "name": "Business",
+        "description": "For larger businesses of up to 50 employees.",
+        "limit": "Up to 50 employees",
+        "allFeatures": "All features included",
+        "lastPoint": "Higher limits on request"
+      },
+      "includedTitle": "Included in every plan",
+      "included": {
+        "personnelFile": "Personnel file",
+        "shiftPlanning": "Shift planning",
+        "vacationSickness": "Vacation & sick leave",
+        "timeTracking": "Time tracking",
+        "files": "File storage",
+        "app": "Employee app",
+        "roles": "Roles & permissions"
+      },
+      "moreEmployees": "More than 50 employees?"
+    },
+    "faq": {
+      "pill": "FAQ",
+      "title": "Frequently asked questions",
+      "subtitle": "Your question isn't listed? Write to us, we're happy to help.",
+      "contact": "Get in touch",
+      "trial": {
+        "question": "Can I try Ployo for free?",
+        "answer": "Yes. You can try Ployo free for 14 days. When you start, you enter your payment details – you're only charged after the trial and can cancel at any time before then."
+      },
+      "audience": {
+        "question": "Which companies is Ployo suited for?",
+        "answer": "Ployo is built for small and mid-sized businesses – from a business with a handful of employees to companies with several locations and shift work."
+      },
+      "app": {
+        "question": "Is there an app for my employees?",
+        "answer": "Yes. With the Ployo app, your employees see their shift plan, submit vacation, day-off requests and sick notes, clock in via QR code and view their documents and payslips."
+      },
+      "dataLocation": {
+        "question": "Where is my data stored?",
+        "answer": "Ployo runs in data centres in Frankfurt am Main. Uploaded documents are stored in OVHcloud object storage, also in Frankfurt. Data processing agreements are in place with all service providers."
+      },
+      "plans": {
+        "question": "Which features are included in which plan?",
+        "answer": "Every plan includes all features. The plans only differ in the number of employees: up to 5, up to 25 or up to 50 – higher limits on request."
+      },
+      "cancel": {
+        "question": "Can I change or cancel my plan?",
+        "answer": "Yes. You can change your plan at any time in the settings under “Billing”. There is no minimum term: you can cancel at any time effective at the end of the current billing period. You can export your data at any time."
+      }
+    },
+    "cta": {
+      "title": "Ready for less paperwork?",
+      "subtitle": "Start with Ployo today and bring personnel files, shift planning and vacation together in one place.",
+      "primary": "Try for free",
+      "secondary": "Get in touch",
+      "points": {
+        "trial": "Try free for 14 days",
+        "billing": "Charged only after 14 days",
+        "cancel": "Cancel any time"
+      }
+    },
+    "footer": {
+      "tagline": "The digital personnel file for small and mid-sized businesses.",
+      "product": "Product",
+      "company": "Company",
+      "legal": "Legal",
+      "links": {
+        "benefits": "Benefits",
+        "app": "Employee app",
+        "roles": "Roles & permissions",
+        "security": "Security",
+        "plans": "Plans",
+        "contact": "Contact",
+        "faq": "FAQ",
+        "login": "Sign in",
+        "imprint": "Legal notice",
+        "privacy": "Privacy",
+        "terms": "Terms",
+        "deleteAccount": "Delete account"
+      },
+      "copyright": "© {year} Ployo. All rights reserved.",
+      "madeIn": "Made in Munich"
+    }
   },
   "LocationShiftPlanner": {
     "wishFreeStatusOpen": "Open",

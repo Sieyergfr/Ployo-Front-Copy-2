@@ -1,6 +1,4 @@
-import CardHeader from "@/components/Card/CardHeader";
 import TwoFactorVerifyForm from "@/components/auth/TwoFactorVerifyForm";
-import { getTranslations } from "next-intl/server";
 
 export const metadata = {
   title: "Zwei-Faktor-Bestätigung",
@@ -20,12 +18,8 @@ export default async function TwoFactorVerifyPage({
   searchParams: Promise<{ next?: string | string[] }>;
 }) {
   const next = sanitizeNext((await searchParams).next);
-  const t = await getTranslations("Auth.twoFactor");
 
-  return (
-    <>
-      <CardHeader title={t("title")} subtitle={t("subtitle")} />
-      <TwoFactorVerifyForm next={next} />
-    </>
-  );
+  // Der Kopf (Titel/Icon) wechselt mit dem Modus App-Code/Backup-Code und
+  // liegt deshalb im Client-Formular.
+  return <TwoFactorVerifyForm next={next} />;
 }

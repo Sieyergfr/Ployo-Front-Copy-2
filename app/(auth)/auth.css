@@ -1,0 +1,453 @@
+/*
+ * Auth-Bereich (Login, Registrieren, 2FA, Passwort vergessen/zurücksetzen):
+ * heller Glas-Look mit Raster, violettem Halo und pulsierenden Ringen.
+ *
+ * Bewusst ungeschichtetes CSS: Regeln hier gewinnen gegen die Tailwind-
+ * @utility-Klassen (Layer "utilities") aus globals.css. Alle Overrides der
+ * gemeinsamen Formular-Klassen (.input, .label, .btn-primary …) sind auf
+ * .au-shell begrenzt, damit Dashboard und Einladungsseite unverändert
+ * bleiben.
+ */
+
+.au-shell {
+  --au-violet: #8b6ed4;
+  --au-violet-ink: #7a3c9c;
+  --au-violet-light: rgba(167, 142, 232, 1);
+  --hx: 50%;
+  --hy: 40%;
+}
+
+/* ─── Hintergrund ─────────────────────────────────────── */
+
+.au-grid,
+.au-spot,
+.au-glow {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.au-grid {
+  background-image:
+    linear-gradient(to right, #e4e3df 1px, transparent 1px),
+    linear-gradient(to bottom, #e4e3df 1px, transparent 1px);
+  background-size: 56px 56px;
+  background-position: center center;
+  -webkit-mask-image: radial-gradient(ellipse 60% 70% at 50% 50%, #000 20%, transparent 72%);
+  mask-image: radial-gradient(ellipse 60% 70% at 50% 50%, #000 20%, transparent 72%);
+}
+
+.au-spot {
+  background-image:
+    linear-gradient(to right, rgba(139, 110, 212, 0.55) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(139, 110, 212, 0.55) 1px, transparent 1px);
+  background-size: 56px 56px;
+  background-position: center center;
+  -webkit-mask-image: radial-gradient(200px circle at var(--hx) var(--hy), #000 0%, rgba(0, 0, 0, 0.4) 45%, transparent 75%);
+  mask-image: radial-gradient(200px circle at var(--hx) var(--hy), #000 0%, rgba(0, 0, 0, 0.4) 45%, transparent 75%);
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+
+.au-glow {
+  background: radial-gradient(420px circle at var(--hx) var(--hy), rgba(139, 110, 212, 0.12), rgba(139, 110, 212, 0.04) 45%, transparent 70%);
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+
+.au-shell:hover .au-spot,
+.au-shell:hover .au-glow {
+  opacity: 1;
+}
+
+.au-halo {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 900px;
+  height: 700px;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(closest-side, rgba(139, 110, 212, 0.14), rgba(139, 110, 212, 0.04) 55%, transparent 100%);
+  pointer-events: none;
+}
+
+.au-rings {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.au-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1100px;
+  height: 1100px;
+  border-radius: 9999px;
+  background: radial-gradient(circle closest-side, rgba(139, 110, 212, 0) 45%, rgba(139, 110, 212, 0.05) 70%, rgba(139, 110, 212, 0.16) 89%, rgba(122, 60, 156, 0.06) 95%, rgba(139, 110, 212, 0) 100%);
+  transform: translate(-50%, -50%) scale(0.3);
+  opacity: 0;
+  pointer-events: none;
+  animation: au-ring 7.5s cubic-bezier(0.25, 0.5, 0.35, 1) infinite;
+}
+
+.au-ring-2 {
+  animation-delay: 2.5s;
+}
+
+.au-ring-3 {
+  animation-delay: 5s;
+}
+
+@keyframes au-ring {
+  0% {
+    transform: translate(-50%, -50%) scale(0.3);
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  55% {
+    opacity: 0.6;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 0;
+  }
+}
+
+/* ─── Karte ───────────────────────────────────────────── */
+
+.au-card {
+  background: rgba(255, 255, 255, 0.7);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  backdrop-filter: blur(20px) saturate(160%);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.85),
+    inset 0 0 0 1px rgba(14, 14, 14, 0.05),
+    inset 0 1px 0 #ffffff,
+    0 2px 6px rgba(14, 14, 14, 0.04),
+    0 30px 80px -24px rgba(139, 110, 212, 0.45);
+  animation: au-in 0.6s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+@keyframes au-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.au-logo-box {
+  background: #ffffff;
+  box-shadow: inset 0 0 0 1px #ecebe7, 0 10px 28px -10px rgba(139, 110, 212, 0.6);
+}
+
+.au-icon-badge {
+  background: rgba(139, 110, 212, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(139, 110, 212, 0.25), 0 12px 32px -10px rgba(139, 110, 212, 0.7);
+}
+
+.au-pill {
+  background: rgba(255, 255, 255, 0.8);
+  box-shadow: inset 0 0 0 1px #ecebe7, 0 6px 20px -8px rgba(139, 110, 212, 0.4);
+}
+
+.au-dot {
+  background: var(--au-violet);
+  box-shadow: 0 0 0 3px rgba(139, 110, 212, 0.18), 0 0 10px rgba(139, 110, 212, 0.8);
+}
+
+.au-step-active {
+  box-shadow: 0 0 10px rgba(139, 110, 212, 0.7);
+}
+
+.au-success-pop {
+  box-shadow: 0 0 0 8px rgba(139, 110, 212, 0.12), 0 16px 40px -10px rgba(139, 110, 212, 0.85);
+  animation: au-pop 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.3);
+}
+
+@keyframes au-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* ─── Links ───────────────────────────────────────────── */
+
+.au-link {
+  transition: color 0.2s ease, background 0.2s ease;
+}
+
+.au-link:hover {
+  color: #0e0e0e;
+  background: rgba(14, 14, 14, 0.045);
+}
+
+.au-text-link {
+  transition: color 0.2s ease;
+}
+
+.au-text-link:hover {
+  color: var(--au-violet-ink);
+}
+
+.au-focus:focus-visible {
+  outline: 2px solid #0e0e0e;
+  outline-offset: 2px;
+}
+
+/* ─── Gemeinsame Formular-Komponenten im Auth-Look ────── */
+
+.au-shell .label {
+  font-size: 10px;
+  color: #6e6e6b;
+}
+
+.au-shell .input {
+  min-height: 44px;
+  padding: 12px 13px;
+  font-family: var(--font-inter), system-ui, sans-serif;
+  font-size: 14px;
+  letter-spacing: normal;
+  color: #0e0e0e;
+  background: #fafaf8;
+  border-color: #e4e3df;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.au-shell .input::placeholder {
+  color: #9a9a96;
+}
+
+.au-shell .input:focus {
+  border-color: #0e0e0e;
+  background: #ffffff;
+}
+
+.au-shell .input-with-icon-right {
+  padding-right: 48px;
+}
+
+.au-shell .input-icon-right {
+  right: 4px;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  color: #6e6e6b;
+}
+
+.au-shell .input-icon-right:hover {
+  background: rgba(14, 14, 14, 0.05);
+}
+
+.au-shell .password-strength-bar {
+  height: 4px;
+}
+
+.au-shell .password-strength-text {
+  font-family: var(--font-inter), system-ui, sans-serif;
+  font-size: 12px;
+  color: #6e6e6b;
+}
+
+.au-shell .checkbox-label {
+  font-size: 13px;
+  line-height: 1.5;
+  color: #6e6e6b;
+}
+
+.au-shell .input.au-backup-input {
+  min-height: 52px;
+  padding: 14px 13px;
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 16px;
+  letter-spacing: 0.15em;
+  text-align: center;
+}
+
+/* Primärer CTA: schwarz mit violettem Glow, Glanzkante und Licht, das dem
+   Mauszeiger folgt (--mx/--my setzt AuthShell). */
+.au-shell .btn-primary {
+  --mx: 50%;
+  --my: 50%;
+  position: relative;
+  overflow: hidden;
+  min-height: 50px;
+  padding: 13px 20px;
+  font-size: 15px;
+  color: #ffffff;
+  background: #0e0e0e;
+  border: 1px solid rgba(167, 142, 232, 0.45);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -8px 16px rgba(139, 110, 212, 0.18),
+    0 10px 28px -8px rgba(139, 110, 212, 0.65);
+  transition: box-shadow 0.3s ease, transform 0.2s ease, border-color 0.3s ease;
+}
+
+.au-shell .btn-primary::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 52%;
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.02));
+  pointer-events: none;
+}
+
+.au-shell .btn-primary::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(130px circle at var(--mx) var(--my), rgba(167, 142, 232, 0.55), rgba(139, 110, 212, 0.18) 45%, transparent 70%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.au-shell .btn-primary > * {
+  position: relative;
+  z-index: 1;
+}
+
+.au-shell .btn-primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  background: #0e0e0e;
+  border-color: rgba(190, 170, 245, 0.7);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    inset 0 -8px 18px rgba(139, 110, 212, 0.28),
+    0 14px 36px -8px rgba(139, 110, 212, 0.85);
+}
+
+.au-shell .btn-primary:hover:not(:disabled)::after {
+  opacity: 1;
+}
+
+.au-shell .btn-primary:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
+}
+
+.au-shell .btn-primary:disabled {
+  cursor: default;
+  opacity: 0.75;
+}
+
+/* Sekundär (Social-Login, "Zur Anmeldung"): helles Glas. */
+.au-shell .btn-secondary {
+  min-height: 44px;
+  font-size: 13.5px;
+  color: #0e0e0e;
+  background: rgba(255, 255, 255, 0.75);
+  border: 1px solid #e4e3df;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 1px 2px rgba(14, 14, 14, 0.04);
+  transition: border-color 0.25s ease, background 0.25s ease, box-shadow 0.25s ease, transform 0.2s ease;
+}
+
+.au-shell .btn-secondary:hover:not(:disabled) {
+  background: #ffffff;
+  border-color: rgba(139, 110, 212, 0.5);
+  box-shadow: inset 0 1px 0 #ffffff, 0 10px 24px -12px rgba(139, 110, 212, 0.5);
+}
+
+.au-shell .btn-secondary:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.au-spin {
+  animation: au-spin 0.8s linear infinite;
+}
+
+@keyframes au-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ─── Code-Eingabe (2FA) ──────────────────────────────── */
+
+.au-otp-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  font-size: 16px;
+  color: transparent;
+  caret-color: transparent;
+  background: transparent;
+  cursor: text;
+}
+
+.au-otp-input:focus {
+  outline: none;
+}
+
+.au-box {
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.au-box-active {
+  border-color: #0e0e0e;
+  background: #ffffff;
+  box-shadow: 0 0 0 4px rgba(139, 110, 212, 0.14), 0 10px 24px -10px rgba(139, 110, 212, 0.6);
+}
+
+.au-box-error {
+  border-color: rgba(180, 51, 42, 0.6);
+}
+
+.au-caret {
+  width: 2px;
+  height: 24px;
+  border-radius: 2px;
+  background: var(--au-violet);
+  animation: au-blink 1s steps(1) infinite;
+}
+
+@keyframes au-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+.au-totp {
+  transition: stroke-dashoffset 1s linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .au-ring {
+    animation: none;
+    opacity: 0.6;
+    transform: translate(-50%, -50%) scale(0.55);
+  }
+
+  .au-card,
+  .au-success-pop,
+  .au-caret,
+  .au-spin {
+    animation: none;
+  }
+
+  .au-totp {
+    transition: none;
+  }
+}

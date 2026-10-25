@@ -1,12 +1,14 @@
 "use client";
 
+import SocialSignInButtons from "@/components/auth/SocialSignInButtons";
+import AuthAlert from "@/components/auth/AuthAlert";
 import PrimaryButton from "@/components/Buttons/PrimaryButton";
 import Checkbox from "@/components/inputs/checkbox";
 import PasswordInput from "@/components/inputs/password-input";
 import TextInput from "@/components/inputs/text-input";
 import { useToast } from "@/components/Toasts";
 import { authClient } from "@/lib/auth-client";
-import { ArrowRight } from "lucide-react";
+import { LoaderCircle } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -24,96 +26,94 @@ export default function RegisterForm({
   const { toast } = useToast();
   const t = useTranslations("Auth.register");
   const [isPending, setIsPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   return (
-    <form
-      className="flex flex-col gap-4"
-      onSubmit={async (event) => {
-        event.preventDefault();
+    <div className="mt-6" data-au-wide>
+      <SocialSignInButtons target={target} disabled={isPending} onError={setError} />
 
-        const formData = new FormData(event.currentTarget);
-        const firstName = String(formData.get("firstName") ?? "").trim();
-        const lastName = String(formData.get("lastName") ?? "").trim();
-        const email = String(formData.get("email") ?? "");
-        const password = String(formData.get("password") ?? "");
-        const passwordRepeat = String(formData.get("password_repeat") ?? "");
-        const termsAccepted = formData.get("terms") === "on";
+      <form
+        className="flex flex-col gap-[14px]"
+        onSubmit={async (event) => {
+          event.preventDefault();
+          setError(null);
 
-        if (password !== passwordRepeat) {
-          toast({
-            tone: "error",
-            title: t("signUpErrorTitle"),
-            subtitle: t("passwordMismatch"),
+          const formData = new FormData(event.currentTarget);
+          const firstName = String(formData.get("firstName") ?? "").trim();
+          const lastName = String(formData.get("lastName") ?? "").trim();
+          const email = String(formData.get("email") ?? "");
+          const password = String(formData.get("password") ?? "");
+          const termsAccepted = formData.get("terms") === "on";
+
+          if (!termsAccepted) {
+            setError(t("termsRequired"));
+            toast({
+              tone: "error",
+              title: t("signUpErrorTitle"),
+              subtitle: t("termsRequired"),
+            });
+            return;
+          }
+
+          setIsPending(true);
+
+          const { error: signUpError } = await authClient.signUp.email({
+            email,
+            password,
+            name: `${firstName} ${lastName}`.trim(),
+            callbackURL: target,
+            // @ts-expect-error – zusätzliches Feld, wird im auth.ts-Hook geprüft
+            terms: termsAccepted,
           });
-          return;
-        }
 
-        if (!termsAccepted) {
-          toast({
-            tone: "error",
-            title: t("signUpErrorTitle"),
-            subtitle: t("termsRequired"),
-          });
-          return;
-        }
+          setIsPending(false);
 
-        setIsPending(true);
+          if (signUpError) {
+            // USER_ALREADY_EXISTS wird in lib/auth.ts gesetzt. Eigener Text,
+            // damit die Meldung uebersetzbar bleibt und auf die naechsten
+            // Schritte zeigt (anmelden oder Passwort zuruecksetzen).
+            const message =
+              signUpError.code === "USER_ALREADY_EXISTS"
+                ? t("emailAlreadyRegistered")
+                : (signUpError.message ?? t("signUpErrorFallback"));
+            setError(message);
+            toast({
+              tone: "error",
+              title: t("signUpErrorTitle"),
+              subtitle: message,
+            });
+            return;
+          }
 
-        const { error: signUpError } = await authClient.signUp.email({
-          email,
-          password,
-          name: `${firstName} ${lastName}`.trim(),
-          callbackURL: target,
-          // @ts-expect-error – zusätzliches Feld, wird im auth.ts-Hook geprüft
-          terms: termsAccepted,
-        });
+          // Ist die Verifizierung aktiv, besteht noch keine Sitzung – der
+          // Nutzer muss zuerst den Link in der E-Mail bestätigen.
+          if (requiresEmailVerification) {
+            toast({
+              tone: "success",
+              title: t("accountCreatedTitle"),
+              subtitle: t("verifyEmailBody"),
+            });
+            router.push(`/confirm?email=${encodeURIComponent(email)}`);
+            return;
+          }
 
-        setIsPending(false);
-
-        if (signUpError) {
-          // USER_ALREADY_EXISTS wird in lib/auth.ts gesetzt. Eigener Text,
-          // damit die Meldung uebersetzbar bleibt und auf die naechsten
-          // Schritte zeigt (anmelden oder Passwort zuruecksetzen).
-          const message =
-            signUpError.code === "USER_ALREADY_EXISTS"
-              ? t("emailAlreadyRegistered")
-              : (signUpError.message ?? t("signUpErrorFallback"));
-          toast({
-            tone: "error",
-            title: t("signUpErrorTitle"),
-            subtitle: message,
-          });
-          return;
-        }
-
-        // Ist die Verifizierung aktiv, besteht noch keine Sitzung – der
-        // Nutzer muss zuerst den Link in der E-Mail bestätigen.
-        if (requiresEmailVerification) {
           toast({
             tone: "success",
             title: t("accountCreatedTitle"),
-            subtitle: t("verifyEmailBody"),
+            subtitle: t("redirectingBody"),
           });
-          router.push(`/confirm?email=${encodeURIComponent(email)}`);
-          return;
-        }
+          router.push(target);
+          router.refresh();
+        }}
+      >
+        {error && <AuthAlert>{error}</AuthAlert>}
 
-        toast({
-          tone: "success",
-          title: t("accountCreatedTitle"),
-          subtitle: t("redirectingBody"),
-        });
-        router.push(target);
-        router.refresh();
-      }}
-    >
-      <div className="card-form">
-        <div className="card-form-grid">
+        <div className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-2">
           <TextInput
             id="firstName"
             type="text"
             label={t("firstNameLabel")}
-            placeholder="Anna"
+            placeholder={t("firstNamePlaceholder")}
             autoComplete="given-name"
             required
           />
@@ -121,7 +121,7 @@ export default function RegisterForm({
             id="lastName"
             type="text"
             label={t("lastNameLabel")}
-            placeholder="Müller"
+            placeholder={t("lastNamePlaceholder")}
             autoComplete="family-name"
             required
           />
@@ -130,7 +130,7 @@ export default function RegisterForm({
           id="email"
           type="email"
           label={t("emailLabel")}
-          placeholder="name@unternehmen.de"
+          placeholder={t("emailPlaceholder")}
           autoComplete="email"
           required
         />
@@ -138,38 +138,33 @@ export default function RegisterForm({
           showStrength
           id="password"
           label={t("passwordLabel")}
-          placeholder="password"
+          placeholder={t("passwordPlaceholder")}
           autoComplete="new-password"
           minLength={12}
-          required
-        />
-        <PasswordInput
-          id="password_repeat"
-          label={t("passwordRepeatLabel")}
-          placeholder="password"
-          autoComplete="new-password"
           required
         />
 
         <Checkbox id="terms" alignItems="start">
           {t("termsPrefix")}{" "}
-          <Link href="/agb" className="text-ink underline underline-offset-2">
+          <Link href="/agb" className="au-text-link text-ink underline underline-offset-2">
             {t("termsLink")}
           </Link>{" "}
           {t("termsMiddle")}{" "}
-          <Link href="/datenschutz" className="text-ink underline underline-offset-2">
+          <Link href="/datenschutz" className="au-text-link text-ink underline underline-offset-2">
             {t("privacyLink")}
           </Link>{" "}
           {t("termsSuffix")}
         </Checkbox>
-      </div>
 
-      <PrimaryButton type="submit" disabled={isPending}>
-        <span className="leading-tight">
-          {isPending ? t("submitting") : t("submit")}
-        </span>
-        <ArrowRight size={12} strokeWidth={3} color="currentColor" />
-      </PrimaryButton>
-    </form>
+        <PrimaryButton type="submit" disabled={isPending} className="au-focus mt-1">
+          {isPending && (
+            <LoaderCircle size={16} strokeWidth={2} className="au-spin" aria-hidden="true" />
+          )}
+          <span className="leading-tight">
+            {isPending ? t("submitting") : t("submit")}
+          </span>
+        </PrimaryButton>
+      </form>
+    </div>
   );
 }
