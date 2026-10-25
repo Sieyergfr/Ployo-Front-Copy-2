@@ -227,10 +227,15 @@ export default function CreateTeamButton({
   tenant,
   employees,
   locations,
+  className,
+  children,
 }: {
   tenant: string;
   employees: DropdownOption[];
   locations: string[];
+  className?: string;
+  /** Eigener Inhalt, z. B. die gestrichelte Kachel im Kartenraster. */
+  children?: React.ReactNode;
 }) {
   const t = useTranslations("CreateTeamButton");
   const { openPopup, closePopup } = useUniversalPopup();
@@ -238,7 +243,7 @@ export default function CreateTeamButton({
   return (
     <button
       type="button"
-      className="btn btn-primary"
+      className={className ?? "btn btn-primary"}
       onClick={() => {
         openPopup({
           title: t("createTeam"),
@@ -253,8 +258,12 @@ export default function CreateTeamButton({
         });
       }}
     >
-      <Plus size={15} strokeWidth={2} />
-      {t("createTeam")}
+      {children ?? (
+        <>
+          <Plus size={15} strokeWidth={2} />
+          {t("createTeam")}
+        </>
+      )}
     </button>
   );
 }

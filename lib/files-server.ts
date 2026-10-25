@@ -1,6 +1,7 @@
 import "server-only";
 
-import { canAccessFileAcl, requireTenantFileAreaAccess } from "@/lib/file-access";
+import { canAccessFileAcl, loadTenantFolderAcl, requireTenantFileAreaAccess } from "@/lib/file-access";
+import { isFolderPathDenied, parseIdList } from "@/lib/file-folders";
 import {
   formatUpdatedAt,
   mapTenantFileToFileItem,
@@ -26,6 +27,11 @@ type TenantFileFolderRecord = {
   parentId: string | null;
   ownerName: string;
   locked: boolean;
+  pinned: boolean;
+  accessRoleIdsJson: unknown;
+  sharedWithEmployees: boolean;
+  visibleTeamIdsJson: unknown;
+  visibleLocationIdsJson: unknown;
   updatedAt: Date;
   createdAt: Date;
 };
@@ -48,8 +54,11 @@ export async function getRecentTenantFiles(tenantSlug: string, limit = 4) {
     },
   });
 
+  const folderAcl = await loadTenantFolderAcl(tenant.tenantId);
+
   return records
     .filter((file) => canAccessFileAcl(file.parent ?? file, tenant))
+    .filter((file) => file.teamId || !isFolderPathDenied(folderAcl, file.folderSlug, tenant))
     .slice(0, limit)
     .map(mapTenantFileToFileItem);
 }
@@ -59,7 +68,7 @@ export async function getFileUploadOptions(
 ): Promise<FileUploadOptions> {
   const tenant = await requireTenantAccess(tenantSlug, "files", "read");
 
-  const [employees, locations, roles, memberships] = await Promise.all([
+  const [employees, locations, roles, memberships, teams] = await Promise.all([
     prisma.tenantEmployee.findMany({
       where: { tenantId: tenant.tenantId },
       orderBy: { name: "asc" },
@@ -80,12 +89,18 @@ export async function getFileUploadOptions(
       orderBy: { createdAt: "asc" },
       include: { user: { select: { id: true, name: true, email: true } } },
     }),
+    prisma.tenantTeam.findMany({
+      where: { tenantId: tenant.tenantId },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
   ]);
 
   return {
     employees,
     locations,
     roles,
+    teams,
     users: memberships.map((membership) => ({
       id: membership.user.id,
       name: membership.user.name || membership.user.email,
@@ -530,7 +545,7 @@ export async function getFilesPageData(
           parent: { select: { accessRoleIdsJson: true, accessUserIdsJson: true } },
         },
       });
-  const tenantFolders: TenantFileFolderRecord[] = await prisma.tenantFileFolder.findMany({
+  const allTenantFolders: TenantFileFolderRecord[] = await prisma.tenantFileFolder.findMany({
         where: {
           tenantId: tenant.tenantId,
           employeeId: null,
@@ -541,8 +556,12 @@ export async function getFilesPageData(
         },
         orderBy: { name: "asc" },
       });
+  // Rollen-Einschränkung der Ordner (M1): gesperrte Ordner samt Inhalt und
+  // Unterordnern sind für diesen Aufrufer unsichtbar.
+  const tenantFolders = allTenantFolders.filter((folder) => !isFolderPathDenied(allTenantFolders, folder.path, tenant));
   const storedFiles = tenantFileRecords
     .filter((file) => canAccessFileAcl(file.parent ?? file, tenant))
+    .filter((file) => !isFolderPathDenied(allTenantFolders, file.folderSlug, tenant))
     .map(mapTenantFileToFileItem);
   const uploadOptions = await getFileUploadOptions(tenantSlug);
   const activeFile =
@@ -564,7 +583,7 @@ export async function getFilesPageData(
   const activeFolderRecord = currentFolderPath
     ? tenantFolders.find((folder) => folder.path === currentFolderPath)
     : undefined;
-  const folderOptions: FileFolder[] = tenantFolders.map((folder) => ({
+  const toFileFolder = (folder: TenantFileFolderRecord): FileFolder & { path: string } => ({
     slug: folder.path,
     path: folder.path,
     name: folder.name,
@@ -572,7 +591,17 @@ export async function getFilesPageData(
     updatedAt: formatUpdatedAt(folder.updatedAt ?? folder.createdAt),
     locked: folder.locked,
     fileCount: storedFiles.filter((file) => file.folderSlug === folder.path).length,
-  }));
+    id: folder.id,
+    pinned: folder.pinned,
+    accessRoleIds: parseIdList(folder.accessRoleIdsJson),
+    sharedWithEmployees: folder.sharedWithEmployees,
+    visibleTeamIds: parseIdList(folder.visibleTeamIdsJson),
+    visibleLocationIds: parseIdList(folder.visibleLocationIdsJson),
+    subfolderCount: tenantFolders.filter(
+      (child) => child.path.startsWith(`${folder.path}/`) && !child.path.slice(folder.path.length + 1).includes("/"),
+    ).length,
+  });
+  const folderOptions: FileFolder[] = tenantFolders.map(toFileFolder);
   const folderMap = new Map<string, FileFolder>();
   const childPrefix = currentFolderPath ? `${currentFolderPath}/` : "";
 
@@ -586,31 +615,12 @@ export async function getFilesPageData(
       continue;
     }
 
-    folderMap.set(folder.path, {
-      slug: folder.path,
-      path: folder.path,
-      name: folder.name,
-      owner: folder.ownerName,
-      updatedAt: formatUpdatedAt(folder.updatedAt ?? folder.createdAt),
-      locked: folder.locked,
-      fileCount: storedFiles.filter((file) => file.folderSlug === folder.path).length,
-    });
+    folderMap.set(folder.path, toFileFolder(folder));
   }
 
-  const folders = Array.from(folderMap.values());
-  const activeFolder = activeFolderRecord
-    ? {
-        slug: activeFolderRecord.path,
-        path: activeFolderRecord.path,
-        name: activeFolderRecord.name,
-        owner: activeFolderRecord.ownerName,
-        updatedAt: formatUpdatedAt(activeFolderRecord.updatedAt),
-        locked: activeFolderRecord.locked,
-        fileCount: storedFiles.filter(
-          (file) => file.folderSlug === activeFolderRecord.path,
-        ).length,
-      }
-    : undefined;
+  // Angeheftete Ordner zuerst, sonst alphabetisch (wie geladen).
+  const folders = Array.from(folderMap.values()).sort((a, b) => Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)));
+  const activeFolder = activeFolderRecord ? toFileFolder(activeFolderRecord) : undefined;
   // Ohne geöffneten Ordner zeigt die Ansicht "Zuletzt geändert" — über ALLE
   // Ordner hinweg (storedFiles ist bereits nach `updatedAt desc` sortiert),
   // nicht nur Dateien auf Wurzelebene. Eine in einen Unterordner hochgeladene

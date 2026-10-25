@@ -15,6 +15,7 @@ import {
   verifyTenantFileFolderPin,
   type FileOwnerType,
 } from "@/lib/storage/storage.service";
+import { moveTenantFile, renameTenantFile, updateTenantFolderSettings } from "@/lib/file-folder-service";
 import { markFolderUnlocked } from "@/lib/folder-pin";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { auth } from "@/lib/auth";
@@ -435,4 +436,76 @@ export async function restoreFileDeletionAction(input: {
 
     return result;
   }, "Löschung rückgängig machen");
+}
+
+/**
+ * Ordner-Einstellungen (M1). Die Felder kommen nur mit, wenn der Dialog sie
+ * zeigt: `settings=access` schickt Rollen/Freigabe, sonst nur Name/Anheften.
+ */
+export async function updateFolderSettingsAction(
+  _prevState: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  return withActionErrorHandling(async () => {
+    const tenant = formString(formData, "tenant");
+    const path = formString(formData, "path");
+
+    if (!tenant || !path) {
+      throw new Error("Ordner konnte nicht gespeichert werden.");
+    }
+
+    const withAccess = formString(formData, "settings") === "access";
+    const pinned = formString(formData, "pinned");
+
+    await updateTenantFolderSettings({
+      tenantSlug: tenant,
+      path,
+      name: formData.has("name") ? formString(formData, "name") : undefined,
+      pinned: pinned === "true" ? true : pinned === "false" ? false : undefined,
+      ...(withAccess
+        ? {
+            accessRoleIds: formStrings(formData, "roleId"),
+            sharedWithEmployees: formData.get("sharedWithEmployees") === "on",
+            visibleTeamIds: formStrings(formData, "teamId"),
+            visibleLocationIds: formStrings(formData, "locationId"),
+          }
+        : {}),
+    });
+
+    revalidatePath(filesPath(tenant), "layout");
+
+    return { success: true };
+  }, "Ordner-Einstellungen speichern");
+}
+
+export async function renameFileAction(_prevState: ActionState, formData: FormData): Promise<ActionState> {
+  return withActionErrorHandling(async () => {
+    const tenant = formString(formData, "tenant");
+    const fileId = formString(formData, "fileId");
+
+    if (!tenant || !fileId) {
+      throw new Error("Datei konnte nicht umbenannt werden.");
+    }
+
+    await renameTenantFile({ tenantSlug: tenant, fileId, name: formString(formData, "name") });
+    revalidatePath(filesPath(tenant), "layout");
+
+    return { success: true };
+  }, "Datei umbenennen");
+}
+
+export async function moveFileAction(_prevState: ActionState, formData: FormData): Promise<ActionState> {
+  return withActionErrorHandling(async () => {
+    const tenant = formString(formData, "tenant");
+    const fileId = formString(formData, "fileId");
+
+    if (!tenant || !fileId) {
+      throw new Error("Datei konnte nicht verschoben werden.");
+    }
+
+    await moveTenantFile({ tenantSlug: tenant, fileId, targetPath: formString(formData, "targetPath") });
+    revalidatePath(filesPath(tenant), "layout");
+
+    return { success: true };
+  }, "Datei verschieben");
 }

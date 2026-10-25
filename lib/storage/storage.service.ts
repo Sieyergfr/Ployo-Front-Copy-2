@@ -24,7 +24,12 @@ import {
   type TenantAccess,
   type TenantPermissionArea,
 } from "@/lib/tenant-access";
-import { canAccessFileAcl, requireFileAcl, requireTenantFileAreaAccess } from "@/lib/file-access";
+import {
+  canAccessFileAcl,
+  isTenantFolderPathDenied,
+  requireFileAcl,
+  requireTenantFileAreaAccess,
+} from "@/lib/file-access";
 import { assertFileDeletionAllowed } from "@/lib/retention-service";
 
 export type FileOwnerType = "tenant" | "employee" | "location" | "team";
@@ -119,6 +124,19 @@ async function assertFileFolderPinAccess(
     pin: pin ?? null,
     scope: fileFolderScope(file),
   });
+}
+
+/** Rollen-Einschränkung zentraler Ordner (M1) auch beim Schreiben durchsetzen. */
+async function assertTenantFolderWritable(tenantSlug: string, ownerType: FileOwnerType, path: string) {
+  if (ownerType !== "tenant" || !path) {
+    return;
+  }
+
+  const fileAccess = await requireTenantAccess(tenantSlug, "files", "read");
+
+  if (await isTenantFolderPathDenied(fileAccess, path)) {
+    throw new Error("FORBIDDEN");
+  }
 }
 
 function formatFileName(value: string) {
@@ -496,6 +514,7 @@ export async function uploadTenantFile(input: UploadTenantFileInput) {
   const bucketConfig = getStorageBucket(input.bucketId);
   const originalName = formatFileName(input.file.name);
   const requestedFolderSlug = normalizeFolderPath(input.folderSlug ?? "");
+  await assertTenantFolderWritable(input.tenantSlug, ownerType, requestedFolderSlug);
   const storedFolder = requestedFolderSlug
     ? await prisma.tenantFileFolder.findFirst({
         where: {
@@ -719,6 +738,7 @@ export async function createTenantFileFolder(input: {
 
   const slug = slugify(name);
   const parentPath = normalizeFolderPath(input.parentPath ?? "");
+  await assertTenantFolderWritable(input.tenantSlug, ownerType, parentPath);
   const parent = parentPath
     ? await prisma.tenantFileFolder.findFirst({
         where: {
@@ -1563,6 +1583,8 @@ export async function softDeleteTenantFileFolder(input: {
   if (!path) {
     throw new Error("Ordner nicht gefunden.");
   }
+
+  await assertTenantFolderWritable(input.tenantSlug, ownerType, path);
 
   const inFolder = (field: "path" | "folderSlug") => [
     { [field]: path },

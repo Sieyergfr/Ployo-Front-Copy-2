@@ -280,9 +280,14 @@ function CreateLocationForm({
 export default function CreateLocationButton({
   tenant,
   employees,
+  className,
+  children,
 }: {
   tenant: string;
   employees: EmployeeSelectorOption[];
+  className?: string;
+  /** Eigener Inhalt, z. B. die gestrichelte Kachel im Kartenraster. */
+  children?: React.ReactNode;
 }) {
   const t = useTranslations("CreateLocationButton");
   const { openPopup, closePopup } = useUniversalPopup();
@@ -290,7 +295,7 @@ export default function CreateLocationButton({
   return (
     <button
       type="button"
-      className="btn btn-primary"
+      className={className ?? "btn btn-primary"}
       onClick={() => {
         openPopup({
           title: t("createLocation"),
@@ -304,8 +309,12 @@ export default function CreateLocationButton({
         });
       }}
     >
-      <Plus size={15} strokeWidth={2} />
-      {t("addLocation")}
+      {children ?? (
+        <>
+          <Plus size={15} strokeWidth={2} />
+          {t("addLocation")}
+        </>
+      )}
     </button>
   );
 }

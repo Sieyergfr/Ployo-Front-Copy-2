@@ -100,6 +100,8 @@ export async function PATCH(
     leadInitials?: string;
     leadPhone?: string;
     leadEmail?: string;
+    /** Kontakt-E-Mail des Standorts; fehlt das Feld, bleibt sie unverändert. */
+    contactEmail?: string;
     accentClassName?: string;
     /** Leer = Standard des Unternehmens verwenden. `undefined` (Feld fehlt) = unverändert lassen. */
     openingHours?: unknown[];
@@ -148,6 +150,7 @@ export async function PATCH(
             leadPhone: body.leadPhone ?? current.lead.phone,
             leadEmail: body.leadEmail ?? current.lead.email,
           }),
+      ...(typeof body.contactEmail === "string" ? { contactEmail: body.contactEmail } : {}),
       accentClassName: body.accentClassName ?? current.accentClassName,
       // Bewusst nicht wie die Felder oben mit `current` auffüllen: `current.openingHours`
       // ist bereits der aufgelöste Wert (ggf. der Mandanten-Standard). Ohne

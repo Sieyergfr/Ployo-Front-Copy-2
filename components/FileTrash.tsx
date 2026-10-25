@@ -155,12 +155,17 @@ export function DeleteFileButton({
   fileId,
   name,
   compact = false,
+  className,
+  label,
   afterDelete,
 }: {
   tenant: string;
   fileId: string;
   name: string;
   compact?: boolean;
+  /** Eigene Optik (z. B. als Menüeintrag) — zeigt dann immer Icon + Text. */
+  className?: string;
+  label?: string;
   afterDelete?: () => void;
 }) {
   const t = useTranslations("FileTrash");
@@ -170,7 +175,7 @@ export function DeleteFileButton({
   return (
     <button
       type="button"
-      className={compact ? compactButtonClass : regularButtonClass}
+      className={className ?? (compact ? compactButtonClass : regularButtonClass)}
       title={t("deleteFile")}
       aria-label={t("deleteFileAria", { name })}
       onClick={() =>
@@ -189,7 +194,7 @@ export function DeleteFileButton({
       }
     >
       <Trash2 size={14} />
-      {!compact && t("delete")}
+      {(!compact || className) && (label ?? t("delete"))}
     </button>
   );
 }
@@ -202,6 +207,8 @@ export function DeleteFolderButton({
   path,
   name,
   compact = false,
+  className,
+  label,
   afterDelete,
 }: {
   tenant: string;
@@ -210,6 +217,8 @@ export function DeleteFolderButton({
   path: string;
   name: string;
   compact?: boolean;
+  className?: string;
+  label?: string;
   afterDelete?: () => void;
 }) {
   const t = useTranslations("FileTrash");
@@ -219,7 +228,7 @@ export function DeleteFolderButton({
   return (
     <button
       type="button"
-      className={compact ? compactButtonClass : regularButtonClass}
+      className={className ?? (compact ? compactButtonClass : regularButtonClass)}
       title={t("deleteFolder")}
       aria-label={t("deleteFolderAria", { name })}
       onClick={() =>
@@ -249,7 +258,7 @@ export function DeleteFolderButton({
       }
     >
       <Trash2 size={14} />
-      {!compact && t("deleteFolder")}
+      {(!compact || className) && (label ?? t("deleteFolder"))}
     </button>
   );
 }

@@ -121,6 +121,7 @@ export async function updateLocationAction(
       },
       status: formString(formData, "status", "active"),
       leadEmployeeId: formString(formData, "lead"),
+      contactEmail: formData.has("contactEmail") ? formString(formData, "contactEmail") : undefined,
       accentClassName: formString(formData, "color", "bg-ink"),
       openingHours: formOpeningHours(formData, "openingHours"),
       shiftMinStaffing: formMinStaffing(formData, "shiftMinStaffing"),

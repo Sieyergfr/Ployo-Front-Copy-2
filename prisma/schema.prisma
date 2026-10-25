@@ -716,6 +716,8 @@ model TenantLocation {
   activeToday        Int                      @default(0)
   shiftCount         Int                      @default(0)
   openPositions      Int                      @default(0)
+  /// Kontakt-E-Mail des Standorts (unabhängig von der Standortleitung).
+  contactEmail       String                   @default("")
   openingHoursJson   Json                     @default("[]")
   /// Mindestbesetzung pro Tag fuer DIESEN Standort. `null` = Vorgabe des
   /// Unternehmens (TenantSettings.shiftMinStaffing) gilt weiter -- so bleibt
@@ -1172,59 +1174,69 @@ model TenantEmployeeTimeline {
 }
 
 model TenantPayrollStatement {
-  id         String                 @id @default(cuid())
-  period     String
-  issuedAt   DateTime               @default(now())
-  gross      String                 @default("")
-  net        String                 @default("")
-  status     PayrollStatementStatus @default(available)
+  id            String                 @id @default(cuid())
+  period        String
+  issuedAt      DateTime               @default(now())
+  gross         String                 @default("")
+  net           String                 @default("")
+  status        PayrollStatementStatus @default(available)
   /// Erster Abruf durch den Mitarbeiter selbst ("gesehen"); `null` = noch nicht geöffnet.
   firstViewedAt DateTime?
-  createdAt  DateTime               @default(now())
-  updatedAt  DateTime               @updatedAt
-  tenantId   String
-  employeeId String
-  fileId     String                 @unique
-  tenant     Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  employee   TenantEmployee         @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  file       TenantFile             @relation(fields: [fileId], references: [id], onDelete: Restrict)
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+  tenantId      String
+  employeeId    String
+  fileId        String                 @unique
+  tenant        Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee      TenantEmployee         @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  file          TenantFile             @relation(fields: [fileId], references: [id], onDelete: Restrict)
 
   @@index([tenantId, employeeId])
   @@index([employeeId, period])
 }
 
 model TenantFileFolder {
-  id                 String                        @id @default(cuid())
-  tenantId           String
-  employeeId         String?
-  locationId         String?
-  teamId             String?
-  parentId           String?
+  id                     String                        @id @default(cuid())
+  tenantId               String
+  employeeId             String?
+  locationId             String?
+  teamId                 String?
+  parentId               String?
   /// Ordnervorlage, aus der der Ordner entstanden ist (lib/employee-folder-templates.ts).
-  templateId         String?
-  scope              String                        @default("tenant")
-  name               String
-  slug               String
-  path               String
-  ownerName          String                        @default("HR")
-  status             FileFolderStatus              @default(active)
-  locked             Boolean                       @default(false)
+  templateId             String?
+  scope                  String                        @default("tenant")
+  name                   String
+  slug                   String
+  path                   String
+  ownerName              String                        @default("HR")
+  status                 FileFolderStatus              @default(active)
+  locked                 Boolean                       @default(false)
   /// Ordner (inkl. Inhalt) vor dem Mitarbeiter selbst verborgen.
-  hiddenFromEmployee Boolean                       @default(false)
-  pinHash            String?
+  hiddenFromEmployee     Boolean                       @default(false)
+  pinHash                String?
+  /// Oben in der Ablage angeheftet (nur zentrale Ordner).
+  pinned                 Boolean                       @default(false)
+  /// Nur diese Rollen (plus Inhaber/Admin/HR) sehen den Ordner samt Inhalt und
+  /// Unterordnern; leer = alle mit Datei-Berechtigung (bisheriges Verhalten).
+  accessRoleIdsJson      Json                          @default("[]")
+  /// Zentraler Ordner für Mitarbeitende freigegeben (lesen/herunterladen in
+  /// "Mein Bereich" bzw. der App) — optional eingeschränkt auf Teams/Standorte.
+  sharedWithEmployees    Boolean                       @default(false)
+  visibleTeamIdsJson     Json                          @default("[]")
+  visibleLocationIdsJson Json                          @default("[]")
   /// Vom Nutzer gelöscht (status "inactive") — siehe TenantFile.deletionBatchId.
-  deletedAt          DateTime?
-  deletionBatchId    String?
-  deletedByName      String                        @default("")
-  createdAt          DateTime                      @default(now())
-  updatedAt          DateTime                      @updatedAt
-  tenant             Tenant                        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  employee           TenantEmployee?               @relation(fields: [employeeId], references: [id], onDelete: SetNull)
-  location           TenantLocation?               @relation(fields: [locationId], references: [id], onDelete: SetNull)
-  team               TenantTeam?                   @relation(fields: [teamId], references: [id], onDelete: SetNull)
-  parent             TenantFileFolder?             @relation("TenantFileFolderChildren", fields: [parentId], references: [id], onDelete: SetNull)
-  children           TenantFileFolder[]            @relation("TenantFileFolderChildren")
-  template           TenantEmployeeFolderTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  deletedAt              DateTime?
+  deletionBatchId        String?
+  deletedByName          String                        @default("")
+  createdAt              DateTime                      @default(now())
+  updatedAt              DateTime                      @updatedAt
+  tenant                 Tenant                        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee               TenantEmployee?               @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  location               TenantLocation?               @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  team                   TenantTeam?                   @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  parent                 TenantFileFolder?             @relation("TenantFileFolderChildren", fields: [parentId], references: [id], onDelete: SetNull)
+  children               TenantFileFolder[]            @relation("TenantFileFolderChildren")
+  template               TenantEmployeeFolderTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
 
   @@unique([tenantId, scope, path])
   @@index([tenantId, deletionBatchId])
@@ -1283,28 +1295,28 @@ model TenantReminder {
 }
 
 model TenantShift {
-  id           String          @id @default(cuid())
+  id           String             @id @default(cuid())
   key          String
   date         String
   weekday      Weekday
   startTime    String
   endTime      String
-  breakMinutes Int             @default(30)
-  team         String          @default("")
-  note         String          @default("")
-  conflict     Boolean         @default(false)
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
+  breakMinutes Int                @default(30)
+  team         String             @default("")
+  note         String             @default("")
+  conflict     Boolean            @default(false)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
   tenantId     String
   employeeId   String?
   locationId   String?
   /// Team der Schicht. `team` bleibt als Anzeige-/Schnappschuss-Text daneben
   /// (Vorlagen, veröffentlichte Wochen, App-Contract `team: string`).
   teamId       String?
-  tenant       Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  employee     TenantEmployee? @relation(fields: [employeeId], references: [id], onDelete: SetNull)
-  location     TenantLocation? @relation(fields: [locationId], references: [id], onDelete: SetNull)
-  teamRef      TenantTeam?     @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  tenant       Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee     TenantEmployee?    @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  location     TenantLocation?    @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  teamRef      TenantTeam?        @relation(fields: [teamId], references: [id], onDelete: SetNull)
   offers       TenantShiftOffer[]
 
   @@unique([tenantId, key])
@@ -1457,39 +1469,39 @@ model TenantWishFreeRequest {
  * Zeilensperre (`SELECT ... FOR UPDATE`) auf den Mitarbeiter ausfuehrt.
  */
 model TenantTimeEntry {
-  id                   String            @id @default(cuid())
+  id                   String                        @id @default(cuid())
   tenantId             String
   employeeId           String
   clockInAt            DateTime
   clockOutAt           DateTime?
   /// ID des Eintrags aus `TenantShiftWeek.publishedShiftsJson`, "" ohne Schicht.
-  shiftId              String            @default("")
+  shiftId              String                        @default("")
   plannedStartAt       DateTime?
   plannedEndAt         DateTime?
-  shiftLocation        String            @default("")
+  shiftLocation        String                        @default("")
   /// Standort, dessen QR-Code beim Einstempeln (bzw. optional beim Ausstempeln) gescannt wurde (nur App).
   /// Kann vom Schicht-Standort abweichen; der Name bleibt als Schnappschuss
   /// erhalten, auch wenn der Standort spaeter umbenannt/geloescht wird.
   clockInLocationId    String?
-  clockInLocationName  String            @default("")
+  clockInLocationName  String                        @default("")
   clockOutLocationId   String?
-  clockOutLocationName String            @default("")
+  clockOutLocationName String                        @default("")
   /// "app" | "web" | "manual" (von der Verwaltung nachgetragen)
-  source               String            @default("app")
+  source               String                        @default("app")
   /// Vom Cron automatisch ausgestempelt (vergessenes Ausstempeln).
-  autoClosed           Boolean           @default(false)
+  autoClosed           Boolean                       @default(false)
   /// Korrigierte Pausendauer - ersetzt die gestempelten Pausen in der Berechnung.
   breakMinutesOverride Int?
   /// Grund der letzten Korrektur bzw. Notiz zum manuellen Eintrag.
-  note                 String            @default("")
+  note                 String                        @default("")
   correctedAt          DateTime?
-  correctedBy          String            @default("")
-  createdAt            DateTime          @default(now())
-  updatedAt            DateTime          @updatedAt
-  tenant               Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  employee             TenantEmployee    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  clockInLocation      TenantLocation?   @relation("TimeEntryClockInLocation", fields: [clockInLocationId], references: [id], onDelete: SetNull)
-  clockOutLocation     TenantLocation?   @relation("TimeEntryClockOutLocation", fields: [clockOutLocationId], references: [id], onDelete: SetNull)
+  correctedBy          String                        @default("")
+  createdAt            DateTime                      @default(now())
+  updatedAt            DateTime                      @updatedAt
+  tenant               Tenant                        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee             TenantEmployee                @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  clockInLocation      TenantLocation?               @relation("TimeEntryClockInLocation", fields: [clockInLocationId], references: [id], onDelete: SetNull)
+  clockOutLocation     TenantLocation?               @relation("TimeEntryClockOutLocation", fields: [clockOutLocationId], references: [id], onDelete: SetNull)
   breaks               TenantTimeBreak[]
   correctionRequests   TenantTimeCorrectionRequest[]
 

@@ -101,6 +101,7 @@ type LocationRecord = {
   leadName: string;
   leadPhone: string;
   leadEmail: string;
+  contactEmail?: string;
   leadEmployeeId: string | null;
   members?: { employeeId: string; initials: string; name: string }[];
   activities?: { actor: string; text: string; tone: string; createdAt: Date }[];
@@ -343,7 +344,9 @@ function toLocation(
     // Live aus tatsächlich geplanten Schichten dieser Woche statt aus dem nie
     // aktualisierten `shiftCount`-Feld — siehe To-Do "Standorte: Schichten-Anzahl falsch".
     shiftCount: (record.shifts ?? []).length,
-    openPositions: record.openPositions,
+    // Live wie `shiftCount`: offene (unbesetzte) Schichten dieser Woche statt
+    // des nie aktualisierten `openPositions`-Felds.
+    openPositions: record.shifts ? record.shifts.filter((shift) => !shift.employeeId).length : record.openPositions,
     openingHours,
     usesDefaultOpeningHours: openingHoursOverride.length === 0,
     shiftMinStaffing: record.shiftMinStaffing,
@@ -352,6 +355,7 @@ function toLocation(
     utilizationCaption: record.utilizationCaption,
     status: normalizeStatus(record.status),
     accentClassName: record.accentClassName,
+    contactEmail: record.contactEmail ?? "",
     lead: {
       employeeId: record.leadEmployeeId,
       initials: record.leadInitials,
@@ -569,7 +573,8 @@ export function toLocationAdminPayload(location: Location) {
     leadInitials: hasRealLead ? location.lead.initials : null,
     leadPhone: hasRealLead ? location.lead.phone : null,
     leadEmail: hasRealLead ? location.lead.email : null,
-    email: location.lead.email || null,
+    email: location.contactEmail || location.lead.email || null,
+    contactEmail: location.contactEmail || null,
     accentClassName: location.accentClassName,
     employeeCount: location.employeeCount,
     activeToday: location.activeToday,
@@ -709,6 +714,7 @@ export async function createTenantLocation(input: {
       leadName: lead?.leadName ?? "Keine Leitung",
       leadPhone: lead?.leadPhone ?? "",
       leadEmail: input.email.trim() || lead?.leadEmail || "",
+      contactEmail: input.email.trim(),
       openingHoursJson: input.openingHours ?? [],
       shiftMinStaffing: normalizeMinStaffing(input.shiftMinStaffing),
     },
@@ -750,12 +756,18 @@ export async function updateTenantLocation(input: {
   leadInitials?: string;
   leadPhone?: string;
   leadEmail?: string;
+  /** Kontakt-E-Mail des Standorts (M5); `undefined` = unverändert. */
+  contactEmail?: string;
   accentClassName: string;
   /** Leer = Mandanten-Standard verwenden, siehe resolveEffectiveOpeningHours(). */
   openingHours?: OpeningHoursDay[];
   /** `null` = Unternehmensvorgabe (TenantSettings.shiftMinStaffing) gilt weiter. */
   shiftMinStaffing?: number | null;
 }) {
+  if (input.contactEmail !== undefined) {
+    assertValidLocationEmail(input.contactEmail.trim());
+  }
+
   assertKnownLocationKind(input.kind.trim());
   assertKnownLocationColor(input.accentClassName.trim());
   const address = assertRequiredAddress(input.address);
@@ -821,6 +833,7 @@ export async function updateTenantLocation(input: {
       leadInitials: leadInitials.trim() || "--",
       leadPhone: leadPhone.trim(),
       leadEmail: leadEmail.trim(),
+      ...(input.contactEmail !== undefined ? { contactEmail: input.contactEmail.trim() } : {}),
       accentClassName: input.accentClassName.trim() || "bg-ink",
       ...(input.openingHours !== undefined ? { openingHoursJson: input.openingHours } : {}),
       ...(input.shiftMinStaffing !== undefined

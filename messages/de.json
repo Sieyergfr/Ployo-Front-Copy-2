@@ -1282,7 +1282,10 @@
   },
   "TeamsPage": {
     "eyebrow": "Organisationsstruktur",
-    "title": "Teams"
+    "title": "Teams",
+    "subtitle": "Organisationsstruktur · {count, plural, one {# Team} other {# Teams}}",
+    "createTitle": "Team erstellen",
+    "createHint": "Mitarbeiter gruppieren – z. B. Küche, Service oder Verkauf."
   },
   "TeamsListClient": {
     "noLocations": "Keine Standorte",
@@ -1291,7 +1294,23 @@
     "noTeamsYet": "Noch keine Teams",
     "noResults": "Keine Treffer",
     "noTeamsYetDescription": "Lege das erste Team an, um Mitarbeiter zu organisieren.",
-    "noResultsDescription": "Für diese Suche wurde kein Team gefunden."
+    "noResultsDescription": "Für diese Suche wurde kein Team gefunden.",
+    "noMembers": "Noch keine Mitglieder",
+    "onDuty": "{count} im Dienst",
+    "onDutyAbsent": "{onDuty} im Dienst · {absent} abwesend",
+    "noDescription": "Keine Beschreibung",
+    "noLead": "Keine Teamleitung",
+    "memberCount": "{count, plural, one {# Mitglied} other {# Mitglieder}}",
+    "view": {
+      "cards": "Karten",
+      "table": "Tabelle"
+    },
+    "column": {
+      "name": "Team",
+      "locations": "Standorte",
+      "lead": "Teamleitung",
+      "members": "Mitglieder"
+    }
   },
   "TeamEditControls": {
     "colorMarker": "Farbmarkierung",
@@ -1356,7 +1375,10 @@
   },
   "LocationsPage": {
     "eyebrow": "Unternehmensstruktur",
-    "title": "Standorte"
+    "title": "Standorte",
+    "subtitle": "Unternehmensstruktur · {count, plural, one {# Standort} other {# Standorte}}",
+    "createTitle": "Standort anlegen",
+    "createHint": "Filiale, Lager oder Büro hinzufügen und Teams, Schichten und Dateien verknüpfen."
   },
   "LocationsListClient": {
     "active": "Aktiv",
@@ -1368,7 +1390,33 @@
     "noLocationsYet": "Noch keine Standorte",
     "noResults": "Keine Treffer",
     "noLocationsYetDescription": "Lege den ersten Standort an, um Teams, Schichten und Dateien zu verknüpfen.",
-    "noResultsDescription": "Für diese Suche wurde kein Standort gefunden."
+    "noResultsDescription": "Für diese Suche wurde kein Standort gefunden.",
+    "open": "Offen",
+    "noLead": "Keine Leitung",
+    "statusInactive": "Standort inaktiv",
+    "open24h": "Rund um die Uhr geöffnet",
+    "closedToday": "Heute geschlossen",
+    "openUntil": "Geöffnet · bis {time} Uhr",
+    "closedNow": "Geschlossen · heute {from}–{to}",
+    "filterLabel": "Status",
+    "filter": {
+      "all": "Alle",
+      "active": "Aktiv",
+      "inactive": "Inaktiv"
+    },
+    "view": {
+      "cards": "Karten",
+      "table": "Tabelle"
+    },
+    "column": {
+      "name": "Standort",
+      "address": "Adresse",
+      "employees": "Mitarbeiter",
+      "shifts": "Schichten",
+      "open": "Offen",
+      "lead": "Leitung",
+      "today": "Heute"
+    }
   },
   "CreateLocationButton": {
     "locationColor": "Standortfarbe",
@@ -1426,7 +1474,8 @@
     "defaultOpeningHoursNote": "Standard-Öffnungszeiten des Unternehmens.",
     "activity": "Aktivität",
     "live": "LIVE",
-    "clockQrTitle": "Stempel-QR-Code"
+    "clockQrTitle": "Stempel-QR-Code",
+    "contactEmail": "Kontakt E-Mail"
   },
   "LocationMetrics": {
     "locationsTotal": "Standorte gesamt",
@@ -2778,7 +2827,8 @@
     "shiftOffersSubtitle": "Du wurdest angefragt. Wer zuerst zusagt, bekommt die Schicht.",
     "shiftOfferReplaces": "Vertretung für {name}",
     "shiftOfferAccept": "Übernehmen",
-    "shiftOfferDecline": "Ablehnen"
+    "shiftOfferDecline": "Ablehnen",
+    "sharedFolder": "Geteilt · {name}"
   },
   "MyTimes": {
     "title": "Meine Zeiten",
@@ -3348,5 +3398,60 @@
     "applying": "Wird angewendet…",
     "saving": "Wird gespeichert…",
     "applyLabel": "Vorlage anwenden"
+  },
+  "FilesUi": {
+    "subtitle": "Dateien für {company}",
+    "newFolder": "Neuer Ordner",
+    "newSubfolder": "Unterordner anlegen",
+    "teamsLabel": "Teams {names}",
+    "allEmployees": "Alle Mitarbeitenden",
+    "onlyRoles": "Nur {names}",
+    "adminOnly": "Nur Verwaltung",
+    "folderCount": "{count, plural, one {# Ordner} other {# Ordner}}",
+    "fileCount": "{count, plural, one {# Datei} other {# Dateien}}",
+    "folderMenu": "Aktionen für Ordner {name}",
+    "open": "Öffnen",
+    "rename": "Umbenennen",
+    "unpin": "Lösen",
+    "pin": "Anheften",
+    "visibility": "Sichtbarkeit & Rechte",
+    "delete": "Löschen",
+    "protectedContent": "Inhalt geschützt",
+    "fileMenu": "Aktionen für {name}",
+    "details": "Details & Versionen",
+    "moveEllipsis": "Verschieben …",
+    "newVersion": "Neue Version hochladen",
+    "breadcrumb": "Ordnerpfad",
+    "allFiles": "Alle Dateien",
+    "emptyFolder": "Noch keine Dateien in diesem Ordner.",
+    "emptyRoot": "Noch keine Dateien hochgeladen.",
+    "filesWithoutFolder": "Dateien ohne Ordner",
+    "filesInFolder": "Dateien in diesem Ordner",
+    "recentlyAdded": "Zuletzt hinzugefügt",
+    "noSearchResults": "Keine Treffer für diese Suche.",
+    "searchInFolder": "In diesem Ordner suchen",
+    "searchAll": "Alle Dateien durchsuchen",
+    "folderSettings": "Sichtbarkeit & Rechte",
+    "cancel": "Abbrechen",
+    "saving": "Wird gespeichert…",
+    "save": "Speichern",
+    "folderName": "Ordnername",
+    "whoMaySee": "Wer darf den Ordner sehen?",
+    "lockedNoShare": "Dieser Ordner ist mit PIN geschützt und bleibt deshalb der Verwaltung vorbehalten.",
+    "shareTitle": "Für Mitarbeitende sichtbar",
+    "shareHintOn": "Mitarbeitende sehen den Ordner unter „Mein Bereich“ und können Dateien herunterladen.",
+    "shareHintOff": "Nur für die Verwaltung sichtbar – Mitarbeitende sehen den Ordner nicht.",
+    "limitTeams": "Nur für Teams",
+    "limitHint": "Keine Auswahl = alle Mitarbeitenden.",
+    "limitLocations": "Nur für Standorte",
+    "limitRoles": "Nur diese Rollen",
+    "limitRolesHint": "Keine Auswahl = alle Rollen mit Datei-Berechtigung. Inhaber, Admins und HR sehen den Ordner immer.",
+    "renameFile": "Datei umbenennen",
+    "fileName": "Dateiname",
+    "renameFolder": "Ordner umbenennen",
+    "moveFile": "Datei verschieben",
+    "noFolder": "Ohne Ordner",
+    "targetFolder": "Zielordner",
+    "move": "Verschieben"
   }
 }

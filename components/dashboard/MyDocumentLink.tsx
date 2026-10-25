@@ -11,11 +11,14 @@ export default function MyDocumentLink({
   fileId,
   name,
   badge,
+  source = "documents",
 }: {
   tenant: string;
   fileId: string;
   name: string;
   badge?: ReactNode;
+  /** "shared-files": Datei aus einem für mich freigegebenen Ordner (M1). */
+  source?: "documents" | "shared-files";
 }) {
   const t = useTranslations("MyArea");
   const { toast } = useToast();
@@ -28,7 +31,7 @@ export default function MyDocumentLink({
     if (target) target.opener = null;
 
     const response = await fetch(
-      `/api/me/documents/${encodeURIComponent(fileId)}/download?tenant=${encodeURIComponent(tenant)}`,
+      `/api/me/${source}/${encodeURIComponent(fileId)}/download?tenant=${encodeURIComponent(tenant)}`,
     ).catch(() => null);
     const data = (await response?.json().catch(() => null)) as { url?: string; error?: string } | null;
 

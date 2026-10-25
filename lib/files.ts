@@ -6,6 +6,14 @@ export type FileFolder = {
   owner: string;
   updatedAt: string;
   locked?: boolean;
+  /** Ordner-Einstellungen der zentralen Ablage (M1) — nur dort gesetzt. */
+  id?: string;
+  pinned?: boolean;
+  accessRoleIds?: string[];
+  sharedWithEmployees?: boolean;
+  visibleTeamIds?: string[];
+  visibleLocationIds?: string[];
+  subfolderCount?: number;
 };
 
 export type FileItem = {
@@ -41,6 +49,8 @@ export type FileUploadOption = {
 };
 
 export type FileUploadOptions = {
+  /** Für die Ordner-Freigabe (M1) — fehlt in älteren Aufrufen. */
+  teams?: Array<{ id: string; name: string }>;
   employees: FileUploadOption[];
   locations: FileUploadOption[];
   roles: FileUploadOption[];

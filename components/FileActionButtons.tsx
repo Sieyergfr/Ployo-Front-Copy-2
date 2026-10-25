@@ -1045,11 +1045,16 @@ export function VersionUploadButton({
   tenant,
   returnPath,
   compact = false,
+  className,
+  label,
 }: {
   file: FileItem;
   tenant?: string;
   returnPath?: string;
   compact?: boolean;
+  /** Eigene Optik (z. B. als Menüeintrag) — zeigt dann immer Icon + Text. */
+  className?: string;
+  label?: string;
 }) {
   const t = useTranslations("FileActionButtons");
   const { openPopup, closePopup } = useUniversalPopup();
@@ -1073,9 +1078,10 @@ export function VersionUploadButton({
     <button
       type="button"
       className={
-        compact
+        className ??
+        (compact
           ? "flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-[8px] border border-border bg-white text-muted transition-colors hover:border-muted hover:text-ink disabled:cursor-not-allowed disabled:opacity-45"
-          : "btn btn-primary btn-sm"
+          : "btn btn-primary btn-sm")
       }
       title={t("uploadNewVersionTitle")}
       aria-label={t("uploadNewVersionAria", { name: file.name })}
@@ -1083,7 +1089,7 @@ export function VersionUploadButton({
       onClick={openVersionPopup}
     >
       <Upload size={14} />
-      {!compact && t("uploadNewVersionTitle")}
+      {(!compact || className) && (label ?? t("uploadNewVersionTitle"))}
     </button>
   );
 }
@@ -1099,11 +1105,15 @@ export function FileSoftDeleteButton({
   tenant,
   returnPath,
   compact = false,
+  className,
+  label,
 }: {
   file: FileItem;
   tenant?: string;
   returnPath?: string;
   compact?: boolean;
+  className?: string;
+  label?: string;
 }) {
   const router = useRouter();
 
@@ -1117,6 +1127,8 @@ export function FileSoftDeleteButton({
       fileId={file.storageFileId}
       name={file.name}
       compact={compact}
+      className={className}
+      label={label}
       afterDelete={() => router.push(returnPath)}
     />
   );
@@ -1129,6 +1141,8 @@ export function CreateFolderButton({
   ownerId,
   parentPath,
   label,
+  className,
+  children,
 }: {
   tenant?: string;
   returnPath?: string;
@@ -1137,6 +1151,9 @@ export function CreateFolderButton({
   parentPath?: string;
   /** In einem geöffneten Ordner heißt der Button "Unterordner" — der Dialog bleibt derselbe. */
   label?: string;
+  className?: string;
+  /** Eigener Inhalt statt Icon + Text (z. B. die "Neuer Ordner"-Kachel). */
+  children?: ReactNode;
 }) {
   const t = useTranslations("FileActionButtons");
   const { openPopup, closePopup } = useUniversalPopup();
@@ -1144,7 +1161,7 @@ export function CreateFolderButton({
   return (
     <button
       type="button"
-      className="btn btn-secondary btn-sm"
+      className={className ?? "btn btn-secondary btn-sm"}
       disabled={!tenant || !returnPath}
       onClick={() =>
         openPopup({
@@ -1163,8 +1180,12 @@ export function CreateFolderButton({
         })
       }
     >
-      <FolderPlus size={14} />
-      {label ?? t("createFolder")}
+      {children ?? (
+        <>
+          <FolderPlus size={14} />
+          {label ?? t("createFolder")}
+        </>
+      )}
     </button>
   );
 }
@@ -1178,6 +1199,7 @@ export function UploadFileButton({
   folderName,
   folderOptions,
   uploadOptions,
+  className,
 }: {
   tenant?: string;
   returnPath?: string;
@@ -1187,6 +1209,7 @@ export function UploadFileButton({
   folderName?: string;
   folderOptions?: FileFolder[];
   uploadOptions?: FileUploadOptions;
+  className?: string;
 }) {
   const t = useTranslations("FileActionButtons");
   const { openPopup, closePopup } = useUniversalPopup();
@@ -1194,7 +1217,7 @@ export function UploadFileButton({
   return (
     <button
       type="button"
-      className="btn btn-primary btn-sm"
+      className={className ?? "btn btn-primary btn-sm"}
       disabled={!tenant || !returnPath}
       onClick={() =>
         openPopup({

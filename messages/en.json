@@ -1282,7 +1282,10 @@
   },
   "TeamsPage": {
     "eyebrow": "Org structure",
-    "title": "Teams"
+    "title": "Teams",
+    "subtitle": "Organisation · {count, plural, one {# team} other {# teams}}",
+    "createTitle": "Create team",
+    "createHint": "Group employees – e.g. kitchen, service or sales."
   },
   "TeamsListClient": {
     "noLocations": "No locations",
@@ -1291,7 +1294,23 @@
     "noTeamsYet": "No teams yet",
     "noResults": "No matches",
     "noTeamsYetDescription": "Create your first team to organize employees.",
-    "noResultsDescription": "No team was found for this search."
+    "noResultsDescription": "No team was found for this search.",
+    "noMembers": "No members yet",
+    "onDuty": "{count} on duty",
+    "onDutyAbsent": "{onDuty} on duty · {absent} absent",
+    "noDescription": "No description",
+    "noLead": "No team lead",
+    "memberCount": "{count, plural, one {# member} other {# members}}",
+    "view": {
+      "cards": "Cards",
+      "table": "Table"
+    },
+    "column": {
+      "name": "Team",
+      "locations": "Locations",
+      "lead": "Team lead",
+      "members": "Members"
+    }
   },
   "TeamEditControls": {
     "colorMarker": "Color marker",
@@ -1356,7 +1375,10 @@
   },
   "LocationsPage": {
     "eyebrow": "Org structure",
-    "title": "Locations"
+    "title": "Locations",
+    "subtitle": "Company structure · {count, plural, one {# location} other {# locations}}",
+    "createTitle": "Add location",
+    "createHint": "Add a branch, warehouse or office and link teams, shifts and files."
   },
   "LocationsListClient": {
     "active": "Active",
@@ -1368,7 +1390,33 @@
     "noLocationsYet": "No locations yet",
     "noResults": "No matches",
     "noLocationsYetDescription": "Create your first location to link teams, shifts, and files.",
-    "noResultsDescription": "No location was found for this search."
+    "noResultsDescription": "No location was found for this search.",
+    "open": "Open",
+    "noLead": "No lead",
+    "statusInactive": "Location inactive",
+    "open24h": "Open around the clock",
+    "closedToday": "Closed today",
+    "openUntil": "Open · until {time}",
+    "closedNow": "Closed · today {from}–{to}",
+    "filterLabel": "Status",
+    "filter": {
+      "all": "All",
+      "active": "Active",
+      "inactive": "Inactive"
+    },
+    "view": {
+      "cards": "Cards",
+      "table": "Table"
+    },
+    "column": {
+      "name": "Location",
+      "address": "Address",
+      "employees": "Employees",
+      "shifts": "Shifts",
+      "open": "Open",
+      "lead": "Lead",
+      "today": "Today"
+    }
   },
   "CreateLocationButton": {
     "locationColor": "Location color",
@@ -1426,7 +1474,8 @@
     "defaultOpeningHoursNote": "The company's default opening hours.",
     "activity": "Activity",
     "live": "LIVE",
-    "clockQrTitle": "Clock-in QR code"
+    "clockQrTitle": "Clock-in QR code",
+    "contactEmail": "Contact email"
   },
   "LocationMetrics": {
     "locationsTotal": "Locations total",
@@ -2778,7 +2827,8 @@
     "shiftOffersSubtitle": "You were asked. Whoever accepts first gets the shift.",
     "shiftOfferReplaces": "Covering for {name}",
     "shiftOfferAccept": "Take shift",
-    "shiftOfferDecline": "Decline"
+    "shiftOfferDecline": "Decline",
+    "sharedFolder": "Shared · {name}"
   },
   "MyTimes": {
     "title": "My times",
@@ -3348,5 +3398,60 @@
     "applying": "Applying…",
     "saving": "Saving…",
     "applyLabel": "Apply template"
+  },
+  "FilesUi": {
+    "subtitle": "Files for {company}",
+    "newFolder": "New folder",
+    "newSubfolder": "New subfolder",
+    "teamsLabel": "Teams {names}",
+    "allEmployees": "All employees",
+    "onlyRoles": "Only {names}",
+    "adminOnly": "Admins only",
+    "folderCount": "{count, plural, one {# folder} other {# folders}}",
+    "fileCount": "{count, plural, one {# file} other {# files}}",
+    "folderMenu": "Actions for folder {name}",
+    "open": "Open",
+    "rename": "Rename",
+    "unpin": "Unpin",
+    "pin": "Pin",
+    "visibility": "Visibility & access",
+    "delete": "Delete",
+    "protectedContent": "Content protected",
+    "fileMenu": "Actions for {name}",
+    "details": "Details & versions",
+    "moveEllipsis": "Move …",
+    "newVersion": "Upload new version",
+    "breadcrumb": "Folder path",
+    "allFiles": "All files",
+    "emptyFolder": "No files in this folder yet.",
+    "emptyRoot": "No files uploaded yet.",
+    "filesWithoutFolder": "Files without folder",
+    "filesInFolder": "Files in this folder",
+    "recentlyAdded": "Recently added",
+    "noSearchResults": "No results for this search.",
+    "searchInFolder": "Search this folder",
+    "searchAll": "Search all files",
+    "folderSettings": "Visibility & access",
+    "cancel": "Cancel",
+    "saving": "Saving…",
+    "save": "Save",
+    "folderName": "Folder name",
+    "whoMaySee": "Who may see this folder?",
+    "lockedNoShare": "This folder is PIN-protected and therefore stays admin-only.",
+    "shareTitle": "Visible to employees",
+    "shareHintOn": "Employees see the folder under “My area” and can download files.",
+    "shareHintOff": "Admins only – employees do not see the folder.",
+    "limitTeams": "Only for teams",
+    "limitHint": "No selection = all employees.",
+    "limitLocations": "Only for locations",
+    "limitRoles": "Only these roles",
+    "limitRolesHint": "No selection = all roles with file access. Owners, admins and HR always see the folder.",
+    "renameFile": "Rename file",
+    "fileName": "File name",
+    "renameFolder": "Rename folder",
+    "moveFile": "Move file",
+    "noFolder": "No folder",
+    "targetFolder": "Target folder",
+    "move": "Move"
   }
 }

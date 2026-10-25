@@ -683,6 +683,21 @@ export default async function LocationDetailPage({
                   <p className="mt-2 text-[11.5px] leading-[1.5] text-muted">
                     {t("phoneEmailAutoNote")}
                   </p>
+                  <div className="field mt-4">
+                    <label htmlFor="location-contact-email" className="label">
+                      {t("contactEmail")}
+                    </label>
+                    <input
+                      id="location-contact-email"
+                      name="contactEmail"
+                      type="email"
+                      form="location-edit-form"
+                      className="input"
+                      defaultValue={location.contactEmail ?? ""}
+                      placeholder="standort@example.com"
+                      autoComplete="email"
+                    />
+                  </div>
                 </div>
               ) : (
                 <div className="mb-5 flex items-center gap-3.5 rounded-[12px] border border-border-soft bg-bg px-4 py-3.5">
@@ -706,6 +721,15 @@ export default async function LocationDetailPage({
                     </div>
                   </div>
                 </div>
+              )}
+              {!isEditing && location.contactEmail && (
+                <a
+                  href={`mailto:${location.contactEmail}`}
+                  className="mb-5 -mt-2 flex items-center justify-between gap-3 rounded-[12px] border border-border-soft px-4 py-2.5 text-[12.5px] text-ink no-underline hover:bg-bg"
+                >
+                  <span className="font-mono text-[10.5px] text-muted">{t("contactEmail")}</span>
+                  <span className="truncate font-medium">{location.contactEmail}</span>
+                </a>
               )}
 
               <div className="mb-2 flex items-center justify-between gap-3">

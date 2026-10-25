@@ -2,13 +2,18 @@ import AuditLogPanel from "@/components/AuditLogPanel";
 import { FilesListClient } from "@/components/FilesListClient";
 import FolderPinGate from "@/components/FolderPinGate";
 import { RecentlyDeletedPanel } from "@/components/FileTrash";
-import PageHeader from "@/components/PageHeader";
+import { ctaClass, DbPageHead, secondaryClass } from "@/components/dashboard/ui";
 import {
+  CreateFolderButton,
   FileDownloadButton,
   FileSoftDeleteButton,
   FileViewButton,
+  UploadFileButton,
   VersionUploadButton,
 } from "@/components/FileActionButtons";
+import { auth } from "@/lib/auth";
+import { getTenantsForUser } from "@/lib/tenants";
+import { headers } from "next/headers";
 import { getAuditLogsForEntity } from "@/lib/audit";
 import { getFilesPageData } from "@/lib/files-server";
 import { isFolderUnlocked } from "@/lib/folder-pin";
@@ -16,7 +21,7 @@ import { getFileVersions, type FileItem } from "@/lib/files";
 import { paginate, searchParamPage } from "@/lib/pagination";
 import { hasPermissionLevel } from "@/lib/roles";
 import { getTenantCapabilities, getTenantPermissions, withAccessRedirect } from "@/lib/tenant-access";
-import { ArrowLeft, FileText, Lock } from "lucide-react";
+import { ArrowLeft, FileText, FolderPlus, Lock } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
@@ -24,28 +29,6 @@ import { getTranslations } from "next-intl/server";
 const PAGE_SIZE = 30;
 
 type T = Awaited<ReturnType<typeof getTranslations>>;
-
-function FileMetricCard({
-  label,
-  value,
-  caption,
-}: {
-  label: string;
-  value: string;
-  caption: string;
-}) {
-  return (
-    <div className="rounded-[14px] border border-border bg-white px-5 pt-5 pb-4">
-      <div className="font-mono text-[10px] uppercase tracking-[0.6px] text-muted">
-        {label}
-      </div>
-      <div className="my-[14px] mb-[9px] font-display text-[38px] font-semibold leading-none tracking-[-1.2px] text-ink">
-        {value}
-      </div>
-      <div className="text-[12px] text-muted">{caption}</div>
-    </div>
-  );
-}
 
 function FileInfoCard({
   file,
@@ -235,8 +218,6 @@ export default async function FilesPageContent({
     currentFolderPath,
     folderOptions,
     folders,
-    files,
-    metrics,
     uploadOptions,
     visibleFiles,
   } = await withAccessRedirect(tenant, () => getFilesPageData(tenant, path, t));
@@ -252,6 +233,12 @@ export default async function FilesPageContent({
   const canManageFiles = hasPermissionLevel(permissions.files, "write");
   const canDeleteFiles = capabilities.files.canDelete;
   const canManageReminders = hasPermissionLevel(permissions.reminders, "write");
+  // Rollen-Einschränkung und Freigabe für Mitarbeitende (M1): nur Datei-Admins.
+  const canManageAccess = hasPermissionLevel(permissions.files, "admin");
+  const ui = await getTranslations("FilesUi");
+  const session = await auth.api.getSession({ headers: await headers() });
+  const memberships = session?.user?.id ? await getTenantsForUser(session.user.id).catch(() => null) : null;
+  const tenantName = memberships?.find((item) => item.tenant.slug === tenant)?.tenant.name ?? tenant;
 
   const baseHref = `/u/${tenant}/dateien`;
   const filesPage = paginate(visibleFiles, searchParamPage(pageParam), PAGE_SIZE);
@@ -333,17 +320,35 @@ export default async function FilesPageContent({
 
   return (
     <>
-      <PageHeader
-        eyebrow={t("eyebrow")}
+      <DbPageHead
+        eyebrow={tenantName}
         title={t("title")}
-        subtitle={t("subtitle", { folders: folders.length, files: files.length })}
+        subtitle={ui("subtitle", { company: tenantName })}
+        actions={
+          canManageFiles ? (
+            <>
+              <CreateFolderButton
+                tenant={tenant}
+                returnPath={activeFolder ? `${baseHref}/${currentFolderPath}` : baseHref}
+                parentPath={currentFolderPath}
+                className={secondaryClass}
+              >
+                <FolderPlus size={16} />
+                {currentFolderPath ? ui("newSubfolder") : ui("newFolder")}
+              </CreateFolderButton>
+              <UploadFileButton
+                tenant={tenant}
+                returnPath={activeFolder ? `${baseHref}/${currentFolderPath}` : baseHref}
+                folderSlug={activeFolder?.path ?? activeFolder?.slug}
+                folderName={activeFolder?.name}
+                folderOptions={folderOptions}
+                uploadOptions={uploadOptions}
+                className={ctaClass}
+              />
+            </>
+          ) : undefined
+        }
       />
-
-      <section className="mb-7 grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(190px,1fr))]">
-        {metrics.map((metric) => (
-          <FileMetricCard key={metric.label} {...metric} />
-        ))}
-      </section>
 
       <FilesListClient
         folders={folders}
@@ -364,6 +369,7 @@ export default async function FilesPageContent({
         canManageFiles={canManageFiles}
         canDeleteFiles={canDeleteFiles}
         canManageReminders={canManageReminders}
+        canManageAccess={canManageAccess}
       />
 
       {canDeleteFiles && <RecentlyDeletedPanel tenant={tenant} className="mt-4" />}

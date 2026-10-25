@@ -1,3 +1,4 @@
+import { folderPathChain, isFolderManager, isFolderPathDenied } from "@/lib/file-folders";
 import {
   assertEmployeeInScope,
   requireTenantAccess,
@@ -52,7 +53,39 @@ export type TenantFileAreaRecord = {
   uploadedById?: string;
   accessRoleIdsJson?: unknown;
   accessUserIdsJson?: unknown;
+  /** Ordnerpfad einer Datei — fehlt er, wird er für zentrale Dateien nachgeladen. */
+  folderSlug?: string | null;
+  /** Pfad, wenn ein Ordner-Datensatz geprüft wird. */
+  path?: string | null;
 };
+
+/**
+ * Ordner-Rollen-Einschränkung der zentralen Ablage (M1): gilt für den Ordner,
+ * seine Unterordner und alle Dateien darin. Inhaber/Admin/HR nie gesperrt.
+ */
+export async function isTenantFolderPathDenied(access: TenantAccess, path: string | null | undefined) {
+  if (!path || isFolderManager(access)) {
+    return false;
+  }
+
+  const { prisma } = await import("@/lib/prisma");
+  const folders = await prisma.tenantFileFolder.findMany({
+    where: { tenantId: access.tenantId, scope: "tenant", status: "active", path: { in: folderPathChain(path) } },
+    select: { path: true, accessRoleIdsJson: true },
+  });
+
+  return isFolderPathDenied(folders, path, access);
+}
+
+/** Für Listen: alle Ordner-Einschränkungen eines Mandanten auf einmal laden. */
+export async function loadTenantFolderAcl(tenantId: string) {
+  const { prisma } = await import("@/lib/prisma");
+
+  return prisma.tenantFileFolder.findMany({
+    where: { tenantId, scope: "tenant", status: "active" },
+    select: { path: true, accessRoleIdsJson: true },
+  });
+}
 
 function isExplicitlySharedWithMe(
   file: { accessRoleIdsJson?: unknown; accessUserIdsJson?: unknown },
@@ -164,6 +197,21 @@ export async function requireTenantFileAreaAccess(
     }
     return;
   }
+
+  // Zentrale Datei: Rollen-Einschränkung des Ordners (M1) — gilt auch, wenn
+  // die Datei selbst ausdrücklich freigegeben ist.
+  const folderPath =
+    file.path ??
+    file.folderSlug ??
+    (
+      await prisma.tenantFile.findFirst({
+        where: { id: file.id, tenantId: fileAccess.tenantId },
+        select: { folderSlug: true },
+      })
+    )?.folderSlug ??
+    "";
+
+  if (await isTenantFolderPathDenied(fileAccess, folderPath)) throw new Error("FORBIDDEN");
 
   // Zentrale Datei (employeeId/locationId/teamId alle null): hier gilt der
   // "files"-Scope selbst als Uploader-Scope — "own"/"team" darf nur

@@ -1,5 +1,6 @@
 import { REPORT_ERRORS } from "@/lib/report-hours";
 import { TENANT_ACCESS_LOCKED_MESSAGE } from "@/lib/tenant-access";
+import { FILE_FOLDER_ERRORS } from "@/lib/file-folders";
 import { SHIFT_OFFER_ERROR_STATUS } from "@/lib/shift-offers";
 import { TIME_CORRECTION_ERROR_STATUS, TIME_TRACKING_ERROR_STATUS } from "@/lib/time-tracking";
 
@@ -42,6 +43,9 @@ const KNOWN_ACTION_GUARD_MESSAGES = new Set([
   "Korrekturantrag konnte nicht bearbeitet werden.",
   "Vorwoche konnte nicht kopiert werden.",
   "Schicht konnte nicht angeboten werden.",
+  "Ordner konnte nicht gespeichert werden.",
+  "Datei konnte nicht umbenannt werden.",
+  "Datei konnte nicht verschoben werden.",
   "Bitte angeben, welche Information benötigt wird.",
   "Bitte die Vertrags-PDF auswählen.",
   "Bitte die vollständige Adresse angeben.",
@@ -159,6 +163,19 @@ function classifySelfServiceError(message: string): number | null {
 
   if (timeCorrectionStatus !== undefined) {
     return timeCorrectionStatus;
+  }
+
+  // lib/file-folder-service.ts — Ordner-Einstellungen, Datei umbenennen/verschieben (M1).
+  if (
+    message === FILE_FOLDER_ERRORS.lockedShare ||
+    message === FILE_FOLDER_ERRORS.restrictedShare ||
+    message === FILE_FOLDER_ERRORS.sameFolder
+  ) {
+    return 409;
+  }
+
+  if (message === FILE_FOLDER_ERRORS.nameRequired || message === "Dateiname ist erforderlich.") {
+    return 400;
   }
 
   const shiftOfferStatus = SHIFT_OFFER_ERROR_STATUS.get(message);

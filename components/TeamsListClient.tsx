@@ -1,83 +1,134 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
-import { ListSearchBox } from "@/components/ListSearchBox";
+import { Search, Users } from "lucide-react";
+import { paletteHex } from "@/lib/org-options";
 import { type Team, type TeamMember } from "@/lib/teams";
 import { useTranslations } from "next-intl";
 
-function MemberAvatar({ member }: { member: TeamMember }) {
+type T = ReturnType<typeof useTranslations>;
+
+function MemberStack({ members, color }: { members: TeamMember[]; color: string }) {
+  const shown = members.slice(0, 5);
+
   return (
-    <div
-      title={member.name}
-      className="flex size-8 items-center justify-center rounded-full bg-ink text-[10.5px] font-semibold text-white"
-    >
-      {member.initials}
-    </div>
+    <span className="flex items-center">
+      {shown.map((member, index) => (
+        <span
+          key={member.id ?? `${member.initials}-${index}`}
+          title={member.name}
+          className="-ml-1.5 flex size-7 items-center justify-center rounded-full border-2 border-white text-[9.5px] font-bold text-white first:ml-0"
+          style={{ background: color }}
+        >
+          {member.initials}
+        </span>
+      ))}
+      {members.length > shown.length && (
+        <span className="-ml-1.5 flex size-7 items-center justify-center rounded-full border-2 border-white bg-[#f2f1ed] text-[10px] font-semibold text-[#6e6e6b]">
+          +{members.length - shown.length}
+        </span>
+      )}
+    </span>
   );
 }
 
-function TeamCard({
-  team,
-  tenant,
-  t,
-}: {
-  team: Team;
-  tenant: string;
-  t: ReturnType<typeof useTranslations>;
-}) {
+function locationList(team: Team) {
+  return team.locations
+    .split(",")
+    .map((name) => name.trim())
+    .filter(Boolean);
+}
+
+function TeamCard({ team, tenant, locationColors, t }: { team: Team; tenant: string; locationColors: Record<string, string>; t: T }) {
+  const color = paletteHex(team.colorClassName, "#4a5568");
+  const absent = team.members.filter((member) => member.status === "vacation").length;
+  const onDuty = team.members.length - absent;
+  const locations = locationList(team);
+  const hasLead = Boolean(team.lead.name) && team.lead.initials !== "--";
+
   return (
     <Link
       href={`/u/${tenant}/teams/${team.id}`}
-      className="flex w-full cursor-pointer flex-col overflow-hidden rounded-card border border-border bg-white p-0 text-left font-sans transition-[border-color,box-shadow] duration-150 hover:border-muted hover:shadow-[0_8px_24px_rgba(0,0,0,0.05)]"
+      className="db-card db-insight relative flex flex-col gap-3 overflow-hidden rounded-[16px] border border-[#ecebe7] bg-white p-5 pl-6 text-ink no-underline"
     >
-      <div className={`h-[3px] w-full ${team.colorClassName}`} />
-      <div className="w-full px-[22px] pt-[22px] pb-[18px]">
-        <div className="mb-4 flex items-start justify-between gap-2.5">
-          <div className="min-w-0">
-            <div className="font-display text-[18px] font-semibold tracking-[-0.4px] text-ink">
-              {team.name}
-            </div>
-            <div className="mt-[5px] font-mono text-[10.5px] text-muted">
-              {team.locations || t("noLocations")}
-            </div>
-          </div>
-          <span className="font-display text-[30px] font-semibold leading-none tracking-[-1px] text-ink">
-            {team.members.length}
+      <span className="absolute inset-y-0 left-0 w-1" style={{ background: color }} />
+      <span className="flex items-start gap-3">
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-[10px] text-white" style={{ background: color }}>
+          <Users size={18} />
+        </span>
+        <span className="flex min-w-0 flex-col">
+          <span className="truncate font-display text-[17px] font-semibold tracking-[-0.3px]">{team.name}</span>
+          <span className={`text-[13px] ${team.members.length === 0 ? "text-[#1f5d2c]" : absent ? "text-[#9a5b00]" : "text-[#1f5d2c]"}`}>
+            {team.members.length === 0
+              ? t("noMembers")
+              : absent
+                ? t("onDutyAbsent", { onDuty, absent })
+                : t("onDuty", { count: onDuty })}
           </span>
-        </div>
-
-        <div className="mb-4 flex flex-wrap gap-1.5">
-          {team.members.map((member) => (
-            <MemberAvatar key={member.id ?? `${team.dbId}-${member.initials}`} member={member} />
-          ))}
-        </div>
-
-        <div className="flex items-center justify-between border-t border-border-soft pt-3.5">
-          <div className="flex min-w-0 items-center gap-[9px]">
-            <div
-              className={`flex size-[26px] shrink-0 items-center justify-center rounded-full ${team.colorClassName} text-[9px] font-bold text-white`}
-            >
+        </span>
+      </span>
+      <span className={`line-clamp-2 min-h-[38px] text-[13.5px] leading-[1.45] ${team.description ? "text-[#3d3d3a]" : "text-[#9a9a96]"}`}>
+        {team.description || t("noDescription")}
+      </span>
+      <span className="flex flex-wrap gap-1.5">
+        {locations.length === 0 ? (
+          <span className="text-[12.5px] text-[#9a9a96]">{t("noLocations")}</span>
+        ) : (
+          <>
+            {locations.slice(0, 2).map((name) => (
+              <span key={name} className="inline-flex items-center gap-1.5 rounded-[7px] border border-[#ecebe7] px-2 py-[3px] text-[12px] font-medium">
+                <span className="size-1.5 rounded-[2px]" style={{ background: locationColors[name] ?? "#9a9a96" }} />
+                {name}
+              </span>
+            ))}
+            {locations.length > 2 && (
+              <span className="rounded-[7px] bg-[rgba(139,110,212,0.10)] px-2 py-[3px] text-[12px] font-semibold text-[#6b4fc4]">
+                +{locations.length - 2}
+              </span>
+            )}
+          </>
+        )}
+      </span>
+      <span className="mt-auto flex items-center justify-between gap-3 border-t border-[#f0efeb] pt-3">
+        <span className="flex min-w-0 items-center gap-2">
+          {hasLead ? (
+            <span className="flex size-7 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white" style={{ background: color }}>
               {team.lead.initials}
-            </div>
-            <div className="min-w-0">
-              <div className="truncate text-[12.5px] font-semibold text-ink">
-                {team.lead.name}
-              </div>
-              <div className="font-mono text-[9px] text-muted">{t("teamLead")}</div>
-            </div>
-          </div>
-          <ArrowRight size={14} className="shrink-0 text-muted" />
-        </div>
-      </div>
+            </span>
+          ) : (
+            <span className="size-7 shrink-0 rounded-full border border-dashed border-[#c9c8c3]" />
+          )}
+          <span className="flex min-w-0 flex-col">
+            <span className="font-mono text-[9px] tracking-[0.1em] text-[#9a9a96] uppercase">{t("teamLead")}</span>
+            <span className="truncate text-[13.5px] font-semibold">{hasLead ? team.lead.name : t("noLead")}</span>
+          </span>
+        </span>
+        {team.members.length > 0 ? (
+          <MemberStack members={team.members} color={color} />
+        ) : (
+          <span className="text-[12.5px] text-[#6e6e6b]">{t("memberCount", { count: 0 })}</span>
+        )}
+      </span>
     </Link>
   );
 }
 
-export function TeamsListClient({ teams, tenant }: { teams: Team[]; tenant: string }) {
+export function TeamsListClient({
+  teams,
+  tenant,
+  locationColors = {},
+  createTile,
+}: {
+  teams: Team[];
+  tenant: string;
+  /** Standortname → Farbe für die Standort-Chips. */
+  locationColors?: Record<string, string>;
+  createTile?: ReactNode;
+}) {
   const t = useTranslations("TeamsListClient");
   const [query, setQuery] = useState("");
+  const [view, setView] = useState<"cards" | "table">("cards");
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -97,29 +148,72 @@ export function TeamsListClient({ teams, tenant }: { teams: Team[]; tenant: stri
 
   return (
     <>
-      <ListSearchBox
-        value={query}
-        onChange={setQuery}
-        placeholder={t("searchPlaceholder")}
-        className="mb-4 max-w-[360px]"
-      />
-
-      {filtered.length > 0 ? (
-        <section className="grid gap-3.5 [grid-template-columns:repeat(auto-fill,minmax(300px,1fr))]">
-          {filtered.map((team) => (
-            <TeamCard key={team.dbId ?? team.id} team={team} tenant={tenant} t={t} />
+      <div className="mb-4 flex flex-wrap items-center justify-end gap-2">
+        <label className="relative block w-[340px] max-w-full">
+          <Search size={15} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-[#9a9a96]" />
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={t("searchPlaceholder")}
+            aria-label={t("searchPlaceholder")}
+            className="db-input box-border h-10 w-full rounded-[10px] border border-[#e4e3df] bg-white pr-3 pl-9 text-[13.5px]"
+          />
+        </label>
+        <span className="inline-flex gap-0.5 rounded-[10px] bg-[#f2f1ed] p-1">
+          {(["cards", "table"] as const).map((id) => (
+            <button
+              key={id}
+              type="button"
+              aria-pressed={view === id}
+              onClick={() => setView(id)}
+              className={`min-h-8 cursor-pointer rounded-[7px] border-0 px-3 text-[13px] font-semibold ${view === id ? "bg-white text-ink shadow-[0_1px_2px_rgba(14,14,14,0.08)]" : "bg-transparent text-[#6e6e6b]"}`}
+            >
+              {t(`view.${id}`)}
+            </button>
           ))}
+        </span>
+      </div>
+
+      {filtered.length === 0 && !createTile ? (
+        <section className="rounded-[16px] border border-[#ecebe7] bg-white px-6 py-10 text-center">
+          <div className="font-display text-[20px] font-semibold text-ink">{teams.length === 0 ? t("noTeamsYet") : t("noResults")}</div>
+          <div className="mt-2 text-[13px] text-[#6e6e6b]">{teams.length === 0 ? t("noTeamsYetDescription") : t("noResultsDescription")}</div>
+        </section>
+      ) : view === "cards" ? (
+        <section className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(310px,1fr))]">
+          {filtered.map((team) => (
+            <TeamCard key={team.dbId ?? team.id} team={team} tenant={tenant} locationColors={locationColors} t={t} />
+          ))}
+          {createTile}
         </section>
       ) : (
-        <section className="rounded-card border border-border bg-white px-6 py-10 text-center">
-          <div className="font-display text-[20px] font-semibold text-ink">
-            {teams.length === 0 ? t("noTeamsYet") : t("noResults")}
-          </div>
-          <div className="mt-2 text-[13px] text-muted-2">
-            {teams.length === 0
-              ? t("noTeamsYetDescription")
-              : t("noResultsDescription")}
-          </div>
+        <section className="overflow-x-auto rounded-[16px] border border-[#ecebe7] bg-white">
+          <table className="w-full min-w-[700px] border-collapse text-left">
+            <thead>
+              <tr className="font-mono text-[10px] tracking-[0.1em] text-[#6e6e6b] uppercase">
+                {["name", "locations", "lead", "members"].map((column) => (
+                  <th key={column} className="px-4 py-3 font-normal">
+                    {t(`column.${column}`)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((team) => (
+                <tr key={team.dbId ?? team.id} className="border-t border-[#f0efeb] text-[13.5px]">
+                  <td className="px-4 py-3">
+                    <Link href={`/u/${tenant}/teams/${team.id}`} className="flex items-center gap-2.5 font-semibold text-ink no-underline">
+                      <span className="size-2.5 rounded-full" style={{ background: paletteHex(team.colorClassName, "#4a5568") }} />
+                      {team.name}
+                    </Link>
+                  </td>
+                  <td className="max-w-[260px] truncate px-4 py-3 text-[#3d3d3a]">{team.locations || "–"}</td>
+                  <td className="px-4 py-3">{team.lead.initials !== "--" && team.lead.name ? team.lead.name : t("noLead")}</td>
+                  <td className="px-4 py-3 font-semibold">{team.members.length}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </section>
       )}
     </>

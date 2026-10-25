@@ -14,6 +14,7 @@ import { getMyPayrollStatements, getMySelfServiceOverview } from "@/lib/self-ser
 import { getMyPublishedShiftsInRange, type MyRangeShift } from "@/lib/shift-service";
 import { withAccessRedirect } from "@/lib/tenant-access";
 import { getTenantsForUser } from "@/lib/tenants";
+import { getMySharedFolders } from "@/lib/file-folder-service";
 import { getMyShiftOffers } from "@/lib/shift-offer-service";
 import { getMyTimeCorrectionRequests } from "@/lib/time-correction-service";
 import { getMyClockStatus, getMyTimeEntries } from "@/lib/time-tracking-service";
@@ -163,7 +164,7 @@ export default async function SelfServicePage({
   const overtimeFrom = addDays(thisMonday, -84);
   const overtimeFromClamped = employee.startDate && employee.startDate > overtimeFrom ? employee.startDate : overtimeFrom;
 
-  const [clockStatus, shifts, wishFree, corrections, payroll, weekEntries, pastEntries, shiftOffers] = await Promise.all([
+  const [clockStatus, shifts, wishFree, corrections, payroll, weekEntries, pastEntries, shiftOffers, sharedFolders] = await Promise.all([
     tryLoad(getMyClockStatus(tenant)),
     tryLoad(getMyPublishedShiftsInRange(tenant, { from: rangeFrom, to: rangeTo })),
     tryLoad(getMyWishFreeRequests(tenant)),
@@ -174,6 +175,7 @@ export default async function SelfServicePage({
       ? tryLoad(getMyTimeEntries({ tenantSlug: tenant, from: overtimeFromClamped, to: addDays(thisMonday, -1) }))
       : Promise.resolve(null),
     tryLoad(getMyShiftOffers(tenant)),
+    tryLoad(getMySharedFolders(tenant)),
   ]);
   const timeTrackingEnabled = clockStatus?.enabled ?? false;
   const shiftList = shifts ?? [];
@@ -450,6 +452,16 @@ export default async function SelfServicePage({
                 ))}
               </div>
             )}
+            {(sharedFolders ?? []).filter((folder) => folder.files.length > 0).map((folder) => (
+              <div key={folder.id} className="mt-4 flex flex-col border-t border-[#f0efeb] pt-3">
+                <span className="mb-1 font-mono text-[10px] tracking-[0.12em] text-[#6e6e6b] uppercase">
+                  {t("sharedFolder", { name: folder.name })}
+                </span>
+                {folder.files.map((file) => (
+                  <MyDocumentLink key={file.id} tenant={tenant} fileId={file.id} name={file.name} source="shared-files" />
+                ))}
+              </div>
+            ))}
           </DbCard>
         </div>
       </div>

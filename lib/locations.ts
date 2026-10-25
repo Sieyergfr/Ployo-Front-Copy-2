@@ -72,6 +72,8 @@ export type Location = {
   utilizationCaption: string;
   status: LocationStatus;
   accentClassName: string;
+  /** Kontakt-E-Mail des Standorts (M5) — unabhängig von der Leitung. */
+  contactEmail?: string;
   lead: {
     /** Echte Mitarbeiter-ID der Standortleitung (Fremdschlüssel), falls gesetzt. */
     employeeId: string | null;
