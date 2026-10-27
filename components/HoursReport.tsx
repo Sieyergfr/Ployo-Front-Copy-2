@@ -6,6 +6,8 @@ import {
   removeReportRecipientAction,
   sendHoursReportAction,
 } from "@/app/(dashboard)/u/[tenant]/reports/actions";
+import { dbInputClass } from "@/components/dashboard/DbDrawer";
+import { DbCard, avatarColor, ctaClass, secondaryClass } from "@/components/dashboard/ui";
 import EmployeeSelector from "@/components/EmployeeSelector";
 import { FormErrorBanner } from "@/components/FormFeedback";
 import { useToast } from "@/components/Toasts";
@@ -28,18 +30,19 @@ import type {
 import {
   ChevronLeft,
   ChevronRight,
-  FileSpreadsheet,
+  Download,
+  Info,
   Loader2,
   Mail,
   Plus,
   RotateCcw,
-  Search,
   Send,
   X,
 } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useMemo, useRef, useState, useTransition, type FormEvent } from "react";
+import { useMemo, useRef, useState, useSyncExternalStore, useTransition, type FormEvent, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 // ---------------------------------------------------------------------------
 // Hilfsfunktionen
@@ -52,6 +55,17 @@ function formatHours(minutes: number, locale: string) {
     // Ohne Tausenderpunkt — der Wert landet auch im Eingabefeld und muss dort wieder parsebar sein.
     useGrouping: false,
   });
+}
+
+function formatHoursShort(minutes: number, locale: string) {
+  return (minutes / 60).toLocaleString(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+}
+
+function formatSigned(minutes: number, locale: string, digits: number) {
+  const value = Math.round((minutes / 60) * 10 ** digits) / 10 ** digits;
+  const text = Math.abs(value).toLocaleString(locale, { minimumFractionDigits: digits, maximumFractionDigits: digits });
+
+  return value > 0 ? `+${text}` : value < 0 ? `−${text}` : `±${text}`;
 }
 
 function formatDate(date: string, locale: string, options: Intl.DateTimeFormatOptions) {
@@ -87,10 +101,12 @@ export function ReportFilterBar({
   employees,
   teams,
   locations,
+  selectionName,
 }: {
   filters: ReportFilters;
   range: ReportRange;
   today: string;
+  selectionName?: string;
   employees: ReportEmployeeOption[];
   teams: ReportSelectOption[];
   locations: ReportSelectOption[];
@@ -155,204 +171,168 @@ export function ReportFilterBar({
       key={value}
       type="button"
       onClick={() => setPeriod(value)}
-      className={`rounded-[9px] px-3 py-1.5 text-[12.5px] font-semibold ${
-        period === value ? "bg-white text-ink shadow-sm" : "text-muted-2"
+      className={`db-focus min-h-9 cursor-pointer rounded-[8px] border-0 px-3 text-[13px] font-medium ${
+        period === value ? "bg-white font-semibold text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]" : "bg-transparent text-[#6e6e6b]"
       }`}
       aria-pressed={period === value}
     >
       {label}
     </button>
   );
+  const control = `${dbInputClass} min-h-11 !w-auto bg-white`;
+  const stepButton =
+    "db-act db-focus flex size-9 cursor-pointer items-center justify-center rounded-[9px] border border-[#ecebe7] bg-white text-ink disabled:cursor-default disabled:opacity-40";
 
   return (
-    <section className="mb-5 rounded-card border border-border bg-white px-5 py-4">
-      <form ref={formRef} onSubmit={onSubmit} className="flex flex-col gap-4">
-        <div className="grid gap-4 md:grid-cols-[220px_1fr]">
-          <div className="field">
-            <label htmlFor="report-mode" className="label">
-              {t("selection")}
-            </label>
-            <select
-              id="report-mode"
-              className="input"
-              value={mode}
-              onChange={(event) => setMode(event.target.value as typeof mode)}
-            >
-              <option value="all">{t("modeAll")}</option>
-              <option value="employee">{t("modeEmployee")}</option>
-              <option value="employees">{t("modeEmployees")}</option>
-              <option value="team">{t("modeTeam")}</option>
-              <option value="location">{t("modeLocation")}</option>
-            </select>
-          </div>
-
-          <div className="min-w-0">
-            {(mode === "employee" || mode === "employees") && (
-              <EmployeeSelector
-                key={mode}
-                label={mode === "employee" ? t("employee") : t("employees")}
-                name="employee"
-                mode={mode === "employee" ? "single" : "multi"}
-                defaultSelectedIds={mode === "employee" ? filters.employeeIds.slice(0, 1) : filters.employeeIds}
-                options={employees}
-              />
-            )}
-            {mode === "team" && (
-              <div className="field">
-                <label htmlFor="report-team" className="label">
-                  {t("team")}
-                </label>
-                <select
-                  id="report-team"
-                  className="input"
-                  value={teamId}
-                  onChange={(event) => setTeamId(event.target.value)}
-                >
-                  <option value="">{t("chooseTeam")}</option>
-                  {teams.map((team) => (
-                    <option key={team.id} value={team.id}>
-                      {team.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-            {mode === "location" && (
-              <div className="field">
-                <label htmlFor="report-location" className="label">
-                  {t("location")}
-                </label>
-                <select
-                  id="report-location"
-                  className="input"
-                  value={locationId}
-                  onChange={(event) => setLocationId(event.target.value)}
-                >
-                  <option value="">{t("chooseLocation")}</option>
-                  {locations.map((location) => (
-                    <option key={location.id} value={location.id}>
-                      {location.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-            {mode === "all" && <p className="pt-7 text-[12.5px] text-muted">{t("modeAllHint")}</p>}
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-end gap-4">
-          <div className="field">
-            <span className="label">{t("period")}</span>
-            <div className="flex flex-wrap gap-1 rounded-xl border border-border bg-bg p-1" role="group">
-              {periodButton("day", t("periodDay"))}
-              {periodButton("week", t("periodWeek"))}
-              {periodButton("month", t("periodMonth"))}
-              {periodButton("custom", t("periodCustom"))}
-            </div>
-          </div>
-
-          {period === "custom" ? (
-            <>
-              <div className="field">
-                <label htmlFor="report-from" className="label">
-                  {t("from")}
-                </label>
-                <input
-                  id="report-from"
-                  type="date"
-                  className="input"
-                  value={from}
-                  max={to || undefined}
-                  onChange={(event) => setFrom(event.target.value)}
-                  required
-                />
-              </div>
-              <div className="field">
-                <label htmlFor="report-to" className="label">
-                  {t("to")}
-                </label>
-                <input
-                  id="report-to"
-                  type="date"
-                  className="input"
-                  value={to}
-                  min={from || undefined}
-                  onChange={(event) => setTo(event.target.value)}
-                  required
-                />
-              </div>
-            </>
-          ) : (
-            <div className="field">
-              <label htmlFor="report-date" className="label">
-                {period === "day" ? t("day") : period === "week" ? t("weekContaining") : t("monthContaining")}
-              </label>
-              <input
-                id="report-date"
-                type="date"
-                className="input"
-                value={date}
-                onChange={(event) => setDate(event.target.value)}
-                required
-              />
-            </div>
-          )}
-
-          <div className="field">
-            <label htmlFor="report-night" className="label">
-              {t("nightWindow")}
-            </label>
-            <select
-              id="report-night"
-              className="input"
-              value={nightStart}
-              onChange={(event) => setNightStart(event.target.value as typeof nightStart)}
-            >
-              <option value="20">{t("night20")}</option>
-              <option value="23">{t("night23")}</option>
-            </select>
-          </div>
-
-          <button type="submit" className="btn btn-primary" disabled={isPending}>
-            {isPending ? <Loader2 size={15} className="animate-spin" /> : <Search size={15} />}
-            {t("apply")}
-          </button>
-        </div>
-      </form>
-
-      <div className="mt-4 flex items-center gap-2 border-t border-border-soft pt-4">
-        {range.previous && (
+    <DbCard className="mb-4 p-[18px]">
+      <form ref={formRef} onSubmit={onSubmit} className="flex flex-col gap-3.5">
+        <div className="flex items-center gap-2.5">
           <button
             type="button"
-            className="btn btn-secondary btn-sm"
+            className={stepButton}
             aria-label={t("previous")}
+            disabled={!range.previous || isPending}
             onClick={() => {
               setDate(range.previous!);
               navigate({ period: range.period, date: range.previous! });
             }}
           >
-            <ChevronLeft size={15} />
+            <ChevronLeft size={16} />
           </button>
-        )}
-        <span className="min-w-0 flex-1 text-center text-[14px] font-semibold text-ink sm:flex-none sm:min-w-[180px]">
-          {rangeLabel}
-        </span>
-        {range.next && (
+          <div className="flex min-w-0 flex-col">
+            <span className="font-display text-[19px] leading-tight font-semibold tracking-[-0.3px]">{rangeLabel}</span>
+            <span className="truncate text-[12.5px] text-[#6e6e6b]">{selectionName || t("modeAll")}</span>
+          </div>
           <button
             type="button"
-            className="btn btn-secondary btn-sm"
+            className={stepButton}
             aria-label={t("next")}
+            disabled={!range.next || isPending}
             onClick={() => {
               setDate(range.next!);
               navigate({ period: range.period, date: range.next! });
             }}
           >
-            <ChevronRight size={15} />
+            <ChevronRight size={16} />
           </button>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex gap-0.5 rounded-[10px] bg-[#f2f1ed] p-[3px]" role="group" aria-label={t("period")}>
+            {periodButton("day", t("periodDay"))}
+            {periodButton("week", t("periodWeek"))}
+            {periodButton("month", t("periodMonth"))}
+            {periodButton("custom", t("periodCustom"))}
+          </div>
+
+          {period === "custom" ? (
+            <>
+              <input
+                type="date"
+                aria-label={t("from")}
+                className={control}
+                value={from}
+                max={to || undefined}
+                onChange={(event) => setFrom(event.target.value)}
+                required
+              />
+              <span className="text-[#9a9a96]">–</span>
+              <input
+                type="date"
+                aria-label={t("to")}
+                className={control}
+                value={to}
+                min={from || undefined}
+                onChange={(event) => setTo(event.target.value)}
+                required
+              />
+            </>
+          ) : (
+            <input
+              type="date"
+              aria-label={period === "day" ? t("day") : period === "week" ? t("weekContaining") : t("monthContaining")}
+              className={control}
+              value={date}
+              onChange={(event) => setDate(event.target.value)}
+              required
+            />
+          )}
+
+          <span className="mx-0.5 hidden h-7 w-px bg-[#ecebe7] sm:block" />
+
+          <select
+            aria-label={t("selection")}
+            className={`${control} cursor-pointer`}
+            value={mode}
+            onChange={(event) => setMode(event.target.value as typeof mode)}
+          >
+            <option value="all">{t("modeAll")}</option>
+            <option value="employee">{t("modeEmployee")}</option>
+            <option value="employees">{t("modeEmployees")}</option>
+            <option value="team">{t("modeTeam")}</option>
+            <option value="location">{t("modeLocation")}</option>
+          </select>
+          {mode === "team" && (
+            <select
+              aria-label={t("team")}
+              className={`${control} cursor-pointer`}
+              value={teamId}
+              onChange={(event) => setTeamId(event.target.value)}
+            >
+              <option value="">{t("chooseTeam")}</option>
+              {teams.map((team) => (
+                <option key={team.id} value={team.id}>
+                  {team.name}
+                </option>
+              ))}
+            </select>
+          )}
+          {mode === "location" && (
+            <select
+              aria-label={t("location")}
+              className={`${control} cursor-pointer`}
+              value={locationId}
+              onChange={(event) => setLocationId(event.target.value)}
+            >
+              <option value="">{t("chooseLocation")}</option>
+              {locations.map((location) => (
+                <option key={location.id} value={location.id}>
+                  {location.name}
+                </option>
+              ))}
+            </select>
+          )}
+
+          <select
+            aria-label={t("nightWindow")}
+            className={`${control} cursor-pointer`}
+            value={nightStart}
+            onChange={(event) => setNightStart(event.target.value as typeof nightStart)}
+          >
+            <option value="20">{t("night20Short")}</option>
+            <option value="23">{t("night23Short")}</option>
+          </select>
+
+          <button type="submit" className={secondaryClass} disabled={isPending}>
+            {isPending && <Loader2 size={15} className="animate-spin" />}
+            {t("apply")}
+          </button>
+        </div>
+
+        {(mode === "employee" || mode === "employees") && (
+          <div className="max-w-[560px]">
+            <EmployeeSelector
+              key={mode}
+              label={mode === "employee" ? t("employee") : t("employees")}
+              name="employee"
+              mode={mode === "employee" ? "single" : "multi"}
+              defaultSelectedIds={mode === "employee" ? filters.employeeIds.slice(0, 1) : filters.employeeIds}
+              options={employees}
+            />
+          </div>
         )}
-      </div>
-    </section>
+      </form>
+    </DbCard>
   );
 }
 
@@ -361,34 +341,6 @@ export function ReportFilterBar({
 // ---------------------------------------------------------------------------
 
 type DraftValues = Record<string, Partial<Record<EditableReportField, string>>>;
-
-function AbsenceCell({ periods, unitKey }: { periods: AbsencePeriod[] | null; unitKey: "workdays" | "calendarDays" }) {
-  const t = useTranslations("ReportsPage");
-  const locale = useLocale();
-
-  if (periods === null) {
-    return <span className="text-muted-2" title={t("noAbsencePermission")}>—</span>;
-  }
-  if (periods.length === 0) {
-    return <span className="text-muted-2">—</span>;
-  }
-
-  const total = periods.reduce((sum, period) => sum + period.days, 0);
-
-  return (
-    <div className="flex flex-col gap-0.5">
-      {periods.map((period) => (
-        <span key={`${period.from}-${period.to}`} className="whitespace-nowrap">
-          {period.from === period.to
-            ? shortDate(period.from, locale)
-            : `${shortDate(period.from, locale)}–${shortDate(period.to, locale)}`}
-          {period.open && <span className="text-[#9A5B00]"> · {t("open")}</span>}
-        </span>
-      ))}
-      <span className="font-semibold text-ink">{t(unitKey, { count: total })}</span>
-    </div>
-  );
-}
 
 export function HoursReportTable({
   tenant,
@@ -399,8 +351,12 @@ export function HoursReportTable({
   recipients,
   emailConfigured,
   disabled,
+  range,
+  today,
 }: {
   tenant: string;
+  range: ReportRange;
+  today: string;
   rows: HoursReportRow[];
   canEdit: boolean;
   showVacation: boolean;
@@ -494,10 +450,10 @@ export function HoursReportTable({
     return true;
   };
 
-  const exportExcel = () => {
+  const exportFile = (format: "xlsx" | "pdf") => {
     if (!ensureValid()) return;
     startExport(async () => {
-      const result = await exportHoursReportAction({ tenant, query, format: "xlsx", overrides: resolved.overrides });
+      const result = await exportHoursReportAction({ tenant, query, format, overrides: resolved.overrides });
       if (result.error || !result.file) {
         toast({ tone: "error", title: result.error ?? t("exportFailed") });
         return;
@@ -538,12 +494,12 @@ export function HoursReportTable({
           type="text"
           inputMode="decimal"
           aria-label={`${fieldLabels[field]} – ${row.name}`}
-          className={`w-[76px] rounded-[8px] border px-2 py-1 text-right font-mono text-[12.5px] tabular-nums outline-none focus:border-ink ${
+          className={`w-[72px] rounded-[7px] border px-1.5 py-1 text-right text-[13.5px] tabular-nums outline-none focus:border-[#8b6fe0] focus:bg-white ${
             invalid
               ? "border-danger bg-danger/5 text-danger"
               : changed
                 ? "border-[#E0B252] bg-[#FFF6E0] text-ink"
-                : "border-border bg-white text-ink"
+                : "border-transparent bg-transparent text-ink hover:border-[#e4e3df]"
           }`}
           value={draft ?? formatHours(row[field], locale)}
           onChange={(event) => setDraft(row.employeeId, field, event.target.value)}
@@ -564,122 +520,237 @@ export function HoursReportTable({
     );
   };
 
-  const th = "px-3 py-2.5 text-left font-mono text-[10.5px] font-semibold uppercase tracking-[0.5px] text-muted";
+  const totalDiff = resolved.values.reduce((sum, row) => sum + rowDiff(row), 0);
+  const plannedToDate = resolved.values.reduce((sum, row) => sum + row.plannedToDateMinutes, 0);
+  const surcharge = totals.nightMinutes + totals.holidayMinutes + totals.sundayMinutes;
+  const running = range.to >= today && range.from <= today;
+  const vacationDays = resolved.values.reduce((sum, row) => sum + (row.vacations ?? []).reduce((total, period) => total + period.days, 0), 0);
+  const sicknessDays = resolved.values.reduce((sum, row) => sum + (row.sickness ?? []).reduce((total, period) => total + period.days, 0), 0);
+  const showAbsence = showVacation || showSickness;
+  const kpis = [
+    { label: t("kpiPlanned"), value: totals.plannedMinutes, caption: running ? t("kpiPlannedToDate", { hours: formatHoursShort(plannedToDate, locale) }) : t("kpiPlannedCaption"), tone: "" },
+    { label: t("kpiWorked"), value: totals.workedMinutes, caption: t("kpiWorkedCaption"), tone: "" },
+    { label: t("kpiDiff"), value: totalDiff, caption: t("kpiDiffCaption"), tone: totalDiff > 0 ? "text-[#1f5d2c]" : totalDiff < 0 ? "text-[#b4332a]" : "", signed: true },
+    { label: t("kpiSurcharge"), value: surcharge, caption: t("kpiSurchargeCaption"), tone: "text-[#6b4fc4]" },
+  ];
+  const th = "px-3 py-3 text-left font-mono text-[10px] font-normal tracking-[0.08em] text-[#6e6e6b] uppercase";
   const thRight = `${th} text-right`;
+  const actions = (
+    <>
+      <button type="button" className={secondaryClass} onClick={() => exportFile("pdf")} disabled={disabled || isExporting || resolved.values.length === 0}>
+        {isExporting ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
+        {t("exportPdf")}
+      </button>
+      <button type="button" className={secondaryClass} onClick={() => exportFile("xlsx")} disabled={disabled || isExporting || resolved.values.length === 0}>
+        {isExporting ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
+        {t("exportExcel")}
+      </button>
+      {canEdit && (
+        <button type="button" className={ctaClass} onClick={openSendDialog} disabled={disabled || resolved.values.length === 0}>
+          <Mail size={15} />
+          {t("sendEmail")}
+        </button>
+      )}
+    </>
+  );
 
   return (
     <>
-      <section className="overflow-hidden rounded-card border border-border bg-white">
+      <ReportActionsPortal>{actions}</ReportActionsPortal>
+
+      <section className="mb-4 grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]">
+        {kpis.map((kpi) => (
+          <DbCard key={kpi.label} className="db-insight flex flex-col gap-1.5 p-[16px]">
+            <span className="text-[13px] font-medium text-[#6e6e6b]">{kpi.label}</span>
+            <span className={`font-display text-[28px] leading-none font-semibold tracking-[-1px] ${kpi.tone}`}>
+              {kpi.signed ? formatSigned(kpi.value, locale, 1) : formatHoursShort(kpi.value, locale)}
+              <span className="ml-1 font-sans text-[13px] font-normal tracking-normal text-[#9a9a96]">{t("hoursUnit")}</span>
+            </span>
+            <span className="text-[12.5px] text-[#6e6e6b]">{kpi.caption}</span>
+          </DbCard>
+        ))}
+      </section>
+
+      <DbCard className="overflow-hidden p-0">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#ecebe7] px-[18px] py-3 text-[12.5px] text-[#6e6e6b]">
+          <span className="flex items-center gap-2">
+            <Info size={14} className="text-[#6b4fc4]" />
+            {canEdit ? t("editHintShort") : t("legendShort")}
+          </span>
+          {running && (
+            <span className="flex items-center gap-1.5 text-[#2c64c9]">
+              <span className="size-1.5 rounded-full bg-[#2c64c9]" />
+              {t("runningHint", { time: new Date().toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" }) })}
+            </span>
+          )}
+        </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[880px] border-collapse text-[13px]">
-            <thead className="border-b border-border bg-bg">
+          <table className="w-full min-w-[920px] border-collapse text-[13.5px]">
+            <thead className="border-b border-[#ecebe7]">
               <tr>
-                <th className={`${th} sticky left-0 z-10 bg-bg`}>{t("columnEmployee")}</th>
-                <th className={th}>{t("columnEmployeeNumber")}</th>
-                <th className={thRight}>{t("columnPlanned")}</th>
-                <th className={thRight}>{t("columnWorked")}</th>
-                <th className={thRight}>{t("columnNight")}</th>
-                <th className={thRight}>{t("columnHoliday")}</th>
-                <th className={thRight}>{t("columnSunday")}</th>
-                {showVacation && <th className={th}>{t("columnVacation")}</th>}
-                {showSickness && <th className={th}>{t("columnSickness")}</th>}
+                <th className={`${th} sticky left-0 z-10 bg-white pl-[18px]`}>{t("columnEmployee")}</th>
+                <th className={thRight}>{t("columnPlannedShort")}</th>
+                <th className={thRight}>{t("columnWorkedShort")}</th>
+                <th className={thRight}>{t("columnDiff")}</th>
+                <th className={thRight}>{t("columnNightShort")}</th>
+                <th className={thRight}>{t("columnHolidayShort")}</th>
+                <th className={thRight}>{t("columnSundayShort")}</th>
+                {showAbsence && <th className={`${th} pr-[18px]`}>{t("columnAbsence")}</th>}
               </tr>
             </thead>
             <tbody>
               {resolved.values.length === 0 && (
                 <tr>
-                  <td colSpan={7 + Number(showVacation) + Number(showSickness)} className="px-5 py-10 text-center text-muted">
+                  <td colSpan={7 + Number(showAbsence)} className="px-5 py-10 text-center text-[#6e6e6b]">
                     {disabled ? t("selectionMissing") : t("noRows")}
                   </td>
                 </tr>
               )}
-              {resolved.values.map((row) => (
-                <tr key={row.employeeId} className="border-b border-border-soft align-top last:border-b-0">
-                  <td className="sticky left-0 z-10 bg-white px-3 py-2.5 font-semibold text-ink">
-                    {row.name}
-                    {row.openEntries > 0 && (
-                      <div className="text-[11px] font-normal text-[#1F7A3E]">● {t("clockedIn")}</div>
+              {resolved.values.map((row) => {
+                const diff = rowDiff(row);
+
+                return (
+                  <tr key={row.employeeId} className="border-b border-[#f0efeb] align-middle last:border-b-0">
+                    <td className="sticky left-0 z-10 bg-white py-2.5 pr-3 pl-[18px]">
+                      <span className="flex items-center gap-2.5">
+                        <span
+                          className="flex size-8 shrink-0 items-center justify-center rounded-full text-[10.5px] font-bold text-white"
+                          style={{ background: avatarColor(row.employeeId) }}
+                        >
+                          {initialsOf(row.name)}
+                        </span>
+                        <span className="flex min-w-0 flex-col">
+                          <span className="truncate font-semibold">{row.name}</span>
+                          <span className="font-mono text-[11px] text-[#9a9a96]">
+                            {row.employeeNumber || "—"}
+                            {row.openEntries > 0 && <span className="ml-1.5 font-sans text-[#1f7a3e]">● {t("clockedIn")}</span>}
+                          </span>
+                        </span>
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5 text-right tabular-nums">{formatHours(row.plannedMinutes, locale)}</td>
+                    <td className="px-3 py-2 text-right">{hoursCell(row, "workedMinutes")}</td>
+                    <td className="px-3 py-2.5 text-right">
+                      <span
+                        className={`inline-block rounded-[6px] px-1.5 py-[2px] text-[12.5px] font-semibold tabular-nums ${
+                          Math.abs(diff) < 1 ? "bg-[#f2f1ed] text-[#6e6e6b]" : diff > 0 ? "bg-[rgba(47,122,74,0.12)] text-[#1f5d2c]" : "bg-[#f2f1ed] text-[#6e6e6b]"
+                        }`}
+                      >
+                        {formatSigned(diff, locale, 2)}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-right">{hoursCell(row, "nightMinutes")}</td>
+                    <td className="px-3 py-2 text-right">{hoursCell(row, "holidayMinutes")}</td>
+                    <td className="px-3 py-2 text-right">{hoursCell(row, "sundayMinutes")}</td>
+                    {showAbsence && (
+                      <td className="py-2.5 pr-[18px] pl-3">
+                        <AbsenceChips vacations={showVacation ? row.vacations : []} sickness={showSickness ? row.sickness : []} />
+                      </td>
                     )}
-                  </td>
-                  <td className="px-3 py-2.5 font-mono text-[12px] text-muted">{row.employeeNumber || "—"}</td>
-                  <td className="px-3 py-2.5 text-right font-mono tabular-nums text-muted">
-                    {formatHours(row.plannedMinutes, locale)}
-                  </td>
-                  <td className="px-3 py-2 text-right font-mono font-semibold">{hoursCell(row, "workedMinutes")}</td>
-                  <td className="px-3 py-2 text-right font-mono">{hoursCell(row, "nightMinutes")}</td>
-                  <td className="px-3 py-2 text-right font-mono">{hoursCell(row, "holidayMinutes")}</td>
-                  <td className="px-3 py-2 text-right font-mono">{hoursCell(row, "sundayMinutes")}</td>
-                  {showVacation && (
-                    <td className="px-3 py-2.5 text-[12px] text-muted">
-                      <AbsenceCell periods={row.vacations} unitKey="workdays" />
-                    </td>
-                  )}
-                  {showSickness && (
-                    <td className="px-3 py-2.5 text-[12px] text-muted">
-                      <AbsenceCell periods={row.sickness} unitKey="calendarDays" />
-                    </td>
-                  )}
-                </tr>
-              ))}
+                  </tr>
+                );
+              })}
             </tbody>
             {resolved.values.length > 0 && (
-              <tfoot className="border-t border-border bg-bg">
-                <tr className="font-mono text-[12.5px] font-semibold tabular-nums text-ink">
-                  <td className="sticky left-0 z-10 bg-bg px-3 py-2.5 font-sans">{t("total")}</td>
-                  <td />
-                  <td className="px-3 py-2.5 text-right">{formatHours(totals.plannedMinutes, locale)}</td>
-                  <td className="px-3 py-2.5 text-right">{formatHours(totals.workedMinutes, locale)}</td>
-                  <td className="px-3 py-2.5 text-right">{formatHours(totals.nightMinutes, locale)}</td>
-                  <td className="px-3 py-2.5 text-right">{formatHours(totals.holidayMinutes, locale)}</td>
-                  <td className="px-3 py-2.5 text-right">{formatHours(totals.sundayMinutes, locale)}</td>
-                  {showVacation && <td />}
-                  {showSickness && <td />}
+              <tfoot className="border-t-2 border-ink">
+                <tr className="text-[13.5px] font-semibold tabular-nums">
+                  <td className="sticky left-0 z-10 bg-white py-3 pr-3 pl-[18px]">{t("total")}</td>
+                  <td className="px-3 py-3 text-right">{formatHours(totals.plannedMinutes, locale)}</td>
+                  <td className="px-3 py-3 text-right">{formatHours(totals.workedMinutes, locale)}</td>
+                  <td className={`px-3 py-3 text-right ${totalDiff > 0 ? "text-[#1f5d2c]" : totalDiff < 0 ? "text-[#b4332a]" : ""}`}>
+                    {formatSigned(totalDiff, locale, 2)}
+                  </td>
+                  <td className="px-3 py-3 text-right">{formatHours(totals.nightMinutes, locale)}</td>
+                  <td className="px-3 py-3 text-right">{formatHours(totals.holidayMinutes, locale)}</td>
+                  <td className="px-3 py-3 text-right">{formatHours(totals.sundayMinutes, locale)}</td>
+                  {showAbsence && (
+                    <td className="py-3 pr-[18px] pl-3 text-[12.5px] font-medium text-[#3d3d3a]">
+                      {[
+                        showVacation && vacationDays > 0 ? t("absenceVacation", { count: vacationDays }) : null,
+                        showSickness && sicknessDays > 0 ? t("absenceSickness", { count: sicknessDays }) : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </td>
+                  )}
                 </tr>
               </tfoot>
             )}
           </table>
         </div>
-      </section>
+      </DbCard>
 
-      <div className="mt-3 flex flex-col gap-1 text-[12px] text-muted">
-        <p>{t("legend")}</p>
-        {canEdit && <p>{t("editHint")}</p>}
-      </div>
+      <p className="mt-3 text-[12px] leading-[1.5] text-[#9a9a96]">{t("legendDesign")}</p>
 
-      <div className="mt-5 flex flex-wrap items-center justify-end gap-2.5">
-        {changedCount > 0 && (
-          <>
-            <span className="mr-auto text-[12.5px] text-[#9A5B00]">{t("changedCount", { count: changedCount })}</span>
-            <button type="button" className="btn btn-secondary" onClick={() => setDrafts({})}>
-              <RotateCcw size={15} />
-              {t("resetAll")}
-            </button>
-          </>
-        )}
-        <button
-          type="button"
-          className="btn btn-secondary"
-          onClick={exportExcel}
-          disabled={disabled || isExporting || resolved.values.length === 0}
-        >
-          {isExporting ? <Loader2 size={15} className="animate-spin" /> : <FileSpreadsheet size={15} />}
-          {t("exportExcel")}
-        </button>
-        {canEdit && (
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={openSendDialog}
-            disabled={disabled || resolved.values.length === 0}
-          >
-            <Mail size={15} />
-            {t("sendEmail")}
+      {changedCount > 0 && (
+        <div className="sticky bottom-4 z-20 mt-4 flex flex-wrap items-center justify-between gap-3 rounded-[14px] border border-[#ecebe7] bg-white px-4 py-3 shadow-[0_12px_40px_rgba(0,0,0,0.12)]">
+          <span className="text-[13px] text-[#9a5b00]">{t("changedCount", { count: changedCount })}</span>
+          <button type="button" className={secondaryClass} onClick={() => setDrafts({})}>
+            <RotateCcw size={15} />
+            {t("resetAll")}
           </button>
-        )}
-      </div>
+        </div>
+      )}
     </>
   );
 }
+
+function AbsenceChips({ vacations, sickness }: { vacations: AbsencePeriod[] | null; sickness: AbsencePeriod[] | null }) {
+  const t = useTranslations("ReportsPage");
+  const locale = useLocale();
+  const vacationDays = (vacations ?? []).reduce((sum, period) => sum + period.days, 0);
+  const sicknessDays = (sickness ?? []).reduce((sum, period) => sum + period.days, 0);
+  const title = (periods: AbsencePeriod[] | null) =>
+    (periods ?? [])
+      .map((period) => (period.from === period.to ? shortDate(period.from, locale) : `${shortDate(period.from, locale)}–${shortDate(period.to, locale)}`))
+      .join(", ");
+
+  if (vacationDays === 0 && sicknessDays === 0) {
+    return <span className="text-[#b5b4af]">–</span>;
+  }
+
+  return (
+    <span className="flex flex-wrap gap-1">
+      {vacationDays > 0 && (
+        <span title={title(vacations)} className="rounded-[6px] bg-[rgba(31,122,108,0.10)] px-1.5 py-[2px] text-[12px] font-medium text-[#1f6b5f]">
+          {t("absenceVacation", { count: vacationDays })}
+        </span>
+      )}
+      {sicknessDays > 0 && (
+        <span title={title(sickness)} className="rounded-[6px] bg-[rgba(180,51,42,0.10)] px-1.5 py-[2px] text-[12px] font-medium text-[#b4332a]">
+          {t("absenceSickness", { count: sicknessDays })}
+          {(sickness ?? []).some((period) => period.open) ? ` · ${t("open")}` : ""}
+        </span>
+      )}
+    </span>
+  );
+}
+
+/** Ist − Soll bis heute, ohne Soll an Abwesenheitstagen. */
+function rowDiff(row: HoursReportRow) {
+  return row.workedMinutes - (row.plannedToDateMinutes - row.absencePlannedMinutes);
+}
+
+function initialsOf(name: string) {
+  const parts = name.trim().split(/\s+/);
+
+  return ((parts[0]?.[0] ?? "") + (parts.length > 1 ? parts.at(-1)![0] : "")).toUpperCase();
+}
+
+/** Die Export-Knöpfe gehören laut Design in den Seitenkopf — dort liegt ein leerer Platzhalter. */
+function ReportActionsPortal({ children }: { children: ReactNode }) {
+  const target = useSyncExternalStore(
+    noopSubscribe,
+    () => document.getElementById(REPORT_ACTIONS_SLOT),
+    () => null,
+  );
+
+  return target ? createPortal(children, target) : null;
+}
+
+const noopSubscribe = () => () => {};
+
+export const REPORT_ACTIONS_SLOT = "report-actions";
 
 // ---------------------------------------------------------------------------
 // Versand

@@ -4,8 +4,8 @@ import { deleteRoleAction, updateRoleAction } from "@/app/(dashboard)/u/[tenant]
 import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
 import { DbField, DbModal, dbInputClass } from "@/components/dashboard/DbDrawer";
 import { RoleEditorHiddenInputs, RolePermissionTable } from "@/components/dashboard/roles/RolePermissionTable";
-import { avatarColor, levelColor, levelCounts, roleEditorFormEntries, roleEditorStateFromRole } from "@/components/dashboard/roles/role-editor-state";
-import { DbCard, DbSwitch, ctaClass, secondaryClass } from "@/components/dashboard/ui";
+import { levelColor, levelCounts, roleEditorFormEntries, roleEditorStateFromRole } from "@/components/dashboard/roles/role-editor-state";
+import { DbCard, DbSwitch, avatarColor, ctaClass, secondaryClass } from "@/components/dashboard/ui";
 import { UnsavedChangesGuard } from "@/components/EditSafety";
 import { useActionStateWithToast } from "@/components/Toasts";
 import type { RoleAssignee } from "@/lib/role-service";

@@ -137,3 +137,14 @@ export function DbSwitch({
     </button>
   );
 }
+
+const avatarColors = ["#2c64c9", "#2f7a4a", "#c2571f", "#6b4fc4", "#4a5568", "#b4332a"];
+
+/** Stabile Avatarfarbe je Person (z. B. aus der id). */
+export function avatarColor(seed: string) {
+  let hash = 0;
+
+  for (const char of seed) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+
+  return avatarColors[hash % avatarColors.length];
+}

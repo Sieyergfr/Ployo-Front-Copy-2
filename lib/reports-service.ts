@@ -145,6 +145,10 @@ export type HoursReportRow = {
   nightMinutes: number;
   holidayMinutes: number;
   sundayMinutes: number;
+  /** Soll der bis jetzt beendeten Schichten (für die Differenz im laufenden Zeitraum). */
+  plannedToDateMinutes: number;
+  /** Davon an Urlaubs-/Krankheitstagen (nur soweit für den Betrachter sichtbar). */
+  absencePlannedMinutes: number;
   /** Noch laufende Stempelungen (bis "jetzt" gezählt). */
   openEntries: number;
   /** null = keine Berechtigung für diesen Mitarbeiter. */
@@ -196,7 +200,7 @@ function requireWrite(access: TenantAccess) {
 
 const SICKNESS_DATE = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
 
-type ComputedReport = {
+export type ComputedReport = {
   tenantName: string;
   timeZone: string;
   today: string;
@@ -219,7 +223,7 @@ type ComputedReport = {
   }>;
 };
 
-async function computeReport(
+export async function computeReport(
   access: TenantAccess,
   filters: ReportFilters,
 ): Promise<ComputedReport> {
@@ -444,15 +448,22 @@ async function computeReport(
       return [];
     }
 
+    const shiftViews = (shiftsByEmployee.get(employee.id) ?? []).map(toShiftView);
+    const absent = (date: string) =>
+      [...(employeeVacations ?? []), ...(employeeSickness ?? [])].some((period) => period.from <= date && period.to >= date);
+    // Nur bereits beendete Schichten — eine laufende oder spätere Schicht von heute zählt noch nicht ins Soll.
+    const shiftsToDate = shiftViews.filter((shift) => new Date(shift.endAt) <= now);
+
     return [
       {
         employeeId: employee.id,
         name: employee.name,
         employeeNumber: employee.employeeNumber,
-        plannedMinutes: (shiftsByEmployee.get(employee.id) ?? []).reduce(
-          (sum, shift) => sum + toShiftView(shift).plannedMinutes,
-          0,
-        ),
+        plannedMinutes: shiftViews.reduce((sum, shift) => sum + shift.plannedMinutes, 0),
+        plannedToDateMinutes: shiftsToDate.reduce((sum, shift) => sum + shift.plannedMinutes, 0),
+        absencePlannedMinutes: shiftsToDate
+          .filter((shift) => absent(shift.date))
+          .reduce((sum, shift) => sum + shift.plannedMinutes, 0),
         ...totals,
         openEntries: own.filter((entry) => !entry.clockOutAt).length,
         vacations: employeeVacations,

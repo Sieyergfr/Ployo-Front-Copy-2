@@ -10,6 +10,7 @@ import {
   sendHoursReport,
   type ReportFilters,
 } from "@/lib/reports-service";
+import { exportReportAnalytics, isAnalyticsTab } from "@/lib/report-analytics";
 import { revalidatePath } from "next/cache";
 
 /**
@@ -91,4 +92,26 @@ export async function removeReportRecipientAction(input: { tenant: string; email
     revalidatePath(`/u/${input.tenant}/reports`);
     return { success: true };
   }, "Report-Empfänger entfernen");
+}
+
+export async function exportReportAnalyticsAction(input: {
+  tenant: string;
+  tab: string;
+  format: string;
+}): Promise<ActionState & { file?: { filename: string; contentType: string; base64: string } }> {
+  let file: { filename: string; contentType: string; base64: string } | undefined;
+
+  const state = await withActionErrorHandling(async () => {
+    if (!isAnalyticsTab(input.tab)) {
+      throw new Error("Unbekannter Report.");
+    }
+
+    file = await exportReportAnalytics({
+      tenantSlug: String(input.tenant),
+      tab: input.tab,
+      format: input.format === "pdf" ? "pdf" : "xlsx",
+    });
+  }, "Report exportieren");
+
+  return { ...state, file };
 }

@@ -3,9 +3,9 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { ChevronRight, Search } from "lucide-react";
-import { avatarColor, levelColor } from "@/components/dashboard/roles/role-editor-state";
+import { levelColor } from "@/components/dashboard/roles/role-editor-state";
 import { dbInputClass } from "@/components/dashboard/DbDrawer";
-import { DbCard } from "@/components/dashboard/ui";
+import { DbCard, avatarColor } from "@/components/dashboard/ui";
 import type { RoleAssignee } from "@/lib/role-service";
 import { permissionAreas, type PermissionRole } from "@/lib/roles";
 import { useTranslations } from "next-intl";

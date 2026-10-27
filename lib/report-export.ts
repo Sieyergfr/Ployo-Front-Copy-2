@@ -513,3 +513,127 @@ export async function buildReportPdf(input: ReportExportInput): Promise<Buffer> 
 
   return Buffer.from(await pdf.save());
 }
+
+// ---------------------------------------------------------------------------
+// Allgemeine Tabellen (Report-Analysen)
+// ---------------------------------------------------------------------------
+
+export type TableExportColumn = { label: string; width: number; align?: "left" | "right" };
+
+export type TableExportInput = {
+  tenantName: string;
+  title: string;
+  /** Zeilen unter dem Titel, z. B. Zeitraum und Erstellungsdatum. */
+  meta: string[];
+  columns: TableExportColumn[];
+  rows: Array<Array<string | number>>;
+  notes?: string[];
+};
+
+function sheetName(title: string) {
+  return escapeXml(title.replace(/[\\/?*[\]:]/g, " ").slice(0, 31) || "Report");
+}
+
+/** Eine Tabelle als .xlsx — Zahlen bleiben Zahlen (zwei Nachkommastellen). */
+export function buildTableXlsx(input: TableExportInput): Buffer {
+  const cell = (value: string | number, bold = false): Cell =>
+    typeof value === "number"
+      ? { value, style: bold ? STYLE.boldNumber : STYLE.number }
+      : { value, style: bold ? STYLE.bold : undefined };
+  const rows: Cell[][] = [
+    [{ value: `${input.title} – ${input.tenantName}`, style: STYLE.title }],
+    ...input.meta.map((line) => [{ value: line }]),
+    [],
+    input.columns.map((column) => ({ value: column.label, style: STYLE.bold })),
+    ...input.rows.map((row) => row.map((value) => cell(value))),
+    ...(input.notes?.length ? [[], ...input.notes.map((note) => [{ value: note }])] : []),
+  ];
+
+  return createZip([
+    { name: "[Content_Types].xml", data: Buffer.from(contentTypesXml) },
+    { name: "_rels/.rels", data: Buffer.from(rootRelsXml) },
+    { name: "xl/workbook.xml", data: Buffer.from(workbookXml.replace('name="Stundenreport"', `name="${sheetName(input.title)}"`)) },
+    { name: "xl/_rels/workbook.xml.rels", data: Buffer.from(workbookRelsXml) },
+    { name: "xl/styles.xml", data: Buffer.from(stylesXml) },
+    {
+      name: "xl/worksheets/sheet1.xml",
+      data: Buffer.from(sheetXml(rows, input.columns.map((column) => column.width), input.meta.length + 3)),
+    },
+  ]);
+}
+
+/** Dieselbe Tabelle als PDF (A4 quer); Spaltenbreiten werden auf die Seite verteilt. */
+export async function buildTablePdf(input: TableExportInput): Promise<Buffer> {
+  const pdf = await PDFDocument.create();
+  pdf.setTitle(`${input.title} – ${input.tenantName}`);
+  pdf.setProducer("Ployo");
+  const font = await pdf.embedFont(StandardFonts.Helvetica);
+  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const pageWidth = 841.89;
+  const pageHeight = 595.28;
+  const margin = 36;
+  const fontSize = 8;
+  const lineHeight = 10;
+  const ink = rgb(0.1, 0.1, 0.09);
+  const muted = rgb(0.43, 0.43, 0.42);
+  const rule = rgb(0.85, 0.85, 0.83);
+  const totalWidth = input.columns.reduce((sum, column) => sum + column.width, 0);
+  const widths = input.columns.map((column) => (column.width / totalWidth) * (pageWidth - 2 * margin));
+  const text = (value: string | number) =>
+    typeof value === "number" ? value.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : value;
+  let page: PDFPage = pdf.addPage([pageWidth, pageHeight]);
+  let y = pageHeight - margin;
+
+  const drawRow = (values: string[], rowFont: PDFFont) => {
+    const lines = values.map((value, index) => wrapText(rowFont, value, fontSize, widths[index] - 6));
+    const rowHeight = Math.max(...lines.map((entry) => entry.length)) * lineHeight + 4;
+
+    if (y - rowHeight < margin + 14) {
+      page = pdf.addPage([pageWidth, pageHeight]);
+      y = pageHeight - margin;
+    }
+
+    let x = margin;
+    lines.forEach((entry, index) => {
+      const align = input.columns[index].align ?? "left";
+
+      entry.forEach((line, lineIndex) => {
+        const lineWidth = rowFont.widthOfTextAtSize(line, fontSize);
+        page.drawText(line, {
+          x: align === "right" ? x + widths[index] - 3 - lineWidth : x + 3,
+          y: y - 2 - (lineIndex + 1) * lineHeight + 2,
+          size: fontSize,
+          font: rowFont,
+          color: ink,
+        });
+      });
+      x += widths[index];
+    });
+    y -= rowHeight;
+    page.drawLine({ start: { x: margin, y }, end: { x: pageWidth - margin, y }, thickness: 0.4, color: rule });
+  };
+
+  page.drawText(pdfSafe(bold, `${input.title} – ${input.tenantName}`), { x: margin, y: y - 14, size: 14, font: bold, color: ink });
+  y -= 28;
+  for (const line of input.meta) {
+    page.drawText(pdfSafe(font, line), { x: margin, y: y - 9, size: 8.5, font, color: muted });
+    y -= 12;
+  }
+  y -= 8;
+  drawRow(input.columns.map((column) => column.label), bold);
+  for (const row of input.rows) drawRow(row.map(text), font);
+
+  y -= 6;
+  for (const note of input.notes ?? []) {
+    for (const line of wrapText(font, note, 7.5, pageWidth - 2 * margin)) {
+      if (y - 10 < margin) {
+        page = pdf.addPage([pageWidth, pageHeight]);
+        y = pageHeight - margin;
+      }
+      page.drawText(line, { x: margin, y: y - 9, size: 7.5, font, color: muted });
+      y -= 10;
+    }
+  }
+
+  return Buffer.from(await pdf.save());
+}

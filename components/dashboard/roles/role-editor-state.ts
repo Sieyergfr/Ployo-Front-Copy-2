@@ -231,13 +231,3 @@ export const roleTemplates: Array<{ id: string; labelKey: string; permissions: P
     },
   },
 ];
-
-const avatarColors = ["#2c64c9", "#2f7a4a", "#c2571f", "#6b4fc4", "#4a5568", "#b4332a"];
-
-export function avatarColor(seed: string) {
-  let hash = 0;
-
-  for (const char of seed) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
-
-  return avatarColors[hash % avatarColors.length];
-}
