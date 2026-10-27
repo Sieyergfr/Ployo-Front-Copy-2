@@ -466,6 +466,7 @@ model Tenant {
   timeEntries                 TenantTimeEntry[]
   clockReminders              TenantTimeClockReminder[]
   reportRecipients            TenantReportRecipient[]
+  timeCorrectionRequests      TenantTimeCorrectionRequest[]
   settings                    TenantSettings?
 }
 
@@ -896,6 +897,7 @@ model TenantEmployee {
   infoRequests                TenantEmployeeInfoRequest[]
   timeline                    TenantEmployeeTimeline[]
   timeEntries                 TenantTimeEntry[]
+  timeCorrectionRequests      TenantTimeCorrectionRequest[]
   contractDetails             TenantEmployeeContractDetails?
   teamMemberships             TenantTeamMember[]
   locationMemberships         TenantLocationMember[]
@@ -1418,43 +1420,78 @@ model TenantWishFreeRequest {
  * Zeilensperre (`SELECT ... FOR UPDATE`) auf den Mitarbeiter ausfuehrt.
  */
 model TenantTimeEntry {
-  id                   String            @id @default(cuid())
+  id                   String                        @id @default(cuid())
   tenantId             String
   employeeId           String
   clockInAt            DateTime
   clockOutAt           DateTime?
   /// ID des Eintrags aus `TenantShiftWeek.publishedShiftsJson`, "" ohne Schicht.
-  shiftId              String            @default("")
+  shiftId              String                        @default("")
   plannedStartAt       DateTime?
   plannedEndAt         DateTime?
-  shiftLocation        String            @default("")
+  shiftLocation        String                        @default("")
   /// Standort, dessen QR-Code beim Einstempeln (bzw. optional beim Ausstempeln) gescannt wurde (nur App).
   /// Kann vom Schicht-Standort abweichen; der Name bleibt als Schnappschuss
   /// erhalten, auch wenn der Standort spaeter umbenannt/geloescht wird.
   clockInLocationId    String?
-  clockInLocationName  String            @default("")
+  clockInLocationName  String                        @default("")
   clockOutLocationId   String?
-  clockOutLocationName String            @default("")
+  clockOutLocationName String                        @default("")
   /// "app" | "web" | "manual" (von der Verwaltung nachgetragen)
-  source               String            @default("app")
+  source               String                        @default("app")
   /// Vom Cron automatisch ausgestempelt (vergessenes Ausstempeln).
-  autoClosed           Boolean           @default(false)
+  autoClosed           Boolean                       @default(false)
   /// Korrigierte Pausendauer - ersetzt die gestempelten Pausen in der Berechnung.
   breakMinutesOverride Int?
   /// Grund der letzten Korrektur bzw. Notiz zum manuellen Eintrag.
-  note                 String            @default("")
+  note                 String                        @default("")
   correctedAt          DateTime?
-  correctedBy          String            @default("")
-  createdAt            DateTime          @default(now())
-  updatedAt            DateTime          @updatedAt
-  tenant               Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  employee             TenantEmployee    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  clockInLocation      TenantLocation?   @relation("TimeEntryClockInLocation", fields: [clockInLocationId], references: [id], onDelete: SetNull)
-  clockOutLocation     TenantLocation?   @relation("TimeEntryClockOutLocation", fields: [clockOutLocationId], references: [id], onDelete: SetNull)
+  correctedBy          String                        @default("")
+  createdAt            DateTime                      @default(now())
+  updatedAt            DateTime                      @updatedAt
+  tenant               Tenant                        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee             TenantEmployee                @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  clockInLocation      TenantLocation?               @relation("TimeEntryClockInLocation", fields: [clockInLocationId], references: [id], onDelete: SetNull)
+  clockOutLocation     TenantLocation?               @relation("TimeEntryClockOutLocation", fields: [clockOutLocationId], references: [id], onDelete: SetNull)
   breaks               TenantTimeBreak[]
+  correctionRequests   TenantTimeCorrectionRequest[]
 
   @@index([tenantId, clockInAt])
   @@index([employeeId, clockInAt])
+}
+
+/**
+ * Korrektur-Anfrage eines Mitarbeiters zu seinen gestempelten Zeiten (App:
+ * "Korrektur anfragen"). Mit `timeEntryId` bezieht sie sich auf einen
+ * bestehenden Eintrag, ohne soll ein fehlender Eintrag nachgetragen werden.
+ * Erst die Freigabe durch jemanden mit `timeTracking:write` ändert die
+ * Zeiten (über correctTimeEntry/createManualTimeEntry, inkl. Audit-Log).
+ */
+model TenantTimeCorrectionRequest {
+  id           String           @id @default(cuid())
+  tenantId     String
+  employeeId   String
+  timeEntryId  String?
+  /// Kalendertag (YYYY-MM-DD, Ortszeit des Betriebs)
+  date         String
+  /// Gewünschte Zeiten ("HH:MM", Ortszeit)
+  startTime    String
+  endTime      String
+  breakMinutes Int?
+  reason       String
+  /// "open" | "approved" | "rejected"
+  status       String           @default("open")
+  rejectReason String           @default("")
+  decidedBy    String           @default("")
+  decidedAt    DateTime?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  tenant       Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employee     TenantEmployee   @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  timeEntry    TenantTimeEntry? @relation(fields: [timeEntryId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, status, createdAt])
+  @@index([employeeId, createdAt])
 }
 
 /**

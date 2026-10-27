@@ -404,6 +404,11 @@ export const TIME_TRACKING_ERRORS = {
   qrRequired: "Bitte scannen Sie zum Einstempeln den QR-Code am Standort.",
   qrRequiredClockOut: "Bitte scannen Sie zum Ausstempeln den QR-Code am Standort.",
   qrInvalid: "Dieser QR-Code gehört zu keinem aktiven Standort Ihres Betriebs.",
+  correctionReasonRequired: "Bitte kurz begründen, was korrigiert werden soll.",
+  correctionNotFound: "Korrektur-Anfrage nicht gefunden.",
+  correctionAlreadyDecided: "Über diese Korrektur-Anfrage wurde bereits entschieden.",
+  correctionTooMany: "Sie haben bereits viele offene Korrektur-Anfragen. Bitte warten Sie auf die Entscheidung.",
+  correctionSelfDecision: "Über die eigene Korrektur-Anfrage kann nicht selbst entschieden werden.",
 } as const;
 
 export const TIME_TRACKING_ERROR_STATUS: ReadonlyMap<string, number> = new Map([
@@ -427,6 +432,11 @@ export const TIME_TRACKING_ERROR_STATUS: ReadonlyMap<string, number> = new Map([
   [TIME_TRACKING_ERRORS.qrRequired, 400],
   [TIME_TRACKING_ERRORS.qrRequiredClockOut, 400],
   [TIME_TRACKING_ERRORS.qrInvalid, 400],
+  [TIME_TRACKING_ERRORS.correctionReasonRequired, 400],
+  [TIME_TRACKING_ERRORS.correctionNotFound, 404],
+  [TIME_TRACKING_ERRORS.correctionAlreadyDecided, 409],
+  [TIME_TRACKING_ERRORS.correctionTooMany, 429],
+  [TIME_TRACKING_ERRORS.correctionSelfDecision, 403],
 ]);
 
 /** Minuten als "h:mm" (z. B. 465 → "7:45"); negative Werte mit Minus (Soll/Ist-Differenz). */

@@ -152,6 +152,22 @@ export type NotificationMessage =
       endTime: string;
     }
   | {
+      key: "timeCorrectionRequested";
+      tenantName: string;
+      employeeName: string;
+      /** YYYY-MM-DD */
+      date: string;
+      startTime: string;
+      endTime: string;
+    }
+  | {
+      key: "timeCorrectionDecided";
+      tenantName: string;
+      date: string;
+      status: "approved" | "rejected";
+      rejectReason: string;
+    }
+  | {
       key: "autoClockedOut";
       tenantName: string;
       /** Datum (YYYY-MM-DD) und Uhrzeit ("HH:MM") des gesetzten Ausstempelns, Ortszeit. */
@@ -480,6 +496,40 @@ export function renderNotification(
       const text = isEn
         ? `Your shift at ${message.tenantName} ended at ${message.endTime}. Please clock out.`
         : `Ihre Schicht bei ${message.tenantName} ist um ${message.endTime} Uhr zu Ende gegangen. Bitte stempeln Sie sich aus.`;
+
+      return { subject, text, html: paragraph(escapeHtml(text)) };
+    }
+
+    case "timeCorrectionRequested": {
+      const date = formatNotificationDate(message.date, locale);
+      const subject = isEn
+        ? `Time correction request from ${message.employeeName}`
+        : `Korrektur-Anfrage von ${message.employeeName}`;
+      const text = isEn
+        ? `${message.employeeName} asks to correct their times on ${date} at ${message.tenantName} to ${message.startTime} – ${message.endTime}.`
+        : `${message.employeeName} bittet bei ${message.tenantName} um eine Korrektur der Zeiten am ${date} auf ${message.startTime} – ${message.endTime} Uhr.`;
+
+      return { subject, text, html: paragraph(escapeHtml(text)) };
+    }
+
+    case "timeCorrectionDecided": {
+      const date = formatNotificationDate(message.date, locale);
+      const decision = isEn
+        ? message.status === "approved"
+          ? "approved"
+          : "rejected"
+        : message.status === "approved"
+          ? "übernommen"
+          : "abgelehnt";
+      const reasonLine = message.rejectReason
+        ? isEn
+          ? ` Reason: ${message.rejectReason}`
+          : ` Begründung: ${message.rejectReason}`
+        : "";
+      const subject = isEn ? `Time correction ${decision}` : `Zeitkorrektur ${decision}`;
+      const text = isEn
+        ? `Your time correction for ${date} at ${message.tenantName} was ${decision}.${reasonLine}`
+        : `Ihre Korrektur-Anfrage für den ${date} bei ${message.tenantName} wurde ${decision}.${reasonLine}`;
 
       return { subject, text, html: paragraph(escapeHtml(text)) };
     }

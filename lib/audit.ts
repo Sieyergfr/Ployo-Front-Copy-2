@@ -3,6 +3,7 @@ import {
   assertEmployeeInScope,
   assertLocationInScope,
   assertTeamInScope,
+  getTenantCapabilities,
   requireTenantAccess,
   type TenantPermissionArea,
 } from "@/lib/tenant-access";
@@ -232,6 +233,101 @@ export async function getAuditLogsForEntity(input: {
     ipAddress: record.ipAddress || undefined,
     detail: record.detail || undefined,
   }));
+}
+
+/**
+ * Nur für das mandantenweite Protokoll (`getTenantAuditLog`): Typen ohne
+ * Pro-Entity-Ansicht. Bewusst NICHT in `AUDIT_AREA_BY_ENTITY_TYPE` — dort
+ * fehlte für sie die Objektscope-Prüfung.
+ */
+const TENANT_LOG_EXTRA_AREAS: Partial<Record<string, TenantPermissionArea>> = {
+  "time-entry": "timeTracking",
+  "time-tracking": "timeTracking",
+  "time-correction-request": "timeTracking",
+  "hours-report": "timeTracking",
+  "report-recipient": "timeTracking",
+};
+
+export type TenantAuditLogEntry = AuditLogEntry & {
+  entityType: string;
+  entityId: string;
+  createdAt: string;
+};
+
+/**
+ * Mandantenweites Änderungsprotokoll (App: "Audit-Log"). Verlangt
+ * `audit:read`; enthalten sind nur Einträge aus Bereichen, in denen der
+ * Nutzer mandantenweit (Scope "all") lesen darf UND `canViewAudit` hat —
+ * team-/own-gescopte Leser sehen weiterhin nur die Pro-Entity-Trails, weil
+ * sich deren Objektscope hier nicht je Eintrag prüfen lässt. Blättern per
+ * `before` (ISO-Zeitstempel des letzten Eintrags).
+ */
+export async function getTenantAuditLog(input: {
+  tenantSlug: string;
+  area?: string;
+  query?: string;
+  before?: string;
+  take?: number;
+}): Promise<{ entries: TenantAuditLogEntry[]; areas: TenantPermissionArea[]; nextBefore: string | null }> {
+  const access = await requireTenantAccess(input.tenantSlug, "audit", "read");
+  const capabilities = await getTenantCapabilities(input.tenantSlug);
+  const typesByArea = new Map<TenantPermissionArea, string[]>();
+
+  for (const [type, area] of Object.entries({ ...AUDIT_AREA_BY_ENTITY_TYPE, ...TENANT_LOG_EXTRA_AREAS })) {
+    if (!area) continue;
+    const capability = capabilities[area];
+    if (capability.level === "none" || capability.scope !== "all" || !capability.canViewAudit) continue;
+    typesByArea.set(area, [...(typesByArea.get(area) ?? []), type]);
+  }
+
+  const areas = [...typesByArea.keys()];
+  const entityTypes =
+    input.area && typesByArea.has(input.area as TenantPermissionArea)
+      ? typesByArea.get(input.area as TenantPermissionArea) ?? []
+      : areas.flatMap((area) => typesByArea.get(area) ?? []);
+
+  if (entityTypes.length === 0) {
+    return { entries: [], areas, nextBefore: null };
+  }
+
+  const take = Math.min(Math.max(input.take ?? 50, 1), 100);
+  const before = input.before ? new Date(input.before) : null;
+  const query = input.query?.trim().slice(0, 100);
+  const records = await prisma.tenantAuditLog.findMany({
+    where: {
+      tenantId: access.tenantId,
+      entityType: { in: entityTypes },
+      ...(before && !Number.isNaN(before.getTime()) ? { createdAt: { lt: before } } : {}),
+      ...(query
+        ? {
+            OR: [
+              { action: { contains: query, mode: "insensitive" as const } },
+              { actorName: { contains: query, mode: "insensitive" as const } },
+              { detail: { contains: query, mode: "insensitive" as const } },
+            ],
+          }
+        : {}),
+    },
+    orderBy: { createdAt: "desc" },
+    take: take + 1,
+  });
+  const page = records.slice(0, take);
+
+  return {
+    areas,
+    nextBefore: records.length > take ? page[page.length - 1].createdAt.toISOString() : null,
+    entries: page.map((record) => ({
+      id: record.id,
+      actor: record.actorName,
+      action: record.action,
+      source: record.source,
+      timestamp: formatTimestamp(record.createdAt),
+      createdAt: record.createdAt.toISOString(),
+      entityType: record.entityType,
+      entityId: record.entityId,
+      detail: record.detail || undefined,
+    })),
+  };
 }
 
 export async function recordTenantAudit(input: {

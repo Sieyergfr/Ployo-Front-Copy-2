@@ -443,3 +443,127 @@ export async function notifyEmployeeOfExpiringVacationCarryover(input: {
 
   return true;
 }
+
+/**
+ * Empfänger einer Korrektur-Anfrage: Mandanten-Manager plus alle Mitglieder,
+ * deren Rolle `timeTracking` mit Schreibrecht hat und deren Ausschnitt den
+ * Mitarbeiter enthält (Scope "all" bzw. gemeinsames Team bei "team").
+ * "own" zählt nie — das wäre die Person selbst.
+ */
+async function getTimeCorrectionApprovers(tenantId: string, employeeId: string) {
+  const memberships = await prisma.tenantMembership.findMany({
+    where: { tenantId },
+    select: {
+      userId: true,
+      role: true,
+      user: { select: { email: true } },
+      roleRef: {
+        select: { permissions: { where: { area: "timeTracking" }, select: { level: true, scope: true }, take: 1 } },
+      },
+    },
+  });
+  const employeeTeams = (
+    await prisma.tenantTeamMember.findMany({ where: { employeeId }, select: { teamId: true } })
+  ).map((membership) => membership.teamId);
+  const subject = await prisma.tenantEmployee.findUnique({ where: { id: employeeId }, select: { userId: true } });
+
+  const approvers: Array<{ userId: string; email: string | null }> = [];
+
+  for (const membership of memberships) {
+    if (membership.userId === subject?.userId) continue;
+
+    if (["OWNER", "ADMIN", "HR"].includes(membership.role)) {
+      approvers.push({ userId: membership.userId, email: membership.user.email });
+      continue;
+    }
+
+    const permission = membership.roleRef?.permissions[0];
+    if (!permission || !["write", "admin"].includes(permission.level)) continue;
+
+    if (permission.scope === "all") {
+      approvers.push({ userId: membership.userId, email: membership.user.email });
+    } else if (permission.scope === "team" && employeeTeams.length) {
+      const me = await prisma.tenantEmployee.findFirst({
+        where: { tenantId, userId: membership.userId },
+        select: { id: true },
+      });
+      const shared = me
+        ? await prisma.tenantTeamMember.findFirst({
+            where: { employeeId: me.id, teamId: { in: employeeTeams } },
+            select: { teamId: true },
+          })
+        : null;
+      if (shared) approvers.push({ userId: membership.userId, email: membership.user.email });
+    }
+  }
+
+  return approvers;
+}
+
+/** Neue Korrektur-Anfrage zu gestempelten Zeiten → alle, die sie freigeben dürfen. */
+export async function notifyApproversOfTimeCorrectionRequest(input: {
+  tenantId: string;
+  tenantName: string;
+  employeeId: string;
+  employeeName: string;
+  requestId: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+}) {
+  const approvers = await getTimeCorrectionApprovers(input.tenantId, input.employeeId);
+
+  await Promise.all(
+    approvers.map((approver) =>
+      dispatchNotification({
+        userId: approver.userId,
+        email: approver.email,
+        message: {
+          key: "timeCorrectionRequested",
+          tenantName: input.tenantName,
+          employeeName: input.employeeName,
+          date: input.date,
+          startTime: input.startTime,
+          endTime: input.endTime,
+        },
+        tenantId: input.tenantId,
+        category: "system",
+        entityType: "time-correction-request",
+        entityId: input.requestId,
+      }),
+    ),
+  );
+}
+
+/** Entscheidung zur eigenen Korrektur-Anfrage. */
+export async function notifyTimeCorrectionDecided(input: {
+  tenantId: string;
+  tenantName: string;
+  employeeId: string;
+  requestId: string;
+  date: string;
+  status: "approved" | "rejected";
+  rejectReason: string;
+}) {
+  const account = await getEmployeeAccount(input.employeeId);
+
+  if (!account) {
+    return;
+  }
+
+  await dispatchNotification({
+    userId: account.userId,
+    email: account.email,
+    message: {
+      key: "timeCorrectionDecided",
+      tenantName: input.tenantName,
+      date: input.date,
+      status: input.status,
+      rejectReason: input.rejectReason,
+    },
+    tenantId: input.tenantId,
+    category: "system",
+    entityType: "time-correction-request",
+    entityId: input.requestId,
+  });
+}
