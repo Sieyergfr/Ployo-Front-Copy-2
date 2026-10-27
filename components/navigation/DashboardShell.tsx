@@ -1,6 +1,7 @@
 "use client";
 
 import { switchLanguageAction } from "@/app/(dashboard)/konto/actions";
+import TrialBanner from "@/components/navigation/TrialBanner";
 import { useActionStateWithToast } from "@/components/Toasts";
 import { permissionLevels, type PermissionLevel } from "@/lib/roles";
 import type { TenantPermissionArea } from "@/lib/tenant-access";
@@ -1094,7 +1095,15 @@ export default function DashboardShell({
           </button>
         </div>
 
-        <div className="container relative z-[1]">{children}</div>
+        <div className="container relative z-[1]">
+          {activeTenant.stripeSubscriptionStatus === "trialing" &&
+            activeTenant.stripeCurrentPeriodEnd &&
+            activeTenant.slug &&
+            (activeTenant.permissions?.settings === "write" || activeTenant.permissions?.settings === "admin") && (
+              <TrialBanner key={activeTenant.slug} tenantSlug={activeTenant.slug} trialEnd={activeTenant.stripeCurrentPeriodEnd} />
+            )}
+          {children}
+        </div>
       </main>
 
       {isNotificationsOpen && (

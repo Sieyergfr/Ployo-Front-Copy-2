@@ -529,11 +529,31 @@
       "resendErrorFallback": "The verification link couldn't be sent."
     },
     "select": {
-      "title": "Select company",
+      "title": "Choose company",
       "subtitle": "Which company would you like to continue with?",
       "searchPlaceholder": "Search companies...",
       "empty": "No company created yet.",
-      "createNew": "Create new company"
+      "createNew": "Create new company",
+      "signedInAs": "Signed in as {email}",
+      "logout": "Sign out",
+      "employeeCount": "{count, plural, one {# employee} other {# employees}}",
+      "plan": {
+        "starter": "Starter",
+        "professional": "Professional",
+        "business": "Business"
+      },
+      "trialDaysLeft": "{count, plural, =0 {Trial · ends today} one {Trial · # day left} other {Trial · # days left}}",
+      "blocked": "Locked",
+      "subscribe": "Subscribe",
+      "waitingForOwner": "Waiting for the owner",
+      "open": "Open",
+      "invitationTo": "Invitation to {company}",
+      "invitedBy": "from {name}",
+      "invitationPending": "Pending invitation",
+      "acceptInvitation": "Accept",
+      "createHint": "Try free for 14 days, no payment details",
+      "summary": "{count, plural, one {# company} other {# companies}}",
+      "summaryAttention": "{count, plural, one {# company} other {# companies}} · {attention, plural, one {# needs} other {# need}} your attention"
     }
   },
   "AccountPreferences": {
@@ -1539,7 +1559,12 @@
     "errorTermsRequired": "Please accept the terms of service.",
     "errorSigninFailed": "The account was created, but signing in failed. Please sign in on the login page.",
     "errorUnexpected": "Something went wrong. Please try again.",
-    "errorRateLimited": "Too many attempts. Please wait a moment and try again."
+    "errorRateLimited": "Too many attempts. Please wait a moment and try again.",
+    "eyebrow": "Invitation",
+    "invitedByTitle": "{name} invited you to {tenant}",
+    "roleChip": "Role: {role}",
+    "validUntil": "valid until {date}",
+    "signIn": "Sign in"
   },
   "CompanyCreateWizard": {
     "countryGermany": "Germany",
@@ -1629,7 +1654,9 @@
     "backToCompanySelection": "← Back to company selection",
     "continueToPayment": "Start 14-day free trial",
     "checkoutFailedTitle": "Payment could not be started",
-    "checkoutFailedSubtitle": "Your company has been created. You can restart setup from the dashboard."
+    "checkoutFailedSubtitle": "Your company has been created. You can restart setup from the dashboard.",
+    "workspaceUrlLabel": "Your workspace URL",
+    "editWorkspaceUrl": "Edit"
   },
   "DatePickerField": {
     "monthJanuary": "January",
@@ -1980,11 +2007,15 @@
     "ownerDisableTitle": "You are the owner of this company",
     "ownerDisableBody": "Instead of setting up 2FA, you can also turn off the 2FA requirement for the company. It will then no longer apply to any member.",
     "ownerDisableButton": "Turn off 2FA requirement",
-    "ownerDisablePending": "Turning off …"
+    "ownerDisablePending": "Turning off …",
+    "banner": "<strong>{company}</strong> requires two-factor authentication. Set it up now to keep working – it takes about a minute.",
+    "alreadyActiveTitle": "2FA is active",
+    "alreadyActiveBody": "Your account is protected. You can continue."
   },
   "CreateCompanyPage": {
     "privacy": "Privacy Policy",
-    "imprint": "Imprint"
+    "imprint": "Imprint",
+    "cancel": "Cancel"
   },
   "KontaktPage": {
     "title": "Contact & Support",
@@ -2003,7 +2034,9 @@
     "imprint": "Imprint",
     "contact": "Contact",
     "terms": "Terms",
-    "deleteAccount": "Delete account"
+    "deleteAccount": "Delete account",
+    "eyebrow": "Legal",
+    "back": "Back to home"
   },
   "LandingPage": {
     "header": {
@@ -2635,7 +2668,26 @@
     "confirmationTimeout": "Stripe's confirmation is taking longer than usual. Reload the page in a few minutes or try again.",
     "redirecting": "Redirecting …",
     "switchCompany": "Choose another company",
-    "logout": "Log out"
+    "logout": "Log out",
+    "eyebrow": {
+      "setup_required": "Setup pending",
+      "payment_failed": "Payment failed",
+      "subscription_inactive": "Subscription ended"
+    },
+    "choosePlanTitle": "Continue with a plan",
+    "billingCycle": "Billing period",
+    "monthly": "Monthly",
+    "yearly": "Yearly",
+    "yearlySaving": "Save 20%",
+    "popular": "Popular",
+    "month": "month",
+    "tooSmall": "Too small for your team",
+    "monthlyNote": "Billed monthly in advance, plus VAT. Access is unlocked immediately.",
+    "yearlyNote": "Billed yearly in advance, plus VAT. Access is unlocked immediately.",
+    "dueToday": "Due today",
+    "afterTrial": "After the trial",
+    "questions": "Questions?",
+    "continueToStripe": "Continue to Stripe"
   },
   "Overview": {
     "greetingMorning": "Good morning",
@@ -4244,5 +4296,37 @@
     "body": "Your role has no permission for this area. Owners and admins decide which role can see what under “Roles”.",
     "toMyArea": "Go to My area",
     "switchCompany": "Switch company"
+  },
+  "TwoFactorSetupWizard": {
+    "stepOf": "Step {step} of {total}",
+    "passwordTitle": "Confirm password",
+    "passwordBody": "For security, please confirm your password first.",
+    "passwordLabel": "Password",
+    "processing": "Processing …",
+    "next": "Next",
+    "enableFailed": "2FA could not be enabled.",
+    "scanTitle": "Scan QR code",
+    "scanBody": "Open an authenticator app (e.g. Google Authenticator, Microsoft Authenticator or 1Password) and scan the code.",
+    "qrLabel": "QR code for the authenticator app",
+    "manualKey": "Or enter the key manually",
+    "copy": "Copy",
+    "copied": "Copied",
+    "verifyTitle": "Enter code",
+    "verifyBody": "Enter the 6-digit code from your authenticator app.",
+    "codeLabel": "Verification code",
+    "back": "Back",
+    "checking": "Checking …",
+    "activate": "Activate",
+    "invalidCode": "The code was invalid. Please check your authenticator app.",
+    "backupTitle": "Save backup codes",
+    "backupBody": "Keep these codes safe. Each code works once if you lose access to your app.",
+    "copyCodes": "Copy codes",
+    "finish": "Done – continue"
+  },
+  "TrialBanner": {
+    "daysLeft": "{count, plural, =0 {Trial: ends today} one {Trial: # day left} other {Trial: # days left}}",
+    "endsOn": "ends on {date}",
+    "later": "Later",
+    "choosePlan": "Choose plan"
   }
 }

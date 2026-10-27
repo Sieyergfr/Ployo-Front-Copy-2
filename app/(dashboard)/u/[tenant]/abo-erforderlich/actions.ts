@@ -8,6 +8,7 @@ import {
   getOpenInvoicePaymentUrl,
   getTenantPlanSelection,
 } from "@/lib/billing-service";
+import { billingCycles, tenantPlans } from "@/lib/tenants";
 import { redirect } from "next/navigation";
 
 function formString(formData: FormData, key: string) {
@@ -35,10 +36,13 @@ export async function startGateCheckoutAction(
     }
 
     const selection = await getTenantPlanSelection(tenant);
+    // Optional im Dialog gewählt; sonst der zuletzt gespeicherte Plan.
+    const plan = tenantPlans.find((value) => value === formString(formData, "plan")) ?? selection.plan;
+    const billingCycle = billingCycles.find((value) => value === formString(formData, "billingCycle")) ?? selection.billingCycle;
     const checkoutUrl = await createBillingCheckoutSession({
       tenantSlug: tenant,
-      plan: selection.plan,
-      billingCycle: selection.billingCycle,
+      plan,
+      billingCycle,
       successUrl: absoluteGateUrl(tenant, "?checkout=success"),
       cancelUrl: absoluteGateUrl(tenant),
     });

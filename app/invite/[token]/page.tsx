@@ -1,5 +1,7 @@
-import AuthHeader from "@/components/AuthHeader";
-import Card from "@/components/Card/card";
+import "@/app/(auth)/auth.css";
+import AuthShell from "@/components/auth/AuthShell";
+import { avatarColor } from "@/components/dashboard/ui";
+import Image from "next/image";
 import CardHeader from "@/components/Card/CardHeader";
 import PrimaryButton from "@/components/Buttons/PrimaryButton";
 import Checkbox from "@/components/inputs/checkbox";
@@ -12,7 +14,7 @@ import {
 } from "@/lib/invitation-service";
 import { headers } from "next/headers";
 import Link from "next/link";
-import { getTranslations } from "next-intl/server";
+import { getLocale, getTranslations } from "next-intl/server";
 import {
   acceptInvitationAction,
   loginAndAcceptInvitationAction,
@@ -24,6 +26,70 @@ export const metadata = {
 };
 
 type T = Awaited<ReturnType<typeof getTranslations>>;
+
+function initialsOf(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
+}
+
+/** Kopf der offenen Einladung: Firmen-/Einladenden-Avatar, Titel, Rolle und Gültigkeit. */
+function InviteHero({
+  invitation,
+  subtitle,
+  t,
+  tRole,
+  locale,
+}: {
+  invitation: NonNullable<Awaited<ReturnType<typeof getInvitationByToken>>>;
+  subtitle?: string;
+  t: T;
+  tRole: T;
+  locale: string;
+}) {
+  const roleKey = ({ ADMIN: "roleAdmin", HR: "roleHR", EMPLOYEE: "roleEmployee" } as Record<string, string>)[invitation.role] ?? "roleEmployee";
+
+  return (
+    <div className="mb-5 flex flex-col items-center gap-2 text-center">
+      <span className="relative mb-1">
+        <span
+          className="flex size-[50px] items-center justify-center rounded-[13px] text-[16px] font-semibold text-white"
+          style={{ background: avatarColor(invitation.tenantName) }}
+        >
+          {initialsOf(invitation.tenantName)}
+        </span>
+        {invitation.invitedByName && (
+          <span
+            className="absolute -right-3 -bottom-2 flex size-[34px] items-center justify-center rounded-full border-[3px] border-white text-[11px] font-semibold text-white"
+            style={{ background: avatarColor(invitation.invitedByName) }}
+          >
+            {initialsOf(invitation.invitedByName)}
+          </span>
+        )}
+      </span>
+      <span className="font-mono text-[10.5px] tracking-[0.12em] text-[#6e6e6b] uppercase">{t("eyebrow")}</span>
+      <h1 className="m-0 font-display text-[clamp(21px,3vw,25px)] leading-[1.2] font-semibold tracking-[-0.5px]">
+        {invitation.invitedByName
+          ? t("invitedByTitle", { name: invitation.invitedByName, tenant: invitation.tenantName })
+          : t("inviteToTenant", { tenant: invitation.tenantName })}
+      </h1>
+      <span className="flex flex-wrap justify-center gap-1.5">
+        <span className="rounded-[7px] bg-[rgba(139,111,224,0.12)] px-2 py-[3px] text-[12.5px] font-semibold text-[#6b4fc4]">
+          {t("roleChip", { role: tRole(roleKey) })}
+        </span>
+        {invitation.expiresAt && (
+          <span className="rounded-[7px] bg-[#f2f1ed] px-2 py-[3px] text-[12.5px] text-[#6e6e6b]">
+            {t("validUntil", { date: new Date(invitation.expiresAt).toLocaleDateString(locale === "en" ? "en-GB" : "de-DE") })}
+          </span>
+        )}
+      </span>
+      {subtitle && <p className="m-0 mt-1 text-[14px] leading-[1.5] text-[#6e6e6b]">{subtitle}</p>}
+    </div>
+  );
+}
 
 function getErrorMessages(t: T): Record<string, string> {
   return {
@@ -51,6 +117,9 @@ export default async function InvitePage({
   searchParams: Promise<{ fehler?: string }>;
 }) {
   const t = await getTranslations("InvitePage");
+  const tRole = await getTranslations("DashboardLayout");
+  const tFooter = await getTranslations("Auth.footer");
+  const locale = await getLocale();
   const { token } = await params;
   const { fehler } = await searchParams;
   const invitation = await getInvitationByToken(token);
@@ -72,10 +141,20 @@ export default async function InvitePage({
     ) : null;
 
   return (
-    <div className="min-h-svh flex items-center justify-center p-6">
-      <div className="w-full max-w-[420px]">
-        <AuthHeader />
-        <Card>
+    <AuthShell>
+      <header className="relative z-[2] mx-auto box-border flex w-full max-w-[1200px] items-center justify-between gap-4 px-[clamp(16px,4vw,60px)] pt-6">
+        <Link href="/" className="au-focus flex items-center gap-2 rounded-[9px] text-ink no-underline">
+          <Image src="/logo_square_brand.svg" alt="" width={22} height={22} priority />
+          <span className="font-display text-[18px] leading-none font-semibold tracking-[-0.4px]">Ployo</span>
+        </Link>
+        {!session?.user && (
+          <Link href="/login" className="au-link au-focus rounded-[10px] px-3 py-2.5 text-[14px] font-medium text-muted-2 no-underline">
+            {t("signIn")}
+          </Link>
+        )}
+      </header>
+      <main className="relative z-[1] box-border flex flex-1 items-center justify-center px-4 pt-10 pb-8">
+        <div className="au-card box-border w-full max-w-[460px] rounded-card p-[clamp(24px,5vw,36px)]">
           {!invitation ? (
             <>
               <CardHeader
@@ -106,10 +185,7 @@ export default async function InvitePage({
           ) : !session?.user ? (
             accountExists ? (
               <>
-                <CardHeader
-                  title={t("inviteToTenant", { tenant: invitation.tenantName })}
-                  subtitle={t("accountExistsSubtitle")}
-                />
+                <InviteHero invitation={invitation} subtitle={t("accountExistsSubtitle")} t={t} tRole={tRole} locale={locale} />
                 {errorBox}
                 <form
                   action={loginAndAcceptInvitationAction}
@@ -143,10 +219,7 @@ export default async function InvitePage({
               </>
             ) : (
               <>
-                <CardHeader
-                  title={t("inviteToTenant", { tenant: invitation.tenantName })}
-                  subtitle={t("createAccountSubtitle")}
-                />
+                <InviteHero invitation={invitation} subtitle={t("createAccountSubtitle")} t={t} tRole={tRole} locale={locale} />
                 {errorBox}
                 <form
                   action={registerAndAcceptInvitationAction}
@@ -217,10 +290,7 @@ export default async function InvitePage({
             )
           ) : (
             <>
-              <CardHeader
-                title={t("inviteToTenant", { tenant: invitation.tenantName })}
-                subtitle={t("loggedInAs", { email: session.user.email })}
-              />
+              <InviteHero invitation={invitation} subtitle={t("loggedInAs", { email: session.user.email })} t={t} tRole={tRole} locale={locale} />
               {errorBox}
               <form action={acceptInvitationAction} className="mt-4 flex flex-col gap-2">
                 <input type="hidden" name="token" value={token} />
@@ -236,8 +306,23 @@ export default async function InvitePage({
               </form>
             </>
           )}
-        </Card>
-      </div>
-    </div>
+        </div>
+      </main>
+      <footer className="relative z-[1] flex flex-wrap items-center justify-center gap-x-2 gap-y-1 px-4 pb-6 text-[12.5px] text-muted-2">
+        <span>© {new Date().getFullYear()} Ployo</span>
+        <span aria-hidden="true">·</span>
+        <Link href="/impressum" className="au-text-link au-focus rounded text-muted-2 no-underline">
+          {tFooter("imprint")}
+        </Link>
+        <span aria-hidden="true">·</span>
+        <Link href="/datenschutz" className="au-text-link au-focus rounded text-muted-2 no-underline">
+          {tFooter("privacy")}
+        </Link>
+        <span aria-hidden="true">·</span>
+        <Link href="/agb" className="au-text-link au-focus rounded text-muted-2 no-underline">
+          {tFooter("terms")}
+        </Link>
+      </footer>
+    </AuthShell>
   );
 }

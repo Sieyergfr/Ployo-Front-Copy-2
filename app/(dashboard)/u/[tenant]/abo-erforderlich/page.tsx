@@ -1,5 +1,7 @@
 import BillingGateDialog from "@/components/BillingGateDialog";
 import { getTenantBillingGate } from "@/lib/billing-service";
+import { prisma } from "@/lib/prisma";
+import { planEmployeeLimits } from "@/lib/stripe/plans";
 import { redirect } from "next/navigation";
 
 export const metadata = {
@@ -30,8 +32,18 @@ export default async function SubscriptionRequiredPage({
     redirect(`/u/${tenant}`);
   }
 
+  // Mitgliedschaft ist durch getTenantBillingGate bereits geprüft.
+  const [employeeCount, tenantPlan] = await Promise.all([
+    prisma.tenantEmployee.count({ where: { tenant: { slug: tenant }, status: { not: "former" } } }),
+    prisma.tenant.findUnique({ where: { slug: tenant }, select: { plan: true, billingCycle: true } }),
+  ]);
+
   return (
     <BillingGateDialog
+      employeeCount={employeeCount}
+      planLimits={planEmployeeLimits}
+      currentPlan={tenantPlan?.plan}
+      currentCycle={tenantPlan?.billingCycle}
       tenant={tenant}
       tenantName={gate.tenantName}
       reason={gate.reason}

@@ -529,11 +529,31 @@
       "resendErrorFallback": "Der Bestätigungslink konnte nicht versendet werden."
     },
     "select": {
-      "title": "Unternehmen auswählen",
+      "title": "Unternehmen wählen",
       "subtitle": "Mit welchem Unternehmen möchten Sie fortfahren?",
       "searchPlaceholder": "Unternehmen suchen...",
       "empty": "Noch kein Unternehmen angelegt.",
-      "createNew": "Neues Unternehmen erstellen"
+      "createNew": "Neues Unternehmen erstellen",
+      "signedInAs": "Angemeldet als {email}",
+      "logout": "Abmelden",
+      "employeeCount": "{count, plural, one {# Mitarbeiter} other {# Mitarbeiter}}",
+      "plan": {
+        "starter": "Starter",
+        "professional": "Professional",
+        "business": "Business"
+      },
+      "trialDaysLeft": "{count, plural, =0 {Test · endet heute} one {Test · noch # Tag} other {Test · noch # Tage}}",
+      "blocked": "Gesperrt",
+      "subscribe": "Abonnieren",
+      "waitingForOwner": "Wartet auf Inhaber:in",
+      "open": "Öffnen",
+      "invitationTo": "Einladung zu {company}",
+      "invitedBy": "von {name}",
+      "invitationPending": "Offene Einladung",
+      "acceptInvitation": "Annehmen",
+      "createHint": "14 Tage kostenlos testen, ohne Zahlungsdaten",
+      "summary": "{count, plural, one {# Unternehmen} other {# Unternehmen}}",
+      "summaryAttention": "{count, plural, one {# Unternehmen} other {# Unternehmen}} · {attention, plural, one {# braucht} other {# brauchen}} Ihre Aufmerksamkeit"
     }
   },
   "AccountPreferences": {
@@ -1539,7 +1559,12 @@
     "errorTermsRequired": "Bitte akzeptieren Sie die Nutzungsbedingungen.",
     "errorSigninFailed": "Das Konto wurde erstellt, die Anmeldung schlug jedoch fehl. Bitte melden Sie sich über die Anmeldeseite an.",
     "errorUnexpected": "Etwas ist schiefgelaufen. Bitte versuchen Sie es erneut.",
-    "errorRateLimited": "Zu viele Versuche. Bitte warten Sie kurz und versuchen Sie es erneut."
+    "errorRateLimited": "Zu viele Versuche. Bitte warten Sie kurz und versuchen Sie es erneut.",
+    "eyebrow": "Einladung",
+    "invitedByTitle": "{name} hat Sie zu {tenant} eingeladen",
+    "roleChip": "Rolle: {role}",
+    "validUntil": "gültig bis {date}",
+    "signIn": "Anmelden"
   },
   "CompanyCreateWizard": {
     "countryGermany": "Deutschland",
@@ -1629,7 +1654,9 @@
     "backToCompanySelection": "← Zurück zur Unternehmensauswahl",
     "continueToPayment": "14 Tage kostenlos testen",
     "checkoutFailedTitle": "Zahlung konnte nicht gestartet werden",
-    "checkoutFailedSubtitle": "Ihr Unternehmen wurde angelegt. Sie können die Einrichtung über das Dashboard erneut starten."
+    "checkoutFailedSubtitle": "Ihr Unternehmen wurde angelegt. Sie können die Einrichtung über das Dashboard erneut starten.",
+    "workspaceUrlLabel": "Adresse in Ployo",
+    "editWorkspaceUrl": "Anpassen"
   },
   "DatePickerField": {
     "monthJanuary": "Januar",
@@ -1980,11 +2007,15 @@
     "ownerDisableTitle": "Sie sind Owner dieses Unternehmens",
     "ownerDisableBody": "Statt 2FA einzurichten, können Sie die 2FA-Pflicht für das Unternehmen auch deaktivieren. Danach gilt sie für kein Mitglied mehr.",
     "ownerDisableButton": "2FA-Pflicht deaktivieren",
-    "ownerDisablePending": "Wird deaktiviert …"
+    "ownerDisablePending": "Wird deaktiviert …",
+    "banner": "<strong>{company}</strong> verlangt Zwei-Faktor-Authentifizierung. Richten Sie sie jetzt ein, um weiterzuarbeiten – das dauert etwa eine Minute.",
+    "alreadyActiveTitle": "2FA ist aktiv",
+    "alreadyActiveBody": "Ihr Konto ist geschützt. Sie können weiterarbeiten."
   },
   "CreateCompanyPage": {
     "privacy": "Datenschutz",
-    "imprint": "Impressum"
+    "imprint": "Impressum",
+    "cancel": "Abbrechen"
   },
   "KontaktPage": {
     "title": "Kontakt & Support",
@@ -2003,7 +2034,9 @@
     "imprint": "Impressum",
     "contact": "Kontakt",
     "terms": "AGB",
-    "deleteAccount": "Konto löschen"
+    "deleteAccount": "Konto löschen",
+    "eyebrow": "Rechtliches",
+    "back": "Zur Startseite"
   },
   "LandingPage": {
     "header": {
@@ -2635,7 +2668,26 @@
     "confirmationTimeout": "Die Bestätigung von Stripe dauert länger als üblich. Laden Sie die Seite in ein paar Minuten neu oder versuchen Sie es erneut.",
     "redirecting": "Weiterleitung …",
     "switchCompany": "Anderes Unternehmen wählen",
-    "logout": "Abmelden"
+    "logout": "Abmelden",
+    "eyebrow": {
+      "setup_required": "Einrichtung offen",
+      "payment_failed": "Zahlung fehlgeschlagen",
+      "subscription_inactive": "Abo beendet"
+    },
+    "choosePlanTitle": "Weiter geht’s mit einem Plan",
+    "billingCycle": "Abrechnungszeitraum",
+    "monthly": "Monatlich",
+    "yearly": "Jährlich",
+    "yearlySaving": "20 % sparen",
+    "popular": "Beliebt",
+    "month": "Monat",
+    "tooSmall": "Zu klein für Ihr Team",
+    "monthlyNote": "Monatlich im Voraus, zzgl. USt. Der Zugriff wird sofort entsperrt.",
+    "yearlyNote": "Jährlich im Voraus, zzgl. USt. Der Zugriff wird sofort entsperrt.",
+    "dueToday": "Heute fällig",
+    "afterTrial": "Nach der Testphase",
+    "questions": "Fragen?",
+    "continueToStripe": "Weiter zu Stripe"
   },
   "Overview": {
     "greetingMorning": "Guten Morgen",
@@ -4244,5 +4296,37 @@
     "body": "Ihre Rolle hat keine Berechtigung für diesen Bereich. Welche Rolle was sehen darf, legen Inhaber:innen und Admins unter „Rollen“ fest.",
     "toMyArea": "Zu Mein Bereich",
     "switchCompany": "Unternehmen wechseln"
+  },
+  "TwoFactorSetupWizard": {
+    "stepOf": "Schritt {step} von {total}",
+    "passwordTitle": "Passwort bestätigen",
+    "passwordBody": "Zur Sicherheit bestätigen Sie zuerst Ihr Passwort.",
+    "passwordLabel": "Passwort",
+    "processing": "Wird verarbeitet …",
+    "next": "Weiter",
+    "enableFailed": "2FA konnte nicht aktiviert werden.",
+    "scanTitle": "QR-Code scannen",
+    "scanBody": "Öffnen Sie eine Authenticator-App (z. B. Google Authenticator, Microsoft Authenticator oder 1Password) und scannen Sie den Code.",
+    "qrLabel": "QR-Code für die Authenticator-App",
+    "manualKey": "Oder Schlüssel manuell eingeben",
+    "copy": "Kopieren",
+    "copied": "Kopiert",
+    "verifyTitle": "Code eingeben",
+    "verifyBody": "Geben Sie den 6-stelligen Code aus Ihrer Authenticator-App ein.",
+    "codeLabel": "Bestätigungscode",
+    "back": "Zurück",
+    "checking": "Wird geprüft …",
+    "activate": "Aktivieren",
+    "invalidCode": "Der Code war ungültig. Bitte prüfen Sie Ihre Authenticator-App.",
+    "backupTitle": "Backup-Codes sichern",
+    "backupBody": "Bewahren Sie diese Codes sicher auf. Jeder Code funktioniert einmal, falls Sie keinen Zugriff auf Ihre App haben.",
+    "copyCodes": "Codes kopieren",
+    "finish": "Fertig – weiter"
+  },
+  "TrialBanner": {
+    "daysLeft": "{count, plural, =0 {Testphase: endet heute} one {Testphase: noch # Tag} other {Testphase: noch # Tage}}",
+    "endsOn": "endet am {date}",
+    "later": "Später",
+    "choosePlan": "Plan wählen"
   }
 }

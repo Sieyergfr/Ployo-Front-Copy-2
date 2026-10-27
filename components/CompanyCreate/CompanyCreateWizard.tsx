@@ -6,11 +6,11 @@ import { slugify } from "@/lib/slug";
 import { tenantIndustries, tenantSizes } from "@/lib/tenant-options";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
-import { type CSSProperties, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 type PlanId = "starter" | "professional" | "business";
 
-type Plan = {
+export type Plan = {
   id: PlanId;
   name: string;
   monthlyPrice: number;
@@ -48,7 +48,8 @@ const sizes = tenantSizes;
 
 const industries = tenantIndustries;
 
-function getPlans(t: T): Plan[] {
+/** Plankatalog (auch vom Abo-Sperrdialog genutzt). */
+export function getPlans(t: T): Plan[] {
   return [
     {
       id: "starter",
@@ -442,68 +443,48 @@ export default function CompanyCreateWizard() {
   }
 
   return (
-    <div className="w-full max-w-[600px]">
-      <div className="overflow-hidden rounded-[20px] border border-border bg-white shadow-[0_4px_28px_rgba(0,0,0,0.055)]">
-        <div className="h-[3px] bg-border-soft">
-          <div
-            className="h-full w-[var(--pct)] bg-ink transition-[width] duration-300"
-            style={{ "--pct": `${(step / LAST_STEP) * 100}%` } as CSSProperties}
-          />
-        </div>
-
-        <div className="px-7 pt-[18px] pb-1">
-          <div className="relative grid w-full grid-cols-3">
-            <div className="absolute top-[10px] right-[16.667%] left-[16.667%] h-[1.5px] rounded-full bg-border" />
-            <div
-              className="absolute top-[10px] left-[16.667%] h-[1.5px] w-[var(--pct)] rounded-full bg-ink transition-[width] duration-300"
-              style={
-                {
-                  "--pct": `${((step - 1) / (LAST_STEP - 1)) * 66.667}%`,
-                } as CSSProperties
-              }
-            />
+    <div className="w-full max-w-[640px]">
+      <div className="au-card overflow-hidden rounded-[20px]">
+        <div className="flex flex-wrap gap-1.5 px-7 pt-6">
           {stepLabels.map((label, index) => {
             const stepNumber = index + 1;
             const active = stepNumber === step;
             const complete = stepNumber < step;
 
             return (
-              <div key={label} className="relative z-10 flex min-w-0 flex-col items-center">
-                <button
-                  type="button"
-                  className="flex cursor-pointer flex-col items-center gap-[7px] border-0 bg-transparent p-0 text-center"
-                  onClick={() => setStep(stepNumber)}
+              <button
+                key={label}
+                type="button"
+                aria-current={active ? "step" : undefined}
+                className={cx(
+                  "flex min-h-9 cursor-pointer items-center gap-2 rounded-full border px-2 pr-3 text-[13.5px] font-semibold transition-colors",
+                  active
+                    ? "border-[#ecebe7] bg-white text-ink shadow-[0_2px_8px_rgba(0,0,0,0.06)]"
+                    : complete
+                      ? "border-transparent bg-transparent text-ink"
+                      : "border-transparent bg-transparent text-muted",
+                )}
+                onClick={() => setStep(stepNumber)}
+              >
+                <span
+                  className={cx(
+                    "flex size-[22px] shrink-0 items-center justify-center rounded-full text-[11.5px] font-semibold",
+                    active ? "bg-ink text-white" : complete ? "bg-[#8b6ed4] text-white" : "bg-[#f2f1ed] text-muted",
+                  )}
                 >
-                  <span
-                    className={cx(
-                      "flex size-[21px] shrink-0 items-center justify-center rounded-full font-mono text-[9.5px] font-semibold transition-colors",
-                      active || complete
-                        ? "border-0 bg-ink text-white"
-                        : "border border-[#D4D2CC] bg-white text-muted",
-                    )}
-                  >
-                    {complete ? <Check size={11} strokeWidth={3.5} /> : stepNumber}
-                  </span>
-                  <span
-                    className={cx(
-                      "hidden max-w-full truncate px-1 text-[11px] font-medium sm:block",
-                      active ? "text-ink" : complete ? "text-muted-2" : "text-muted",
-                    )}
-                  >
-                    {label}
-                  </span>
-                </button>
-              </div>
+                  {complete ? <Check size={12} strokeWidth={3} /> : stepNumber}
+                </span>
+                <span className="hidden sm:inline">{label}</span>
+              </button>
             );
           })}
-          </div>
         </div>
 
         <div className="px-7 pt-[22px] pb-5">
           <div className="font-mono text-[10px] uppercase tracking-[0.06em] text-muted">
             {currentCopy.eyebrow}
           </div>
-          <h1 className="mt-2 mb-[5px] font-display text-[25px] font-semibold tracking-[-0.7px] text-ink">
+          <h1 className="mt-2 mb-[5px] font-display text-[clamp(26px,3.4vw,30px)] font-semibold tracking-[-0.8px] text-ink">
             {currentCopy.title}
           </h1>
           <p className="m-0 text-[13.5px] text-muted">{currentCopy.subtitle}</p>
@@ -540,7 +521,7 @@ export default function CompanyCreateWizard() {
                 <div className="mt-1.5 rounded-[12px] border border-border bg-bg px-[15px] py-3.5">
                   <div className="flex items-center justify-between gap-3">
                     <div className="font-mono text-[9px] uppercase tracking-[0.05em] text-muted">
-                      Your workspace URL
+                      {t("workspaceUrlLabel")}
                     </div>
                     <button
                       type="button"
@@ -548,7 +529,7 @@ export default function CompanyCreateWizard() {
                       onClick={() => setEditingSlug((current) => !current)}
                     >
                       <Pencil size={11} strokeWidth={2.2} />
-                      Edit
+                      {t("editWorkspaceUrl")}
                     </button>
                   </div>
 
@@ -839,7 +820,7 @@ export default function CompanyCreateWizard() {
                   "inline-flex min-w-[132px] cursor-pointer items-center justify-center gap-2 rounded-[10px] border-0 px-[22px] py-[11px] text-[13.5px] font-semibold transition-colors active:translate-y-px",
                   blocked
                     ? "cursor-default bg-border-soft text-muted"
-                    : "bg-ink text-white hover:bg-ink-hover",
+                    : "border border-[rgba(167,142,232,0.45)] bg-ink text-white shadow-[0_10px_30px_-10px_rgba(139,110,212,0.8)] hover:bg-ink-hover",
                 )}
                 disabled={blocked || creating}
               >
@@ -856,11 +837,6 @@ export default function CompanyCreateWizard() {
         </form>
       </div>
 
-      <div className="mt-[18px] text-center">
-        <Link href="/select" className="text-[12.5px] text-muted no-underline transition-colors hover:text-ink">
-          {t("backToCompanySelection")}
-        </Link>
-      </div>
     </div>
   );
 }

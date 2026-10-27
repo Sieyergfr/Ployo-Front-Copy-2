@@ -13,6 +13,9 @@ export type InvitationView = {
   tenantName: string;
   tenantSlug: string;
   expired: boolean;
+  invitedByName: string;
+  /** ISO-Zeitpunkt oder null (unbefristet). */
+  expiresAt: string | null;
 };
 
 function isExpired(expiresAt: Date | null) {
@@ -43,6 +46,8 @@ export async function getInvitationByToken(
     tenantName: invitation.tenant.name,
     tenantSlug: invitation.tenant.slug,
     expired: isExpired(invitation.expiresAt),
+    invitedByName: invitation.invitedByName,
+    expiresAt: invitation.expiresAt?.toISOString() ?? null,
   };
 }
 
