@@ -19,7 +19,7 @@ import { getAuditLogsForEntity } from "@/lib/audit";
 import { getEmployeesForTenant } from "@/lib/employee-service";
 import { getLocationClockQr, getLocationForTenant } from "@/lib/location-service";
 import { renderClockQrSvg } from "@/lib/time-clock-qr-svg";
-import { locationColorPalette, locationKinds } from "@/lib/org-options";
+import { locationColorPalette, locationKindLabel, locationKinds, paletteHex } from "@/lib/org-options";
 import { hasPermissionLevel } from "@/lib/roles";
 import { getTenantCapabilities, withAccessRedirect } from "@/lib/tenant-access";
 import {
@@ -34,7 +34,8 @@ import {
   type LocationActivity,
   type LocationStatus,
 } from "@/lib/locations";
-import { ArrowLeft } from "lucide-react";
+import { Building2, ChevronLeft, ChevronRight, MapPin } from "lucide-react";
+import { DbCard, avatarColor, secondaryClass } from "@/components/dashboard/ui";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
@@ -89,15 +90,11 @@ function DetailMetricCard({
   }[tone];
 
   return (
-    <div className="rounded-[14px] border border-border bg-white px-5 pt-5 pb-4">
-      <div className="font-mono text-[10px] uppercase tracking-[0.6px] text-muted">
-        {label}
-      </div>
-      <div className="my-[14px] mb-[9px] font-display text-[38px] font-semibold leading-none tracking-[-1.2px] text-ink">
-        {value}
-      </div>
-      <div className={`text-[12px] ${captionColor}`}>{caption}</div>
-    </div>
+    <DbCard className="db-insight flex flex-col gap-2 p-[18px]">
+      <span className="text-[13px] font-medium text-[#6e6e6b]">{label}</span>
+      <span className={`font-display text-[30px] leading-none font-semibold tracking-[-1px] ${tone === "danger" ? "text-[#b4332a]" : ""}`}>{value}</span>
+      <span className={`text-[13px] ${tone === "danger" ? "text-[#6e6e6b]" : captionColor}`}>{caption}</span>
+    </DbCard>
   );
 }
 
@@ -113,15 +110,13 @@ function DetailPanel({
   className?: string;
 }) {
   return (
-    <section className={`rounded-card border border-border bg-white px-6 py-[22px] ${className}`}>
-      <div className="mb-[18px] flex items-center justify-between gap-3">
-        <h2 className="font-display text-[17px] font-semibold tracking-[-0.3px] text-ink">
-          {title}
-        </h2>
+    <DbCard className={`p-[18px] ${className}`}>
+      <div className="mb-3.5 flex items-center justify-between gap-3">
+        <h2 className="m-0 font-display text-[17px] font-semibold tracking-[-0.3px] text-ink">{title}</h2>
         {eyebrow}
       </div>
       {children}
-    </section>
+    </DbCard>
   );
 }
 
@@ -294,17 +289,6 @@ function searchParamNumber(
   return Number.isFinite(parsed) && parsed > 0 && (max === undefined || parsed <= max)
     ? parsed
     : fallback;
-}
-
-function TeamChip({ member }: { member: Location["team"][number] }) {
-  return (
-    <span className="inline-flex items-center gap-2 rounded-full border border-border bg-bg px-3 py-2">
-      <span className="flex size-6 items-center justify-center rounded-full bg-white font-mono text-[9px] font-semibold text-muted-2">
-        {member.initials}
-      </span>
-      <span className="text-[12.5px] font-medium text-ink">{member.name}</span>
-    </span>
-  );
 }
 
 function ActivityDot({ tone }: { tone: LocationActivity["tone"] }) {
@@ -483,18 +467,31 @@ export default async function LocationDetailPage({
     )
     .map((employee) => employee.id);
 
+  const employeeByDbId = new Map(employees.map((employee) => [employee.dbId ?? employee.id, employee]));
+  const todayWeekday = (["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"] as const)[
+    new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Berlin" })).getDay()
+  ];
+  const todayHours = location.openingHours.find((day) => day.weekday === todayWeekday);
+  const accent = paletteHex(location.accentClassName, "#2c64c9");
+  const tabClass = (active: boolean) =>
+    `-mb-px inline-flex items-center gap-2 border-b-2 px-0.5 pb-3 text-[14.5px] no-underline ${
+      active ? "border-ink font-semibold text-ink" : "border-transparent font-medium text-[#6e6e6b] hover:text-ink"
+    }`;
+  const countPill = (count: number, tone = "bg-[#f2f1ed] text-[#6e6e6b]") => (
+    <span className={`rounded-[6px] px-1.5 text-[12px] font-semibold ${tone}`}>{count}</span>
+  );
+
   return (
     <>
       <UnsavedChangesGuard active={isEditing} />
-      <div className="mb-[18px]">
-        <Link
-          href={`/u/${tenant}/standorte`}
-          className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.5px] text-muted transition-colors hover:text-ink"
-        >
-          <ArrowLeft size={13} />
+      <nav aria-label={t("breadcrumb")} className="mb-[18px] flex items-center gap-2 text-[14px]">
+        <Link href={`/u/${tenant}/standorte`} className={`${secondaryClass} min-h-9 bg-white px-3 py-1.5 text-[13.5px]`}>
+          <ChevronLeft size={15} />
           {t("backToLocations")}
         </Link>
-      </div>
+        <span className="text-[#9a9a96]">/</span>
+        <span className="truncate font-medium">{location.name}</span>
+      </nav>
 
       <LocationEditFormAndBar
         tenant={tenant}
@@ -502,113 +499,83 @@ export default async function LocationDetailPage({
         cancelHref={locationHref}
         isEditing={isEditing}
       />
-      <section className="mb-5 overflow-hidden rounded-card border border-border bg-white">
-        <div className={`h-1 w-full ${location.accentClassName}`} />
-        <div className="flex flex-wrap items-start gap-6 px-7 py-7">
-          <div className="min-w-[240px] flex-1">
-            {isEditing ? (
-              <div className="flex flex-col gap-4">
-                <EditableTextField
-                  id="location-name"
-                  label={t("locationName")}
-                  name="name"
-                  value={location.name}
+      <DbCard className="db-hero relative mb-5 overflow-hidden p-0">
+        <span className="absolute inset-y-0 left-0 w-1" style={{ background: accent }} />
+        <div className="flex flex-wrap items-start gap-5 px-7 pt-6 pb-5">
+          {isEditing ? (
+            <div className="flex min-w-[240px] flex-1 flex-col gap-4">
+              <EditableTextField id="location-name" label={t("locationName")} name="name" value={location.name} />
+              <div className="grid gap-3 sm:grid-cols-2">
+                <EditableSelectField id="location-kind" label={t("type")} name="kind" value={location.kind} options={locationKinds.map((kind) => ({ value: kind, label: locationKindLabel(kind) }))} />
+                <EditableSelectField
+                  id="location-status"
+                  label={t("status")}
+                  name="status"
+                  value={location.status}
+                  options={[
+                    { value: "active", label: t("active") },
+                    { value: "inactive", label: t("inactive") },
+                  ]}
                 />
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <EditableSelectField
-                    id="location-kind"
-                    label={t("type")}
-                    name="kind"
-                    value={location.kind}
-                    options={[...locationKinds]}
-                  />
-                  <EditableSelectField
-                    id="location-status"
-                    label={t("status")}
-                    name="status"
-                    value={location.status}
-                    options={[
-                      { value: "active", label: t("active") },
-                      { value: "inactive", label: t("inactive") },
-                    ]}
-                  />
-                </div>
-                <div>
-                  <div className="mb-2 label">{t("address")}</div>
-                  <AddressFields
-                    idPrefix="location-address"
-                    defaults={location.addressFields}
-                    required
-                    formId="location-edit-form"
-                    t={tAddress}
-                  />
-                </div>
-                <EditableColorField value={location.accentClassName} t={t} />
               </div>
-            ) : (
-              <>
-                <div className="mb-3 flex flex-wrap items-center gap-2.5">
-                  <span className="font-mono text-[10.5px] uppercase tracking-[0.6px] text-muted">
-                    {location.kind}
-                  </span>
-                  <LocationStatusBadge status={location.status} t={t} />
-                </div>
-                <h1 className="m-0 font-display text-[clamp(30px,3.6vw,44px)] font-semibold leading-[1.02] tracking-[-1.2px] text-ink">
+              <div>
+                <div className="mb-2 label">{t("address")}</div>
+                <AddressFields idPrefix="location-address" defaults={location.addressFields} required formId="location-edit-form" t={tAddress} />
+              </div>
+              <EditableColorField value={location.accentClassName} t={t} />
+            </div>
+          ) : (
+            <>
+              <span
+                className="flex size-[64px] shrink-0 items-center justify-center rounded-[16px] text-white shadow-[0_10px_28px_rgba(0,0,0,0.14)]"
+                style={{ background: accent }}
+              >
+                <Building2 size={26} />
+              </span>
+              <div className="flex min-w-[240px] flex-1 flex-col gap-1.5">
+                <h1 className="m-0 flex flex-wrap items-center gap-2.5 font-display text-[clamp(26px,3vw,34px)] leading-[1.1] font-semibold tracking-[-1px]">
                   {location.name}
+                  <span className="rounded-[6px] bg-[#f2f1ed] px-2 py-[3px] font-sans text-[12px] font-semibold tracking-normal text-[#3d3d3a]">{locationKindLabel(location.kind)}</span>
+                  <LocationStatusBadge status={location.status} t={t} />
                 </h1>
-                <div className="mt-[9px] text-[13.5px] text-muted-2">
+                <span className="flex items-center gap-1.5 text-[14px] text-[#6e6e6b]">
+                  <MapPin size={14} />
                   {location.address}
-                </div>
-              </>
-            )}
-          </div>
-
-          {!isEditing && (
-            <LocationHeaderActions
-              locationName={location.name}
-              locationEditHref={locationEditHref}
-              canDeleteLocation={canDeleteLocation}
-              canEditLocation={canEditLocation}
-            />
+                </span>
+                {todayHours && (
+                  <span className="mt-1 flex flex-wrap gap-1.5">
+                    <span className="inline-flex items-center gap-1.5 rounded-[7px] border border-[#ecebe7] bg-white px-2 py-[3px] text-[12.5px]">
+                      <span className={`size-1.5 rounded-full ${todayHours.mode === "closed" ? "bg-[#9a9a96]" : "bg-[#2f7a4a]"}`} />
+                      {t("todayHours", { hours: formatOpeningHoursRange(todayHours) })}
+                    </span>
+                  </span>
+                )}
+              </div>
+              <LocationHeaderActions
+                locationName={location.name}
+                locationEditHref={locationEditHref}
+                canDeleteLocation={canDeleteLocation}
+                canEditLocation={canEditLocation}
+              />
+            </>
           )}
         </div>
-      </section>
-
-      <div className="mb-5 flex gap-[26px] border-b border-border">
-        <Link
-          href={locationHref}
-          className={`mb-[-1px] inline-flex items-center gap-2 border-b-2 px-0.5 py-3 text-[14px] ${
-            isHomeTab
-              ? "border-ink font-semibold text-ink"
-              : "border-transparent font-medium text-muted"
-          }`}
-        >
-          {t("tabHome")}
-        </Link>
-        <Link
-          href={`${locationHref}?tab=files`}
-          className={`mb-[-1px] inline-flex items-center gap-2 border-b-2 px-0.5 py-3 text-[14px] ${
-            isFilesTab
-              ? "border-ink font-semibold text-ink"
-              : "border-transparent font-medium text-muted"
-          }`}
-        >
-          {t("tabFiles")}
-          <span className="font-mono text-[11px] text-muted">
-            {location.files.length + location.fileFolders.length}
-          </span>
-        </Link>
-        <Link
-          href={`${locationHref}?tab=shifts`}
-          className={`mb-[-1px] inline-flex items-center gap-2 border-b-2 px-0.5 py-3 text-[14px] ${
-            isShiftsTab
-              ? "border-ink font-semibold text-ink"
-              : "border-transparent font-medium text-muted"
-          }`}
-        >
-          {t("tabShifts")}
-        </Link>
-      </div>
+        {!isEditing && (
+          <div className="flex gap-6 border-t border-[#f0efeb] px-7 pt-3.5">
+            <Link href={locationHref} className={tabClass(isHomeTab)}>
+              {t("tabHome")}
+            </Link>
+            <Link href={`${locationHref}?tab=files`} className={tabClass(isFilesTab)}>
+              {t("tabFiles")}
+              {countPill(location.files.length + location.fileFolders.length)}
+            </Link>
+            <Link href={`${locationHref}?tab=shifts`} className={tabClass(isShiftsTab)}>
+              {t("tabShifts")}
+              {(location.openShiftCount ?? 0) > 0 && countPill(location.openShiftCount ?? 0, "bg-[rgba(224,123,0,0.12)] text-[#8a5300]")}
+            </Link>
+          </div>
+        )}
+      </DbCard>
 
       {isFilesTab ? (
         <FilesTab
@@ -641,190 +608,196 @@ export default async function LocationDetailPage({
       ) : (
         <>
           {!isEditing && (
-          <section className="mb-4 grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(190px,1fr))]">
-              <>
-                <DetailMetricCard
-                  label={t("employeesMetric")}
-                  value={location.employeeCount}
-                  caption={t("activeToday", { count: location.activeToday })}
-                />
-                <DetailMetricCard
-                  label={t("shiftsActive")}
-                  value={location.shiftCount}
-                  caption={t("thisWeek")}
-                />
-                <DetailMetricCard
-                  label={t("openPositions")}
-                  value={location.openPositions}
-                  caption={t("thisWeek")}
-                  tone={location.openPositions > 0 ? "danger" : "muted"}
-                />
-                <DetailMetricCard
-                  label={t("utilization")}
-                  value={location.utilization}
-                  caption={location.utilizationCaption}
-                  tone="success"
-                />
-              </>
-          </section>
+            <section className="mb-4 grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(190px,1fr))]">
+              <DetailMetricCard label={t("employeesMetric")} value={location.employeeCount} caption={t("activeToday", { count: location.activeToday })} />
+              <DetailMetricCard label={t("shiftsActive")} value={location.shiftCount} caption={t("thisWeek")} />
+              <DetailMetricCard
+                label={t("openShifts")}
+                value={location.openShiftCount ?? 0}
+                caption={t("openShiftsCaption")}
+                tone={(location.openShiftCount ?? 0) > 0 ? "danger" : "muted"}
+              />
+              <DetailMetricCard label={t("utilization")} value={location.utilization} caption={location.utilizationCaption} />
+            </section>
           )}
 
-          <div className="grid items-start gap-4 [grid-template-columns:repeat(auto-fit,minmax(320px,1fr))]">
-            <DetailPanel title={t("leadershipAndTeam")}>
-              {isEditing ? (
-                <div className="mb-5">
-                  <EmployeeSelector
-                    label={t("locationLead")}
-                    name="lead"
-                    options={leadEmployeeOptions}
-                    defaultSelectedIds={currentLeadEmployeeId ? [currentLeadEmployeeId] : []}
-                    form="location-edit-form"
-                  />
-                  <p className="mt-2 text-[11.5px] leading-[1.5] text-muted">
-                    {t("phoneEmailAutoNote")}
-                  </p>
-                  <div className="field mt-4">
-                    <label htmlFor="location-contact-email" className="label">
-                      {t("contactEmail")}
-                    </label>
-                    <input
-                      id="location-contact-email"
-                      name="contactEmail"
-                      type="email"
+          <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
+            <div className="flex min-w-0 flex-col gap-4">
+              <DetailPanel title={t("leadershipAndTeam")}>
+                {isEditing ? (
+                  <div className="mb-5">
+                    <EmployeeSelector
+                      label={t("locationLead")}
+                      name="lead"
+                      options={leadEmployeeOptions}
+                      defaultSelectedIds={currentLeadEmployeeId ? [currentLeadEmployeeId] : []}
                       form="location-edit-form"
-                      className="input"
-                      defaultValue={location.contactEmail ?? ""}
-                      placeholder="standort@example.com"
-                      autoComplete="email"
                     />
-                  </div>
-                </div>
-              ) : (
-                <div className="mb-5 flex items-center gap-3.5 rounded-[12px] border border-border-soft bg-bg px-4 py-3.5">
-                  <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-ink text-[13px] font-semibold text-white">
-                    {location.lead.initials}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-[14px] font-semibold text-ink">
-                      {location.lead.name}
-                    </div>
-                    <div className="mt-[3px] font-mono text-[10.5px] text-muted">
-                      {t("locationLead")}
-                    </div>
-                  </div>
-                  <div className="hidden text-right md:block">
-                    <div className="font-mono text-[10.5px] text-muted-2">
-                      {location.lead.phone}
-                    </div>
-                    <div className="mt-[3px] font-mono text-[10.5px] text-muted">
-                      {location.lead.email}
+                    <p className="mt-2 text-[11.5px] leading-[1.5] text-muted">{t("phoneEmailAutoNote")}</p>
+                    <div className="field mt-4">
+                      <label htmlFor="location-contact-email" className="label">
+                        {t("contactEmail")}
+                      </label>
+                      <input
+                        id="location-contact-email"
+                        name="contactEmail"
+                        type="email"
+                        form="location-edit-form"
+                        className="input"
+                        defaultValue={location.contactEmail ?? ""}
+                        placeholder="standort@example.com"
+                        autoComplete="email"
+                      />
                     </div>
                   </div>
-                </div>
-              )}
-              {!isEditing && location.contactEmail && (
-                <a
-                  href={`mailto:${location.contactEmail}`}
-                  className="mb-5 -mt-2 flex items-center justify-between gap-3 rounded-[12px] border border-border-soft px-4 py-2.5 text-[12.5px] text-ink no-underline hover:bg-bg"
-                >
-                  <span className="font-mono text-[10.5px] text-muted">{t("contactEmail")}</span>
-                  <span className="truncate font-medium">{location.contactEmail}</span>
-                </a>
-              )}
-
-              <div className="mb-2 flex items-center justify-between gap-3">
-                <span className="font-mono text-[9.5px] uppercase tracking-[0.6px] text-muted">
-                  {t("team")}
-                </span>
-                {canEditLocation && (
-                  <AddLocationEmployeesButton
-                    tenant={tenant}
-                    locationId={locationDbId}
-                    employees={assignableEmployees}
-                    assignedIds={assignedEmployeeIds}
-                    variant="icon"
-                  />
+                ) : (
+                  <div className="mb-4 flex items-center gap-3.5 rounded-[12px] border border-[#ecebe7] bg-[#fafaf8] px-4 py-3">
+                    <span className="flex size-11 shrink-0 items-center justify-center rounded-full text-[13px] font-semibold text-white" style={{ background: avatarColor(location.lead.employeeId ?? location.lead.name) }}>
+                      {location.lead.initials}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="font-mono text-[10px] tracking-[0.12em] text-[#6e6e6b] uppercase">{t("locationLead")}</div>
+                      <div className="text-[15px] font-semibold">{location.lead.name}</div>
+                    </div>
+                    <div className="hidden text-right text-[13px] md:block">
+                      <div>{location.lead.phone}</div>
+                      <div className="text-[#6e6e6b]">{location.contactEmail || location.lead.email}</div>
+                    </div>
+                  </div>
                 )}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {location.team.map((member) => (
-                  <TeamChip
-                    key={`${member.initials}-${member.name}`}
-                    member={member}
-                  />
-                ))}
-              </div>
-            </DetailPanel>
 
-            {/* Eigene Zeile über die volle Breite: die Wochentage stehen darin
-                nebeneinander und brauchen mehr Platz als eine Spalte hergibt. */}
-            <DetailPanel title={t("openingHoursAndStaffing")} className="[grid-column:1/-1]">
-              <MinStaffingField
-                isEditing={isEditing}
-                shiftMinStaffing={location.shiftMinStaffing}
-                effectiveMinStaffing={location.effectiveMinStaffing}
-                t={t}
-              />
-              {isEditing ? (
-                <OpeningHoursEditor
-                  name="openingHours"
-                  defaultValue={location.openingHours}
-                  allowInherit
-                  initiallyCustom={!location.usesDefaultOpeningHours}
-                  formId="location-edit-form"
-                />
-              ) : (
-                <div className="grid gap-1.5">
-                  {location.openingHours.map((day) => (
-                    <div
-                      key={day.weekday}
-                      className="flex items-center justify-between text-[12.5px]"
-                    >
-                      <span className="text-muted-2">
-                        {OPENING_HOURS_WEEKDAY_LABELS[day.weekday]}
-                      </span>
-                      <span className="font-mono text-ink">
-                        {formatOpeningHoursRange(day)}
-                      </span>
-                    </div>
-                  ))}
-                  {location.usesDefaultOpeningHours && (
-                    <p className="mt-2 text-[11.5px] text-muted">
-                      {t("defaultOpeningHoursNote")}
-                    </p>
+                <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-mono text-[10px] tracking-[0.12em] text-[#6e6e6b] uppercase">
+                    {t("team")} · {location.team.length}
+                  </span>
+                  {canEditLocation && (
+                    <AddLocationEmployeesButton tenant={tenant} locationId={locationDbId} employees={assignableEmployees} assignedIds={assignedEmployeeIds} variant="link" />
                   )}
                 </div>
-              )}
-            </DetailPanel>
+                <ul className="m-0 flex list-none flex-col p-0">
+                  {location.team.map((member) => {
+                    const employee = member.employeeId ? employeeByDbId.get(member.employeeId) : undefined;
+                    const content = (
+                      <>
+                        <span className="flex size-8 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white" style={{ background: avatarColor(member.employeeId ?? member.name) }}>
+                          {member.initials}
+                        </span>
+                        <span className="flex min-w-0 flex-1 flex-col">
+                          <span className="flex items-center gap-1.5 text-[14px] font-semibold">
+                            {member.name}
+                            {member.employeeId && member.employeeId === location.lead.employeeId && (
+                              <span className="rounded-[5px] bg-[rgba(139,111,224,0.12)] px-1.5 text-[11px] font-semibold text-[#6b4fc4]">{t("leadBadge")}</span>
+                            )}
+                          </span>
+                          {employee && <span className="truncate text-[12.5px] text-[#6e6e6b]">{[employee.role, ...(employee.teams?.length ? employee.teams : [employee.team])].filter(Boolean).join(" · ")}</span>}
+                        </span>
+                        {employee && <ChevronRight size={16} className="text-[#9a9a96]" />}
+                      </>
+                    );
 
-            {clockQr && (
-              <DetailPanel title={t("clockQrTitle")}>
-                <LocationClockQrPanel
-                  tenant={tenant}
-                  locationId={clockQr.locationId}
-                  printHref={`${locationHref}/stempel-qr`}
-                  svg={clockQrSvg}
-                  qrRequired={clockQr.qrRequired}
-                />
+                    return (
+                      <li key={`${member.initials}-${member.name}`} className="border-b border-[#f0efeb] last:border-b-0">
+                        {employee ? (
+                          <Link href={`/u/${tenant}/employees/${employee.id}`} className="flex items-center gap-3 rounded-[8px] px-1 py-2.5 text-ink no-underline hover:bg-[#fafaf8]">
+                            {content}
+                          </Link>
+                        ) : (
+                          <span className="flex items-center gap-3 px-1 py-2.5">{content}</span>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
               </DetailPanel>
-            )}
 
-            <DetailPanel
-              title={t("activity")}
-              eyebrow={
-                <span className="rounded-[7px] bg-success/10 px-2 py-[3px] font-mono text-[9.5px] font-semibold tracking-[0.5px] text-success">
-                  {t("live")}
-                </span>
-              }
-            >
-              {location.activity.map((item, index) => (
-                <ActivityItem
-                  key={`${item.actor}-${item.time}`}
-                  item={item}
-                  isLast={index === location.activity.length - 1}
-                />
-              ))}
-            </DetailPanel>
+              <DetailPanel
+                title={t("openingHoursAndStaffing")}
+                eyebrow={
+                  location.usesDefaultOpeningHours && !isEditing ? (
+                    <span className="rounded-[6px] bg-[rgba(139,111,224,0.10)] px-2 py-[3px] text-[12px] font-semibold text-[#6b4fc4]">{t("companyDefaultBadge")}</span>
+                  ) : undefined
+                }
+              >
+                {isEditing ? (
+                  <>
+                    <MinStaffingField isEditing shiftMinStaffing={location.shiftMinStaffing} effectiveMinStaffing={location.effectiveMinStaffing} t={t} />
+                    <OpeningHoursEditor
+                      name="openingHours"
+                      defaultValue={location.openingHours}
+                      allowInherit
+                      initiallyCustom={!location.usesDefaultOpeningHours}
+                      formId="location-edit-form"
+                    />
+                  </>
+                ) : (
+                  <>
+                    <div className="flex flex-col">
+                      {location.openingHours.map((day) => (
+                        <div
+                          key={day.weekday}
+                          className={`flex items-center justify-between rounded-[8px] px-2.5 py-1.5 text-[14px] ${day.weekday === todayWeekday ? "bg-[rgba(139,111,224,0.08)] font-semibold" : ""}`}
+                        >
+                          <span className="flex items-center gap-2">
+                            {OPENING_HOURS_WEEKDAY_LABELS[day.weekday]}
+                            {day.weekday === todayWeekday && (
+                              <span className="rounded-[5px] bg-[rgba(139,111,224,0.14)] px-1.5 text-[11px] font-semibold text-[#6b4fc4]">{t("today")}</span>
+                            )}
+                          </span>
+                          <span className="tabular-nums">{formatOpeningHoursRange(day)}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-3 flex items-center justify-between gap-3 rounded-[12px] border border-[#ecebe7] px-4 py-3">
+                      <span className="flex flex-col">
+                        <span className="font-mono text-[10px] tracking-[0.12em] text-[#6e6e6b] uppercase">{t("minStaffingShort")}</span>
+                        <span className="text-[15px] font-semibold">{t("personsPerDay", { count: location.effectiveMinStaffing })}</span>
+                      </span>
+                      <span className="rounded-[7px] border border-[#ecebe7] px-2 py-[3px] text-[12px]">
+                        {location.shiftMinStaffing === null ? t("companyDefault") : t("ownValue")}
+                      </span>
+                    </div>
+                  </>
+                )}
+              </DetailPanel>
+            </div>
+
+            <div className="flex min-w-0 flex-col gap-4">
+              {clockQr && (
+                <DetailPanel
+                  title={t("clockQrTitle")}
+                  eyebrow={
+                    clockQr.qrRequired ? (
+                      <span className="rounded-[6px] bg-[rgba(47,122,74,0.12)] px-2 py-[3px] text-[12px] font-semibold text-[#1f5d2c]">{t("scanRequired")}</span>
+                    ) : undefined
+                  }
+                >
+                  <LocationClockQrPanel
+                    tenant={tenant}
+                    locationId={clockQr.locationId}
+                    printHref={`${locationHref}/stempel-qr`}
+                    svg={clockQrSvg}
+                    qrRequired={clockQr.qrRequired}
+                  />
+                </DetailPanel>
+              )}
+
+              {!isEditing && (
+                <DetailPanel
+                  title={t("activity")}
+                  eyebrow={
+                    <span className="inline-flex items-center gap-1 rounded-[7px] bg-[rgba(180,51,42,0.08)] px-2 py-[3px] font-mono text-[10px] font-semibold tracking-[0.5px] text-[#b4332a]">
+                      <span className="size-1.5 rounded-full bg-[#b4332a]" />
+                      {t("live")}
+                    </span>
+                  }
+                >
+                  {location.activity.length === 0 && <p className="m-0 text-[13px] text-[#6e6e6b]">{t("noActivity")}</p>}
+                  {location.activity.map((item, index) => (
+                    <ActivityItem key={`${item.actor}-${item.time}`} item={item} isLast={index === location.activity.length - 1} />
+                  ))}
+                </DetailPanel>
+              )}
+            </div>
           </div>
         </>
       )}

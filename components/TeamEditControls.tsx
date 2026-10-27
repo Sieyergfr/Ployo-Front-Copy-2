@@ -57,6 +57,7 @@ export function LocationMultiSelectDropdown({
   name = "locations",
   label,
   placeholder,
+  onChange,
 }: {
   defaultLocations: string[];
   options?: string[];
@@ -65,6 +66,8 @@ export function LocationMultiSelectDropdown({
   label?: string;
   /** Platzhaltertext, wenn nichts ausgewählt ist — Default passt nur für Standorte, andere Verwendungen (z. B. Teams) sollten das überschreiben. */
   placeholder?: string;
+  /** Meldet die aktuelle Auswahl (z. B. für eine Vorschau). */
+  onChange?: (locations: string[]) => void;
 }) {
   const t = useTranslations("TeamEditControls");
   const [isOpen, setIsOpen] = useState(false);
@@ -115,11 +118,12 @@ export function LocationMultiSelectDropdown({
   }, [isOpen]);
 
   function toggleLocation(location: string) {
-    setSelectedLocations((current) =>
-      current.includes(location)
-        ? current.filter((item) => item !== location)
-        : [...current, location],
-    );
+    const next = selectedLocations.includes(location)
+      ? selectedLocations.filter((item) => item !== location)
+      : [...selectedLocations, location];
+
+    setSelectedLocations(next);
+    onChange?.(next);
   }
 
   const dropdownId = `${name}-dropdown`;

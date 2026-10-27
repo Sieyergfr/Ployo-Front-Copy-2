@@ -12,7 +12,8 @@ import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
 import FloatingEditBar from "@/components/FloatingEditBar";
 import FormSubmitButton from "@/components/FormSubmitButton";
 import { useActionStateWithToast } from "@/components/Toasts";
-import { Pencil, Plus, UserRoundCheck, UserRoundMinus } from "lucide-react";
+import { secondaryClass } from "@/components/dashboard/ui";
+import { Pencil, Plus, Trash2, UserRoundCheck, UserRoundMinus } from "lucide-react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import type { Team, TeamMember } from "@/lib/teams";
@@ -77,22 +78,23 @@ export function TeamHeaderActions({
   }
 
   return (
-    <div className="flex gap-2">
+    <div className="flex flex-wrap gap-2.5">
+      {canManage && (
+        <Link href={teamEditHref} className={secondaryClass}>
+          <Pencil size={15} />
+          {t("edit")}
+        </Link>
+      )}
       {canDeleteTeam && (
         <ConfirmSubmitButton
           form="team-edit-form"
           formAction={deleteFormAction}
-          className="btn btn-secondary btn-sm border-danger/25 text-danger hover:border-danger/40 hover:bg-danger/5"
+          className={`${secondaryClass} !px-3 text-[#c0392b]`}
           description={t("deleteConfirmDescription", { name: teamName })}
         >
-          {t("delete")}
+          <Trash2 size={16} aria-hidden />
+          <span className="sr-only">{t("delete")}</span>
         </ConfirmSubmitButton>
-      )}
-      {canManage && (
-        <Link href={teamEditHref} className="btn btn-secondary btn-sm">
-          <Pencil size={14} />
-          {t("edit")}
-        </Link>
       )}
     </div>
   );

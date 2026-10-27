@@ -86,6 +86,7 @@ export async function createLocationAction(
       accentClassName: formString(formData, "color", "bg-ink"),
       openingHours: formOpeningHours(formData, "openingHours"),
       shiftMinStaffing: formMinStaffing(formData, "shiftMinStaffing"),
+      bundesland: formString(formData, "bundesland") || undefined,
     });
 
     revalidatePath(locationsPath(tenant));

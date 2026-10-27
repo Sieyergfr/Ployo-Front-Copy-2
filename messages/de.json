@@ -1284,7 +1284,16 @@
     "membersHint": "Mitglieder können nach dem Erstellen direkt über die Teamdetailseite hinzugefügt werden.",
     "cancel": "Abbrechen",
     "creatingTeam": "Team wird erstellt...",
-    "createTeam": "Team erstellen"
+    "createTeam": "Team erstellen",
+    "eyebrow": "Organisationsstruktur",
+    "newTeam": "Neues Team",
+    "preview": "Vorschau",
+    "noLocations": "Keine Standorte",
+    "teamColorHint": "Wird im Schichtplan und in Listen zur Unterscheidung genutzt.",
+    "teamLeadHint": "Optional. Ohne Teamleitung wird das erste Mitglied als Leitung angezeigt.",
+    "noEmployeeFound": "Kein Mitarbeiter gefunden.",
+    "locations": "Standorte",
+    "locationsHint": "Ein Team kann an mehreren Standorten arbeiten. Leer = standortunabhängig."
   },
   "TeamDetailPage": {
     "onDuty": "Im Dienst",
@@ -1311,7 +1320,7 @@
     "deleteConfirmDescription": "Das Team \"{name}\" wird dauerhaft entfernt.",
     "delete": "Löschen",
     "edit": "Bearbeiten",
-    "tabHome": "Home",
+    "tabHome": "Übersicht",
     "tabFiles": "Dateien",
     "teamMembers": "Teammitglieder",
     "columnName": "Name",
@@ -1319,7 +1328,26 @@
     "columnRole": "Rolle",
     "columnContract": "Vertrag",
     "columnStatus": "Status",
-    "columnAction": "Aktion"
+    "columnAction": "Aktion",
+    "breadcrumb": "Brotkrumen",
+    "teams": "Teams",
+    "description": "Beschreibung",
+    "memberCount": "{count, plural, one {# Mitglied} other {# Mitglieder}}",
+    "atLocations": "{count, plural, =0 {ohne Standort} one {an # Standort} other {an # Standorten}}",
+    "perPersonnelFile": "laut Personalakte",
+    "absent": "Abwesend",
+    "currentlyOnVacation": "gerade im Urlaub",
+    "sickOrAbsent": "krank oder abwesend",
+    "noTeamLead": "Keine Teamleitung",
+    "membersSubtitle": "Standort, Vertrag und Status kommen aus der Personalakte.",
+    "search": "Suchen",
+    "status": {
+      "active": "Im Dienst",
+      "vacation": "Urlaub",
+      "absent": "Abwesend"
+    },
+    "noMembers": "Noch keine Mitglieder in diesem Team.",
+    "noSearchResults": "Keine Treffer für diese Suche."
   },
   "TeamMetrics": {
     "teamsTotal": "Teams gesamt",
@@ -1377,7 +1405,7 @@
   "CreateLocationButton": {
     "locationColor": "Standortfarbe",
     "locationName": "Standortname",
-    "locationNamePlaceholder": "Filiale München Zentrum",
+    "locationNamePlaceholder": "z. B. Filiale München Zentrum",
     "type": "Typ",
     "select": "Auswählen",
     "status": "Status",
@@ -1394,7 +1422,16 @@
     "cancel": "Abbrechen",
     "creatingLocation": "Standort wird erstellt...",
     "createLocation": "Standort erstellen",
-    "addLocation": "Standort anlegen"
+    "addLocation": "Standort anlegen",
+    "eyebrow": "Unternehmensstruktur",
+    "newLocation": "Neuer Standort",
+    "preview": "Vorschau",
+    "general": "Allgemein",
+    "bundesland": "Bundesland",
+    "noBundesland": "Keine Angabe",
+    "bundeslandHint": "Ohne Bundesland zählen nur bundesweite Feiertage.",
+    "leadAndContact": "Leitung & Kontakt",
+    "operations": "Betrieb"
   },
   "LocationDetailPage": {
     "active": "Aktiv",
@@ -1410,7 +1447,7 @@
     "deleteConfirmDescription": "Der Standort \"{name}\" wird dauerhaft gelöscht.",
     "delete": "Löschen",
     "edit": "Bearbeiten",
-    "tabHome": "Home",
+    "tabHome": "Übersicht",
     "tabFiles": "Dateien",
     "tabShifts": "Schichten",
     "employeesMetric": "Mitarbeiter",
@@ -1431,7 +1468,20 @@
     "activity": "Aktivität",
     "live": "LIVE",
     "clockQrTitle": "Stempel-QR-Code",
-    "contactEmail": "Kontakt E-Mail"
+    "contactEmail": "Kontakt E-Mail",
+    "breadcrumb": "Brotkrumen",
+    "companyDefaultBadge": "Unternehmens-Standard",
+    "leadBadge": "Leitung",
+    "minStaffingHint": "Überschreibt den unternehmensweiten Standardwert nur für diesen Standort. Leer lassen, um den Standard zu übernehmen.",
+    "minStaffingShort": "Mindestbesetzung",
+    "noActivity": "Noch keine Aktivität an diesem Standort.",
+    "openShifts": "Offene Schichten",
+    "openShiftsCaption": "diese Woche unbesetzt",
+    "ownValue": "Eigener Wert für diesen Standort",
+    "personsPerDay": "{count, plural, one {# Person} other {# Personen}} pro Tag",
+    "scanRequired": "Scan Pflicht",
+    "today": "Heute",
+    "todayHours": "Heute {hours}"
   },
   "LocationMetrics": {
     "locationsTotal": "Standorte gesamt",
@@ -1910,9 +1960,12 @@
     "goToOverview": "Zur Übersicht"
   },
   "NotFound": {
-    "title": "Seite nicht gefunden",
-    "body": "Die angeforderte Seite existiert nicht oder wurde verschoben.",
-    "goHome": "Zur Startseite"
+    "title": "Diese Seite gibt es nicht",
+    "body": "Vielleicht wurde der Link verschoben, oder die Adresse hat sich geändert. Prüfen Sie die Adresse oder springen Sie zurück.",
+    "goHome": "Zur Startseite",
+    "toDashboard": "Zum Dashboard",
+    "chooseCompany": "Unternehmen wählen",
+    "contactSupport": "Support kontaktieren"
   },
   "DashboardLayout": {
     "roleOwner": "Inhaber",
@@ -4160,9 +4213,9 @@
     "allPersons": "Alle Personen",
     "range": "Zeitraum",
     "rangeLabel": {
-      "today": "Heute",
       "7": "7 Tage",
       "30": "30 Tage",
+      "today": "Heute",
       "all": "Alle"
     },
     "kindLabel": {
@@ -4185,5 +4238,11 @@
     "footer": "Audit-Einträge sind schreibgeschützt. Einträge werden nach {months} Monaten automatisch gelöscht.",
     "truncated": "Angezeigt werden die neuesten 1.000 Einträge.",
     "changeRetention": "Aufbewahrung ändern"
+  },
+  "NoAccessNotice": {
+    "title": "Kein Zugriff auf diesen Bereich",
+    "body": "Ihre Rolle hat keine Berechtigung für diesen Bereich. Welche Rolle was sehen darf, legen Inhaber:innen und Admins unter „Rollen“ fest.",
+    "toMyArea": "Zu Mein Bereich",
+    "switchCompany": "Unternehmen wechseln"
   }
 }

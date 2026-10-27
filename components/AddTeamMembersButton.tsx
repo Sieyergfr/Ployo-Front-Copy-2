@@ -8,6 +8,7 @@ import FormSubmitButton from "@/components/FormSubmitButton";
 import { useActionStateWithToast } from "@/components/Toasts";
 import { useUniversalPopup } from "@/components/UniversalPopup";
 import { Plus, UserPlus } from "lucide-react";
+import { ctaClass } from "@/components/dashboard/ui";
 import { useTranslations } from "next-intl";
 
 type T = ReturnType<typeof useTranslations>;
@@ -93,8 +94,8 @@ export default function AddTeamMembersButton({
   teamHandle: string;
   defaultRole: string;
   employees: EmployeeSelectorOption[];
-  /** "icon": kompaktes Plus neben einer Überschrift. */
-  variant?: "button" | "icon";
+  /** "icon": kompaktes Plus neben einer Überschrift; "cta": dunkler Haupt-Button. */
+  variant?: "button" | "icon" | "cta";
 }) {
   const t = useTranslations("AddTeamMembersButton");
   const { openPopup, closePopup } = useUniversalPopup();
@@ -105,7 +106,9 @@ export default function AddTeamMembersButton({
       className={
         variant === "icon"
           ? "flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[8px] border border-border bg-white text-muted transition-colors hover:border-muted hover:text-ink"
-          : "btn btn-secondary btn-sm"
+          : variant === "cta"
+            ? `${ctaClass} min-h-10`
+            : "btn btn-secondary btn-sm"
       }
       title={t("addMembers")}
       aria-label={t("addMembers")}

@@ -21,13 +21,16 @@ import { getLocationsForTenant } from "@/lib/location-service";
 import {
   getAssignableEmployees,
   getTeamForTenant,
-  getTeamMetrics,
-  getTeamsForTenant,
 } from "@/lib/team-service";
 import { type Team, type TeamMember } from "@/lib/teams";
 import { hasPermissionLevel } from "@/lib/roles";
 import { getTenantCapabilities, withAccessRedirect } from "@/lib/tenant-access";
-import { ArrowLeft } from "lucide-react";
+import TeamMembersTable, { type TeamMemberRow } from "@/components/dashboard/teams/TeamMembersTable";
+import { DbCard, avatarColor, secondaryClass, smallActionClass } from "@/components/dashboard/ui";
+import { getEmployeesForTenant } from "@/lib/employee-service";
+import { type Employee } from "@/lib/employees";
+import { paletteHex } from "@/lib/org-options";
+import { ChevronLeft, UserRound, Users } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
@@ -52,51 +55,18 @@ function TeamMetricCard({
   tone,
 }: {
   label: string;
-  value: string;
+  value: number;
   caption: string;
-  tone?: "danger";
+  tone?: "success" | "teal" | "danger";
 }) {
-  return (
-    <div className="rounded-[14px] border border-border bg-white px-[22px] pt-5 pb-4">
-      <div className="font-mono text-[10.5px] uppercase tracking-[0.6px] text-muted">
-        {label}
-      </div>
-      <div
-        className={`mt-4 mb-2 font-display text-[38px] font-semibold leading-none tracking-[-1.2px] ${
-          tone === "danger" ? "text-danger" : "text-ink"
-        }`}
-      >
-        {value}
-      </div>
-      <div className="text-[12px] text-muted">{caption}</div>
-    </div>
-  );
-}
-
-function StatusPill({ status, t }: { status: TeamMember["status"]; t: T }) {
-  const isOnDuty = status === "on-duty";
+  const color = { success: "text-[#2f7a4a]", teal: "text-[#16676f]", danger: "text-[#b4332a]" };
 
   return (
-    <div className="flex items-center gap-[7px]">
-      <span
-        className={`size-[7px] shrink-0 rounded-full ${
-          isOnDuty ? "bg-success" : "bg-muted"
-        }`}
-      />
-      <span
-        className={`text-[12.5px] ${isOnDuty ? "text-success" : "text-muted"}`}
-      >
-        {isOnDuty ? t("onDuty") : t("onVacation")}
-      </span>
-    </div>
-  );
-}
-
-function ContractBadge({ children }: { children: string }) {
-  return (
-    <span className="inline-block rounded-[7px] border border-border-light px-[9px] py-[3px] text-[11.5px] text-[#5C6B7A]">
-      {children}
-    </span>
+    <DbCard className="db-insight flex flex-col gap-2 p-[18px]">
+      <span className="text-[13px] font-medium text-[#6e6e6b]">{label}</span>
+      <span className={`font-display text-[30px] leading-none font-semibold tracking-[-1px] ${tone ? color[tone] : ""}`}>{value}</span>
+      <span className="text-[13px] text-[#6e6e6b]">{caption}</span>
+    </DbCard>
   );
 }
 
@@ -105,86 +75,29 @@ function EditableTextField({
   label,
   name,
   value,
+  required = true,
 }: {
   id: string;
   label: string;
   name: string;
   value: string;
+  required?: boolean;
 }) {
   return (
     <div className="field">
       <label htmlFor={id} className="label">
         {label}
       </label>
-      <input id={id} name={name} className="input bg-white" defaultValue={value} required />
+      <input id={id} name={name} className="input bg-white" defaultValue={value} required={required} />
     </div>
   );
 }
 
-function teamAccentTextClass(team: Team) {
-  const colors: Record<string, string> = {
-    empfang: "text-[#7A3C9C]",
-    logistik: "text-[#1D8A65]",
-    service: "text-[#2A5BC9]",
-    verkauf: "text-[#C9622A]",
-  };
+function memberStatus(member: TeamMember, employee?: Employee): TeamMemberRow["status"] {
+  if (employee?.status === "vacation" || employee?.status === "absent") return employee.status;
+  if (employee) return "active";
 
-  return colors[team.key ?? team.id] ?? "text-muted";
-}
-
-function MemberRow({
-  member,
-  team,
-  tenant,
-  isEditing,
-  t,
-}: {
-  member: TeamMember;
-  team: Team;
-  tenant: string;
-  isEditing: boolean;
-  t: T;
-}) {
-  return (
-    <div className="grid items-center gap-3.5 border-t border-border-soft px-6 py-[13px] [grid-template-columns:2fr_120px_1.2fr_130px_110px_150px]">
-      <div className="flex min-w-0 items-center gap-[11px]">
-        <span className="flex size-[34px] shrink-0 items-center justify-center rounded-full bg-ink text-[11px] font-semibold text-white">
-          {member.initials}
-        </span>
-        <div className="min-w-0">
-          <div className="truncate text-[13.5px] font-semibold text-ink">
-            {member.name}
-          </div>
-          {member.isLead && (
-            <div className={`mt-0.5 font-mono text-[9.5px] ${teamAccentTextClass(team)}`}>
-              {t("teamLead")}
-            </div>
-          )}
-        </div>
-      </div>
-      <div className="text-[13px] text-ink">{member.location}</div>
-      <div className="text-[13px] text-muted-2">{member.role}</div>
-      <div>
-        <ContractBadge>{member.contract}</ContractBadge>
-      </div>
-      <StatusPill status={member.status} t={t} />
-      <div className="flex items-center justify-end gap-2">
-        {isEditing && !member.isLead && member.id && (
-          <RemoveTeamMemberForm tenant={tenant} team={team} member={member} />
-        )}
-        {isEditing ? (
-          <TeamRoleEditorButton
-            tenant={tenant}
-            teamId={team.dbId ?? ""}
-            teamHandle={team.id}
-            member={member}
-          />
-        ) : (
-          <span className="font-mono text-[10px] text-muted">-</span>
-        )}
-      </div>
-    </div>
-  );
+  return member.status === "vacation" ? "vacation" : "active";
 }
 
 function TeamFilesSection({
@@ -233,16 +146,13 @@ export default async function TeamDetailPage({
   const { edit, tab, folder } = await searchParams;
   const activeFolder = typeof folder === "string" ? folder : undefined;
   const t = await getTranslations("TeamDetailPage");
-  const tMetrics = await getTranslations("TeamMetrics");
-  const [team, teams] = await withAccessRedirect(tenant, () =>
-    Promise.all([getTeamForTenant(tenant, teamId), getTeamsForTenant(tenant)]),
-  );
+  const team = await withAccessRedirect(tenant, () => getTeamForTenant(tenant, teamId));
 
-  if (!team || !teams) {
+  if (!team) {
     notFound();
   }
 
-  const [assignableEmployees, capabilities, uploadOptions, locations] = await Promise.all([
+  const [assignableEmployees, capabilities, uploadOptions, locations, employees] = await Promise.all([
     getAssignableEmployees(tenant, team.id),
     getTenantCapabilities(tenant),
     getFileUploadOptions(tenant),
@@ -250,16 +160,16 @@ export default async function TeamDetailPage({
     // "keine Auswahl" zurückfallen lassen, nicht die ganze Seite sperren
     // (gleiche Absicherung wie auf der Teams-Übersicht für CreateTeamButton).
     getLocationsForTenant(tenant).catch(() => null).then((v) => v ?? []),
+    // Status und E-Mail kommen aus der Personalakte; ohne Leserecht bleibt
+    // es beim gespeicherten Teamstatus.
+    getEmployeesForTenant(tenant).catch(() => null).then((v) => v ?? []),
   ]);
   const canManage = hasPermissionLevel(capabilities.teams.level, "write");
   const canDeleteTeam = capabilities.teams.canDelete;
   const canViewAudit = capabilities.teams.canViewAudit;
   const canManageFiles = capabilities.teams.canUploadFiles;
   const canDeleteFiles = canManageFiles && capabilities.files.canDelete;
-  const teamMetrics = getTeamMetrics(teams, tMetrics);
-  const onDutyCount = team.members.filter(
-    (member) => member.status === "on-duty",
-  ).length;
+  const canOpenProfiles = hasPermissionLevel(capabilities.employees.level, "read");
   const isFilesTab = tab === "files";
   const isHomeTab = !isFilesTab;
   const isEditing = edit === "1" && isHomeTab && canManage;
@@ -272,130 +182,125 @@ export default async function TeamDetailPage({
       })
     : [];
   const teamEditHref = `${teamHref}?edit=1`;
+  const accent = paletteHex(team.colorClassName, "#2c64c9");
+  const employeeByDbId = new Map(employees.map((employee) => [employee.dbId ?? employee.id, employee]));
+  const locationColor = new Map(locations.map((location) => [location.name, paletteHex(location.accentClassName, "#9a9a96")]));
+  const teamLocations = team.locations
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const rows: TeamMemberRow[] = team.members.map((member) => {
+    const employee = member.employeeId ? employeeByDbId.get(member.employeeId) : undefined;
+
+    return {
+      key: member.id ?? `${team.dbId}-${member.initials}`,
+      name: member.name,
+      initials: member.initials,
+      isLead: Boolean(member.isLead),
+      location: employee?.location || member.location,
+      locationColor: locationColor.get(employee?.location || member.location) ?? "#9a9a96",
+      role: member.role,
+      contract: employee?.contract || member.contract,
+      status: memberStatus(member, employee),
+      href: canOpenProfiles && employee ? `/u/${tenant}/employees/${employee.id}` : undefined,
+      actions: canManage ? (
+        <>
+          <TeamRoleEditorButton tenant={tenant} teamId={team.dbId ?? ""} teamHandle={team.id} member={member} />
+          {!member.isLead && member.id && <RemoveTeamMemberForm tenant={tenant} team={team} member={member} />}
+        </>
+      ) : undefined,
+    };
+  });
+  const countBy = (status: TeamMemberRow["status"]) => rows.filter((row) => row.status === status).length;
+  const memberLocationCount = new Set(rows.map((row) => row.location).filter(Boolean)).size;
+  const leadMember = team.members.find((member) => member.isLead);
+  const leadEmployee = leadMember?.employeeId ? employeeByDbId.get(leadMember.employeeId) : undefined;
+  const tabClass = (active: boolean) =>
+    `-mb-px inline-flex items-center gap-2 border-b-2 px-0.5 pb-3 text-[14.5px] no-underline ${
+      active ? "border-ink font-semibold text-ink" : "border-transparent font-medium text-[#6e6e6b] hover:text-ink"
+    }`;
 
   return (
     <>
       <UnsavedChangesGuard active={isEditing} />
-      <section className="mb-7 grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]">
-        {teamMetrics.map((metric) => (
-          <TeamMetricCard key={metric.label} {...metric} />
-        ))}
-      </section>
-
-      <div className="mb-[22px] flex flex-wrap items-center gap-3.5">
-        <Link href={`/u/${tenant}/teams`} className="btn btn-secondary btn-sm">
-          <ArrowLeft size={14} />
+      <nav aria-label={t("breadcrumb")} className="mb-[18px] flex items-center gap-2 text-[14px]">
+        <Link href={`/u/${tenant}/teams`} className={`${secondaryClass} min-h-9 bg-white px-3 py-1.5 text-[13.5px]`}>
+          <ChevronLeft size={15} />
           {t("backToTeams")}
         </Link>
-        <span className="font-mono text-[11px] uppercase tracking-[0.5px] text-muted">
-          {t("teamsBreadcrumb", { name: team.name })}
-        </span>
-      </div>
+        <span className="text-[#9a9a96]">/</span>
+        <Link href={`/u/${tenant}/teams`} className="text-[#6e6e6b] no-underline hover:text-ink">
+          {t("teams")}
+        </Link>
+        <span className="text-[#9a9a96]">/</span>
+        <span className="truncate font-medium">{team.name}</span>
+      </nav>
 
-      <TeamEditFormAndBar
-        tenant={tenant}
-        teamId={team.dbId ?? ""}
-        cancelHref={teamHref}
-        isEditing={isEditing}
-      >
-        <section className="mb-3.5 overflow-hidden rounded-card border border-border bg-white">
-          <div className={`h-1 w-full ${team.colorClassName}`} />
-          <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-[22px]">
-            <div className="min-w-[260px] flex-1">
-              {isEditing ? (
+      <TeamEditFormAndBar tenant={tenant} teamId={team.dbId ?? ""} cancelHref={teamHref} isEditing={isEditing}>
+        <DbCard className="db-hero relative mb-5 overflow-hidden p-0">
+          <span className="absolute inset-y-0 left-0 w-1" style={{ background: accent }} />
+          <div className="flex flex-wrap items-start gap-5 px-7 pt-6 pb-5">
+            {isEditing ? (
+              <div className="flex min-w-[240px] flex-1 flex-col gap-4">
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <EditableTextField
-                    id="team-name"
-                    label={t("teamName")}
-                    name="name"
-                    value={team.name}
-                  />
-                  <LocationMultiSelectDropdown
-                    defaultLocations={team.locations
-                      .split(",")
-                      .map((item) => item.trim())
-                      .filter(Boolean)}
-                    options={locations.map((location) => location.name)}
-                  />
+                  <EditableTextField id="team-name" label={t("teamName")} name="name" value={team.name} />
+                  <LocationMultiSelectDropdown defaultLocations={teamLocations} options={locations.map((location) => location.name)} />
                 </div>
-              ) : (
-                <>
-                  <h1 className="m-0 font-display text-[28px] font-semibold tracking-[-0.8px] text-ink">
-                    {team.name}
-                  </h1>
-                  <div className="mt-1.5 text-[13px] text-muted">
-                    {team.locations || t("noLocations")}
-                  </div>
-                </>
-              )}
-            </div>
-
-            <div className="flex flex-wrap items-center gap-4">
-              <div className="flex gap-6">
-                <div className="text-center">
-                  <div className="font-display text-[30px] font-semibold tracking-[-1px] text-ink">
-                    {team.members.length}
-                  </div>
-                  <div className="mt-[3px] font-mono text-[9px] uppercase text-muted">
-                    {t("members")}
-                  </div>
-                </div>
-                <div className="text-center">
-                  <div className="font-display text-[30px] font-semibold tracking-[-1px] text-success">
-                    {onDutyCount}
-                  </div>
-                  <div className="mt-[3px] font-mono text-[9px] uppercase text-muted">
-                    {t("onDuty")}
-                  </div>
+                <EditableTextField id="team-description" label={t("description")} name="description" value={team.description ?? ""} required={false} />
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <TeamColorButtons defaultValue={team.colorClassName} />
                 </div>
               </div>
-
-              {!isEditing && (
-                <TeamHeaderActions
-                  teamName={team.name}
-                  teamEditHref={teamEditHref}
-                  canDeleteTeam={canDeleteTeam}
-                  canManage={canManage}
-                />
-              )}
-            </div>
+            ) : (
+              <>
+                <span
+                  className="flex size-[64px] shrink-0 items-center justify-center rounded-[16px] text-white shadow-[0_10px_28px_rgba(0,0,0,0.14)]"
+                  style={{ background: accent }}
+                >
+                  <Users size={26} />
+                </span>
+                <div className="flex min-w-[240px] flex-1 flex-col gap-1.5">
+                  <h1 className="m-0 flex flex-wrap items-center gap-2.5 font-display text-[clamp(26px,3vw,34px)] leading-[1.1] font-semibold tracking-[-1px]">
+                    {team.name}
+                    <span className="rounded-[6px] bg-[#f2f1ed] px-2 py-[3px] font-sans text-[12px] font-semibold tracking-normal text-[#3d3d3a]">
+                      {t("memberCount", { count: team.members.length })}
+                    </span>
+                  </h1>
+                  {team.description && <span className="text-[14px] text-[#6e6e6b]">{team.description}</span>}
+                  <span className="mt-1 flex flex-wrap gap-1.5">
+                    {teamLocations.length === 0 && <span className="text-[13px] text-[#9a9a96]">{t("noLocations")}</span>}
+                    {teamLocations.slice(0, 3).map((name) => (
+                      <span key={name} className="inline-flex items-center gap-1.5 rounded-[7px] border border-[#ecebe7] bg-white px-2 py-[3px] text-[12.5px]">
+                        <span className="size-[7px] rounded-[2px]" style={{ background: locationColor.get(name) ?? "#9a9a96" }} />
+                        {name}
+                      </span>
+                    ))}
+                    {teamLocations.length > 3 && (
+                      <span title={teamLocations.slice(3).join(", ")} className="rounded-[7px] bg-[rgba(139,111,224,0.12)] px-2 py-[3px] text-[12.5px] font-semibold text-[#6b4fc4]">
+                        +{teamLocations.length - 3}
+                      </span>
+                    )}
+                  </span>
+                </div>
+                <TeamHeaderActions teamName={team.name} teamEditHref={teamEditHref} canDeleteTeam={canDeleteTeam} canManage={canManage} />
+              </>
+            )}
           </div>
-        </section>
-
-        {isEditing && (
-          <section className="mb-3.5 rounded-card border border-border bg-white px-6 py-4">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <TeamColorButtons defaultValue={team.colorClassName} />
+          {!isEditing && (
+            <div className="flex gap-6 border-t border-[#f0efeb] px-7 pt-3.5">
+              <Link href={teamHref} className={tabClass(isHomeTab)}>
+                {t("tabHome")}
+              </Link>
+              <Link href={`${teamHref}?tab=files`} className={tabClass(isFilesTab)}>
+                {t("tabFiles")}
+                <span className="rounded-[6px] bg-[#f2f1ed] px-1.5 text-[12px] font-semibold text-[#6e6e6b]">
+                  {team.fileFolders.length + team.files.length}
+                </span>
+              </Link>
             </div>
-          </section>
-        )}
+          )}
+        </DbCard>
       </TeamEditFormAndBar>
-
-      <div className="mb-3.5 flex gap-[26px] border-b border-border">
-        <Link
-          href={teamHref}
-          className={`mb-[-1px] inline-flex items-center gap-2 border-b-2 px-0.5 py-3 text-[14px] ${
-            isHomeTab
-              ? "border-ink font-semibold text-ink"
-              : "border-transparent font-medium text-muted"
-          }`}
-        >
-          {t("tabHome")}
-        </Link>
-        <Link
-          href={`${teamHref}?tab=files`}
-          className={`mb-[-1px] inline-flex items-center gap-2 border-b-2 px-0.5 py-3 text-[14px] ${
-            isFilesTab
-              ? "border-ink font-semibold text-ink"
-              : "border-transparent font-medium text-muted"
-          }`}
-        >
-          {t("tabFiles")}
-          <span className="font-mono text-[11px] text-muted">
-            {team.fileFolders.length + team.files.length}
-          </span>
-        </Link>
-      </div>
 
       {isFilesTab ? (
         <TeamFilesSection
@@ -409,20 +314,68 @@ export default async function TeamDetailPage({
           t={t}
         />
       ) : (
-        <>
-          {isEditing && <TeamLeaderEditorForm team={team} tenant={tenant} />}
+        <div className="flex flex-col gap-4">
+          {!isEditing && (
+            <section className="grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(190px,1fr))]">
+              <TeamMetricCard label={t("members")} value={rows.length} caption={t("atLocations", { count: memberLocationCount })} />
+              <TeamMetricCard label={t("onDuty")} value={countBy("active")} caption={t("perPersonnelFile")} tone="success" />
+              <TeamMetricCard label={t("onVacation")} value={countBy("vacation")} caption={t("currentlyOnVacation")} tone="teal" />
+              <TeamMetricCard label={t("absent")} value={countBy("absent")} caption={t("sickOrAbsent")} tone="danger" />
+            </section>
+          )}
 
-          <section className="overflow-hidden rounded-card border border-border bg-white">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-6 pt-5 pb-3.5">
-              <h2 className="m-0 font-display text-[16px] font-semibold tracking-[-0.3px] text-ink">
-                {t("teamMembers")}
-              </h2>
-              {!isEditing && canManage && (
+          {isEditing ? (
+            <TeamLeaderEditorForm team={team} tenant={tenant} />
+          ) : (
+            <DbCard className="flex flex-wrap items-center gap-3.5 px-[18px] py-3.5">
+              {leadMember ? (
+                <span
+                  className="flex size-[52px] shrink-0 items-center justify-center rounded-full text-[15px] font-semibold text-white ring-2 ring-white ring-offset-2"
+                  style={{ background: avatarColor(leadMember.name), ["--tw-ring-offset-color" as string]: accent }}
+                >
+                  {leadMember.initials}
+                </span>
+              ) : (
+                <span className="flex size-[52px] shrink-0 items-center justify-center rounded-full bg-[#f2f1ed] text-[#9a9a96]">
+                  <UserRound size={22} />
+                </span>
+              )}
+              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="font-mono text-[10px] tracking-[0.12em] text-[#6e6e6b] uppercase">{t("teamLead")}</span>
+                <span className="font-display text-[17px] font-semibold tracking-[-0.3px]">{leadMember?.name ?? t("noTeamLead")}</span>
+                {leadMember && (
+                  <span className="truncate text-[13px] text-[#6e6e6b]">
+                    {[leadMember.role, leadEmployee?.location || leadMember.location].filter(Boolean).join(" · ")}
+                    {leadEmployee?.email && (
+                      <>
+                        {" · "}
+                        <a href={`mailto:${leadEmployee.email}`} className="text-ink no-underline hover:underline">
+                          {leadEmployee.email}
+                        </a>
+                      </>
+                    )}
+                  </span>
+                )}
+              </div>
+              {canManage && team.members.length > 0 && (
+                <Link href={teamEditHref} className={smallActionClass + " bg-white"}>
+                  {t("editTeamLead")}
+                </Link>
+              )}
+            </DbCard>
+          )}
+
+          <TeamMembersTable
+            rows={rows}
+            editor={isEditing ? <TeamMemberAssignmentForm team={team} tenant={tenant} assignableEmployees={assignableEmployees} /> : undefined}
+            toolbar={
+              !isEditing && canManage ? (
                 <AddTeamMembersButton
                   tenant={tenant}
                   teamId={team.dbId ?? ""}
                   teamHandle={team.id}
                   defaultRole={team.name}
+                  variant="cta"
                   employees={assignableEmployees.map((member) => ({
                     id: member.employeeId ?? "",
                     initials: member.initials,
@@ -433,39 +386,10 @@ export default async function TeamDetailPage({
                     role: member.role,
                   }))}
                 />
-              )}
-            </div>
-            {isEditing && (
-              <TeamMemberAssignmentForm
-                team={team}
-                tenant={tenant}
-                assignableEmployees={assignableEmployees}
-              />
-            )}
-            <div className="overflow-x-auto">
-              <div className="min-w-[820px]">
-                <div className="grid gap-3.5 border-b border-border px-6 py-3.5 font-mono text-[9.5px] uppercase tracking-[0.6px] text-muted [grid-template-columns:2fr_120px_1.2fr_130px_110px_150px]">
-                  <div>{t("columnName")}</div>
-                  <div>{t("columnLocation")}</div>
-                  <div>{t("columnRole")}</div>
-                  <div>{t("columnContract")}</div>
-                  <div>{t("columnStatus")}</div>
-                  <div className="text-right">{t("columnAction")}</div>
-                </div>
-                {team.members.map((member) => (
-                  <MemberRow
-                    key={member.id ?? `${team.dbId}-${member.initials}`}
-                    member={member}
-                    team={team}
-                    tenant={tenant}
-                    isEditing={isEditing}
-                    t={t}
-                  />
-                ))}
-              </div>
-            </div>
-          </section>
-        </>
+              ) : undefined
+            }
+          />
+        </div>
       )}
 
       {canViewAudit && (

@@ -584,6 +584,8 @@ export async function updateTenantTeam(input: {
   name: string;
   locations: string[];
   colorClassName: string;
+  /** Optional (Dashboard); fehlt = unverändert, damit die App-API nichts überschreibt. */
+  description?: string;
 }) {
   assertKnownTeamColor(input.colorClassName);
 
@@ -616,6 +618,7 @@ export async function updateTenantTeam(input: {
       name: nextName,
       locations: input.locations.join(", "),
       colorClassName: input.colorClassName,
+      ...(input.description === undefined ? {} : { description: input.description.trim().slice(0, 500) }),
     },
   });
 

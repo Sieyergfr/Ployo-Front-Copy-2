@@ -1,12 +1,12 @@
 "use client";
 
 import { createTeamAction } from "@/app/(dashboard)/u/[tenant]/teams/actions";
-import FormSubmitButton from "@/components/FormSubmitButton";
+import { DbField, DbModal, dbInputClass } from "@/components/dashboard/DbDrawer";
+import { avatarColor, ctaClass, secondaryClass } from "@/components/dashboard/ui";
 import { LocationMultiSelectDropdown } from "@/components/TeamEditControls";
 import { useActionStateWithToast } from "@/components/Toasts";
-import { useUniversalPopup } from "@/components/UniversalPopup";
-import { teamColorPalette } from "@/lib/org-options";
-import { Check, ChevronDown, Plus, Users } from "lucide-react";
+import { paletteHex, teamColorPalette } from "@/lib/org-options";
+import { Check, Plus, Search, Users } from "lucide-react";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 
@@ -16,210 +16,187 @@ type DropdownOption = {
   meta?: string;
 };
 
-const teamColors = teamColorPalette;
-
-function CustomDropdownField({
-  label,
-  name,
-  placeholder,
-  options,
-}: {
-  label: string;
-  name: string;
-  placeholder: string;
-  options: DropdownOption[];
-}) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [selectedValue, setSelectedValue] = useState("");
-  const selectedOption = options.find((option) => option.value === selectedValue);
-  const listboxId = `${name}-team-dropdown-listbox`;
-  const labelId = `${name}-team-dropdown-label`;
-
-  return (
-    <div
-      className="field"
-      onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget)) {
-          setIsOpen(false);
-        }
-      }}
-    >
-      <label id={labelId} className="label">
-        {label}
-      </label>
-      <input type="hidden" name={name} value={selectedValue} />
-
-      <div className="relative">
-        <button
-          type="button"
-          aria-haspopup="listbox"
-          aria-expanded={isOpen}
-          aria-labelledby={labelId}
-          aria-controls={listboxId}
-          className="input flex cursor-pointer items-center justify-between gap-3 bg-bg text-left"
-          onClick={() => setIsOpen((current) => !current)}
-        >
-          <span className={selectedOption ? "text-ink" : "text-muted"}>
-            {selectedOption?.label ?? placeholder}
-          </span>
-          <ChevronDown
-            size={14}
-            className={`shrink-0 text-muted transition-transform ${
-              isOpen ? "rotate-180" : ""
-            }`}
-          />
-        </button>
-
-        {isOpen && (
-          <div
-            id={listboxId}
-            role="listbox"
-            aria-labelledby={labelId}
-            className="absolute z-50 mt-1.5 max-h-56 w-full overflow-y-auto rounded-[10px] border border-border bg-white p-1.5 shadow-[0_12px_32px_rgba(0,0,0,0.12)]"
-          >
-            {options.map((option) => {
-              const isSelected = option.value === selectedValue;
-
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  role="option"
-                  aria-selected={isSelected}
-                  className={`flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-2 text-left transition-colors ${
-                    isSelected ? "bg-border-soft" : "hover:bg-bg"
-                  }`}
-                  onClick={() => {
-                    setSelectedValue(option.value);
-                    setIsOpen(false);
-                  }}
-                >
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13px] font-medium text-ink">
-                      {option.label}
-                    </span>
-                    {option.meta && (
-                      <span className="mt-0.5 block truncate font-mono text-[10px] text-muted">
-                        {option.meta}
-                      </span>
-                    )}
-                  </span>
-                  {isSelected && (
-                    <Check size={13} className="shrink-0 text-success" />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    </div>
-  );
+function initialsOf(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
 }
 
-function TeamColorPicker() {
+function LeadPicker({ employees }: { employees: DropdownOption[] }) {
   const t = useTranslations("CreateTeamButton");
-  const [selectedColor, setSelectedColor] = useState<string>(teamColors[0].value);
+  const [query, setQuery] = useState("");
+  const [selected, setSelected] = useState("");
+  const needle = query.trim().toLowerCase();
+  const visible = needle
+    ? employees.filter((employee) => `${employee.label} ${employee.meta ?? ""}`.toLowerCase().includes(needle))
+    : employees;
 
   return (
-    <div className="field">
-      <div className="label">{t("teamColor")}</div>
-      <input type="hidden" name="color" value={selectedColor} />
-      <div className="flex flex-wrap gap-2">
-        {teamColors.map((color) => {
-          const isSelected = color.value === selectedColor;
+    <div className="flex flex-col gap-1.5">
+      <span className="font-mono text-[10px] tracking-[0.08em] text-[#6e6e6b] uppercase">{t("teamLead")}</span>
+      <input type="hidden" name="lead" value={selected} />
+      <label className="relative block">
+        <Search size={15} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-[#9a9a96]" />
+        <input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder={t("selectEmployeePlaceholder")}
+          aria-label={t("selectEmployeePlaceholder")}
+          className={`${dbInputClass} pl-9`}
+        />
+      </label>
+      <div role="listbox" aria-label={t("teamLead")} className="flex max-h-[200px] flex-col overflow-y-auto">
+        {visible.map((employee) => {
+          const isSelected = employee.value === selected;
 
           return (
             <button
-              key={color.value}
+              key={employee.value}
               type="button"
-              aria-label={color.label}
-              title={color.label}
-              className={`flex size-9 cursor-pointer items-center justify-center rounded-[9px] border transition-colors ${
-                isSelected ? "border-ink" : "border-border hover:border-muted"
+              role="option"
+              aria-selected={isSelected}
+              onClick={() => setSelected(isSelected ? "" : employee.value)}
+              className={`db-focus flex min-h-12 cursor-pointer items-center gap-2.5 rounded-[10px] border-0 px-2 text-left ${
+                isSelected ? "bg-[rgba(139,111,224,0.10)]" : "bg-transparent hover:bg-[#f6f5f2]"
               }`}
-              onClick={() => setSelectedColor(color.value)}
             >
-              <span className={`size-4 rounded-full ${color.className}`} />
+              <span
+                className="flex size-7 shrink-0 items-center justify-center rounded-full text-[10.5px] font-semibold text-white"
+                style={{ background: avatarColor(employee.label) }}
+              >
+                {initialsOf(employee.label)}
+              </span>
+              <span className="min-w-0 flex-1 truncate text-[14px] font-semibold">{employee.label}</span>
+              {employee.meta && <span className="truncate text-[12.5px] text-[#6e6e6b]">{employee.meta}</span>}
+              {isSelected && <Check size={15} className="shrink-0 text-[#6b4fc4]" />}
             </button>
           );
         })}
+        {visible.length === 0 && <span className="px-2 py-3 text-[13px] text-[#6e6e6b]">{t("noEmployeeFound")}</span>}
       </div>
+      <span className="text-[12px] text-[#6e6e6b]">{t("teamLeadHint")}</span>
     </div>
   );
 }
 
-function CreateTeamForm({
+function CreateTeamModal({
   tenant,
   employees,
   locations,
-  onDone,
+  onClose,
 }: {
   tenant: string;
   employees: DropdownOption[];
   locations: string[];
-  onDone: () => void;
+  onClose: () => void;
 }) {
   const t = useTranslations("CreateTeamButton");
-  const [, formAction] = useActionStateWithToast(createTeamAction);
+  const [, formAction, isPending] = useActionStateWithToast(createTeamAction);
+  const [name, setName] = useState("");
+  const [color, setColor] = useState<string>(teamColorPalette[0].value);
+  const [selectedLocations, setSelectedLocations] = useState<string[]>([]);
+  const colorEntry = teamColorPalette.find((entry) => entry.value === color) ?? teamColorPalette[0];
+  const accent = paletteHex(colorEntry.className);
 
   return (
-    <form className="flex flex-col gap-4" action={formAction}>
-      <input type="hidden" name="tenant" value={tenant} />
-      <div className="field">
-        <label htmlFor="team-name" className="label">
-          {t("teamName")}
-        </label>
-        <input
-          id="team-name"
-          name="name"
-          className="input"
-          placeholder={t("teamNamePlaceholder")}
-          required
-        />
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-2">
-        <LocationMultiSelectDropdown defaultLocations={[]} options={locations} />
-
-        <CustomDropdownField
-          label={t("teamLead")}
-          name="lead"
-          placeholder={t("selectEmployeePlaceholder")}
-          options={employees}
-        />
-      </div>
-
-      <div className="field">
-        <label htmlFor="team-description" className="label">
-          {t("description")}
-        </label>
-        <textarea
-          id="team-description"
-          name="description"
-          className="input min-h-24 resize-none"
-          placeholder={t("descriptionPlaceholder")}
-        />
-      </div>
-
-      <TeamColorPicker />
-
-      <p className="m-0 text-[12.5px] leading-[1.55] text-muted-2">
-        {t("membersHint")}
-      </p>
-
-      <div className="mt-1 flex justify-end gap-2.5 border-t border-border-soft pt-4">
-        <button type="button" className="btn btn-secondary" onClick={onDone}>
-          {t("cancel")}
-        </button>
-        <FormSubmitButton
-          Icon={Users}
-          pendingLabel={t("creatingTeam")}
-        >
+    <DbModal
+      title={
+        <span className="flex flex-col gap-1">
+          <span className="font-mono text-[10px] font-medium tracking-[0.12em] text-[#6e6e6b] uppercase">{t("eyebrow")}</span>
           {t("createTeam")}
-        </FormSubmitButton>
-      </div>
-    </form>
+        </span>
+      }
+      onClose={onClose}
+    >
+      <form action={formAction} className="flex flex-col gap-[18px]">
+        <input type="hidden" name="tenant" value={tenant} />
+        <input type="hidden" name="color" value={color} />
+
+        <div className="relative flex items-center gap-3.5 overflow-hidden rounded-[14px] border border-[#ecebe7] bg-white py-3.5 pr-4 pl-5">
+          <span className="absolute inset-y-0 left-0 w-1" style={{ background: accent }} />
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-[11px] text-white" style={{ background: accent }}>
+            <Users size={18} />
+          </span>
+          <span className="flex min-w-0 flex-1 flex-col">
+            <span className="truncate text-[15px] font-semibold">{name.trim() || t("newTeam")}</span>
+            <span className="truncate text-[13px] text-[#6e6e6b]">
+              {selectedLocations.length > 0 ? selectedLocations.join(", ") : t("noLocations")}
+            </span>
+          </span>
+          <span className="font-mono text-[10px] tracking-[0.12em] text-[#6e6e6b] uppercase">{t("preview")}</span>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <span className="font-mono text-[10px] tracking-[0.08em] text-[#6e6e6b] uppercase">
+            {t("teamColor")} · {colorEntry.label}
+          </span>
+          <div className="flex flex-wrap items-center gap-2" role="radiogroup" aria-label={t("teamColor")}>
+            {teamColorPalette.map((entry) => (
+              <button
+                key={entry.value}
+                type="button"
+                role="radio"
+                aria-checked={color === entry.value}
+                aria-label={entry.label}
+                title={entry.label}
+                onClick={() => setColor(entry.value)}
+                className={`db-focus flex size-7 cursor-pointer items-center justify-center rounded-full border-0 text-white ${
+                  color === entry.value ? "ring-2 ring-offset-2" : ""
+                }`}
+                style={{ background: paletteHex(entry.className), ["--tw-ring-color" as string]: paletteHex(entry.className) }}
+              >
+                <Check size={13} strokeWidth={3} />
+              </button>
+            ))}
+          </div>
+          <span className="text-[12px] text-[#6e6e6b]">{t("teamColorHint")}</span>
+        </div>
+
+        <DbField label={`${t("teamName")} *`}>
+          <input
+            name="name"
+            className={dbInputClass}
+            placeholder={t("teamNamePlaceholder")}
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            required
+            maxLength={80}
+            autoFocus
+          />
+        </DbField>
+
+        <LeadPicker employees={employees} />
+
+        <DbField label={t("description")}>
+          <textarea name="description" className={`${dbInputClass} min-h-20 resize-y`} placeholder={t("descriptionPlaceholder")} maxLength={500} />
+        </DbField>
+
+        <div className="flex flex-col gap-1.5">
+          <LocationMultiSelectDropdown
+            defaultLocations={[]}
+            options={locations}
+            label={t("locations")}
+            placeholder={t("noLocations")}
+            onChange={setSelectedLocations}
+          />
+          <span className="text-[12px] text-[#6e6e6b]">{t("locationsHint")}</span>
+        </div>
+
+        <p className="m-0 text-[12.5px] leading-[1.55] text-[#6e6e6b]">{t("membersHint")}</p>
+
+        <div className="flex justify-end gap-2 border-t border-[#ecebe7] pt-4">
+          <button type="button" className={secondaryClass} onClick={onClose}>
+            {t("cancel")}
+          </button>
+          <button type="submit" className={ctaClass} disabled={isPending}>
+            {isPending ? t("creatingTeam") : t("createTeam")}
+          </button>
+        </div>
+      </form>
+    </DbModal>
   );
 }
 
@@ -238,32 +215,19 @@ export default function CreateTeamButton({
   children?: React.ReactNode;
 }) {
   const t = useTranslations("CreateTeamButton");
-  const { openPopup, closePopup } = useUniversalPopup();
+  const [open, setOpen] = useState(false);
 
   return (
-    <button
-      type="button"
-      className={className ?? "btn btn-primary"}
-      onClick={() => {
-        openPopup({
-          title: t("createTeam"),
-          content: (
-            <CreateTeamForm
-              tenant={tenant}
-              employees={employees}
-              locations={locations}
-              onDone={closePopup}
-            />
-          ),
-        });
-      }}
-    >
-      {children ?? (
-        <>
-          <Plus size={15} strokeWidth={2} />
-          {t("createTeam")}
-        </>
-      )}
-    </button>
+    <>
+      <button type="button" className={className ?? ctaClass} onClick={() => setOpen(true)}>
+        {children ?? (
+          <>
+            <Plus size={15} strokeWidth={2} />
+            {t("createTeam")}
+          </>
+        )}
+      </button>
+      {open && <CreateTeamModal tenant={tenant} employees={employees} locations={locations} onClose={() => setOpen(false)} />}
+    </>
   );
 }

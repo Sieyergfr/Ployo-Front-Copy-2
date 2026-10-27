@@ -2,7 +2,7 @@
 
 import { type ReactNode, useMemo, useState } from "react";
 import Link from "next/link";
-import { paletteHex } from "@/lib/org-options";
+import { locationKindLabel, paletteHex } from "@/lib/org-options";
 import { openingHoursForWeekday, type OpeningHoursWeekday } from "@/lib/opening-hours";
 import { type Location } from "@/lib/locations";
 import { Building2, MapPin, Search } from "lucide-react";
@@ -93,7 +93,7 @@ function LocationCard({ location, tenant, t }: { location: Location; tenant: str
         </span>
         <span className="flex min-w-0 flex-1 flex-col">
           <span className="truncate font-display text-[17px] font-semibold tracking-[-0.3px]">{location.name}</span>
-          <span className="text-[13px] text-[#6e6e6b]">{location.kind}</span>
+          <span className="text-[13px] text-[#6e6e6b]">{locationKindLabel(location.kind)}</span>
         </span>
         <StatusBadge location={location} t={t} />
       </span>

@@ -6,6 +6,11 @@
 
 export const locationKinds = ["Filiale", "Zentrale", "Lager", "Buero", "Verwaltung"] as const;
 
+/** Anzeige der Standorttypen (gespeichert wird weiterhin der Rohwert, z. B. "Buero"). */
+export function locationKindLabel(kind: string) {
+  return kind === "Buero" ? "Büro" : kind;
+}
+
 export const locationColorPalette = [
   { value: "bg-ink", className: "bg-ink", label: "Schwarz" },
   { value: "bg-[#2A6FDB]", className: "bg-[#2A6FDB]", label: "Blau" },

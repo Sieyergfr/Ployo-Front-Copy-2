@@ -7,7 +7,8 @@ import {
 import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
 import FloatingEditBar from "@/components/FloatingEditBar";
 import { useActionStateWithToast } from "@/components/Toasts";
-import { Pencil } from "lucide-react";
+import { secondaryClass } from "@/components/dashboard/ui";
+import { Pencil, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 
@@ -66,21 +67,22 @@ export function LocationHeaderActions({
 
   return (
     <div className="flex flex-wrap gap-2.5">
+      {canEditLocation && (
+        <Link href={locationEditHref} className={secondaryClass}>
+          <Pencil size={15} />
+          {t("edit")}
+        </Link>
+      )}
       {canDeleteLocation && (
         <ConfirmSubmitButton
           form="location-edit-form"
           formAction={deleteFormAction}
-          className="btn btn-secondary btn-sm border-danger/25 text-danger hover:border-danger/40 hover:bg-danger/5"
+          className={`${secondaryClass} !px-3 text-[#c0392b]`}
           description={t("deleteConfirmDescription", { name: locationName })}
         >
-          {t("delete")}
+          <Trash2 size={16} aria-hidden />
+          <span className="sr-only">{t("delete")}</span>
         </ConfirmSubmitButton>
-      )}
-      {canEditLocation && (
-        <Link href={locationEditHref} className="btn btn-secondary btn-sm">
-          <Pencil size={14} />
-          {t("edit")}
-        </Link>
       )}
     </div>
   );

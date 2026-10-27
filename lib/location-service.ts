@@ -21,6 +21,7 @@ import {
   resolveEffectiveOpeningHours,
   type OpeningHoursDay,
 } from "@/lib/opening-hours";
+import { BUNDESLAENDER } from "@/lib/german-holidays";
 import { prisma } from "@/lib/prisma";
 import { clockQrPayload, generateClockQrToken } from "@/lib/time-clock-qr";
 import { getDefaultOpeningHours, getISOWeekFromDate, getISOWeekStart } from "@/lib/shift-service";
@@ -680,6 +681,8 @@ export async function createTenantLocation(input: {
   openingHours?: OpeningHoursDay[];
   /** `null` = Unternehmensvorgabe (TenantSettings.shiftMinStaffing) gilt weiter. */
   shiftMinStaffing?: number | null;
+  /** Bundesland für Feiertage (optional, Dashboard); leer = nur bundesweite Feiertage. */
+  bundesland?: string;
 }) {
   assertValidLocationEmail(input.email.trim());
   assertKnownLocationKind(input.kind.trim());
@@ -718,6 +721,7 @@ export async function createTenantLocation(input: {
       contactEmail: input.email.trim(),
       openingHoursJson: input.openingHours ?? [],
       shiftMinStaffing: normalizeMinStaffing(input.shiftMinStaffing),
+      bundesland: BUNDESLAENDER.find((entry) => entry.code === input.bundesland)?.code ?? null,
     },
     include: { address: true },
   });

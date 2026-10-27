@@ -75,8 +75,9 @@ export default function AddLocationEmployeesButton({
   employees: EmployeeSelectorOption[];
   /** Wer dem Standort schon zugewiesen ist; erscheint vorausgewählt. */
   assignedIds?: string[];
-  /** "icon": kompaktes Plus neben der Team-Überschrift statt eines Kopfzeilen-Buttons. */
-  variant?: "button" | "icon";
+  /** "icon": kompaktes Plus neben der Team-Überschrift statt eines Kopfzeilen-Buttons;
+   *  "link": Textlink unter einer Liste. */
+  variant?: "button" | "icon" | "link";
 }) {
   const t = useTranslations("AddLocationEmployeesButton");
   const { openPopup, closePopup } = useUniversalPopup();
@@ -87,7 +88,9 @@ export default function AddLocationEmployeesButton({
       className={
         variant === "icon"
           ? "flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-[8px] border border-border bg-white text-muted transition-colors hover:border-muted hover:text-ink"
-          : "btn btn-primary btn-sm"
+          : variant === "link"
+            ? "db-focus inline-flex cursor-pointer items-center gap-1.5 self-start rounded-[8px] border-0 bg-transparent p-0 text-[13.5px] font-semibold text-[#6b4fc4] hover:underline"
+            : "btn btn-primary btn-sm"
       }
       title={t("addEmployees")}
       aria-label={t("addEmployees")}
@@ -107,7 +110,7 @@ export default function AddLocationEmployeesButton({
       }}
     >
       <Plus size={14} />
-      {variant === "icon" ? null : t("employees")}
+      {variant === "icon" ? null : variant === "link" ? t("addEmployees") : t("employees")}
     </button>
   );
 }

@@ -2,278 +2,215 @@
 
 import { createLocationAction } from "@/app/(dashboard)/u/[tenant]/standorte/actions";
 import AddressFields from "@/components/AddressFields";
+import { DbDrawer, DbField, dbInputClass } from "@/components/dashboard/DbDrawer";
+import { ctaClass, secondaryClass } from "@/components/dashboard/ui";
 import EmployeeSelector, {
   type EmployeeSelectorOption,
 } from "@/components/EmployeeSelector";
-import FormSubmitButton from "@/components/FormSubmitButton";
 import { OpeningHoursEditor } from "@/components/OpeningHoursEditor";
 import { useActionStateWithToast } from "@/components/Toasts";
-import { useUniversalPopup } from "@/components/UniversalPopup";
-import { locationColorPalette, locationKinds } from "@/lib/org-options";
-import { Building2, Check, ChevronDown, Plus } from "lucide-react";
-import { useState } from "react";
+import { BUNDESLAENDER } from "@/lib/german-holidays";
+import { locationColorPalette, locationKindLabel, locationKinds, paletteHex } from "@/lib/org-options";
+import { Building2, Check, Plus } from "lucide-react";
+import { useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 
-type DropdownOption = {
-  value: string;
-  label: string;
-  meta?: string;
-};
-
-const locationColors = locationColorPalette;
-
-function CustomDropdownField({
-  label,
-  name,
-  placeholder,
-  options,
-  defaultValue = "",
-}: {
-  label: string;
-  name: string;
-  placeholder: string;
-  options: DropdownOption[];
-  defaultValue?: string;
-}) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [selectedValue, setSelectedValue] = useState(defaultValue);
-  const selectedOption = options.find((option) => option.value === selectedValue);
-  const listboxId = `${name}-dropdown-listbox`;
-  const labelId = `${name}-dropdown-label`;
-
+function FormSection({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div
-      className="field"
-      onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget)) {
-          setIsOpen(false);
-        }
-      }}
-    >
-      <label id={labelId} className="label">
-        {label}
-      </label>
-
-      <input type="hidden" name={name} value={selectedValue} />
-
-      <div className="relative">
-        <button
-          type="button"
-          aria-haspopup="listbox"
-          aria-expanded={isOpen}
-          aria-labelledby={labelId}
-          aria-controls={listboxId}
-          className="input flex cursor-pointer items-center justify-between gap-3 bg-bg text-left"
-          onClick={() => setIsOpen((current) => !current)}
-        >
-          <span className={selectedOption ? "text-ink" : "text-muted"}>
-            {selectedOption?.label ?? placeholder}
-          </span>
-          <ChevronDown
-            size={14}
-            className={`shrink-0 text-muted transition-transform ${
-              isOpen ? "rotate-180" : ""
-            }`}
-          />
-        </button>
-
-        {isOpen && (
-          <div
-            id={listboxId}
-            role="listbox"
-            aria-labelledby={labelId}
-            className="absolute z-50 mt-1.5 max-h-56 w-full overflow-y-auto rounded-[10px] border border-border bg-white p-1.5 shadow-[0_12px_32px_rgba(0,0,0,0.12)]"
-          >
-            {options.map((option) => {
-              const isSelected = option.value === selectedValue;
-
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  role="option"
-                  aria-selected={isSelected}
-                  className={`flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-2 text-left transition-colors ${
-                    isSelected ? "bg-border-soft" : "hover:bg-bg"
-                  }`}
-                  onClick={() => {
-                    setSelectedValue(option.value);
-                    setIsOpen(false);
-                  }}
-                >
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13px] font-medium text-ink">
-                      {option.label}
-                    </span>
-                    {option.meta && (
-                      <span className="mt-0.5 block truncate font-mono text-[10px] text-muted">
-                        {option.meta}
-                      </span>
-                    )}
-                  </span>
-                  {isSelected && (
-                    <Check size={13} className="shrink-0 text-success" />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        )}
+    <section className="flex flex-col gap-3.5">
+      <div className="flex items-center gap-3">
+        <h3 className="m-0 shrink-0 font-display text-[15px] font-semibold">{title}</h3>
+        <span className="h-px flex-1 bg-[#ecebe7]" />
       </div>
-    </div>
+      {children}
+    </section>
   );
 }
 
-function LocationColorPicker() {
-  const t = useTranslations("CreateLocationButton");
-  const [selectedColor, setSelectedColor] = useState<string>(locationColors[0].value);
-
-  return (
-    <div className="field">
-      <div className="label">{t("locationColor")}</div>
-      <input type="hidden" name="color" value={selectedColor} />
-      <div className="flex flex-wrap gap-2">
-        {locationColors.map((color) => {
-          const isSelected = color.value === selectedColor;
-
-          return (
-            <button
-              key={color.value}
-              type="button"
-              aria-label={color.label}
-              title={color.label}
-              className={`flex size-9 cursor-pointer items-center justify-center rounded-[9px] border transition-colors ${
-                isSelected ? "border-ink" : "border-border hover:border-muted"
-              }`}
-              onClick={() => setSelectedColor(color.value)}
-            >
-              <span className={`size-4 rounded-full ${color.className}`} />
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function CreateLocationForm({
+function CreateLocationDrawer({
   tenant,
   employees,
-  onDone,
+  onClose,
 }: {
   tenant: string;
   employees: EmployeeSelectorOption[];
-  onDone: () => void;
+  onClose: () => void;
 }) {
   const t = useTranslations("CreateLocationButton");
   const tAddress = useTranslations("AddressFields");
-  const [, formAction] = useActionStateWithToast(createLocationAction);
+  const [, formAction, isPending] = useActionStateWithToast(createLocationAction);
+  const [name, setName] = useState("");
+  const [kind, setKind] = useState<string>("Filiale");
+  const [status, setStatus] = useState("active");
+  const [color, setColor] = useState<string>(locationColorPalette[1].value);
+  const [bundesland, setBundesland] = useState("");
+  const colorEntry = locationColorPalette.find((entry) => entry.value === color) ?? locationColorPalette[0];
+  const accent = paletteHex(colorEntry.className);
 
   return (
-    <form className="flex flex-col gap-4" action={formAction}>
-      <input type="hidden" name="tenant" value={tenant} />
-      <div className="field">
-        <label htmlFor="location-name" className="label">
-          {t("locationName")}
-        </label>
-        <input
-          id="location-name"
-          name="name"
-          className="input"
-          placeholder={t("locationNamePlaceholder")}
-          required
-        />
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-2">
-        <CustomDropdownField
-          label={t("type")}
-          name="kind"
-          placeholder={t("select")}
-          defaultValue="Filiale"
-          options={locationKinds.map((kind) => ({ value: kind, label: kind }))}
-        />
-
-        <CustomDropdownField
-          label={t("status")}
-          name="status"
-          placeholder={t("select")}
-          defaultValue="active"
-          options={[
-            { value: "active", label: t("active") },
-            { value: "inactive", label: t("inactive") },
-          ]}
-        />
-      </div>
-
-      <div>
-        <div className="mb-2 label">{t("address")}</div>
-        <AddressFields idPrefix="location-address" required t={tAddress} />
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-2">
-        <EmployeeSelector
-          label={t("locationLead")}
-          name="lead"
-          options={employees}
-        />
-
-        <div className="field">
-          <label htmlFor="location-email" className="label">
-            {t("contactEmail")}
-          </label>
-          <input
-            id="location-email"
-            name="email"
-            type="email"
-            className="input"
-            placeholder="standort@example.com"
-            autoComplete="email"
-          />
+    <DbDrawer
+      title={
+        <span className="flex flex-col gap-1">
+          <span className="font-mono text-[10px] font-medium tracking-[0.12em] text-[#6e6e6b] uppercase">{t("eyebrow")}</span>
+          {t("addLocation")}
+        </span>
+      }
+      width={580}
+      onClose={onClose}
+      footer={
+        <div className="flex justify-end gap-2">
+          <button type="button" className={secondaryClass} onClick={onClose}>
+            {t("cancel")}
+          </button>
+          <button type="submit" form="create-location-form" className={ctaClass} disabled={isPending}>
+            {isPending ? t("creatingLocation") : t("createLocation")}
+          </button>
         </div>
+      }
+    >
+      <div className="relative flex items-center gap-3.5 overflow-hidden rounded-[14px] border border-[#ecebe7] bg-white py-3.5 pr-4 pl-5">
+        <span className="absolute inset-y-0 left-0 w-1" style={{ background: accent }} />
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-[11px] text-white" style={{ background: accent }}>
+          <Building2 size={18} />
+        </span>
+        <span className="flex min-w-0 flex-1 flex-col">
+          <span className="truncate text-[15px] font-semibold">{name.trim() || t("newLocation")}</span>
+          <span className="text-[13px] text-[#6e6e6b]">
+            {locationKindLabel(kind)}
+            {status === "inactive" && ` · ${t("inactive")}`}
+          </span>
+        </span>
+        <span className="font-mono text-[10px] tracking-[0.12em] text-[#6e6e6b] uppercase">{t("preview")}</span>
       </div>
 
-      <LocationColorPicker />
+      <form id="create-location-form" action={formAction} className="flex flex-col gap-6">
+        <input type="hidden" name="tenant" value={tenant} />
+        <input type="hidden" name="kind" value={kind} />
+        <input type="hidden" name="status" value={status} />
+        <input type="hidden" name="color" value={color} />
+        <input type="hidden" name="bundesland" value={bundesland} />
 
-      <div className="field max-w-[280px]">
-        <label htmlFor="location-min-staffing" className="label">
-          {t("minStaffingPerDay")}
-        </label>
-        <input
-          id="location-min-staffing"
-          name="shiftMinStaffing"
-          type="number"
-          min={0}
-          max={99}
-          className="input"
-          placeholder={t("companyDefault")}
-        />
-        <p className="m-0 text-[11px] text-muted">
-          {t("minStaffingHint")}
-        </p>
-      </div>
+        <FormSection title={t("general")}>
+          <DbField label={`${t("locationName")} *`}>
+            <input
+              name="name"
+              className={dbInputClass}
+              placeholder={t("locationNamePlaceholder")}
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              required
+              maxLength={80}
+              autoFocus
+            />
+          </DbField>
 
-      <div>
-        <div className="mb-2 label">{t("openingHours")}</div>
-        <OpeningHoursEditor name="openingHours" defaultValue={[]} allowInherit initiallyCustom={false} />
-      </div>
+          <div className="flex flex-col gap-2">
+            <span className="font-mono text-[10px] tracking-[0.08em] text-[#6e6e6b] uppercase">{t("type")}</span>
+            <div className="flex flex-wrap gap-2" role="radiogroup" aria-label={t("type")}>
+              {locationKinds.map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  role="radio"
+                  aria-checked={kind === option}
+                  onClick={() => setKind(option)}
+                  className={`db-focus min-h-9 cursor-pointer rounded-full border px-3.5 text-[13px] font-medium transition-colors ${
+                    kind === option ? "border-ink bg-ink text-white" : "border-[#e4e3df] bg-white text-ink hover:border-[#9a9a96]"
+                  }`}
+                >
+                  {locationKindLabel(option)}
+                </button>
+              ))}
+            </div>
+          </div>
 
-      <p className="m-0 text-[12.5px] leading-[1.55] text-muted-2">
-        {t("assignmentHint")}
-      </p>
+          <div className="flex flex-wrap gap-x-6 gap-y-3.5">
+            <div className="flex flex-col gap-2">
+              <span className="font-mono text-[10px] tracking-[0.08em] text-[#6e6e6b] uppercase">{t("status")}</span>
+              <span role="radiogroup" aria-label={t("status")} className="flex gap-0.5 self-start rounded-[10px] bg-[#f2f1ed] p-[3px]">
+                {(["active", "inactive"] as const).map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    role="radio"
+                    aria-checked={status === value}
+                    onClick={() => setStatus(value)}
+                    className={`db-focus min-h-9 cursor-pointer rounded-[8px] border-0 px-3 text-[13px] ${
+                      status === value ? "bg-white font-semibold text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]" : "bg-transparent font-medium text-[#6e6e6b]"
+                    }`}
+                  >
+                    {t(value)}
+                  </button>
+                ))}
+              </span>
+            </div>
 
-      <div className="mt-1 flex justify-end gap-2.5 border-t border-border-soft pt-4">
-        <button type="button" className="btn btn-secondary" onClick={onDone}>
-          {t("cancel")}
-        </button>
-        <FormSubmitButton
-          Icon={Building2}
-          pendingLabel={t("creatingLocation")}
-        >
-          {t("createLocation")}
-        </FormSubmitButton>
-      </div>
-    </form>
+            <div className="flex flex-col gap-2">
+              <span className="font-mono text-[10px] tracking-[0.08em] text-[#6e6e6b] uppercase">
+                {t("locationColor")} · {colorEntry.label}
+              </span>
+              <div className="flex flex-wrap items-center gap-2" role="radiogroup" aria-label={t("locationColor")}>
+                {locationColorPalette.map((entry) => (
+                  <button
+                    key={entry.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={color === entry.value}
+                    aria-label={entry.label}
+                    title={entry.label}
+                    onClick={() => setColor(entry.value)}
+                    className={`db-focus flex size-7 cursor-pointer items-center justify-center rounded-full border-0 text-white ${
+                      color === entry.value ? "ring-2 ring-offset-2" : ""
+                    }`}
+                    style={{ background: paletteHex(entry.className), ["--tw-ring-color" as string]: paletteHex(entry.className) }}
+                  >
+                    <Check size={13} strokeWidth={3} />
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </FormSection>
+
+        <FormSection title={t("address")}>
+          <AddressFields idPrefix="location-address" required t={tAddress} />
+          <DbField label={t("bundesland")}>
+            <select className={dbInputClass} value={bundesland} onChange={(event) => setBundesland(event.target.value)}>
+              <option value="">{t("noBundesland")}</option>
+              {BUNDESLAENDER.map((entry) => (
+                <option key={entry.code} value={entry.code}>
+                  {entry.name}
+                </option>
+              ))}
+            </select>
+          </DbField>
+          {!bundesland && (
+            <span className="flex items-center gap-2 text-[12.5px] text-[#6e6e6b]">
+              <span className="size-1.5 rounded-full bg-[#e07b00]" />
+              {t("bundeslandHint")}
+            </span>
+          )}
+        </FormSection>
+
+        <FormSection title={t("leadAndContact")}>
+          <EmployeeSelector label={t("locationLead")} name="lead" options={employees} />
+          <DbField label={t("contactEmail")}>
+            <input name="email" type="email" className={dbInputClass} placeholder="standort@example.com" autoComplete="email" />
+          </DbField>
+        </FormSection>
+
+        <FormSection title={t("operations")}>
+          <DbField label={t("minStaffingPerDay")} hint={t("minStaffingHint")}>
+            <input name="shiftMinStaffing" type="number" min={0} max={99} className={`${dbInputClass} max-w-[200px]`} placeholder={t("companyDefault")} />
+          </DbField>
+          <div className="flex flex-col gap-2">
+            <span className="font-mono text-[10px] tracking-[0.08em] text-[#6e6e6b] uppercase">{t("openingHours")}</span>
+            <OpeningHoursEditor name="openingHours" defaultValue={[]} allowInherit initiallyCustom={false} />
+          </div>
+          <p className="m-0 text-[12.5px] leading-[1.55] text-[#6e6e6b]">{t("assignmentHint")}</p>
+        </FormSection>
+      </form>
+    </DbDrawer>
   );
 }
 
@@ -290,31 +227,19 @@ export default function CreateLocationButton({
   children?: React.ReactNode;
 }) {
   const t = useTranslations("CreateLocationButton");
-  const { openPopup, closePopup } = useUniversalPopup();
+  const [open, setOpen] = useState(false);
 
   return (
-    <button
-      type="button"
-      className={className ?? "btn btn-primary"}
-      onClick={() => {
-        openPopup({
-          title: t("createLocation"),
-          content: (
-            <CreateLocationForm
-              tenant={tenant}
-              employees={employees}
-              onDone={closePopup}
-            />
-          ),
-        });
-      }}
-    >
-      {children ?? (
-        <>
-          <Plus size={15} strokeWidth={2} />
-          {t("addLocation")}
-        </>
-      )}
-    </button>
+    <>
+      <button type="button" className={className ?? ctaClass} onClick={() => setOpen(true)}>
+        {children ?? (
+          <>
+            <Plus size={15} strokeWidth={2} />
+            {t("addLocation")}
+          </>
+        )}
+      </button>
+      {open && <CreateLocationDrawer tenant={tenant} employees={employees} onClose={() => setOpen(false)} />}
+    </>
   );
 }

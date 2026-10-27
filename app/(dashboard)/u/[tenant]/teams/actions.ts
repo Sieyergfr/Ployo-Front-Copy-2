@@ -80,6 +80,7 @@ export async function updateTeamAction(
       name,
       locations: formStrings(formData, "locations"),
       colorClassName: formString(formData, "color", "bg-[#C9622A]"),
+      description: formData.has("description") ? formString(formData, "description") : undefined,
     });
 
     revalidatePath(teamsPath(tenant));
