@@ -19,6 +19,10 @@ Diese Funktionen gibt es im Web bereits; die Routen für die App sind gebaut und
   danach Übergangslösung oben zurückbauen
 - **Freigegebene Ordner** — `GET /api/me/shared-files`, `GET …/[fileId]/download`
 - **Standort-Kontaktmail** — `contactEmail` im Standort-Editor (`PATCH /locations/[handle]`)
+- **Erinnerungen** — Bezug, Zuständigkeit, Wiederholung, Vorlauf und Checkliste (M9) zeigt die App
+  noch nicht; beim Bearbeiten aus der App bleiben sie unverändert (Felder optional)
+- **Team-Beschreibung / Standort-Bundesland** — im Web pflegbar; die App-Routen nehmen sie (noch)
+  nicht entgegen und lassen sie unverändert
 
 
 Stand: 2026-09-05. Blocker, Sollte-behoben-werden, Responsive Design, Datenschutz-Umbauplan Phase 0-2 und die komplette i18n-String-Extraktion (108 Dateien, 93 Namespaces, ~1635 Keys) sind vollständig umgesetzt, code-verifiziert, committet und gepusht. Die machbaren Teile von Phase 3 (Jugendarbeitsschutz, Mutterschutz, Betriebsrat-Hinweis, Verarbeitungsverzeichnis) sind ebenfalls umgesetzt und code-verifiziert, aber noch nicht gepusht/deployt (steht noch dein Go aus). Alles Weitere unten sind bewusst offene Punkte, die externe Schritte oder deine Entscheidung brauchen (siehe "Braucht weiterhin deine Aufmerksamkeit").

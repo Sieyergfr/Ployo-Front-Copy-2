@@ -316,7 +316,7 @@ export default async function TeamDetailPage({
       ) : (
         <div className="flex flex-col gap-4">
           {!isEditing && (
-            <section className="grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(190px,1fr))]">
+            <section className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-3.5">
               <TeamMetricCard label={t("members")} value={rows.length} caption={t("atLocations", { count: memberLocationCount })} />
               <TeamMetricCard label={t("onDuty")} value={countBy("active")} caption={t("perPersonnelFile")} tone="success" />
               <TeamMetricCard label={t("onVacation")} value={countBy("vacation")} caption={t("currentlyOnVacation")} tone="teal" />

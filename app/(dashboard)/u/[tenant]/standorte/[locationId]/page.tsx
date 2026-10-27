@@ -608,7 +608,7 @@ export default async function LocationDetailPage({
       ) : (
         <>
           {!isEditing && (
-            <section className="mb-4 grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(190px,1fr))]">
+            <section className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-3.5">
               <DetailMetricCard label={t("employeesMetric")} value={location.employeeCount} caption={t("activeToday", { count: location.activeToday })} />
               <DetailMetricCard label={t("shiftsActive")} value={location.shiftCount} caption={t("thisWeek")} />
               <DetailMetricCard

@@ -213,6 +213,8 @@ Diese Regeln gelten für jede Migration des Umbaus. Sie entsprechen dem Vorgehen
 | M6 | 3 | neue Tabelle `TenantTimeCorrectionRequest` (Mitarbeiter, Eintrag/Datum, Kommen/Gehen neu, Grund, Status, entschieden von/am) |
 | M7 | 3 | neue Tabelle `TenantEmployeeInfoRequestItem` (Anfrage, Typ Dokument/Angabe, Name, Pflicht, Status, Antwort, Datei) |
 | M8 | 3 | neue Tabelle `TenantShiftOffer` (Schicht, angefragte Personen, Antworten, Status) |
+| M9 | 4 | `TenantReminder`: Bezug, Zuständigkeit, Wiederholung, Vorlauf, Checkliste, Vorschlag; neue Tabelle `TenantReminderSuggestionDismissal` (`reminder_details`) |
+| M10 | 4 | `TenantSettings`: `overtimeWarningPercent Int @default(10)`, `shiftNotifyOnPublish Boolean @default(true)` (`settings_overtime_publish`) |
 
 Ich habe aus diesem Container **keinen Zugriff** auf den Server oder die Live-DB. Die Schritte 1–7
 führst du aus oder gibst sie frei. Ich liefere je Release ein fertiges Skript mit genau diesen Befehlen.
@@ -289,7 +291,7 @@ ist die Stelle mit `TODO(app-multi-item-requests)` markiert. Auch in `To-Do.md` 
 
 ---
 
-## 7. Umsetzungsstand (26.10.2026)
+## 7. Umsetzungsstand (27.10.2026)
 
 Alle Seiten aus Phase 1 und die Migrationen M1–M8 sind gebaut, getestet und auf
 `claude/affectionate-noether-axt94e` gepusht. **Noch nicht live** — Release über
@@ -301,11 +303,32 @@ Abweichungen vom Plan:
   zwischen „nur Verwaltung (ggf. bestimmte Rollen)“ und „für Mitarbeitende (alle/Teams/Standorte)“
   unterscheidet. Ordner werden nur umbenannt, nicht verschoben (ihr Pfad ist zugleich die Adresse der
   Dateien); verschoben werden Dateien.
-- **M4 nicht umgesetzt:** `overtimeThresholdMinutes` und die App-Schalter gehören in die
-  Einstellungen, die vom Umbau ausgenommen sind. Die Zeiterfassung nutzt vorerst feste Werte
-  (1 Std. über Plan, 10 Std. pro Tag). Die App-Schalter brauchen noch eine Klärung.
+- **M4 als M10 umgesetzt:** Nachdem das erweiterte Design auch die Einstellungen enthält, gibt es
+  `overtimeWarningPercent` (Hinweis „über Soll“ in der Schichtplanung) und
+  `shiftNotifyOnPublish`. Die App-Schalter brauchen weiterhin eine Klärung.
 - **M5:** `contactEmail` ersetzt die bisherige Vermischung mit der E-Mail der Leitung.
 - **M8:** Annehmen ändert den veröffentlichten Schnappschuss nicht (Regel 4); eine veröffentlichte
   Woche gilt danach als geändert und wird regulär neu veröffentlicht.
 
 Ausstehend in `ployo-app`: siehe `To-Do.md`, Abschnitt „App-Update ausstehend“.
+
+### Nachtrag: erweitertes Design (27.10.2026)
+
+Mit dem erweiterten Artefakt sind zusätzlich gebaut (alles auf demselben Branch, gleiches Release):
+- Rollen (Liste, Detail, Erstellen), Reports mit Analysen (Überstunden, Abwesenheiten, ArbZG,
+  Personal, Urlaubskonten) inkl. Export, Erinnerungen (Board, Vorschläge, Wiederholung, M9),
+  Einstellungen als eigene Seite (`/einstellungen?kat=…`, Auto-Speichern, M10), Audit-Log-Seite.
+- Standort- und Team-Detail, „Standort anlegen“ (optional mit Bundesland), „Team erstellen“,
+  Teambeschreibung im Dashboard bearbeitbar.
+- Unternehmensauswahl (`/select`, jetzt außerhalb der Auth-Gruppe, gleiche URL) mit Rolle,
+  Mitarbeiterzahl, Abo-Status und offenen Einladungen; Anlege-Assistent, Einladung, geführte
+  2FA-Einrichtung mit QR-Code, Rechtsseiten mit Navigation, 404, „Kein Zugriff“,
+  Testphasen-Banner und Abo-Sperrdialog mit Planauswahl.
+
+App-Verträge: Alle Änderungen an gemeinsam genutzten Services sind additiv (neue optionale
+Parameter, fehlend = unverändert). `ployo-app` ist unverändert; `npm run typecheck` und
+`npm run lint` dort sind grün, die App-Vertragstests hier ebenfalls.
+
+Nicht umgesetzt (bewusst): „Einladung ablehnen“ und „Inhaber:in erinnern“ aus dem Design brauchen
+einen neuen Einladungsstatus bzw. einen Benachrichtigungsweg und sind deshalb offen; „Zugriff
+anfragen“ auf der Kein-Zugriff-Seite ebenso.
