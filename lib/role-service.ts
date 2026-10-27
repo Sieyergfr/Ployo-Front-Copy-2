@@ -234,18 +234,45 @@ async function countRoleMembersForTenant(
   tenantId: string,
   roles: Array<{ id: string; key: string; name: string }>,
 ): Promise<Map<string, number>> {
+  const members = await collectRoleMembers(tenantId, roles);
+
+  return new Map([...members.entries()].map(([roleId, entries]) => [roleId, entries.size]));
+}
+
+/** Eine Person, die einer Rolle zugeordnet ist (siehe `countRoleMembersForTenant`). */
+export type RoleAssignee = {
+  /** `e:<employeeId>` oder `u:<userId>` (Konto ohne Personalakte). */
+  id: string;
+  name: string;
+  initials: string;
+  /** Schlüssel der Personalakte für den Link, falls vorhanden. */
+  employeeKey: string | null;
+  /** Mit Konto verknüpft — sonst „vorgemerkt“, greift nach Annahme der Einladung. */
+  hasAccount: boolean;
+};
+
+function initialsFromName(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+
+  return ((parts[0]?.[0] ?? "") + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase() || "?";
+}
+
+async function collectRoleMembers(
+  tenantId: string,
+  roles: Array<{ id: string; key: string; name: string }>,
+): Promise<Map<string, Map<string, RoleAssignee>>> {
   const [memberships, employees, legacyUnlinkedEmployeeMemberships] = await Promise.all([
     prisma.tenantMembership.findMany({
       where: { tenantId, roleId: { not: null } },
-      select: { userId: true, roleId: true },
+      select: { userId: true, roleId: true, user: { select: { name: true } } },
     }),
     prisma.tenantEmployee.findMany({
       where: { tenantId, status: { not: "former" } },
-      select: { id: true, userId: true, role: true },
+      select: { id: true, key: true, name: true, initials: true, userId: true, role: true },
     }),
     prisma.tenantMembership.findMany({
       where: { tenantId, role: "EMPLOYEE", roleId: null },
-      select: { userId: true },
+      select: { userId: true, user: { select: { name: true } } },
     }),
   ]);
 
@@ -253,17 +280,40 @@ async function countRoleMembersForTenant(
     employees.filter((employee) => employee.userId).map((employee) => [employee.userId as string, employee]),
   );
 
-  const memberKeysByRoleId = new Map<string, Set<string>>();
+  const membersByRoleId = new Map<string, Map<string, RoleAssignee>>();
 
-  function addMember(roleId: string, key: string) {
-    const set = memberKeysByRoleId.get(roleId) ?? new Set<string>();
-    set.add(key);
-    memberKeysByRoleId.set(roleId, set);
+  function addMember(roleId: string, member: RoleAssignee) {
+    const entries = membersByRoleId.get(roleId) ?? new Map<string, RoleAssignee>();
+    entries.set(member.id, member);
+    membersByRoleId.set(roleId, entries);
+  }
+
+  function fromEmployee(employee: (typeof employees)[number]): RoleAssignee {
+    return {
+      id: `e:${employee.id}`,
+      name: employee.name,
+      initials: employee.initials || initialsFromName(employee.name),
+      employeeKey: employee.key,
+      hasAccount: Boolean(employee.userId),
+    };
+  }
+
+  function fromMembership(membership: { userId: string; user: { name: string } }): RoleAssignee {
+    const employee = employeeByUserId.get(membership.userId);
+
+    return employee
+      ? fromEmployee(employee)
+      : {
+          id: `u:${membership.userId}`,
+          name: membership.user.name,
+          initials: initialsFromName(membership.user.name),
+          employeeKey: null,
+          hasAccount: true,
+        };
   }
 
   for (const membership of memberships) {
-    const employee = employeeByUserId.get(membership.userId);
-    addMember(membership.roleId!, employee ? `e:${employee.id}` : `u:${membership.userId}`);
+    addMember(membership.roleId!, fromMembership(membership));
   }
 
   for (const employee of employees) {
@@ -278,7 +328,7 @@ async function countRoleMembersForTenant(
     );
 
     if (matchingRole) {
-      addMember(matchingRole.id, `e:${employee.id}`);
+      addMember(matchingRole.id, fromEmployee(employee));
     }
   }
 
@@ -286,12 +336,71 @@ async function countRoleMembersForTenant(
 
   if (employeeSystemRole) {
     for (const membership of legacyUnlinkedEmployeeMemberships) {
-      const employee = employeeByUserId.get(membership.userId);
-      addMember(employeeSystemRole.id, employee ? `e:${employee.id}` : `u:${membership.userId}`);
+      addMember(employeeSystemRole.id, fromMembership(membership));
     }
   }
 
-  return new Map([...memberKeysByRoleId.entries()].map(([roleId, keys]) => [roleId, keys.size]));
+  return membersByRoleId;
+}
+
+function sortedAssignees(entries: Map<string, RoleAssignee> | undefined) {
+  return [...(entries?.values() ?? [])].sort((a, b) => a.name.localeCompare(b.name, "de"));
+}
+
+/**
+ * Rollenübersicht fürs Dashboard: wie `getRolesForTenant`, zusätzlich die
+ * zugeordneten Personen je Rolle (gleiche Zählung, daher `members` ===
+ * `assignees[role.id].length`).
+ */
+export async function getRolesOverviewForTenant(tenantSlug: string) {
+  const tenantId = await ensureTenantDefaultRoles(tenantSlug);
+
+  if (!tenantId) {
+    return null;
+  }
+
+  const roles = await prisma.tenantRole.findMany({
+    where: { tenantId },
+    orderBy: [{ isSystem: "desc" }, { createdAt: "asc" }],
+    include: { permissions: true },
+  });
+  const members = await collectRoleMembers(tenantId, roles);
+
+  return {
+    roles: roles.map((role) => toPermissionRole(role, members.get(role.id)?.size ?? 0)),
+    assignees: Object.fromEntries(roles.map((role) => [role.id, sortedAssignees(members.get(role.id))])) as Record<
+      string,
+      RoleAssignee[]
+    >,
+  };
+}
+
+/** Rollendetail fürs Dashboard: Rolle, zugeordnete Personen und Zeitstempel. */
+export async function getRoleDetailForTenant(tenantSlug: string, roleId: string) {
+  const tenantId = await ensureTenantDefaultRoles(tenantSlug);
+
+  if (!tenantId) {
+    return null;
+  }
+
+  const role = await prisma.tenantRole.findFirst({
+    where: { id: roleId, tenantId },
+    include: { permissions: true },
+  });
+
+  if (!role) {
+    return null;
+  }
+
+  const members = await collectRoleMembers(tenantId, [role]);
+  const assignees = sortedAssignees(members.get(role.id));
+
+  return {
+    role: toPermissionRole(role, assignees.length),
+    assignees,
+    createdAt: role.createdAt.toISOString(),
+    updatedAt: role.updatedAt.toISOString(),
+  };
 }
 
 /**

@@ -109,3 +109,31 @@ export function DbCtaButton({ className, type = "button", ...props }: ComponentP
 export function DbSecondaryButton({ className, type = "button", ...props }: ComponentProps<"button">) {
   return <button type={type} className={cx(secondaryClass, className)} {...props} />;
 }
+
+/** Ein-/Aus-Schalter im Stil des Designs. */
+export function DbSwitch({
+  checked,
+  className,
+  ...props
+}: Omit<ComponentProps<"button">, "role" | "type"> & { checked: boolean }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      className={cx(
+        "db-focus relative inline-flex h-6 w-[42px] shrink-0 cursor-pointer items-center rounded-full border-0 p-0 transition-colors disabled:cursor-default disabled:opacity-60",
+        checked ? "bg-[#8b6fe0]" : "bg-[#dcdbd6]",
+        className,
+      )}
+      {...props}
+    >
+      <span
+        className={cx(
+          "absolute top-[3px] left-[3px] size-[18px] rounded-full bg-white shadow-[0_1px_2px_rgba(0,0,0,0.2)] transition-transform",
+          checked && "translate-x-[18px]",
+        )}
+      />
+    </button>
+  );
+}

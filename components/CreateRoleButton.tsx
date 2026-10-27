@@ -1,662 +1,143 @@
 "use client";
 
 import { createRoleAction } from "@/app/(dashboard)/u/[tenant]/rollen/actions";
-import FormSubmitButton from "@/components/FormSubmitButton";
+import { DbDrawer, DbField, dbInputClass } from "@/components/dashboard/DbDrawer";
+import { RoleEditorHiddenInputs, RolePermissionTable } from "@/components/dashboard/roles/RolePermissionTable";
+import { emptyRoleEditorState, levelCounts, roleTemplates } from "@/components/dashboard/roles/role-editor-state";
+import { DbSwitch, ctaClass, secondaryClass } from "@/components/dashboard/ui";
 import { useActionStateWithToast } from "@/components/Toasts";
-import { useUniversalPopup } from "@/components/UniversalPopup";
-import {
-  emptyBooleanCapabilitySet,
-  emptyPermissionSet,
-  emptyShiftsLevelSet,
-  permissionAreas,
-  permissionLevelLabels,
-  permissionLevels,
-  type PermissionLevel,
-} from "@/lib/roles";
-import {
-  Bell,
-  BriefcaseBusiness,
-  CalendarDays,
-  FileText,
-  Landmark,
-  MapPin,
-  Plus,
-  RotateCcw,
-  Search,
-  Settings,
-  ShieldCheck,
-  ScrollText,
-  UsersRound,
-  X,
-  type LucideIcon,
-} from "lucide-react";
-import { useMemo, useState } from "react";
+import { permissionAreas } from "@/lib/roles";
+import { Plus } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { useState, type ReactNode } from "react";
 
-type RoleTemplate = {
-  id: string;
-  label: string;
-  permissions: Partial<Record<string, PermissionLevel>>;
-};
-
-const roleTemplateLabelKeys: Record<string, string> = {
-  "location-lead": "templateLocationLead",
-  "hr-team": "templateHrTeam",
-  "employee-service": "templateEmployeeService",
-};
-
-function getRoleTemplates(t: ReturnType<typeof useTranslations>): RoleTemplate[] {
-  return roleTemplateData.map((template) => ({
-    ...template,
-    label: t(roleTemplateLabelKeys[template.id]),
-  }));
-}
-
-const roleTemplateData: Omit<RoleTemplate, "label">[] = [
-  {
-    id: "location-lead",
-    permissions: {
-      employees: "read",
-      locations: "write",
-      teams: "write",
-      files: "read",
-      vacation: "write",
-      sickness: "read",
-      shifts: "admin",
-      reminders: "write",
-    },
-  },
-  {
-    id: "hr-team",
-    permissions: {
-      employees: "write",
-      payroll: "read",
-      locations: "read",
-      teams: "read",
-      files: "write",
-      vacation: "admin",
-      sickness: "write",
-      reminders: "write",
-      audit: "read",
-      roles: "read",
-    },
-  },
-  {
-    id: "employee-service",
-    permissions: {
-      employees: "read",
-      payroll: "read",
-      teams: "read",
-      files: "read",
-      vacation: "write",
-      sickness: "write",
-      shifts: "read",
-      reminders: "read",
-    },
-  },
-];
-
-const areaIcons: Record<string, LucideIcon> = {
-  employees: UsersRound,
-  contracts: BriefcaseBusiness,
-  employeeFiles: FileText,
-  payroll: Landmark,
-  sensitiveData: ShieldCheck,
-  locations: MapPin,
-  teams: BriefcaseBusiness,
-  files: FileText,
-  vacation: CalendarDays,
-  sickness: CalendarDays,
-  shifts: CalendarDays,
-  reminders: Bell,
-  audit: ScrollText,
-  roles: ShieldCheck,
-  settings: Settings,
-};
-
-const permissionTone: Record<PermissionLevel, string> = {
-  none: "text-muted",
-  read: "text-[#2A6FDB]",
-  write: "text-success",
-  admin: "text-danger",
-};
-
-function permissionsForTemplate(template: RoleTemplate): Record<string, PermissionLevel> {
-  const permissions = emptyPermissionSet();
-
-  Object.entries(template.permissions).forEach(([areaId, level]) => {
-    if (level) {
-      permissions[areaId] = level;
-    }
-  });
-
-  return permissions;
-}
-
-type RoleCapabilities = {
-  canDelete: Record<string, boolean>;
-  canUploadFiles: Record<string, boolean>;
-  canEditFiles: Record<string, boolean>;
-  canViewFiles: Record<string, boolean>;
-  canViewAudit: Record<string, boolean>;
-  shiftsLevel: Record<string, PermissionLevel | null>;
-};
-
-function emptyCapabilities(): RoleCapabilities {
-  return {
-    canDelete: emptyBooleanCapabilitySet(),
-    canUploadFiles: emptyBooleanCapabilitySet(),
-    canEditFiles: emptyBooleanCapabilitySet(),
-    canViewFiles: emptyBooleanCapabilitySet(),
-    canViewAudit: emptyBooleanCapabilitySet(),
-    shiftsLevel: emptyShiftsLevelSet(),
-  };
-}
-
-function ToggleChip({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={[
-        "h-7 rounded-full border px-2.5 text-[11px] font-semibold transition-colors",
-        active
-          ? "border-ink bg-ink text-white"
-          : "border-border bg-white text-muted hover:border-muted hover:text-ink",
-      ].join(" ")}
-    >
-      {children}
-    </button>
-  );
-}
-
-function CreateRoleForm({
-  tenant,
-  onClose,
-}: {
-  tenant: string;
-  onClose: () => void;
-}) {
+function CreateRoleDrawer({ tenant, onClose }: { tenant: string; onClose: () => void }) {
   const t = useTranslations("CreateRoleButton");
-  const roleTemplates = useMemo(() => getRoleTemplates(t), [t]);
-  const defaultTemplate = roleTemplates[2] ?? roleTemplates[0];
-  const [activeTemplateId, setActiveTemplateId] = useState(defaultTemplate.id);
-  const [permissions, setPermissions] = useState<Record<string, PermissionLevel>>(
-    () => permissionsForTemplate(defaultTemplate),
-  );
-  const [capabilities, setCapabilities] = useState<RoleCapabilities>(emptyCapabilities);
-  const [query, setQuery] = useState("");
-  const [, formAction] = useActionStateWithToast(createRoleAction);
-
-  const filteredAreas = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-
-    if (!normalizedQuery) {
-      return permissionAreas;
-    }
-
-    return permissionAreas.filter((area) =>
-      `${area.label} ${area.description}`.toLowerCase().includes(normalizedQuery),
-    );
-  }, [query]);
-
-  const configuredCount = useMemo(
-    () => Object.values(permissions).filter((level) => level !== "none").length,
-    [permissions],
-  );
-
-  const summary = useMemo(
-    () => ({
-      read: Object.values(permissions).filter((level) => level === "read").length,
-      write: Object.values(permissions).filter((level) => level === "write").length,
-      admin: Object.values(permissions).filter((level) => level === "admin").length,
-    }),
-    [permissions],
-  );
+  const tEditor = useTranslations("RoleEditor");
+  const [state, setState] = useState(emptyRoleEditorState);
+  const [activeTemplate, setActiveTemplate] = useState<string | null>(null);
+  const [appOverview, setAppOverview] = useState(false);
+  const [, formAction, isPending] = useActionStateWithToast(createRoleAction);
+  const counts = levelCounts(state.permissions);
+  const configured = permissionAreas.length - counts.none;
 
   return (
-    <form action={formAction} className="flex max-h-[92svh] flex-col overflow-hidden">
-      <input type="hidden" name="tenant" value={tenant} />
-      {permissionAreas.map((area) => (
-        <input
-          key={area.id}
-          type="hidden"
-          name={`permission-${area.id}`}
-          value={permissions[area.id] ?? "none"}
-        />
-      ))}
-      {permissionAreas.map((area) => (
-        <input
-          key={`can-delete-${area.id}`}
-          type="hidden"
-          name={`can-delete-${area.id}`}
-          value={capabilities.canDelete[area.id] ? "on" : ""}
-        />
-      ))}
-      {permissionAreas.map((area) => (
-        <input
-          key={`can-view-audit-${area.id}`}
-          type="hidden"
-          name={`can-view-audit-${area.id}`}
-          value={capabilities.canViewAudit[area.id] ? "on" : ""}
-        />
-      ))}
-      {permissionAreas
-        .filter((area) => area.fileRelevant)
-        .map((area) => (
-          <input
-            key={`can-upload-files-${area.id}`}
-            type="hidden"
-            name={`can-upload-files-${area.id}`}
-            value={capabilities.canUploadFiles[area.id] ? "on" : ""}
-          />
-        ))}
-      {permissionAreas
-        .filter((area) => area.fileRelevant)
-        .map((area) => (
-          <input
-            key={`can-edit-files-${area.id}`}
-            type="hidden"
-            name={`can-edit-files-${area.id}`}
-            value={capabilities.canEditFiles[area.id] ? "on" : ""}
-          />
-        ))}
-      {permissionAreas
-        .filter((area) => area.fileRelevant)
-        .map((area) => (
-          <input
-            key={`can-view-files-${area.id}`}
-            type="hidden"
-            name={`can-view-files-${area.id}`}
-            value={capabilities.canViewFiles[area.id] ? "on" : ""}
-          />
-        ))}
-      {permissionAreas
-        .filter((area) => area.supportsAssignedScope && capabilities.shiftsLevel[area.id])
-        .map((area) => (
-          <input
-            key={`shifts-level-${area.id}`}
-            type="hidden"
-            name={`shifts-level-${area.id}`}
-            value={capabilities.shiftsLevel[area.id] ?? ""}
-          />
-        ))}
-
-      <div className="flex items-start justify-between gap-4 border-b border-border px-6 py-5">
-        <div>
-          <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
-            {t("newRoleProgress", { configured: configuredCount, total: permissionAreas.length })}
-          </div>
-          <h2 className="mt-1 font-display text-[24px] font-semibold leading-tight text-ink">
-            {t("createRole")}
-          </h2>
-        </div>
-        <button
-          type="button"
-          aria-label={t("closePopup")}
-          title={t("close")}
-          className="flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-[10px] border border-border bg-white text-muted transition-colors hover:border-muted hover:text-ink"
-          onClick={onClose}
-        >
-          <X size={16} strokeWidth={2} />
-        </button>
-      </div>
-
-      <div className="flex-1 overflow-y-auto px-6 py-5">
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="field">
-            <label htmlFor="role-name" className="label">
-              {t("roleName")}
-            </label>
-            <input
-              id="role-name"
-              name="name"
-              className="input"
-              placeholder={t("roleNamePlaceholder")}
-              required
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="role-description" className="label">
-              {t("description")}
-            </label>
-            <input
-              id="role-description"
-              name="description"
-              className="input"
-              placeholder={t("descriptionPlaceholder")}
-            />
-          </div>
-        </div>
-
-        <label className="mt-4 flex items-start gap-2.5 rounded-[12px] border border-border bg-bg p-3">
-          <input
-            type="checkbox"
-            name="appOverviewEnabled"
-            className="mt-0.5"
-          />
-          <span className="min-w-0">
-            <span className="block text-[13.5px] font-semibold text-ink">
-              {t("appOverviewTitle")}
-            </span>
-            <span className="mt-0.5 block text-[12px] leading-[1.35] text-muted">
-              {t("appOverviewDescription")}
-            </span>
-          </span>
-        </label>
-
-        <section className="mt-5">
-          <div className="mb-2 font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
-            {t("applyTemplate")}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {roleTemplates.map((template) => {
-              const isActive = activeTemplateId === template.id;
-
-              return (
-                <button
-                  key={template.id}
-                  type="button"
-                  className={[
-                    "rounded-full border px-3.5 py-2 text-[12.5px] font-semibold transition-colors",
-                    isActive
-                      ? "border-ink bg-ink text-white"
-                      : "border-border bg-white text-ink hover:border-muted hover:bg-bg",
-                  ]
-                    .filter(Boolean)
-                    .join(" ")}
-                  onClick={() => {
-                    setActiveTemplateId(template.id);
-                    setPermissions(permissionsForTemplate(template));
-                    setCapabilities(emptyCapabilities());
-                  }}
-                >
-                  {template.label}
-                </button>
-              );
-            })}
-          </div>
-        </section>
-
-        <section className="mt-5 overflow-hidden rounded-[18px] border border-border bg-white">
-          <div className="flex flex-col gap-3 border-b border-border bg-[#FAFAF8] px-4 py-4 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h3 className="text-[15px] font-semibold text-ink">
-                {t("permissionsPerArea")}
-              </h3>
-              <p className="mt-0.5 text-[12px] leading-[1.4] text-muted">
-                {t("permissionsPerAreaHint")}
-              </p>
-            </div>
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <label className="relative min-w-0 sm:w-[220px]">
-                <Search
-                  size={15}
-                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted"
-                />
-                <input
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  className="h-9 w-full rounded-[10px] border border-border bg-white pl-9 pr-3 text-[13px] outline-none transition-colors placeholder:text-muted-2 focus:border-ink"
-                  placeholder={t("searchAreaPlaceholder")}
-                />
-              </label>
-              <button
-                type="button"
-                className="flex h-9 items-center justify-center gap-2 rounded-[10px] border border-border bg-white px-3 text-[12.5px] font-semibold text-ink transition-colors hover:border-muted hover:bg-bg"
-                onClick={() => {
-                  setActiveTemplateId("");
-                  setPermissions(emptyPermissionSet());
-                  setCapabilities(emptyCapabilities());
-                }}
-              >
-                <RotateCcw size={14} />
-                {t("reset")}
-              </button>
-            </div>
-          </div>
-
-          <div>
-            {filteredAreas.length > 0 ? (
-              filteredAreas.map((area) => {
-                const Icon = areaIcons[area.id] ?? ShieldCheck;
-                const selectedPermission = permissions[area.id] ?? "none";
-                const hasAccess = selectedPermission !== "none";
-
-                const parentLabel = area.parentAreaId
-                  ? permissionAreas.find((candidate) => candidate.id === area.parentAreaId)?.label
-                  : undefined;
-
-                return (
-                  <div
-                    key={area.id}
-                    className={`flex flex-col gap-3 border-t border-border-soft px-4 py-3 first:border-t-0 ${
-                      area.parentAreaId ? "bg-bg/40" : ""
-                    }`}
-                  >
-                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                      <div className="flex min-w-0 items-center gap-3">
-                        <div className="flex size-10 shrink-0 items-center justify-center rounded-[12px] border border-border bg-bg text-ink">
-                          <Icon size={17} strokeWidth={2} />
-                        </div>
-                        <div className="min-w-0">
-                          {parentLabel && (
-                            <div className="font-mono text-[10px] uppercase tracking-[0.05em] text-muted-2">
-                              {parentLabel} ↳
-                            </div>
-                          )}
-                          <div className="text-[13.5px] font-semibold text-ink">
-                            {area.label}
-                          </div>
-                          <div className="mt-0.5 text-[12px] leading-[1.35] text-muted">
-                            {area.description}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="grid w-full grid-cols-4 rounded-[12px] border border-border bg-bg p-1 md:w-[336px]">
-                        {permissionLevels.map((level) => {
-                          const isSelected = selectedPermission === level;
-
-                          return (
-                            <button
-                              key={level}
-                              type="button"
-                              className={[
-                                "h-8 rounded-[9px] px-2 text-[11.5px] font-semibold transition-colors",
-                                isSelected
-                                  ? `bg-white shadow-sm ${permissionTone[level]}`
-                                  : "text-muted hover:bg-white/70 hover:text-ink",
-                              ]
-                                .filter(Boolean)
-                                .join(" ")}
-                              onClick={() => {
-                                setActiveTemplateId("");
-                                setPermissions((current) => ({
-                                  ...current,
-                                  [area.id]: level,
-                                }));
-                              }}
-                            >
-                              {level === "none"
-                                ? t("none")
-                                : permissionLevelLabels[level]}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {hasAccess && (
-                      <div className="flex flex-wrap items-center gap-1.5 md:pl-[52px]">
-                        <ToggleChip
-                          active={capabilities.canDelete[area.id] ?? false}
-                          onClick={() =>
-                            setCapabilities((current) => ({
-                              ...current,
-                              canDelete: {
-                                ...current.canDelete,
-                                [area.id]: !current.canDelete[area.id],
-                              },
-                            }))
-                          }
-                        >
-                          {t("deleteAllowed")}
-                        </ToggleChip>
-                        <ToggleChip
-                          active={capabilities.canViewAudit[area.id] ?? false}
-                          onClick={() =>
-                            setCapabilities((current) => ({
-                              ...current,
-                              canViewAudit: {
-                                ...current.canViewAudit,
-                                [area.id]: !current.canViewAudit[area.id],
-                              },
-                            }))
-                          }
-                        >
-                          {t("auditLogVisible")}
-                        </ToggleChip>
-                        {area.fileRelevant && (
-                          <>
-                            <ToggleChip
-                              active={capabilities.canUploadFiles[area.id] ?? false}
-                              onClick={() =>
-                                setCapabilities((current) => ({
-                                  ...current,
-                                  canUploadFiles: {
-                                    ...current.canUploadFiles,
-                                    [area.id]: !current.canUploadFiles[area.id],
-                                  },
-                                }))
-                              }
-                            >
-                              {t("upload")}
-                            </ToggleChip>
-                            <ToggleChip
-                              active={capabilities.canEditFiles[area.id] ?? false}
-                              onClick={() =>
-                                setCapabilities((current) => ({
-                                  ...current,
-                                  canEditFiles: {
-                                    ...current.canEditFiles,
-                                    [area.id]: !current.canEditFiles[area.id],
-                                  },
-                                }))
-                              }
-                            >
-                              {t("edit")}
-                            </ToggleChip>
-                            <ToggleChip
-                              active={capabilities.canViewFiles[area.id] ?? false}
-                              onClick={() =>
-                                setCapabilities((current) => ({
-                                  ...current,
-                                  canViewFiles: {
-                                    ...current.canViewFiles,
-                                    [area.id]: !current.canViewFiles[area.id],
-                                  },
-                                }))
-                              }
-                            >
-                              {t("viewFiles")}
-                            </ToggleChip>
-                          </>
-                        )}
-                        {area.supportsAssignedScope && (
-                          <select
-                            value={capabilities.shiftsLevel[area.id] ?? "none"}
-                            onChange={(event) =>
-                              setCapabilities((current) => ({
-                                ...current,
-                                shiftsLevel: {
-                                  ...current.shiftsLevel,
-                                  [area.id]:
-                                    event.target.value === "none"
-                                      ? null
-                                      : (event.target.value as PermissionLevel),
-                                },
-                              }))
-                            }
-                            className="h-7 cursor-pointer rounded-full border border-border bg-white px-2.5 text-[11px] font-semibold text-ink outline-none"
-                          >
-                            {permissionLevels.map((level) => (
-                              <option key={level} value={level}>
-                                {t("shiftsLevel", { level: permissionLevelLabels[level] })}
-                              </option>
-                            ))}
-                          </select>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })
-            ) : (
-              <div className="px-4 py-8 text-center text-[13px] text-muted">
-                {t("noAreaFound")}
-              </div>
-            )}
-          </div>
-        </section>
-      </div>
-
-      <div className="flex flex-col gap-3 border-t border-border bg-white px-6 py-4 md:flex-row md:items-center md:justify-between">
-        <div className="flex flex-wrap gap-2">
-          <span className="rounded-full bg-[#2A6FDB]/10 px-3 py-1.5 text-[12px] font-semibold text-[#2A6FDB]">
-            {t("summaryRead", { count: summary.read })}
-          </span>
-          <span className="rounded-full bg-success/10 px-3 py-1.5 text-[12px] font-semibold text-success">
-            {t("summaryWrite", { count: summary.write })}
-          </span>
-          <span className="rounded-full bg-danger/10 px-3 py-1.5 text-[12px] font-semibold text-danger">
-            {t("summaryAdmin", { count: summary.admin })}
-          </span>
-        </div>
-        <div className="flex justify-end gap-2.5">
-          <button type="button" className="btn btn-secondary" onClick={onClose}>
+    <DbDrawer
+      title={t("createRole")}
+      subtitle={t("subtitle")}
+      width={780}
+      onClose={onClose}
+      footer={
+        <div className="flex justify-end gap-2">
+          <button type="button" className={secondaryClass} onClick={onClose}>
             {t("cancel")}
           </button>
-          <FormSubmitButton
-            Icon={ShieldCheck}
-            pendingLabel={t("creatingRole")}
-          >
-            {t("createRole")}
-          </FormSubmitButton>
+          <button type="submit" form="create-role-form" className={ctaClass} disabled={isPending}>
+            {isPending ? t("creatingRole") : t("createRole")}
+          </button>
         </div>
-      </div>
-    </form>
+      }
+    >
+      <form id="create-role-form" action={formAction} className="flex flex-col gap-[18px]">
+        <input type="hidden" name="tenant" value={tenant} />
+        {appOverview && <input type="hidden" name="appOverviewEnabled" value="on" />}
+        <RoleEditorHiddenInputs state={state} />
+
+        <div className="grid gap-3 sm:grid-cols-[1fr_1.3fr]">
+          <DbField label={t("roleNameRequired")}>
+            <input name="name" className={dbInputClass} placeholder={t("roleNamePlaceholder")} required maxLength={80} autoFocus />
+          </DbField>
+          <DbField label={t("description")}>
+            <input name="description" className={dbInputClass} placeholder={t("descriptionPlaceholder")} maxLength={200} />
+          </DbField>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <span className="font-mono text-[10px] tracking-[0.08em] text-[#6e6e6b] uppercase">{t("applyTemplate")}</span>
+          <div className="flex flex-wrap gap-2">
+            {roleTemplates.map((template) => (
+              <button
+                key={template.id}
+                type="button"
+                aria-pressed={activeTemplate === template.id}
+                onClick={() => {
+                  const base = emptyRoleEditorState();
+
+                  setActiveTemplate(template.id);
+                  setState({ ...base, permissions: { ...base.permissions, ...template.permissions } as typeof base.permissions });
+                }}
+                className={`db-focus min-h-9 cursor-pointer rounded-full border px-3.5 text-[13px] font-medium transition-colors ${
+                  activeTemplate === template.id ? "border-ink bg-ink text-white" : "border-[#e4e3df] bg-white text-ink hover:border-[#9a9a96]"
+                }`}
+              >
+                {t(template.labelKey)}
+              </button>
+            ))}
+          </div>
+          <span className="text-[12.5px] leading-[1.45] text-[#6e6e6b]">{t("templateHint")}</span>
+        </div>
+
+        <div className="rounded-[12px] border border-[#ecebe7] px-4 py-3">
+          <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+            <span className="text-[14px] font-semibold">{t("progress", { configured, total: permissionAreas.length })}</span>
+            <span className="text-[12.5px] text-[#6e6e6b]">{t("progressCounts", { read: counts.read, write: counts.write, admin: counts.admin })}</span>
+          </div>
+          <div className="h-1.5 overflow-hidden rounded-full bg-[#f0efeb]">
+            <span className="block h-full rounded-full bg-[#8b6fe0] transition-[width]" style={{ width: `${(configured / permissionAreas.length) * 100}%` }} />
+          </div>
+        </div>
+
+        <div className="flex items-start gap-3 rounded-[12px] border border-[#ecebe7] bg-[#fafaf8] px-4 py-3">
+          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <span className="text-[14px] font-semibold">{tEditor("appOverviewTitle")}</span>
+            <span className="text-[12.5px] leading-[1.4] text-[#6e6e6b]">{tEditor("appOverviewDescription")}</span>
+          </div>
+          <DbSwitch checked={appOverview} onClick={() => setAppOverview((value) => !value)} aria-label={tEditor("appOverviewTitle")} />
+        </div>
+
+        <div className="-mx-6 flex flex-col">
+          <h3 className="m-0 px-[18px] pb-3 font-display text-[17px] font-semibold tracking-[-0.3px]">{tEditor("title")}</h3>
+          <RolePermissionTable
+            state={state}
+            setState={(next) => {
+              setActiveTemplate(null);
+              setState(next);
+            }}
+            toolbar="reset"
+            onReset={() => {
+              setActiveTemplate(null);
+              setState(emptyRoleEditorState());
+            }}
+          />
+        </div>
+      </form>
+    </DbDrawer>
   );
 }
 
-export default function CreateRoleButton({ tenant }: { tenant: string }) {
+export default function CreateRoleButton({
+  tenant,
+  className = ctaClass,
+  children,
+}: {
+  tenant: string;
+  className?: string;
+  children?: ReactNode;
+}) {
   const t = useTranslations("CreateRoleButton");
-  const { openPopup, closePopup } = useUniversalPopup();
+  const [open, setOpen] = useState(false);
 
   return (
-    <button
-      type="button"
-      className="btn btn-primary"
-      onClick={() =>
-        openPopup({
-          className:
-            "max-w-[780px] !overflow-hidden rounded-[18px] p-0 shadow-[0_24px_80px_rgba(0,0,0,0.24)]",
-          contentClassName: "",
-          hideCloseButton: true,
-          content: <CreateRoleForm tenant={tenant} onClose={closePopup} />,
-        })
-      }
-    >
-      <Plus size={15} />
-      {t("createRole")}
-    </button>
+    <>
+      <button type="button" className={className} onClick={() => setOpen(true)}>
+        {children ?? (
+          <>
+            <Plus size={16} />
+            {t("createRole")}
+          </>
+        )}
+      </button>
+      {open && <CreateRoleDrawer tenant={tenant} onClose={() => setOpen(false)} />}
+    </>
   );
 }

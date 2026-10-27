@@ -375,6 +375,19 @@ function isoDate(offsetDays: number) {
   return date.toISOString().slice(0, 10);
 }
 
+/** Erster Tag ab `offsetDays`, an dem auch der Folgetag ein Werktag ohne Feiertag ist (Mo–Do, nicht um Weihnachten/Neujahr). */
+function isoWorkdayPairStart(offsetDays: number) {
+  for (let offset = offsetDays; ; offset += 1) {
+    const key = isoDate(offset);
+    const weekday = new Date(`${key}T00:00:00Z`).getUTCDay();
+    const monthDay = key.slice(5);
+
+    if (weekday >= 1 && weekday <= 4 && !(monthDay >= "12-23" || monthDay <= "01-02")) {
+      return offset;
+    }
+  }
+}
+
 function isoWeek(dateKey: string) {
   const date = new Date(`${dateKey}T00:00:00Z`);
   const day = date.getUTCDay() || 7;
@@ -526,7 +539,7 @@ describe("App-Vertrag, Schicht 2: Antworten behalten ihre Struktur", () => {
     await step("POST tenants/[tenant]/vacation-requests/[requestId]/approve", "owner", "tenants/[tenant]/vacation-requests/[requestId]/approve", "POST", { params: { requestId: vacation.dbId } });
     const ownVacation = (await step<{ request: { id: string; dbId?: string } }>(
       "POST me/vacation-requests", "employee", "me/vacation-requests", "POST",
-      { body: { tenant: tenantSlug, startDate: isoDate(60), endDate: isoDate(61), note: "Eigener Antrag" } },
+      { body: { tenant: tenantSlug, startDate: isoDate(isoWorkdayPairStart(60)), endDate: isoDate(isoWorkdayPairStart(60) + 1), note: "Eigener Antrag" } },
     )).request;
     await step("POST tenants/[tenant]/vacation-requests/[requestId]/reject", "owner", "tenants/[tenant]/vacation-requests/[requestId]/reject", "POST", { params: { requestId: ownVacation.dbId ?? ownVacation.id } });
     await step("DELETE tenants/[tenant]/vacation-requests/[requestId]", "owner", "tenants/[tenant]/vacation-requests/[requestId]", "DELETE", { params: { requestId: ownVacation.dbId ?? ownVacation.id } });
