@@ -405,70 +405,71 @@ model ConsentRecord {
 }
 
 model Tenant {
-  id                          String                          @id @default(cuid())
-  slug                        String                          @unique
-  name                        String
-  country                     String                          @default("DE")
-  timezone                    String                          @default("Europe/Berlin")
-  size                        String?
-  industry                    String?
-  contactEmail                String?
-  logoUrl                     String?
-  primaryColor                String                          @default("#2A6FDB")
-  plan                        TenantPlan                      @default(professional)
-  billingCycle                BillingCycle                    @default(monthly)
-  stripeCustomerId            String?                         @unique
-  stripeSubscriptionId        String?                         @unique
-  stripePriceId               String?
-  stripeSubscriptionStatus    String?
-  stripeCurrentPeriodEnd      DateTime?
-  stripeCancelAtPeriodEnd     Boolean                         @default(false)
+  id                           String                              @id @default(cuid())
+  slug                         String                              @unique
+  name                         String
+  country                      String                              @default("DE")
+  timezone                     String                              @default("Europe/Berlin")
+  size                         String?
+  industry                     String?
+  contactEmail                 String?
+  logoUrl                      String?
+  primaryColor                 String                              @default("#2A6FDB")
+  plan                         TenantPlan                          @default(professional)
+  billingCycle                 BillingCycle                        @default(monthly)
+  stripeCustomerId             String?                             @unique
+  stripeSubscriptionId         String?                             @unique
+  stripePriceId                String?
+  stripeSubscriptionStatus     String?
+  stripeCurrentPeriodEnd       DateTime?
+  stripeCancelAtPeriodEnd      Boolean                             @default(false)
   /// Erstellungszeitpunkt (`event.created`) des zuletzt tatsächlich
   /// angewendeten Subscription-Webhook-Events — verhindert, dass ein
   /// verspätet zugestelltes/außer der Reihe eintreffendes älteres Ereignis
   /// einen bereits neueren lokalen Stand überschreibt (Audit-Finding M14).
-  stripeLastEventCreatedAt    DateTime?
+  stripeLastEventCreatedAt     DateTime?
   /// Über den Anlage-Assistenten erstellt: ohne abgeschlossenen Checkout
   /// gesperrt (lib/billing-access.ts). Ältere Mandanten bleiben `false`.
-  billingRequired             Boolean                         @default(false)
+  billingRequired              Boolean                             @default(false)
   /// Mindestens eine Rechnung mit Betrag > 0 wurde bezahlt — entscheidet,
   /// ob eine fehlgeschlagene Zahlung eine Kulanzphase bekommt.
-  stripeHasPaid               Boolean                         @default(false)
+  stripeHasPaid                Boolean                             @default(false)
   /// `attempt_count` der aktuell offenen, fehlgeschlagenen Abo-Rechnung;
   /// bei bezahlter Rechnung wieder 0.
-  stripeFailedPaymentAttempts Int                             @default(0)
-  createdAt                   DateTime                        @default(now())
-  updatedAt                   DateTime                        @updatedAt
-  invitations                 TenantInvitation[]
-  memberships                 TenantMembership[]
-  roles                       TenantRole[]
-  teams                       TenantTeam[]
-  locations                   TenantLocation[]
-  employees                   TenantEmployee[]
-  vacationRequests            TenantVacationRequest[]
-  wishFreeRequests            TenantWishFreeRequest[]
-  timeCorrectionRequests      TenantTimeCorrectionRequest[]
-  shiftOffers                 TenantShiftOffer[]
-  shifts                      TenantShift[]
-  shiftTemplates              TenantShiftTemplate[]
-  shiftWeeks                  TenantShiftWeek[]
-  files                       TenantFile[]
-  fileFolders                 TenantFileFolder[]
-  reminders                   TenantReminder[]
-  contracts                   TenantEmployeeContract[]
-  contractDetails             TenantEmployeeContractDetails[]
-  payrollStatements           TenantPayrollStatement[]
-  sicknessReports             TenantSicknessReport[]
-  auditLogs                   TenantAuditLog[]
-  locationActivities          TenantLocationActivity[]
-  infoRequests                TenantEmployeeInfoRequest[]
-  employeeTimeline            TenantEmployeeTimeline[]
-  employeeNotifications       TenantEmployeeNotification[]
-  employeeFolderTemplates     TenantEmployeeFolderTemplate[]
-  timeEntries                 TenantTimeEntry[]
-  clockReminders              TenantTimeClockReminder[]
-  reportRecipients            TenantReportRecipient[]
-  settings                    TenantSettings?
+  stripeFailedPaymentAttempts  Int                                 @default(0)
+  createdAt                    DateTime                            @default(now())
+  updatedAt                    DateTime                            @updatedAt
+  invitations                  TenantInvitation[]
+  memberships                  TenantMembership[]
+  roles                        TenantRole[]
+  teams                        TenantTeam[]
+  locations                    TenantLocation[]
+  employees                    TenantEmployee[]
+  vacationRequests             TenantVacationRequest[]
+  wishFreeRequests             TenantWishFreeRequest[]
+  timeCorrectionRequests       TenantTimeCorrectionRequest[]
+  shiftOffers                  TenantShiftOffer[]
+  shifts                       TenantShift[]
+  shiftTemplates               TenantShiftTemplate[]
+  shiftWeeks                   TenantShiftWeek[]
+  files                        TenantFile[]
+  fileFolders                  TenantFileFolder[]
+  reminders                    TenantReminder[]
+  contracts                    TenantEmployeeContract[]
+  contractDetails              TenantEmployeeContractDetails[]
+  payrollStatements            TenantPayrollStatement[]
+  sicknessReports              TenantSicknessReport[]
+  auditLogs                    TenantAuditLog[]
+  locationActivities           TenantLocationActivity[]
+  infoRequests                 TenantEmployeeInfoRequest[]
+  employeeTimeline             TenantEmployeeTimeline[]
+  employeeNotifications        TenantEmployeeNotification[]
+  employeeFolderTemplates      TenantEmployeeFolderTemplate[]
+  timeEntries                  TenantTimeEntry[]
+  clockReminders               TenantTimeClockReminder[]
+  reportRecipients             TenantReportRecipient[]
+  settings                     TenantSettings?
+  reminderSuggestionDismissals TenantReminderSuggestionDismissal[]
 }
 
 model TenantMembership {
@@ -1297,31 +1298,55 @@ model TenantEmployeeFolderTemplate {
 }
 
 model TenantReminder {
-  id              String           @id @default(cuid())
-  key             String
-  title           String
-  subject         String           @default("")
-  category        String           @default("Allgemein")
-  dueDate         String
-  priority        ReminderPriority @default(normal)
-  status          ReminderStatus   @default(open)
-  notes           String           @default("")
-  linkedFilesJson Json             @default("[]")
-  completedAt     DateTime?
-  createdById     String           @default("")
-  createdByName   String           @default("")
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
-  tenantId        String
-  teamId          String?
-  tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  team            TenantTeam?      @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  id               String           @id @default(cuid())
+  key              String
+  title            String
+  subject          String           @default("")
+  category         String           @default("Allgemein")
+  dueDate          String
+  priority         ReminderPriority @default(normal)
+  status           ReminderStatus   @default(open)
+  notes            String           @default("")
+  linkedFilesJson  Json             @default("[]")
+  /// Echte Verknüpfung ("employee" | "team" | "location") — `subject` bleibt der Anzeigetext.
+  subjectType      String           @default("")
+  subjectId        String           @default("")
+  /// Zuständige Person (User-ID eines Mitglieds), leer = niemand.
+  ownerUserId      String           @default("")
+  /// "none" | "weekly" | "monthly" | "quarterly" | "yearly" — beim Erledigen wird die nächste angelegt.
+  recurrence       String           @default("none")
+  /// Tage vor Fälligkeit, ab denen die Erinnerung in Glocke/Digest erscheint.
+  remindDaysBefore Int              @default(7)
+  /// [{ id, label, done }]
+  checklistJson    Json             @default("[]")
+  /// Aus einem Vorschlag übernommen (z. B. "probation:<employeeId>:<date>").
+  suggestionKey    String           @default("")
+  completedAt      DateTime?
+  createdById      String           @default("")
+  createdByName    String           @default("")
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  tenantId         String
+  teamId           String?
+  tenant           Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  team             TenantTeam?      @relation(fields: [teamId], references: [id], onDelete: SetNull)
 
   @@unique([tenantId, key])
   @@index([tenantId, status])
   @@index([teamId])
   @@index([tenantId, dueDate])
   @@index([priority])
+}
+
+/// Vom Nutzer ignorierte Fristen-Vorschläge der Erinnerungsseite.
+model TenantReminderSuggestionDismissal {
+  id        String   @id @default(cuid())
+  tenantId  String
+  key       String
+  createdAt DateTime @default(now())
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, key])
 }
 
 model TenantShift {

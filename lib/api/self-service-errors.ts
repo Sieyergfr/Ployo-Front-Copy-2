@@ -42,6 +42,12 @@ const KNOWN_ACTION_GUARD_MESSAGES = new Set([
   "Der Zugang des Inhabers kann nicht gesperrt werden.",
   "Korrekturantrag konnte nicht bearbeitet werden.",
   "Vorwoche konnte nicht kopiert werden.",
+  // lib/reminders.ts / lib/reminder-dashboard.ts (Erinnerungen im Dashboard)
+  "Vorschlag nicht mehr verfügbar.",
+  "Unbekannter Bezug.",
+  "Unbekannte zuständige Person.",
+  // lib/report-analytics.ts
+  "Unbekannter Report.",
   "Schicht konnte nicht angeboten werden.",
   "Ordner konnte nicht gespeichert werden.",
   "Datei konnte nicht umbenannt werden.",

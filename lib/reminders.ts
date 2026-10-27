@@ -12,7 +12,17 @@ export {
   type ReminderMetric,
   type ReminderPriority,
 } from "@/lib/reminders-shared";
-import type { Reminder, ReminderMetric, ReminderPriority } from "@/lib/reminders-shared";
+import {
+  isReminderRecurrence,
+  nextReminderDueDate,
+  normalizeReminderChecklist,
+  reminderSubjectTypes,
+  type Reminder,
+  type ReminderMetric,
+  type ReminderPriority,
+  type ReminderRecurrence,
+  type ReminderSubjectType,
+} from "@/lib/reminders-shared";
 
 function normalizeLinkedFiles(value?: string[]) {
   return Array.from(
@@ -76,8 +86,16 @@ function toReminder(record: {
   notes: string;
   linkedFilesJson: unknown;
   createdByName: string;
+  createdById?: string;
+  createdAt?: Date;
+  subjectType?: string;
+  subjectId?: string;
+  ownerUserId?: string;
+  recurrence?: string;
+  remindDaysBefore?: number;
+  checklistJson?: unknown;
   team?: { id: string; name: string } | null;
-}): Reminder {
+}, ownerNames: Map<string, string> = new Map()): Reminder {
   return {
     id: record.id,
     daysLeft: daysUntil(record.dueDate),
@@ -92,7 +110,112 @@ function toReminder(record: {
     createdByName: record.createdByName,
     teamId: record.team?.id ?? null,
     teamName: record.team?.name ?? null,
+    subjectType: reminderSubjectTypes.includes(record.subjectType as ReminderSubjectType)
+      ? (record.subjectType as ReminderSubjectType)
+      : "",
+    subjectId: record.subjectId ?? "",
+    ownerUserId: record.ownerUserId ?? "",
+    ownerName: record.ownerUserId ? (ownerNames.get(record.ownerUserId) ?? "") : "",
+    recurrence: isReminderRecurrence(record.recurrence) ? record.recurrence : "none",
+    remindDaysBefore: record.remindDaysBefore ?? 7,
+    checklist: normalizeReminderChecklist(record.checklistJson),
+    automatic: record.createdById === "system",
+    createdAt: record.createdAt?.toISOString(),
   };
+}
+
+async function memberNames(tenantId: string) {
+  const memberships = await prisma.tenantMembership.findMany({
+    where: { tenantId },
+    select: { userId: true, user: { select: { name: true, email: true } } },
+  });
+
+  return new Map(memberships.map((membership) => [membership.userId, membership.user.name || membership.user.email]));
+}
+
+/** Zusätzliche Felder aus dem Dashboard — `undefined` heißt "nicht ändern" (die App kennt sie nicht). */
+type ReminderDetailsInput = {
+  subjectType?: string;
+  subjectId?: string;
+  ownerUserId?: string;
+  recurrence?: string;
+  remindDaysBefore?: number;
+  checklist?: unknown;
+};
+
+/**
+ * Prüft und übersetzt die Zusatzfelder. Eine Verknüpfung muss im Mandanten
+ * existieren; ihr Name wird als Anzeigetext (`subject`) übernommen, den auch
+ * die App zeigt.
+ */
+async function resolveReminderDetails(tenantId: string, input: ReminderDetailsInput) {
+  const data: {
+    subjectType?: string;
+    subjectId?: string;
+    subject?: string;
+    ownerUserId?: string;
+    recurrence?: ReminderRecurrence;
+    remindDaysBefore?: number;
+    checklistJson?: ReturnType<typeof normalizeReminderChecklist>;
+  } = {};
+
+  if (input.subjectType !== undefined || input.subjectId !== undefined) {
+    const type = input.subjectType?.trim() ?? "";
+    const id = input.subjectId?.trim() ?? "";
+
+    if (!type || !id) {
+      data.subjectType = "";
+      data.subjectId = "";
+    } else if (!reminderSubjectTypes.includes(type as ReminderSubjectType)) {
+      throw new Error("Unbekannter Bezug.");
+    } else {
+      const where = { id, tenantId };
+      const entity =
+        type === "employee"
+          ? await prisma.tenantEmployee.findFirst({ where, select: { name: true } })
+          : type === "team"
+            ? await prisma.tenantTeam.findFirst({ where, select: { name: true } })
+            : await prisma.tenantLocation.findFirst({ where, select: { name: true } });
+
+      if (!entity) {
+        throw new Error("Unbekannter Bezug.");
+      }
+
+      data.subjectType = type;
+      data.subjectId = id;
+      data.subject = entity.name;
+    }
+  }
+
+  if (input.ownerUserId !== undefined) {
+    const ownerUserId = input.ownerUserId.trim();
+
+    if (ownerUserId) {
+      const member = await prisma.tenantMembership.findFirst({ where: { tenantId, userId: ownerUserId }, select: { id: true } });
+
+      if (!member) {
+        throw new Error("Unbekannte zuständige Person.");
+      }
+    }
+
+    data.ownerUserId = ownerUserId;
+  }
+
+  if (input.recurrence !== undefined) {
+    data.recurrence = isReminderRecurrence(input.recurrence) ? input.recurrence : "none";
+  }
+
+  if (input.remindDaysBefore !== undefined) {
+    const days = Math.round(Number(input.remindDaysBefore));
+
+    data.remindDaysBefore = Number.isFinite(days) ? Math.min(90, Math.max(0, days)) : 7;
+  }
+
+  if (input.checklist !== undefined) {
+    data.checklistJson = normalizeReminderChecklist(input.checklist);
+  }
+
+  return data;
 }
 
 async function requireTenantReminderAccess(tenantSlug: string) {
@@ -278,7 +401,9 @@ export async function getRemindersForTenant(tenantSlug: string) {
     }),
   ]);
 
-  return [...openRecords, ...doneRecords].map(toReminder);
+  const names = await memberNames(access.tenantId);
+
+  return [...openRecords, ...doneRecords].map((record) => toReminder(record, names));
 }
 
 export function buildReminderMetrics(
@@ -362,7 +487,9 @@ export async function createTenantReminder(input: {
   notes?: string;
   linkedFiles?: string[];
   teamId?: string;
-}) {
+  /** Aus einem Fristen-Vorschlag übernommen. */
+  suggestionKey?: string;
+} & ReminderDetailsInput) {
   await requireTenantAccess(input.tenantSlug, "reminders", "write");
   const access = await requireTenantReminderAccess(input.tenantSlug);
 
@@ -388,6 +515,8 @@ export async function createTenantReminder(input: {
     linkedFiles: input.linkedFiles,
   });
 
+  const details = await resolveReminderDetails(access.tenantId, input);
+
   return prisma.tenantReminder.create({
     data: {
       tenantId: access.tenantId,
@@ -402,6 +531,8 @@ export async function createTenantReminder(input: {
       createdById: access.userId,
       createdByName: access.userName,
       teamId: input.teamId?.trim() || undefined,
+      suggestionKey: input.suggestionKey?.trim().slice(0, 200) ?? "",
+      ...details,
     },
   });
 }
@@ -463,7 +594,9 @@ export async function updateTenantReminder(input: {
   category?: string;
   notes?: string;
   linkedFiles?: string[];
-}) {
+  /** Nur aus dem Dashboard; `undefined` lässt das Team unverändert. */
+  teamId?: string | null;
+} & ReminderDetailsInput) {
   await requireTenantAccess(input.tenantSlug, "reminders", "write");
   const access = await requireTenantReminderAccess(input.tenantSlug);
 
@@ -489,6 +622,11 @@ export async function updateTenantReminder(input: {
     throw new Error("Titel und Fälligkeit sind erforderlich.");
   }
 
+  if (input.teamId) {
+    await assertKnownTeam(access.tenantId, input.teamId);
+  }
+
+  const details = await resolveReminderDetails(access.tenantId, input);
   const key = await createUniqueReminderKey({
     tenantId: access.tenantId,
     title,
@@ -510,6 +648,8 @@ export async function updateTenantReminder(input: {
       category: input.category?.trim() || "Allgemein",
       notes: input.notes?.trim() ?? "",
       linkedFilesJson: linkedFiles,
+      ...(input.teamId !== undefined ? { teamId: input.teamId?.trim() || null } : {}),
+      ...details,
     },
   });
 }
@@ -531,16 +671,46 @@ export async function completeTenantReminder(input: {
 
   const reminder = await prisma.tenantReminder.findFirst({
     where: { id: input.reminderId, tenantId: access.tenantId },
-    select: { id: true, title: true },
   });
 
   const result = await prisma.tenantReminder.updateMany({
-    where: { id: input.reminderId, tenantId: access.tenantId },
+    where: { id: input.reminderId, tenantId: access.tenantId, status: "open" },
     data: {
       status: "done",
       completedAt: new Date(),
     },
   });
+
+  // Wiederkehrend: nächste Fälligkeit gleich mit anlegen (Checkliste wieder offen).
+  const nextDue =
+    reminder && result.count > 0 && isReminderRecurrence(reminder.recurrence)
+      ? nextReminderDueDate(reminder.dueDate, reminder.recurrence)
+      : null;
+
+  if (reminder && nextDue) {
+    await prisma.tenantReminder.create({
+      data: {
+        tenantId: reminder.tenantId,
+        key: await createUniqueReminderKey({ tenantId: reminder.tenantId, title: reminder.title }),
+        title: reminder.title,
+        subject: reminder.subject,
+        category: reminder.category,
+        dueDate: nextDue,
+        priority: reminder.priority,
+        notes: reminder.notes,
+        linkedFilesJson: reminder.linkedFilesJson ?? [],
+        createdById: reminder.createdById,
+        createdByName: reminder.createdByName,
+        teamId: reminder.teamId,
+        subjectType: reminder.subjectType,
+        subjectId: reminder.subjectId,
+        ownerUserId: reminder.ownerUserId,
+        recurrence: reminder.recurrence,
+        remindDaysBefore: reminder.remindDaysBefore,
+        checklistJson: normalizeReminderChecklist(reminder.checklistJson).map((item) => ({ ...item, done: false })),
+      },
+    });
+  }
 
   if (reminder) {
     await recordTenantAudit({

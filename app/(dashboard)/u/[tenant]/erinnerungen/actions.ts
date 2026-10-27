@@ -6,6 +6,11 @@ import {
   deleteTenantReminder,
   updateTenantReminder,
 } from "@/lib/reminders";
+import {
+  acceptReminderSuggestion,
+  dismissReminderSuggestion,
+  rescheduleTenantReminder,
+} from "@/lib/reminder-dashboard";
 import { type ActionState, withActionErrorHandling } from "@/lib/action-state";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -22,6 +27,39 @@ function formStrings(formData: FormData, key: string) {
     .filter((value): value is string => typeof value === "string")
     .map((value) => value.trim())
     .filter(Boolean);
+}
+
+/**
+ * Zusatzfelder des neuen Erinnerungs-Drawers. Nur Felder, die das Formular
+ * wirklich mitschickt, werden übergeben — ältere Formulare (z. B. am
+ * Dateibrowser) lassen sie so unverändert.
+ */
+function reminderDetails(formData: FormData) {
+  const details: {
+    subjectType?: string;
+    subjectId?: string;
+    ownerUserId?: string;
+    recurrence?: string;
+    remindDaysBefore?: number;
+    checklist?: unknown;
+  } = {};
+
+  if (formData.has("subjectType")) {
+    details.subjectType = formString(formData, "subjectType");
+    details.subjectId = formString(formData, "subjectId");
+  }
+  if (formData.has("ownerUserId")) details.ownerUserId = formString(formData, "ownerUserId");
+  if (formData.has("recurrence")) details.recurrence = formString(formData, "recurrence");
+  if (formData.has("remindDaysBefore")) details.remindDaysBefore = Number(formString(formData, "remindDaysBefore", "7"));
+  if (formData.has("checklist")) {
+    try {
+      details.checklist = JSON.parse(formString(formData, "checklist", "[]"));
+    } catch {
+      details.checklist = [];
+    }
+  }
+
+  return details;
 }
 
 function remindersPath(tenant: string) {
@@ -61,6 +99,7 @@ export async function createReminderAction(
       notes: formString(formData, "notes"),
       linkedFiles: formStrings(formData, "linkedFiles"),
       teamId: formString(formData, "teamId") || undefined,
+      ...reminderDetails(formData),
     });
 
     revalidateReminderAreas(tenant, returnPath);
@@ -93,6 +132,8 @@ export async function updateReminderAction(
       category: formString(formData, "category", "Allgemein"),
       notes: formString(formData, "notes"),
       linkedFiles: formStrings(formData, "linkedFiles"),
+      ...(formData.has("teamId") ? { teamId: formString(formData, "teamId") || null } : {}),
+      ...reminderDetails(formData),
     });
 
     revalidateReminderAreas(tenant, returnPath);
@@ -138,4 +179,37 @@ export async function deleteReminderAction(
     revalidateReminderAreas(tenant, returnPath);
     redirect(returnPath);
   }, "Erinnerung löschen");
+}
+
+/** Abhaken direkt in der Liste (ohne Weiterleitung). */
+export async function completeReminderQuickAction(input: { tenant: string; reminderId: string }): Promise<ActionState> {
+  return withActionErrorHandling(async () => {
+    await completeTenantReminder({ tenantSlug: String(input.tenant), reminderId: String(input.reminderId) });
+    revalidateReminderAreas(String(input.tenant));
+  }, "Erinnerung erledigen");
+}
+
+export async function rescheduleReminderAction(input: { tenant: string; reminderId: string; dueDate: string }): Promise<ActionState> {
+  return withActionErrorHandling(async () => {
+    await rescheduleTenantReminder({
+      tenantSlug: String(input.tenant),
+      reminderId: String(input.reminderId),
+      dueDate: String(input.dueDate),
+    });
+    revalidateReminderAreas(String(input.tenant));
+  }, "Erinnerung verschieben");
+}
+
+export async function acceptReminderSuggestionAction(input: { tenant: string; key: string }): Promise<ActionState> {
+  return withActionErrorHandling(async () => {
+    await acceptReminderSuggestion({ tenantSlug: String(input.tenant), key: String(input.key) });
+    revalidateReminderAreas(String(input.tenant));
+  }, "Vorschlag übernehmen");
+}
+
+export async function dismissReminderSuggestionAction(input: { tenant: string; key: string }): Promise<ActionState> {
+  return withActionErrorHandling(async () => {
+    await dismissReminderSuggestion({ tenantSlug: String(input.tenant), key: String(input.key) });
+    revalidateReminderAreas(String(input.tenant));
+  }, "Vorschlag ignorieren");
 }

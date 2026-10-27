@@ -82,7 +82,7 @@ async function handleNotifications(request: Request, requestId: string) {
     if (dueTenants.length > 0) {
       const reminders = await prisma.tenantReminder.findMany({
         where: { tenantId: { in: dueTenants.map((tenant) => tenant.id) }, status: "open" },
-        select: { tenantId: true, title: true, dueDate: true },
+        select: { tenantId: true, title: true, dueDate: true, remindDaysBefore: true },
       });
 
       const remindersByTenant = new Map<string, typeof reminders>();
@@ -97,7 +97,8 @@ async function handleNotifications(request: Request, requestId: string) {
 
       for (const tenant of dueTenants) {
         const urgent = (remindersByTenant.get(tenant.id) ?? [])
-          .filter((reminder) => daysUntil(reminder.dueDate) <= 7)
+          // Vorlauf je Erinnerung (Standard 7 Tage wie bisher).
+          .filter((reminder) => daysUntil(reminder.dueDate) <= reminder.remindDaysBefore)
           .sort((a, b) => daysUntil(a.dueDate) - daysUntil(b.dueDate))
           .slice(0, 10);
 

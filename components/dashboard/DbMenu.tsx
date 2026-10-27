@@ -10,7 +10,18 @@ export const dbMenuItemClass = "db-ms-opt text-[13px] font-medium text-ink disab
  * Klick auf einen Eintrag schließt das Menü (Dialoge, die er öffnet, liegen
  * in eigenen Portalen und bleiben offen).
  */
-export function DbMenu({ label, children, align = "right" }: { label: string; children: ReactNode; align?: "left" | "right" }) {
+export function DbMenu({
+  label,
+  children,
+  align = "right",
+  icon,
+}: {
+  label: string;
+  children: ReactNode;
+  align?: "left" | "right";
+  /** Eigenes Symbol statt "…". */
+  icon?: ReactNode;
+}) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -48,7 +59,7 @@ export function DbMenu({ label, children, align = "right" }: { label: string; ch
           setOpen((value) => !value);
         }}
       >
-        <MoreHorizontal size={17} />
+        {icon ?? <MoreHorizontal size={17} />}
       </button>
       {open && (
         <div
