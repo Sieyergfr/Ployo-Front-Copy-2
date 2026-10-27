@@ -329,6 +329,10 @@ App-Verträge: Alle Änderungen an gemeinsam genutzten Services sind additiv (ne
 Parameter, fehlend = unverändert). `ployo-app` ist unverändert; `npm run typecheck` und
 `npm run lint` dort sind grün, die App-Vertragstests hier ebenfalls.
 
-Nicht umgesetzt (bewusst): „Einladung ablehnen“ und „Inhaber:in erinnern“ aus dem Design brauchen
-einen neuen Einladungsstatus bzw. einen Benachrichtigungsweg und sind deshalb offen; „Zugriff
-anfragen“ auf der Kein-Zugriff-Seite ebenso.
+„Einladung ablehnen“, „Inhaber:in erinnern“ und „Zugriff anfragen“ laufen ohne Migration über die
+bestehende Benachrichtigungsschiene (Posteingang, Push, E-Mail) und das Audit-Log
+(`lib/self-service-requests.ts`): Empfänger sind Inhaber:innen und Admins (abgelehnte Einladungen:
+zusätzlich HR), dieselbe Anfrage ist pro Person und Unternehmen 24 Stunden gesperrt. Eine abgelehnte
+Einladung bekommt den vorhandenen Status `EXPIRED` (kein neuer Enum-Wert, den die App mitlesen
+müsste); die Verwaltung kann neu einladen. Im Web erscheinen die Hinweise im Glockenmenü, in der
+App im Posteingang (ohne Deep-Link, unbekannte Typen öffnen dort den Posteingang).

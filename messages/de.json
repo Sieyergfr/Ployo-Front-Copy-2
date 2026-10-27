@@ -553,7 +553,13 @@
       "acceptInvitation": "Annehmen",
       "createHint": "14 Tage kostenlos testen, ohne Zahlungsdaten",
       "summary": "{count, plural, one {# Unternehmen} other {# Unternehmen}}",
-      "summaryAttention": "{count, plural, one {# Unternehmen} other {# Unternehmen}} · {attention, plural, one {# braucht} other {# brauchen}} Ihre Aufmerksamkeit"
+      "summaryAttention": "{count, plural, one {# Unternehmen} other {# Unternehmen}} · {attention, plural, one {# braucht} other {# brauchen}} Ihre Aufmerksamkeit",
+      "remindOwner": "Inhaber:in erinnern",
+      "ownerReminded": "Erinnert",
+      "ownerRemindedToast": "Inhaber:innen wurden erinnert",
+      "declineInvitation": "Ablehnen",
+      "invitationDeclined": "Abgelehnt",
+      "invitationDeclinedToast": "Einladung abgelehnt"
     }
   },
   "AccountPreferences": {
@@ -1564,7 +1570,11 @@
     "invitedByTitle": "{name} hat Sie zu {tenant} eingeladen",
     "roleChip": "Rolle: {role}",
     "validUntil": "gültig bis {date}",
-    "signIn": "Anmelden"
+    "signIn": "Anmelden",
+    "notYou": "Nicht Sie?",
+    "declineInvitation": "Einladung ablehnen",
+    "declined": "Abgelehnt",
+    "declinedToast": "Einladung abgelehnt"
   },
   "CompanyCreateWizard": {
     "countryGermany": "Deutschland",
@@ -4295,7 +4305,11 @@
     "title": "Kein Zugriff auf diesen Bereich",
     "body": "Ihre Rolle hat keine Berechtigung für diesen Bereich. Welche Rolle was sehen darf, legen Inhaber:innen und Admins unter „Rollen“ fest.",
     "toMyArea": "Zu Mein Bereich",
-    "switchCompany": "Unternehmen wechseln"
+    "switchCompany": "Unternehmen wechseln",
+    "requestAccess": "Zugriff anfragen",
+    "requested": "Angefragt",
+    "requestedToast": "Anfrage gesendet",
+    "requestedToastBody": "Inhaber:innen und Admins wurden benachrichtigt."
   },
   "TwoFactorSetupWizard": {
     "stepOf": "Schritt {step} von {total}",

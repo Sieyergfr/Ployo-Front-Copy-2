@@ -1,4 +1,6 @@
+import { requestAccessAction } from "@/app/actions/self-service-requests";
 import { ctaClass, secondaryClass } from "@/components/dashboard/ui";
+import SelfServiceRequestButton from "@/components/SelfServiceRequestButton";
 import { Lock } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
@@ -8,7 +10,7 @@ import Link from "next/link";
  * async: wird sowohl von der Serverseite kein-zugriff als auch aus der
  * Client-Fehlergrenze (u/[tenant]/error.tsx) gerendert.
  */
-export default function NoAccessNotice({ tenant }: { tenant: string }) {
+export default function NoAccessNotice({ tenant, path = "" }: { tenant: string; path?: string }) {
   const t = useTranslations("NoAccessNotice");
 
   return (
@@ -19,11 +21,18 @@ export default function NoAccessNotice({ tenant }: { tenant: string }) {
       <h1 className="m-0 font-display text-[22px] font-semibold tracking-[-0.4px] text-ink">{t("title")}</h1>
       <p className="m-0 max-w-[440px] text-[14px] leading-[1.6] text-[#6e6e6b]">{t("body")}</p>
       <div className="mt-2 flex flex-wrap justify-center gap-2">
-        <Link href={`/u/${tenant}/mein-bereich`} className={ctaClass}>
+        <SelfServiceRequestButton
+          action={requestAccessAction}
+          fields={{ tenant, path }}
+          className={ctaClass}
+          doneLabel={t("requested")}
+          successTitle={t("requestedToast")}
+          successSubtitle={t("requestedToastBody")}
+        >
+          {t("requestAccess")}
+        </SelfServiceRequestButton>
+        <Link href={`/u/${tenant}/mein-bereich`} className={secondaryClass}>
           {t("toMyArea")}
-        </Link>
-        <Link href="/select" className={secondaryClass}>
-          {t("switchCompany")}
         </Link>
       </div>
     </section>

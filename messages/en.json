@@ -553,7 +553,13 @@
       "acceptInvitation": "Accept",
       "createHint": "Try free for 14 days, no payment details",
       "summary": "{count, plural, one {# company} other {# companies}}",
-      "summaryAttention": "{count, plural, one {# company} other {# companies}} · {attention, plural, one {# needs} other {# need}} your attention"
+      "summaryAttention": "{count, plural, one {# company} other {# companies}} · {attention, plural, one {# needs} other {# need}} your attention",
+      "remindOwner": "Remind the owner",
+      "ownerReminded": "Reminded",
+      "ownerRemindedToast": "Owners have been reminded",
+      "declineInvitation": "Decline",
+      "invitationDeclined": "Declined",
+      "invitationDeclinedToast": "Invitation declined"
     }
   },
   "AccountPreferences": {
@@ -1564,7 +1570,11 @@
     "invitedByTitle": "{name} invited you to {tenant}",
     "roleChip": "Role: {role}",
     "validUntil": "valid until {date}",
-    "signIn": "Sign in"
+    "signIn": "Sign in",
+    "notYou": "Not you?",
+    "declineInvitation": "Decline invitation",
+    "declined": "Declined",
+    "declinedToast": "Invitation declined"
   },
   "CompanyCreateWizard": {
     "countryGermany": "Germany",
@@ -4295,7 +4305,11 @@
     "title": "No access to this area",
     "body": "Your role has no permission for this area. Owners and admins decide which role can see what under “Roles”.",
     "toMyArea": "Go to My area",
-    "switchCompany": "Switch company"
+    "switchCompany": "Switch company",
+    "requestAccess": "Request access",
+    "requested": "Requested",
+    "requestedToast": "Request sent",
+    "requestedToastBody": "Owners and admins have been notified."
   },
   "TwoFactorSetupWizard": {
     "stepOf": "Step {step} of {total}",

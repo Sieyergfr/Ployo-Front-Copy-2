@@ -33,7 +33,7 @@ export default function TenantErrorBoundary({
   }, [error]);
 
   if (error.message === "FORBIDDEN" && tenant) {
-    return <NoAccessNotice tenant={tenant} />;
+    return <NoAccessNotice tenant={tenant} path={pathname ?? ""} />;
   }
 
   return (

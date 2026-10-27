@@ -4,6 +4,8 @@ import { avatarColor } from "@/components/dashboard/ui";
 import { LocaleSwitcher } from "@/components/LocaleSwitcher";
 import { auth } from "@/lib/auth";
 import { getOwnPreferences, getOwnScheduledDeletion, startPagePath } from "@/lib/account-service";
+import { declineInvitationAction, remindOwnerAction } from "@/app/actions/self-service-requests";
+import SelfServiceRequestButton from "@/components/SelfServiceRequestButton";
 import { getTenantSelectOverview, type TenantSelectEntry } from "@/lib/tenant-select";
 import { ArrowRight, Plus } from "lucide-react";
 import { getTranslations } from "next-intl/server";
@@ -77,7 +79,15 @@ function TenantRow({ tenant, href, t, tRole }: { tenant: TenantSelectEntry; href
               {t("subscribe")}
             </Link>
           ) : (
-            <span className="text-[13px] text-[#6e6e6b]">{t("waitingForOwner")}</span>
+            <SelfServiceRequestButton
+              action={remindOwnerAction}
+              fields={{ tenant: tenant.slug }}
+              className="inline-flex min-h-10 cursor-pointer items-center gap-1.5 rounded-[10px] border border-[#ecebe7] bg-white px-3.5 text-[14px] font-semibold text-ink disabled:cursor-default disabled:text-[#6e6e6b]"
+              doneLabel={t("ownerReminded")}
+              successTitle={t("ownerRemindedToast")}
+            >
+              {t("remindOwner")}
+            </SelfServiceRequestButton>
           )
         ) : (
           <Link href={href} className={openClass}>
@@ -161,6 +171,15 @@ export default async function TenantSelectPage() {
                 {invitation.invitedByName ? t("invitedBy", { name: invitation.invitedByName }) : t("invitationPending")}
               </span>
             </span>
+            <SelfServiceRequestButton
+              action={declineInvitationAction}
+              fields={{ token: invitation.token }}
+              className="inline-flex min-h-10 cursor-pointer items-center gap-1.5 rounded-[10px] border-0 bg-transparent px-2.5 text-[14px] font-medium text-[#6e6e6b] hover:text-ink disabled:cursor-default"
+              doneLabel={t("invitationDeclined")}
+              successTitle={t("invitationDeclinedToast")}
+            >
+              {t("declineInvitation")}
+            </SelfServiceRequestButton>
             <Link
               href={`/invite/${invitation.token}`}
               className="inline-flex min-h-10 items-center rounded-[10px] border border-[#ecebe7] bg-white px-3.5 text-[14px] font-semibold text-ink no-underline"

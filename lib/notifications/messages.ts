@@ -187,6 +187,24 @@ export type NotificationMessage =
       endTime: string;
     }
   | {
+      key: "accessRequested";
+      tenantName: string;
+      requesterName: string;
+      requesterEmail: string;
+      /** Optional: Bereich/Seite, auf die der Zugriff fehlte (Pfad ohne Mandant). */
+      path: string;
+    }
+  | {
+      key: "subscriptionReminderRequested";
+      tenantName: string;
+      requesterName: string;
+    }
+  | {
+      key: "invitationDeclined";
+      tenantName: string;
+      email: string;
+    }
+  | {
       key: "autoClockedOut";
       tenantName: string;
       /** Datum (YYYY-MM-DD) und Uhrzeit ("HH:MM") des gesetzten Ausstempelns, Ortszeit. */
@@ -447,6 +465,38 @@ export function renderNotification(
           );
 
       return { subject, text, html };
+    }
+
+    case "accessRequested": {
+      const where = message.path ? (isEn ? ` (page ${message.path})` : ` (Seite ${message.path})`) : "";
+      const subject = isEn
+        ? `${message.requesterName} is requesting access`
+        : `${message.requesterName} bittet um Zugriff`;
+      const text = isEn
+        ? `${message.requesterName} (${message.requesterEmail}) is missing a permission at ${message.tenantName}${where} and asks for access. You can adjust roles under "Roles".`
+        : `${message.requesterName} (${message.requesterEmail}) fehlt bei ${message.tenantName} eine Berechtigung${where} und bittet um Zugriff. Rollen passen Sie unter „Rollen“ an.`;
+
+      return { subject, text, html: paragraph(escapeHtml(text)) };
+    }
+
+    case "subscriptionReminderRequested": {
+      const subject = isEn
+        ? `${message.tenantName}: please renew the subscription`
+        : `${message.tenantName}: Bitte Abo abschließen`;
+      const text = isEn
+        ? `${message.requesterName} cannot use Ployo at ${message.tenantName} because there is no active subscription. Choose a plan under Settings → Billing to unlock access for everyone.`
+        : `${message.requesterName} kann Ployo bei ${message.tenantName} nicht nutzen, weil kein aktives Abo besteht. Unter Einstellungen → Abrechnung wählen Sie einen Plan und schalten den Zugang für alle frei.`;
+
+      return { subject, text, html: paragraph(escapeHtml(text)) };
+    }
+
+    case "invitationDeclined": {
+      const subject = isEn ? `Invitation declined` : `Einladung abgelehnt`;
+      const text = isEn
+        ? `${message.email} declined the invitation to ${message.tenantName}.`
+        : `${message.email} hat die Einladung zu ${message.tenantName} abgelehnt.`;
+
+      return { subject, text, html: paragraph(escapeHtml(text)) };
     }
 
     case "newTimeCorrectionRequest": {

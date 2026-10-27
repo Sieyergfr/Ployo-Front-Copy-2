@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { getEmployeesForTenant, getEmployeeLimitForTenant } from "@/lib/employee-service";
 import { getRemindersForTenant } from "@/lib/reminders";
+import { getMyNotifications } from "@/lib/notifications/inbox";
 import { getISOWeekFromDate, getShiftPlanForTenant } from "@/lib/shift-service";
 import { getVacationRequestsForTenant } from "@/lib/vacation-service";
 import { getSicknessForTenant } from "@/lib/sickness";
@@ -46,7 +47,7 @@ export async function GET(request: Request) {
   }
 
   const { year, week } = getISOWeekFromDate(new Date());
-  const [vacations, reminders, shiftPlan, employees, preferences, employeeLimit, sickness] =
+  const [vacations, reminders, shiftPlan, employees, preferences, employeeLimit, sickness, inbox] =
     await Promise.all([
       tryLoad(getVacationRequestsForTenant(tenant)),
       tryLoad(getRemindersForTenant(tenant)),
@@ -55,6 +56,7 @@ export async function GET(request: Request) {
       tryLoad(getNotificationPreferences(tenant)),
       tryLoad(getEmployeeLimitForTenant(tenant)),
       tryLoad(getSicknessForTenant(tenant)),
+      tryLoad(getMyNotifications(tenant, { unreadOnly: true, limit: 20 })),
     ]);
 
   const notifications: Array<{
@@ -110,6 +112,24 @@ export async function GET(request: Request) {
       detail: `${shiftPlan.conflictCount} Konflikte in ${shiftPlan.label}.`,
       time: shiftPlan.range,
       category: "Planung",
+    });
+  }
+
+  // Anfragen an Inhaber:innen/Admins aus dem persönlichen Posteingang
+  // (Zugriff anfragen, Abo-Erinnerung, abgelehnte Einladung).
+  const inboxPrefixes: Record<string, string> = {
+    "access-request": "access",
+    billing: "billing",
+    invitation: "invitation",
+  };
+
+  for (const item of (inbox ?? []).filter((entry) => entry.entityType in inboxPrefixes).slice(0, 5)) {
+    notifications.push({
+      id: `${inboxPrefixes[item.entityType]}-${item.id}`,
+      title: item.title,
+      detail: item.detail,
+      time: item.createdAt.slice(0, 10).split("-").reverse().join("."),
+      category: "System",
     });
   }
 

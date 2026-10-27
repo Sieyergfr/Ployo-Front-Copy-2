@@ -623,3 +623,103 @@ export async function notifyEmployeeOfShiftPlanWithdrawn(input: {
     entityId: `${input.year}-W${String(input.week).padStart(2, "0")}`,
   });
 }
+
+/** Inhaber:innen und Admins — die Rollen, die Rechte und das Abo verwalten. */
+async function getTenantOwnersAndAdmins(tenantId: string) {
+  return prisma.tenantMembership.findMany({
+    where: { tenantId, role: { in: ["OWNER", "ADMIN"] } },
+    select: { userId: true, user: { select: { email: true } } },
+  });
+}
+
+/** "Zugriff anfragen" von der Kein-Zugriff-Seite. */
+export async function notifyAdminsOfAccessRequest(input: {
+  tenantId: string;
+  tenantName: string;
+  requesterUserId: string;
+  requesterName: string;
+  requesterEmail: string;
+  path: string;
+}) {
+  const recipients = (await getTenantOwnersAndAdmins(input.tenantId)).filter(
+    (recipient) => recipient.userId !== input.requesterUserId,
+  );
+
+  await Promise.all(
+    recipients.map((recipient) =>
+      dispatchNotification({
+        userId: recipient.userId,
+        email: recipient.user.email,
+        message: {
+          key: "accessRequested",
+          tenantName: input.tenantName,
+          requesterName: input.requesterName,
+          requesterEmail: input.requesterEmail,
+          path: input.path,
+        },
+        tenantId: input.tenantId,
+        category: "system",
+        entityType: "access-request",
+        entityId: input.requesterUserId,
+      }),
+    ),
+  );
+
+  return recipients.length;
+}
+
+/** "Inhaber:in erinnern" bei gesperrtem Abo. */
+export async function notifyOwnersOfSubscriptionReminder(input: {
+  tenantId: string;
+  tenantName: string;
+  requesterUserId: string;
+  requesterName: string;
+}) {
+  const recipients = (await getTenantOwnersAndAdmins(input.tenantId)).filter(
+    (recipient) => recipient.userId !== input.requesterUserId,
+  );
+
+  await Promise.all(
+    recipients.map((recipient) =>
+      dispatchNotification({
+        userId: recipient.userId,
+        email: recipient.user.email,
+        message: {
+          key: "subscriptionReminderRequested",
+          tenantName: input.tenantName,
+          requesterName: input.requesterName,
+        },
+        tenantId: input.tenantId,
+        category: "system",
+        entityType: "billing",
+        entityId: input.tenantId,
+      }),
+    ),
+  );
+
+  return recipients.length;
+}
+
+/** Abgelehnte Einladung an die Verwaltung. */
+export async function notifyManagersOfDeclinedInvitation(input: {
+  tenantId: string;
+  tenantName: string;
+  email: string;
+  invitationId: string;
+}) {
+  const managers = await getTenantManagers(input.tenantId);
+
+  await Promise.all(
+    managers.map((manager) =>
+      dispatchNotification({
+        userId: manager.userId,
+        email: manager.user.email,
+        message: { key: "invitationDeclined", tenantName: input.tenantName, email: input.email },
+        tenantId: input.tenantId,
+        category: "system",
+        entityType: "invitation",
+        entityId: input.invitationId,
+      }),
+    ),
+  );
+}

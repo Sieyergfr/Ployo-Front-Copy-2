@@ -1,5 +1,7 @@
 import "@/app/(auth)/auth.css";
+import { declineInvitationAction } from "@/app/actions/self-service-requests";
 import AuthShell from "@/components/auth/AuthShell";
+import SelfServiceRequestButton from "@/components/SelfServiceRequestButton";
 import { avatarColor } from "@/components/dashboard/ui";
 import Image from "next/image";
 import CardHeader from "@/components/Card/CardHeader";
@@ -305,6 +307,20 @@ export default async function InvitePage({
                 </button>
               </form>
             </>
+          )}
+          {isPendingInvitation && (
+            <div className="mt-4 flex items-center justify-center gap-1 text-[13px] text-[#6e6e6b]">
+              {t("notYou")}
+              <SelfServiceRequestButton
+                action={declineInvitationAction}
+                fields={{ token }}
+                className="cursor-pointer border-0 bg-transparent p-0 text-[13px] font-semibold text-ink underline-offset-2 hover:underline disabled:cursor-default disabled:text-[#6e6e6b] disabled:no-underline"
+                doneLabel={t("declined")}
+                successTitle={t("declinedToast")}
+              >
+                {t("declineInvitation")}
+              </SelfServiceRequestButton>
+            </div>
           )}
         </div>
       </main>

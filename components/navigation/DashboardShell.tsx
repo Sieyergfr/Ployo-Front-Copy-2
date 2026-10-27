@@ -19,6 +19,9 @@ import {
   CircleUserRound,
   Clock,
   Contact,
+  CreditCard,
+  KeyRound,
+  UserX,
   Folder,
   LayoutDashboard,
   LogOut,
@@ -164,6 +167,9 @@ const notificationKinds = {
   vacation: { icon: Sun, tone: "#168a8a", href: "/urlaub" },
   reminder: { icon: CircleAlert, tone: "#e07b00", href: "/erinnerungen" },
   shifts: { icon: CalendarDays, tone: "#8b6ed4", href: "/schichtplanung" },
+  access: { icon: KeyRound, tone: "#6b4fc4", href: "/rollen" },
+  billing: { icon: CreditCard, tone: "#b4332a", href: "/einstellungen?kat=billing" },
+  invitation: { icon: UserX, tone: "#6e6e6b", href: "/employees" },
 } as const;
 
 function notificationKind(id: string) {
