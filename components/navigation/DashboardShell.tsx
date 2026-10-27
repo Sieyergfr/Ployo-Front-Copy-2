@@ -10,6 +10,7 @@ import {
   Bell,
   CalendarDays,
   ChartColumn,
+  ScrollText,
   Check,
   CheckCheck,
   ChevronsUpDown,
@@ -42,7 +43,6 @@ import Link from "next/link";
 import { useParams, usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
-import TenantSettingsDialog from "@/components/navigation/TenantSettingsDialog";
 import type {
   NavigationTenantItem,
   NavigationUsageInfo,
@@ -91,6 +91,7 @@ const navigationItems: NavItem[] = [
   { labelKey: "roles", icon: Shield, href: "/rollen", section: "organisation", area: "roles", requiredLevel: "admin" },
   { labelKey: "reports", icon: ChartColumn, href: "/reports", section: "analysis", area: "timeTracking" },
   { labelKey: "reminders", icon: AlarmClock, href: "/erinnerungen", section: "analysis", area: "reminders" },
+  { labelKey: "audit", icon: ScrollText, href: "/audit", section: "analysis", area: "audit" },
 ];
 
 const sections: NavSection[] = ["personal", "staff", "organisation", "analysis"];
@@ -557,18 +558,15 @@ function SearchDialog({
 export default function DashboardShell({
   tenants = [],
   user,
-  isStripeConfigured = false,
   children,
 }: {
   tenants?: NavigationTenantItem[];
   user?: NavigationUserItem;
-  isStripeConfigured?: boolean;
   children: ReactNode;
 }) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [isTenantMenuOpen, setIsTenantMenuOpen] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [readNotificationIds, setReadNotificationIds] = useState<string[]>([]);
@@ -580,6 +578,7 @@ export default function DashboardShell({
   const [, switchLanguageFormAction] = useActionStateWithToast(switchLanguageAction);
   const tenantSelectorRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
+  const router = useRouter();
   const params = useParams<{ tenant?: string | string[] }>();
 
   const routeTenant = Array.isArray(params.tenant) ? params.tenant[0] : params.tenant;
@@ -595,7 +594,6 @@ export default function DashboardShell({
   const tenantItems = tenants.length > 0 ? tenants : [fallbackTenantItem];
   const isCurrentTenantData = Boolean(tenant) && fetchedData?.tenant === tenant;
   const notifications = isCurrentTenantData ? fetchedData!.notifications : [];
-  const usage = isCurrentTenantData ? fetchedData!.usage : null;
   const counts = isCurrentTenantData ? fetchedData!.counts : null;
   const unreadNotificationCount = notifications.filter(
     (notification) => !readNotificationIds.includes(notification.id),
@@ -976,19 +974,16 @@ export default function DashboardShell({
           </div>
 
           <div className="h-1.5" />
-          <button
-            type="button"
+          <Link
+            href={`${baseHref}/einstellungen`}
             title={t("footer.settings")}
-            aria-haspopup="dialog"
-            className={itemClass()}
-            onClick={() => {
-              closeOverlays();
-              setIsSettingsOpen(true);
-            }}
+            aria-current={pathname.startsWith(`${baseHref}/einstellungen`) ? "page" : undefined}
+            className={itemClass(pathname.startsWith(`${baseHref}/einstellungen`))}
+            onClick={() => closeOverlays()}
           >
             <Settings size={17} />
             {!isCollapsed && <span className="db-label">{t("footer.settings")}</span>}
-          </button>
+          </Link>
           <form action="/logout" method="post">
             <button type="submit" title={t("footer.logout")} className={itemClass()}>
               <LogOut size={17} />
@@ -1114,7 +1109,7 @@ export default function DashboardShell({
           }}
           onOpenSettings={() => {
             setIsNotificationsOpen(false);
-            setIsSettingsOpen(true);
+            router.push(`${baseHref}/einstellungen?kat=notifications`);
           }}
         />
       )}
@@ -1127,15 +1122,6 @@ export default function DashboardShell({
         />
       )}
 
-      {isSettingsOpen && (
-        <TenantSettingsDialog
-          tenant={activeTenant}
-          user={user}
-          usage={usage}
-          isStripeConfigured={isStripeConfigured}
-          onClose={() => setIsSettingsOpen(false)}
-        />
-      )}
     </div>
   );
 }

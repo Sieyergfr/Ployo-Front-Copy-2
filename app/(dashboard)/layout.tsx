@@ -2,7 +2,6 @@ import DashboardShell from "@/components/navigation/DashboardShell";
 import type { NavigationTenantItem } from "@/components/navigation/types";
 import { auth } from "@/lib/auth";
 import { getOwnScheduledDeletion } from "@/lib/account-service";
-import { isStripeConfigured } from "@/lib/stripe/client";
 import { computePermissionLevels } from "@/lib/tenant-access";
 import { getTenantsForUser } from "@/lib/tenants";
 import { getTranslations } from "next-intl/server";
@@ -134,7 +133,6 @@ export default async function AuthLayout ({
                 email: session.user.email,
                 initials: getInitials(session.user.name || session.user.email),
             }}
-            isStripeConfigured={isStripeConfigured()}
         >
             {children}
         </DashboardShell>

@@ -1,7 +1,7 @@
 import AnalyticsExportButtons from "@/components/dashboard/reports/AnalyticsExportButtons";
 import { AbsencesTab, ArbzgTab, OvertimeTab, StaffTab } from "@/components/dashboard/reports/AnalyticsTabs";
 import { DbCard, DbPageHead } from "@/components/dashboard/ui";
-import { HoursReportTable, REPORT_ACTIONS_SLOT, ReportFilterBar } from "@/components/HoursReport";
+import { HoursReportTable, ReportFilterBar } from "@/components/HoursReport";
 import { auth } from "@/lib/auth";
 import {
   getArbzgAnalytics,
@@ -125,7 +125,8 @@ export default async function ReportsPage({
     <>
       <DbPageHead eyebrow={tenantName} title={t("title")} subtitle={t("subtitle")} />
 
-      <div id={REPORT_ACTIONS_SLOT} className="-mt-3 mb-6 flex flex-wrap gap-2">
+      {/* Platz für die Export-Knöpfe des Stundenreports (siehe HoursReport.tsx). */}
+      <div id="report-actions" className="-mt-3 mb-6 flex flex-wrap gap-2">
         {tab !== "hours" && <AnalyticsExportButtons tenant={tenant} tab={tab} />}
       </div>
 

@@ -530,6 +530,10 @@ model TenantSettings {
   /// grundsaetzlich 8h, verlaengerbar auf bis zu 10h bei Ausgleich
   /// innerhalb von 6 Monaten - 10 als praktikabler Default).
   maxShiftHours                             Int      @default(10)
+  /// Schichtplan warnt, wenn die geplanten Wochenstunden die Vertragsstunden um mehr als diesen Prozentsatz übersteigen (M4).
+  overtimeWarningPercent                    Int      @default(10)
+  /// Beim Veröffentlichen des Schichtplans die betroffenen Mitarbeitenden benachrichtigen (bisheriges Verhalten: immer).
+  shiftNotifyOnPublish                      Boolean  @default(true)
   defaultOpeningHoursJson                   Json     @default("[]")
   employeeNumberRequired                    Boolean  @default(true)
   employeeNumberPrefix                      String   @default("MA-")

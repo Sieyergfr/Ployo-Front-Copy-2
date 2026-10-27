@@ -80,6 +80,8 @@ type ShiftPlanningClientProps = {
   /** Veröffentlicht, seither aber bearbeitet — Mitarbeiter sehen diesen Stand noch nicht. */
   hasUnpublishedChanges?: boolean;
   days: ShiftDay[];
+  /** Einstellung „Überstunden-Warnung“: Mitarbeitende über ihren Vertragsstunden. */
+  overtimeWarnings?: Array<{ employeeId: string; name: string; plannedMinutes: number; targetMinutes: number }>;
   employees: ShiftEmployeeOption[];
   locations: ShiftLocationOption[];
   wishFreeRequests: WishFreeRequest[];
@@ -1366,6 +1368,7 @@ export default function ShiftPlanningClient({
   templates,
   absences = [],
   offerCounts = {},
+  overtimeWarnings = [],
   holidays = {},
   canManage = true,
   canDelete = canManage,
@@ -1666,6 +1669,17 @@ export default function ShiftPlanningClient({
               <span className="inline-flex items-center gap-1.5 rounded-full bg-[#fff7ea] px-3 py-1 text-[12.5px] font-semibold text-[#9a5b00]">
                 <span className="size-1.5 rounded-full bg-[#e07b00]" />
                 {ui("warnings", { count: warningCount })}
+              </span>
+            )}
+            {overtimeWarnings.length > 0 && (
+              <span
+                title={overtimeWarnings
+                  .map((item) => `${item.name}: ${Math.round(item.plannedMinutes / 6) / 10} / ${Math.round(item.targetMinutes / 6) / 10} Std.`)
+                  .join("\n")}
+                className="inline-flex items-center gap-1.5 rounded-full bg-[#fff7ea] px-3 py-1 text-[12.5px] font-semibold text-[#9a5b00]"
+              >
+                <span className="size-1.5 rounded-full bg-[#e07b00]" />
+                {ui("overtime", { count: overtimeWarnings.length })}
               </span>
             )}
             {openShiftCount > 0 && (

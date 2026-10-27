@@ -9,6 +9,7 @@ import {
   getShiftPlanningSettings,
   getShiftTemplatesForTenant,
   getShiftWeekAbsences,
+  getShiftWeekOvertimeWarnings,
 } from "@/lib/shift-service";
 import { getWishFreeRequestsForTenant } from "@/lib/wish-free-service";
 import { hasPermissionLevel } from "@/lib/roles";
@@ -67,10 +68,13 @@ export default async function ShiftPlanningPage({
   const shiftIds = plan.days.flatMap((day) => day.shifts.map((shift) => shift.dbId).filter((id): id is string => Boolean(id)));
   // Nur Planer sehen Abwesenheiten und Angebote — ohne Schreibrecht bleibt
   // der Plan eine reine Ansicht.
-  const [absences, offerCounts, session] = await Promise.all([
+  const [absences, offerCounts, session, overtimeWarnings] = await Promise.all([
     canManage ? getShiftWeekAbsences({ tenantSlug: tenant, year, week }).catch(() => []) : [],
     canManage ? getPendingShiftOfferCounts(tenant, shiftIds).catch(() => ({})) : {},
     auth.api.getSession({ headers: await headers() }),
+    canManage
+      ? getShiftWeekOvertimeWarnings({ tenantSlug: tenant, shifts: plan.days.flatMap((day) => day.shifts) }).catch(() => [])
+      : [],
   ]);
   const memberships = session?.user?.id ? await getTenantsForUser(session.user.id).catch(() => null) : null;
   const tenantName = memberships?.find((item) => item.tenant.slug === tenant)?.tenant.name ?? tenant;
@@ -92,6 +96,7 @@ export default async function ShiftPlanningPage({
       todayIso={new Date().toISOString().slice(0, 10)}
       absences={absences}
       offerCounts={offerCounts}
+      overtimeWarnings={overtimeWarnings}
       holidays={holidays}
       canSeeSickness={hasPermissionLevel(capabilities.sickness.level, "read")}
       weekRange={plan.range}

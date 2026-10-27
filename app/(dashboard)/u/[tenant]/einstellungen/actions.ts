@@ -5,9 +5,13 @@ import {
   updateTenantNotifications,
   updateTenantProfile,
   updateTenantSecurity,
+  updateLocationHolidayRegion,
+  updateTenantShiftSettings,
   updateTenantTimeTracking,
 } from "@/lib/settings-service";
-import { updateAccountName } from "@/lib/account-service";
+import { updateAccountName, updateOwnPreferences } from "@/lib/account-service";
+import { LOCALE_COOKIE, LOCALE_COOKIE_MAX_AGE_DAYS } from "@/lib/locale-shared";
+import { cookies } from "next/headers";
 import { type ActionState, withActionErrorHandling } from "@/lib/action-state";
 import { createBillingCheckoutSession, createBillingPortalSession } from "@/lib/billing-service";
 import { isStripeConfigured } from "@/lib/stripe/client";
@@ -42,10 +46,11 @@ function settingsPath(tenant: string) {
   return `/u/${tenant}/einstellungen`;
 }
 
-function absoluteTenantUrl(tenant: string) {
+function absoluteTenantUrl(tenant: string, returnPath = "") {
   const baseUrl = (process.env.BETTER_AUTH_URL ?? "http://localhost:3000").replace(/\/$/, "");
 
-  return `${baseUrl}/u/${tenant}`;
+  // Nur Rücksprünge innerhalb des eigenen Mandanten (z. B. zurück zur Einstellungsseite).
+  return returnPath.startsWith(`/u/${tenant}/`) ? `${baseUrl}${returnPath}` : `${baseUrl}/u/${tenant}`;
 }
 
 /**
@@ -211,7 +216,7 @@ export async function startBillingCheckoutAction(
       throw new Error("Checkout konnte nicht gestartet werden.");
     }
 
-    const returnUrl = absoluteTenantUrl(tenant);
+    const returnUrl = absoluteTenantUrl(tenant, formString(formData, "returnPath"));
     const checkoutUrl = await createBillingCheckoutSession({
       tenantSlug: tenant,
       plan: normalizePlan(formString(formData, "planSelection")),
@@ -237,10 +242,120 @@ export async function openBillingPortalAction(
 
     const portalUrl = await createBillingPortalSession({
       tenantSlug: tenant,
-      returnUrl: absoluteTenantUrl(tenant),
+      returnUrl: absoluteTenantUrl(tenant, formString(formData, "returnPath")),
       intent: formString(formData, "portalIntent") === "switch-plan" ? "switch-plan" : undefined,
     });
 
     redirect(portalUrl);
   }, "Zahlungsverwaltung öffnen");
+}
+
+// ---------------------------------------------------------------------------
+// Einstellungsseite (/u/[tenant]/einstellungen) — speichert abschnittsweise
+// ohne Weiterleitung. Dieselben Service-Funktionen und Feldnamen wie der
+// bisherige Dialog.
+// ---------------------------------------------------------------------------
+
+export type SettingsSectionState = ActionState & { slug?: string };
+
+const SETTINGS_VALIDATION_MESSAGES = new Set([
+  "Unternehmensname ist erforderlich.",
+  "Diese Arbeitsbereich-URL ist nicht erlaubt.",
+  "Diese Arbeitsbereich-URL ist bereits vergeben.",
+]);
+
+export async function saveSettingsSectionAction(formData: FormData): Promise<SettingsSectionState> {
+  const tenant = formString(formData, "tenant");
+  const category = formString(formData, "category", "account");
+  let slug = tenant;
+
+  const state = await withActionErrorHandling(async () => {
+    if (!tenant) {
+      return { error: "Einstellungen konnten nicht gespeichert werden." };
+    }
+
+    try {
+      await saveSettingsPopupCategory(tenant, category, formData);
+    } catch (error) {
+      // Prüfmeldungen der Einstellungen direkt anzeigen (wie im bisherigen Dialog),
+      // ohne sie der gemeinsamen API-Fehlerliste der App hinzuzufügen.
+      if (error instanceof Error && SETTINGS_VALIDATION_MESSAGES.has(error.message)) {
+        return { error: error.message };
+      }
+
+      throw error;
+    }
+
+    if (category === "company") {
+      slug = (await getTenantSlugAfterSave(formString(formData, "tenantId"))) || tenant;
+    }
+
+    revalidatePath(`/u/${slug}`, "layout");
+  }, "Einstellungen speichern");
+
+  return slug !== tenant && !state.error ? { ...state, slug } : state;
+}
+
+/** Die URL wird beim Speichern normalisiert (slugify) — dieselbe Regel wie im Service. */
+async function getTenantSlugAfterSave(requested: string) {
+  const { slugify } = await import("@/lib/slug");
+
+  return slugify(requested);
+}
+
+export async function savePreferencesSectionAction(formData: FormData): Promise<ActionState> {
+  return withActionErrorHandling(async () => {
+    const language = formString(formData, "language", "de");
+
+    await updateOwnPreferences({
+      language,
+      timezone: formString(formData, "timezone"),
+      startPage: formString(formData, "startPage"),
+      dateFormat: formString(formData, "dateFormat"),
+      notifyVacationEvents: formBool(formData, "notifyVacationEvents"),
+      notifyShiftEvents: formBool(formData, "notifyShiftEvents"),
+      pushEnabled: formBool(formData, "pushEnabled"),
+    });
+
+    // Wie der Sprachumschalter: Sprache auch für Seiten ohne Anmeldung merken.
+    (await cookies()).set(LOCALE_COOKIE, language === "en" ? "en" : "de", {
+      maxAge: LOCALE_COOKIE_MAX_AGE_DAYS * 24 * 60 * 60,
+      path: "/",
+      sameSite: "lax",
+    });
+    revalidatePath("/", "layout");
+  }, "Einstellungen speichern");
+}
+
+export async function saveShiftSettingsSectionAction(formData: FormData): Promise<ActionState> {
+  return withActionErrorHandling(async () => {
+    const tenant = formString(formData, "tenant");
+
+    await updateTenantShiftSettings({
+      tenantSlug: tenant,
+      weekStart: formString(formData, "weekStart"),
+      minStaffing: formString(formData, "minStaffing"),
+      breakRule: formString(formData, "breakRule"),
+      presetsJson: formString(formData, "presets", "[]"),
+      defaultOpeningHoursJson: formString(formData, "defaultOpeningHours", "[]"),
+      minRestHours: formString(formData, "minRestHours"),
+      maxShiftHours: formString(formData, "maxShiftHours"),
+      overtimeWarningPercent: formString(formData, "overtimeWarningPercent"),
+      notifyOnPublish: formBool(formData, "notifyOnPublish"),
+    });
+
+    revalidatePath(`/u/${tenant}`, "layout");
+  }, "Planungseinstellungen speichern");
+}
+
+export async function saveHolidayRegionAction(input: { tenant: string; locationId: string; bundesland: string }): Promise<ActionState> {
+  return withActionErrorHandling(async () => {
+    await updateLocationHolidayRegion({
+      tenantSlug: String(input.tenant),
+      locationId: String(input.locationId),
+      bundesland: String(input.bundesland),
+    });
+
+    revalidatePath(`/u/${input.tenant}`, "layout");
+  }, "Feiertage speichern");
 }

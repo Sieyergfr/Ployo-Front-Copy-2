@@ -259,3 +259,101 @@ export async function recordTenantAudit(input: {
     },
   });
 }
+
+// ---------------------------------------------------------------------------
+// Mandantenweites Audit-Log (Seite /u/[tenant]/audit)
+// ---------------------------------------------------------------------------
+
+export type TenantAuditEntry = {
+  id: string;
+  actorId: string;
+  actor: string;
+  action: string;
+  source: string;
+  entityType: string;
+  entityId: string;
+  detail: string;
+  ipAddress: string;
+  createdAt: string;
+};
+
+export const AUDIT_PAGE_LIMIT = 1000;
+
+/**
+ * Alle Einträge eines Zeitraums, neueste zuerst — für Personen mit
+ * Leserecht auf "Audit Logs" (mandantenweit, ohne Scope). Begrenzt auf
+ * `AUDIT_PAGE_LIMIT` Einträge; `truncated` zeigt an, dass es mehr gibt.
+ */
+export async function getTenantAuditLog(input: { tenantSlug: string; sinceDays: number | null }) {
+  const access = await requireTenantAccess(input.tenantSlug, "audit", "read");
+  const since = input.sinceDays === null ? undefined : new Date(Date.now() - input.sinceDays * 86_400_000);
+  const records = await prisma.tenantAuditLog.findMany({
+    where: { tenantId: access.tenantId, ...(since ? { createdAt: { gte: since } } : {}) },
+    orderBy: { createdAt: "desc" },
+    take: AUDIT_PAGE_LIMIT + 1,
+  });
+  const settings = await prisma.tenantSettings.findUnique({
+    where: { tenantId: access.tenantId },
+    select: { auditRetentionMonths: true },
+  });
+
+  return {
+    entries: records.slice(0, AUDIT_PAGE_LIMIT).map(
+      (record): TenantAuditEntry => ({
+        id: record.id,
+        actorId: record.actorId,
+        actor: record.actorName,
+        action: record.action,
+        source: record.source,
+        entityType: record.entityType,
+        entityId: record.entityId,
+        detail: record.detail,
+        ipAddress: record.ipAddress,
+        createdAt: record.createdAt.toISOString(),
+      }),
+    ),
+    truncated: records.length > AUDIT_PAGE_LIMIT,
+    retentionMonths: settings?.auditRetentionMonths ?? 24,
+  };
+}
+
+/** CSV-Export des Audit-Logs (selbst wieder protokolliert). */
+export async function exportTenantAuditLog(input: { tenantSlug: string; sinceDays: number | null }) {
+  const access = await requireTenantAccess(input.tenantSlug, "audit", "read");
+  const { entries } = await getTenantAuditLog(input);
+  const escape = (value: string) => `"${value.replace(/"/g, '""').replace(/^[=+\-@]/, "'$&")}"`;
+  const lines = [
+    ["Zeitpunkt", "Person", "Aktion", "Bereich", "Objekt-Typ", "Objekt-ID", "Details", "IP-Adresse"].map(escape).join(";"),
+    ...entries.map((entry) =>
+      [
+        new Date(entry.createdAt).toLocaleString("de-DE", { timeZone: "Europe/Berlin" }),
+        entry.actor,
+        entry.action,
+        entry.source,
+        entry.entityType,
+        entry.entityId,
+        entry.detail,
+        entry.ipAddress,
+      ]
+        .map((value) => escape(String(value)))
+        .join(";"),
+    ),
+  ];
+
+  await recordTenantAudit({
+    tenantId: access.tenantId,
+    actorId: access.userId,
+    actorName: access.userName,
+    action: "Audit-Log exportiert",
+    source: "Audit-Log",
+    entityType: "audit-log",
+    entityId: access.tenantId,
+    detail: `${entries.length} Einträge · CSV`,
+  });
+
+  return {
+    filename: `audit-log-${new Date().toISOString().slice(0, 10)}.csv`,
+    contentType: "text/csv;charset=utf-8",
+    base64: Buffer.from(`﻿${lines.join("\r\n")}`, "utf8").toString("base64"),
+  };
+}

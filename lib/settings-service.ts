@@ -1,3 +1,4 @@
+import { BUNDESLAENDER } from "@/lib/german-holidays";
 import { auth } from "@/lib/auth";
 import { normalizeAddressInput, type AddressInput } from "@/lib/address";
 import { recordTenantAudit } from "@/lib/audit";
@@ -135,6 +136,11 @@ export async function updateTenantShiftSettings(input: {
   breakRule?: string;
   presetsJson?: string;
   defaultOpeningHoursJson?: string;
+  /** Nur von der Einstellungsseite — `undefined` lässt den Wert unverändert. */
+  minRestHours?: string;
+  maxShiftHours?: string;
+  overtimeWarningPercent?: string;
+  notifyOnPublish?: boolean;
 }) {
   const access = await requireSettingsManager(input.tenantSlug);
 
@@ -168,6 +174,13 @@ export async function updateTenantShiftSettings(input: {
       shiftBreakRule: normalizeBreakRule(input.breakRule),
       shiftPresetsJson: presets,
       defaultOpeningHoursJson: defaultOpeningHours,
+      // ArbZG: mind. 11 Std. Ruhezeit, höchstens 10 Std. am Tag — strenger ja, lockerer nicht.
+      ...(input.minRestHours !== undefined ? { minRestHours: Math.min(14, Math.max(11, normalizeInt(input.minRestHours, 11))) } : {}),
+      ...(input.maxShiftHours !== undefined ? { maxShiftHours: Math.min(10, Math.max(6, normalizeInt(input.maxShiftHours, 10))) } : {}),
+      ...(input.overtimeWarningPercent !== undefined
+        ? { overtimeWarningPercent: Math.min(50, Math.max(0, normalizeInt(input.overtimeWarningPercent, 10))) }
+        : {}),
+      ...(input.notifyOnPublish !== undefined ? { shiftNotifyOnPublish: input.notifyOnPublish } : {}),
     },
   });
 }
@@ -697,4 +710,18 @@ export async function deleteTenantInvitation(input: {
   await prisma.tenantInvitation.delete({
     where: { id: input.invitationId },
   });
+}
+
+/** Bundesland eines Standorts (bestimmt die gesetzlichen Feiertage im Schichtplan und in Reports). */
+export async function updateLocationHolidayRegion(input: { tenantSlug: string; locationId: string; bundesland: string }) {
+  const access = await requireSettingsManager(input.tenantSlug);
+  const code = BUNDESLAENDER.find((entry) => entry.code === input.bundesland)?.code ?? null;
+  const result = await prisma.tenantLocation.updateMany({
+    where: { id: input.locationId, tenantId: access.tenantId },
+    data: { bundesland: code },
+  });
+
+  if (result.count === 0) {
+    throw new Error("Standort nicht gefunden.");
+  }
 }

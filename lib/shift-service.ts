@@ -1,3 +1,4 @@
+import { computeOvertimeWarnings } from "@/lib/shift-overtime";
 import { auth } from "@/lib/auth";
 import { recordTenantAudit } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
@@ -2038,8 +2039,15 @@ export async function publishShiftWeek(input: {
       )
     : new Set(shiftsByEmployee.keys());
 
+  // Einstellung "Bei Veröffentlichung benachrichtigen" (Standard: an, wie bisher).
+  const publishSettings = await prisma.tenantSettings.findUnique({
+    where: { tenantId: access.tenantId },
+    select: { shiftNotifyOnPublish: true },
+  });
+  const notifyRecipients = publishSettings?.shiftNotifyOnPublish === false ? [] : Array.from(employeeIdsToNotify);
+
   await Promise.all(
-    Array.from(employeeIdsToNotify).map((employeeId) =>
+    notifyRecipients.map((employeeId) =>
       notifyEmployeeOfShiftPlanPublished({
         tenantId: access.tenantId,
         tenantName: tenant?.name ?? "",
@@ -2697,4 +2705,25 @@ export async function getShiftWeekAbsences(input: {
   }
 
   return result;
+}
+
+/**
+ * Überstunden-Warnung für eine Planwoche (Einstellung „Überstunden-Warnung“,
+ * `TenantSettings.overtimeWarningPercent`). Nur für Planer (shifts:write).
+ */
+export async function getShiftWeekOvertimeWarnings(input: {
+  tenantSlug: string;
+  shifts: Array<{ employeeId?: string; startTime?: string; endTime?: string; breakMinutes?: number }>;
+}) {
+  const access = await requireTenantAccess(input.tenantSlug, "shifts", "write");
+  const ids = [...new Set(input.shifts.map((shift) => shift.employeeId).filter((id): id is string => Boolean(id)))];
+
+  if (ids.length === 0) return [];
+
+  const [settings, employees] = await Promise.all([
+    prisma.tenantSettings.findUnique({ where: { tenantId: access.tenantId }, select: { overtimeWarningPercent: true } }),
+    prisma.tenantEmployee.findMany({ where: { tenantId: access.tenantId, id: { in: ids } }, select: { id: true, name: true, weeklyHours: true } }),
+  ]);
+
+  return computeOvertimeWarnings({ shifts: input.shifts, employees, thresholdPercent: settings?.overtimeWarningPercent ?? 10 });
 }
