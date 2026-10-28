@@ -131,19 +131,20 @@
   height: 1100px;
   box-sizing: border-box;
   border-radius: 9999px;
-  background: radial-gradient(circle closest-side, rgba(139, 110, 212, 0) 45%, rgba(139, 110, 212, 0.05) 70%, rgba(139, 110, 212, 0.16) 89%, rgba(122, 60, 156, 0.06) 95%, rgba(139, 110, 212, 0) 100%);
+  background: radial-gradient(circle closest-side, rgba(139, 110, 212, 0) 40%, rgba(139, 110, 212, 0.035) 62%, rgba(139, 110, 212, 0.1) 82%, rgba(139, 110, 212, 0.17) 92%, rgba(122, 60, 156, 0.07) 97%, rgba(139, 110, 212, 0) 100%);
   transform: translate(-50%, -50%) scale(0.22);
   opacity: 0;
   pointer-events: none;
-  animation: pl-ring 7.5s cubic-bezier(0.25, 0.5, 0.35, 1) infinite;
+  animation: pl-ring 4.8s linear infinite;
 }
 
+/* Drei versetzte Wellen, die nacheinander nach außen laufen. */
 .pl-ring-2 {
-  animation-delay: 2.5s;
+  animation-delay: 1.6s;
 }
 
 .pl-ring-3 {
-  animation-delay: 5s;
+  animation-delay: 3.2s;
 }
 
 @keyframes pl-ring {
@@ -151,14 +152,14 @@
     transform: translate(-50%, -50%) scale(0.22);
     opacity: 0;
   }
-  15% {
+  10% {
     opacity: 1;
   }
   55% {
-    opacity: 0.6;
+    opacity: 0.8;
   }
   100% {
-    transform: translate(-50%, -50%) scale(1);
+    transform: translate(-50%, -50%) scale(0.75);
     opacity: 0;
   }
 }
@@ -171,11 +172,11 @@
 .pl-ring-sec {
   width: 640px;
   height: 640px;
-  background: radial-gradient(circle closest-side, rgba(167, 142, 232, 0) 45%, rgba(167, 142, 232, 0.06) 70%, rgba(167, 142, 232, 0.22) 89%, rgba(167, 142, 232, 0) 100%);
+  background: radial-gradient(circle closest-side, rgba(167, 142, 232, 0) 40%, rgba(167, 142, 232, 0.045) 62%, rgba(167, 142, 232, 0.12) 82%, rgba(167, 142, 232, 0.2) 92%, rgba(167, 142, 232, 0) 100%);
 }
 
 .pl-ring-cta {
-  background: radial-gradient(circle closest-side, rgba(167, 142, 232, 0) 45%, rgba(167, 142, 232, 0.05) 70%, rgba(167, 142, 232, 0.18) 89%, rgba(167, 142, 232, 0) 100%);
+  background: radial-gradient(circle closest-side, rgba(167, 142, 232, 0) 40%, rgba(167, 142, 232, 0.04) 62%, rgba(167, 142, 232, 0.11) 82%, rgba(167, 142, 232, 0.18) 92%, rgba(167, 142, 232, 0) 100%);
 }
 
 /* ─── Buttons ─────────────────────────────────────────── */
@@ -885,17 +886,14 @@
   }
 
   .pl-ring {
-    animation: none;
-    opacity: 0.8;
-    transform: translate(-50%, -50%) scale(0.5);
+    animation-duration: 9.6s;
   }
 
   .pl-ring-2 {
-    transform: translate(-50%, -50%) scale(0.72);
+    animation-delay: 3.2s;
   }
 
   .pl-ring-3 {
-    transform: translate(-50%, -50%) scale(0.95);
-    opacity: 0.5;
+    animation-delay: 6.4s;
   }
 }
