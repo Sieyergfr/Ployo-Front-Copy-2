@@ -5,31 +5,12 @@ import {
   addReportRecipient,
   exportHoursReport,
   isReportFormat,
-  parseReportFilters,
+  parseReportFiltersFromQuery,
   removeReportRecipient,
   sendHoursReport,
-  type ReportFilters,
 } from "@/lib/reports-service";
 import { exportReportAnalytics, isAnalyticsTab } from "@/lib/report-analytics";
 import { revalidatePath } from "next/cache";
-
-/**
- * Die Filter kommen als Query-String der Seite (dieselbe Quelle wie beim
- * Rendern) und werden hier erneut geparst — der Client kann also nichts
- * anderes anfordern, als er über die URL ohnehin sehen dürfte.
- */
-function filtersFromQuery(query: string): ReportFilters {
-  const params = new URLSearchParams(typeof query === "string" ? query.slice(0, 20_000) : "");
-  const record: Record<string, string | string[]> = {};
-
-  for (const key of new Set(params.keys())) {
-    const values = params.getAll(key);
-    record[key] = values.length > 1 ? values : values[0];
-  }
-
-  // Ohne "date" setzt der Service den heutigen Tag in der Zeitzone des Betriebs ein.
-  return parseReportFilters(record, typeof record.date === "string" ? record.date : "");
-}
 
 type ExportPayload = {
   tenant: string;
@@ -46,7 +27,7 @@ export async function exportHoursReportAction(
   const state = await withActionErrorHandling(async () => {
     file = await exportHoursReport({
       tenantSlug: String(input.tenant),
-      filters: filtersFromQuery(input.query),
+      filters: parseReportFiltersFromQuery(input.query),
       overrides: input.overrides,
       format: isReportFormat(input.format) ? input.format : "xlsx",
     });
@@ -64,7 +45,7 @@ export async function sendHoursReportAction(
     const tenant = String(input.tenant);
     const result = await sendHoursReport({
       tenantSlug: tenant,
-      filters: filtersFromQuery(input.query),
+      filters: parseReportFiltersFromQuery(input.query),
       overrides: input.overrides,
       format: isReportFormat(input.format) ? input.format : "xlsx",
       recipients: Array.isArray(input.recipients) ? input.recipients.map(String).slice(0, 50) : [],

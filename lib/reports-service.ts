@@ -115,6 +115,24 @@ export function parseReportFilters(params: SearchParams, today: string): ReportF
   };
 }
 
+/**
+ * Filter aus einem Query-String (Dashboard-Actions, App-API) — dieselbe
+ * Quelle wie beim Rendern, der Client kann also nichts anderes anfordern,
+ * als er über die URL ohnehin sehen dürfte. Ohne "date" setzt der Service
+ * den heutigen Tag in der Zeitzone des Betriebs ein.
+ */
+export function parseReportFiltersFromQuery(query: unknown): ReportFilters {
+  const params = new URLSearchParams(typeof query === "string" ? query.slice(0, 20_000) : "");
+  const record: Record<string, string | string[]> = {};
+
+  for (const key of new Set(params.keys())) {
+    const values = params.getAll(key);
+    record[key] = values.length > 1 ? values : values[0];
+  }
+
+  return parseReportFilters(record, typeof record.date === "string" ? record.date : "");
+}
+
 /** Gegenstück zu `parseReportFilters` — für Links (blättern) und den Client. */
 export function reportFiltersToParams(filters: ReportFilters): URLSearchParams {
   const params = new URLSearchParams({ mode: filters.mode, period: filters.period, night: filters.nightStart });
