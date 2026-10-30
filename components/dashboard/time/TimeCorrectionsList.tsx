@@ -1,5 +1,8 @@
 "use client";
 
+import { useDatePreference } from "@/components/DatePreferences";
+import { preferredDateFormatter } from "@/lib/date-picker";
+
 import { decideTimeCorrectionAction } from "@/app/(dashboard)/u/[tenant]/zeiterfassung/actions";
 import { dbInputClass } from "@/components/dashboard/DbDrawer";
 import { useActionStateWithToast } from "@/components/Toasts";
@@ -60,8 +63,9 @@ export default function TimeCorrectionsList({
 }) {
   const t = useTranslations("TimeUi.corrections");
   const locale = useLocale();
-  const day = new Intl.DateTimeFormat(locale === "en" ? "en-GB" : "de-DE", { weekday: "short", day: "2-digit", month: "2-digit", timeZone: "UTC" });
-  const dateTime = new Intl.DateTimeFormat(locale === "en" ? "en-GB" : "de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  const datePreference = useDatePreference();
+  const day = preferredDateFormatter(datePreference, locale === "en" ? "en-GB" : "de-DE", { weekday: "short", day: "2-digit", month: "2-digit", timeZone: "UTC" });
+  const dateTime = preferredDateFormatter(datePreference, locale === "en" ? "en-GB" : "de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
   const pending = requests.filter((request) => request.status === "pending");
   const decided = requests.filter((request) => request.status !== "pending").slice(0, 20);
 

@@ -91,7 +91,7 @@ interface NotificationChannel {
     preference: UserNotificationPreference,
     tenantSettings: TenantChannelSettings,
   ): Promise<boolean>;
-  send(event: ResolvedNotificationEvent): Promise<void>;
+  send(event: ResolvedNotificationEvent): Promise<void | boolean>;
 }
 
 const emailChannel: NotificationChannel = {
@@ -133,7 +133,7 @@ const pushChannel: NotificationChannel = {
 
     const tokens = subscriptions.map((subscription) => subscription.token).filter(isExpoPushToken);
 
-    if (tokens.length === 0) return;
+    if (tokens.length === 0) return false;
 
     // Deep-Link-Referenz mitschicken: die App öffnet damit denselben Screen,
     // den auch die Zeile im In-App-Posteingang ansteuert (src/lib/push.ts).
@@ -169,6 +169,7 @@ const pushChannel: NotificationChannel = {
         where: { userId: event.userId, token: { in: staleTokens } },
       });
     }
+    return results.some((result) => result.ok);
   },
 };
 
@@ -215,7 +216,8 @@ function isCategoryEnabledForUser(category: NotificationCategory, preference: Us
   return true;
 }
 
-export async function dispatchNotification(event: NotificationEvent) {
+/** Liefert die erfolgreich an den jeweiligen Versandkanal übergebenen Kanäle zurück. */
+export async function dispatchNotification(event: NotificationEvent): Promise<NotificationChannelName[]> {
   const [preference, settings] = await Promise.all([
     prisma.userPreference.findUnique({
       where: { userId: event.userId },
@@ -238,7 +240,7 @@ export async function dispatchNotification(event: NotificationEvent) {
   };
 
   if (!isCategoryEnabledForUser(event.category, preference)) {
-    return;
+    return [];
   }
 
   // Sprache des EMPFAENGERS, nicht die des Requests: derselbe Vorgang kann
@@ -247,6 +249,7 @@ export async function dispatchNotification(event: NotificationEvent) {
   const rendered = renderNotification(event.message, locale);
   const resolved: ResolvedNotificationEvent = { ...event, ...rendered, locale };
 
+  const delivered: NotificationChannelName[] = [];
   for (const channel of channels) {
     if (event.channels && !event.channels.includes(channel.name)) {
       continue;
@@ -254,7 +257,7 @@ export async function dispatchNotification(event: NotificationEvent) {
 
     try {
       if (await channel.isEnabledFor(resolved, preference, tenantSettings)) {
-        await channel.send(resolved);
+        if (await channel.send(resolved) !== false) delivered.push(channel.name);
       }
     } catch (error) {
       // Ein Kanal (typischerweise E-Mail, abhängig vom externen SMTP-Server)
@@ -269,4 +272,5 @@ export async function dispatchNotification(event: NotificationEvent) {
       });
     }
   }
+  return delivered;
 }

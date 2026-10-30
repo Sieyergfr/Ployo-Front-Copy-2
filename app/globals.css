@@ -246,11 +246,11 @@ body {
 }
 
 @utility btn {
-  @apply inline-flex cursor-pointer items-center justify-center gap-2 rounded-btn px-[18px] py-[10px] text-[14px] font-semibold transition-all duration-150 active:scale-[0.98];
+  @apply inline-flex min-h-9 shrink-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-btn px-3 py-2 text-[13px] leading-4 font-semibold transition-all duration-150 active:scale-[0.98];
 }
 
 @utility btn-sm {
-  @apply gap-[7px] px-[18px] py-[9px] text-[13px] font-medium;
+  @apply min-h-8 gap-1.5 px-2.5 py-1.5 text-[12px] leading-4 font-medium;
 }
 
 @utility btn-block {
@@ -521,4 +521,55 @@ body {
     opacity: 0;
     transform: translate(14px, 10px) scale(0.98);
   }
+}
+
+/* Einheitliche, zurückhaltende Scrollleisten in Dialogen und ihren Listen. */
+:where([role="dialog"], dialog, [role="dialog"] *, dialog *) {
+  scrollbar-width: thin;
+  scrollbar-color: #c7c5bf transparent;
+}
+:where([role="dialog"], dialog, [role="dialog"] *, dialog *)::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+:where([role="dialog"], dialog, [role="dialog"] *, dialog *)::-webkit-scrollbar-track {
+  background: transparent;
+  margin-block: 12px;
+}
+:where([role="dialog"], dialog, [role="dialog"] *, dialog *)::-webkit-scrollbar-thumb {
+  background: #c7c5bf;
+  border-radius: 999px;
+}
+:where([role="dialog"], dialog, [role="dialog"] *, dialog *)::-webkit-scrollbar-thumb:hover {
+  background: #9a9892;
+}
+:where([role="dialog"], dialog, [role="dialog"] *, dialog *)::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+:where([role="dialog"], dialog, [role="dialog"] *, dialog *)::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Der Rahmen rückt die Scrollleiste ein; der Inhaltsabstand bleibt 24px. */
+.popup-scroll-inset {
+  border: 6px solid white;
+  padding: 18px;
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+}
+
+/* Formularfelder dürfen sich in schmalen Dialogen unter ihre Inhaltsbreite verkleinern. */
+:where([role="dialog"]) .field { min-width: 0; }
+:where([role="dialog"]) :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) { min-width: 0; max-width: 100%; }
+
+/* Formularaktionen umbrechen als ganze Buttons, statt Beschriftungen zu stapeln. */
+:where(form) .flex:has(> .btn) {
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.btn > svg {
+  flex-shrink: 0;
 }

@@ -94,7 +94,7 @@ export default function BillingGateDialog({
       aria-labelledby="billing-gate-title"
     >
       <div
-        className={`max-h-[calc(100%-24px)] w-full overflow-y-auto rounded-[18px] border border-[#ecebe7] bg-white p-6 shadow-[0_24px_80px_rgba(0,0,0,0.22),0_20px_50px_-20px_rgba(139,110,212,0.5)] ${
+        className={`popup-scroll-inset max-h-[calc(100%-24px)] w-full overflow-y-auto rounded-[18px] border border-[#ecebe7] bg-white p-6 shadow-[0_24px_80px_rgba(0,0,0,0.22),0_20px_50px_-20px_rgba(139,110,212,0.5)] ${
           showPlans ? "max-w-[800px]" : "max-w-[460px]"
         }`}
       >

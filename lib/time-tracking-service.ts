@@ -545,9 +545,42 @@ export async function performMyClockAction(input: {
     const now = new Date();
     const openEntry = await tx.tenantTimeEntry.findFirst({
       where: { employeeId, clockOutAt: null },
-      select: { id: true, breaks: { where: { endAt: null }, select: { id: true } } },
+      select: { id: true, clockInLocationId: true, shiftLocation: true, breaks: { where: { endAt: null }, select: { id: true } } },
     });
     const openBreak = openEntry?.breaks[0] ?? null;
+    const employee = await tx.tenantEmployee.findUniqueOrThrow({
+      where: { id: employeeId }, select: { name: true, location: true },
+    });
+    // QR wins over a planned/home location. Never guess among multiple locations.
+    let activityLocationId = scannedLocation?.id ?? openEntry?.clockInLocationId ?? null;
+    const plannedLocation = clockableShift?.location || openEntry?.shiftLocation;
+    const locationName = plannedLocation || employee.location;
+    if (!activityLocationId && locationName) {
+      const matches = await tx.tenantLocation.findMany({
+        where: { tenantId, name: locationName }, select: { id: true }, take: 2,
+      });
+      if (matches.length === 1) activityLocationId = matches[0].id;
+    }
+    if (!activityLocationId && !plannedLocation) {
+      const memberships = await tx.tenantLocationMember.findMany({
+        where: { employeeId, location: { tenantId } }, select: { locationId: true }, take: 2,
+      });
+      if (memberships.length === 1) activityLocationId = memberships[0].locationId;
+    }
+    const recordActivity = async () => {
+      if (!activityLocationId) return;
+      const texts: Record<ClockAction, string> = {
+        clockIn: "hat sich eingestempelt",
+        clockOut: "hat sich ausgestempelt",
+        breakStart: "hat eine Pause begonnen",
+        breakEnd: "hat die Pause beendet",
+      };
+      await tx.tenantLocationActivity.create({ data: {
+        tenantId, locationId: activityLocationId, actor: employee.name,
+        text: texts[input.action], tone: input.action === "clockIn" || input.action === "breakEnd" ? "success" : "ink",
+        createdAt: now,
+      } });
+    };
 
     switch (input.action) {
       case "clockIn": {
@@ -567,6 +600,7 @@ export async function performMyClockAction(input: {
             clockInLocationName: scannedLocation?.name ?? "",
           },
         });
+        await recordActivity();
         return;
       }
       case "clockOut": {
@@ -585,6 +619,7 @@ export async function performMyClockAction(input: {
               : {}),
           },
         });
+        await recordActivity();
         return;
       }
       case "breakStart": {
@@ -592,6 +627,7 @@ export async function performMyClockAction(input: {
         if (openBreak) throw new Error(TIME_TRACKING_ERRORS.breakRunning);
 
         await tx.tenantTimeBreak.create({ data: { timeEntryId: openEntry.id, startAt: now } });
+        await recordActivity();
         return;
       }
       case "breakEnd": {
@@ -599,6 +635,7 @@ export async function performMyClockAction(input: {
         if (!openBreak) throw new Error(TIME_TRACKING_ERRORS.noBreak);
 
         await tx.tenantTimeBreak.update({ where: { id: openBreak.id }, data: { endAt: now } });
+        await recordActivity();
         return;
       }
     }

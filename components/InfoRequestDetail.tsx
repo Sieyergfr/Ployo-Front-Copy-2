@@ -3,7 +3,8 @@
 import { RightDrawer } from "@/components/ActionDrawers";
 import { OwnerFileActions } from "@/components/OwnerFileActions";
 import type { InfoRequest, InfoRequestStatus } from "@/lib/employees";
-import { CheckCircle2, Clock, FileText, MessageSquare, XCircle } from "lucide-react";
+import { useToast } from "@/components/Toasts";
+import { Bell, CheckCircle2, Clock, FileText, MessageSquare, XCircle } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState, type ReactNode } from "react";
 
@@ -43,13 +44,29 @@ const statusIcons: Record<InfoRequestStatus, ReactNode> = {
 export function InfoRequestRow({
   request,
   tenant,
+  canRemind = false,
 }: {
   request: InfoRequest;
   tenant: string;
+  canRemind?: boolean;
 }) {
   const t = useTranslations("InfoRequestDetail");
   const statusLabels = getStatusLabels(t);
   const [open, setOpen] = useState(false);
+  const [reminding, setReminding] = useState(false);
+  const [reminded, setReminded] = useState(false);
+  const { toast } = useToast();
+  const remind = async () => {
+    setReminding(true);
+    try {
+      const response = await fetch(`/api/tenants/${encodeURIComponent(tenant)}/info-requests/${encodeURIComponent(request.id)}/remind`, { method: "POST" });
+      const result = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(result?.error || t("reminderError"));
+      setReminded(true);
+      toast({ tone: "success", title: t("reminderSent") });
+    } catch (error) { toast({ tone: "error", title: error instanceof Error ? error.message : t("reminderError") }); }
+    finally { setReminding(false); }
+  };
 
   return (
     <>
@@ -98,6 +115,12 @@ export function InfoRequestRow({
           onClose={() => setOpen(false)}
         >
           <div className="flex flex-col gap-4">
+            {canRemind && request.status === "open" && (
+              <button type="button" className="btn btn-secondary" disabled={reminding || reminded} onClick={remind}>
+                <Bell size={15} />
+                {reminding ? t("reminderSending") : reminded ? t("reminderSent") : t("sendReminder")}
+              </button>
+            )}
             <div className="flex flex-wrap items-center gap-2">
               <span
                 className={`inline-flex items-center gap-1.5 rounded-[7px] border px-2.5 py-1 font-mono text-[11px] font-semibold ${statusClassNames[request.status]}`}

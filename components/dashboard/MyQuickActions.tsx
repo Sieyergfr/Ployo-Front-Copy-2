@@ -1,5 +1,7 @@
 "use client";
 
+import DatePickerField from "@/components/DatePickerField";
+
 import { DbDrawer, DbField, dbInputClass } from "@/components/dashboard/DbDrawer";
 import { DbCtaButton } from "@/components/dashboard/ui";
 import { useToast } from "@/components/Toasts";
@@ -144,7 +146,7 @@ export function TimeCorrectionForm({
   return (
     <form className="flex flex-col gap-4" onSubmit={onSubmit}>
       <DbField label={t("date")}>
-        <input name="date" type="date" required max={todayIso()} defaultValue={defaults?.date ?? todayIso()} className={dbInputClass} />
+        <DatePickerField name="date" required max={todayIso()} defaultValue={defaults?.date ?? todayIso()} inputClassName={dbInputClass} />
       </DbField>
       <div className="grid grid-cols-2 gap-3">
         <DbField label={t("clockIn")}>
@@ -211,10 +213,10 @@ function VacationForm({ tenant, remaining, onDone }: { tenant: string; remaining
       </p>
       <div className="grid grid-cols-2 gap-3">
         <DbField label={t("from")}>
-          <input name="startDate" type="date" required min={todayIso()} className={dbInputClass} />
+          <DatePickerField name="startDate" required min={todayIso()} inputClassName={dbInputClass} />
         </DbField>
         <DbField label={t("until")}>
-          <input name="endDate" type="date" required min={todayIso()} className={dbInputClass} />
+          <DatePickerField name="endDate" required min={todayIso()} inputClassName={dbInputClass} />
         </DbField>
       </div>
       <DbField label={t("noteOptional")}>
@@ -261,10 +263,10 @@ function SicknessForm({ tenant, onDone }: { tenant: string; onDone: () => void }
     <form className="flex flex-col gap-4" onSubmit={onSubmit}>
       <div className="grid grid-cols-2 gap-3">
         <DbField label={t("from")}>
-          <input name="startDate" type="date" required defaultValue={todayIso()} className={dbInputClass} />
+          <DatePickerField name="startDate" required defaultValue={todayIso()} inputClassName={dbInputClass} />
         </DbField>
         <DbField label={t("untilOptional")}>
-          <input name="endDate" type="date" className={dbInputClass} />
+          <DatePickerField name="endDate" inputClassName={dbInputClass} />
         </DbField>
       </div>
       <DbField label={t("certificate")} hint={t("certificateHint")}>
@@ -295,7 +297,7 @@ function WishFreeForm({ tenant, onDone }: { tenant: string; onDone: () => void }
   return (
     <form className="flex flex-col gap-4" onSubmit={onSubmit}>
       <DbField label={t("date")}>
-        <input name="date" type="date" required min={todayIso()} className={dbInputClass} />
+        <DatePickerField name="date" required min={todayIso()} inputClassName={dbInputClass} />
       </DbField>
       <DbField label={t("reasonOptional")}>
         <input name="reason" maxLength={300} className={dbInputClass} />

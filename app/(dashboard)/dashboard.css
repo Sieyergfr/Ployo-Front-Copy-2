@@ -505,3 +505,7 @@ button.db-sp-stat:hover{transform:translateY(-1px);box-shadow:0 8px 18px -12px r
 .db-side{transition:none}
 .db-live::after{animation:none;opacity:0}
 }
+
+.db-modal.popup-scroll-inset{border:6px solid #fff;padding:18px;scrollbar-gutter:stable;overscroll-behavior:contain}
+
+.db-modal.popup-scroll-inset{overflow-x:hidden}

@@ -36,8 +36,8 @@ import {
  * Einteilen durch die Planung (Überschneidung, Ruhezeit, Höchstarbeitszeit,
  * Jugend-/Mutterschutz).
  *
- * Die App kennt Angebote noch nicht (`/api/me/shift-offers` ist vorbereitet);
- * bis zum App-Update lassen sie sich im Web unter "Mein Bereich" annehmen.
+ * Web und App verwenden denselben Ablauf: Angebote in "Mein Bereich" bzw.
+ * auf Home/unter "Plan → Angebote" beantworten; die App-API delegiert hierher.
  */
 
 function isoDate(date: Date) {

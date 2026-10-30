@@ -1,17 +1,19 @@
 "use client";
 
+import DatePickerField from "@/components/DatePickerField";
+
 import { createEmployeeAction } from "@/app/(dashboard)/u/[tenant]/employees/actions";
 import { DbField, DbModal, dbInputClass } from "@/components/dashboard/DbDrawer";
 import { DbCtaButton } from "@/components/dashboard/ui";
 import { FieldErrors, FormErrorBanner } from "@/components/FormFeedback";
 import { LocationMultiSelectDropdown } from "@/components/TeamEditControls";
 import type { ActionState } from "@/lib/action-state";
-import { Smartphone, UserPlus } from "lucide-react";
+import { ChevronDown, Smartphone, UserPlus } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useActionState, useState } from "react";
 
 const initialState: ActionState = {};
-const contractOptions = ["Unbefristet", "Teilzeit", "Befristet", "Werkstudentin"] as const;
+const contractOptions = ["Unbefristet", "Teilzeit", "Befristet", "Werkstudentin", "Minijob", "Midijob", "Kurzfristig", "Ausbildung", "Praktikum"] as const;
 
 function Step({ number, title }: { number: number; title: string }) {
   return (
@@ -41,14 +43,12 @@ function CreateEmployeeForm({
 }) {
   const t = useTranslations("EmployeesUi.create");
   const [state, formAction, isPending] = useActionState(createEmployeeAction, initialState);
-  const [contract, setContract] = useState<string>("Unbefristet");
   const [email, setEmail] = useState("");
   const freeSeats = seats.limit !== null ? Math.max(0, seats.limit - seats.used) : null;
 
   return (
     <form action={formAction} className="flex flex-col gap-4">
       <input type="hidden" name="tenant" value={tenant} />
-      <input type="hidden" name="contract" value={contract} />
       <Step number={1} title={t("person")} />
       <div className="grid gap-3 sm:grid-cols-2">
         <DbField label={`${t("firstName")} *`}>
@@ -102,44 +102,38 @@ function CreateEmployeeForm({
           ))}
         </select>
       </DbField>
-      <div className="flex flex-col gap-1.5">
-        <span className="font-mono text-[10px] tracking-[0.08em] text-[#6e6e6b] uppercase">{t("contract")}</span>
-        <div role="radiogroup" className="grid grid-cols-2 gap-1 rounded-[10px] bg-[#f2f1ed] p-1 sm:grid-cols-4">
-          {contractOptions.map((option) => (
-            <button
-              key={option}
-              type="button"
-              role="radio"
-              aria-checked={contract === option}
-              onClick={() => setContract(option)}
-              className={`min-h-9 cursor-pointer rounded-[8px] text-[13.5px] font-medium ${contract === option ? "bg-white text-ink shadow-[0_1px_2px_rgba(14,14,14,0.08)]" : "text-[#6e6e6b]"}`}
-            >
-              {t(`contracts.${option}`)}
-            </button>
-          ))}
-        </div>
-      </div>
+      <DbField label={t("contract")}>
+        <span className="relative block min-w-0">
+          <select
+            name="contract"
+            defaultValue="Unbefristet"
+            className={`${dbInputClass} cursor-pointer appearance-none pr-10`}
+          >
+            {contractOptions.map((option) => (
+              <option key={option} value={option}>{t(`contracts.${option}`)}</option>
+            ))}
+          </select>
+          <ChevronDown size={15} aria-hidden="true" className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-[#9a9a96]" />
+        </span>
+      </DbField>
       <div className="grid gap-3 sm:grid-cols-2">
         <DbField label={t("startDate")}>
-          <input name="startDate" type="date" className={dbInputClass} />
+          <DatePickerField name="startDate" inputClassName={dbInputClass} />
         </DbField>
         <DbField label={t("employeeNumber")}>
           <input name="employeeNumber" readOnly value={employeeNumberPreview} aria-readonly="true" className={`${dbInputClass} text-[#6e6e6b]`} />
         </DbField>
       </div>
       <FormErrorBanner message={state.error} />
-      <div className="-mx-6 mt-1 -mb-6 flex flex-wrap items-center justify-between gap-3 border-t border-[#ecebe7] px-6 py-4">
+      <div className="mt-1 flex flex-wrap items-center justify-between gap-3 border-t border-[#ecebe7] pt-4">
         {freeSeats !== null ? (
-          <span className="flex items-center gap-2.5 text-[13px] text-[#6e6e6b]">
-            <span className="h-1 w-14 overflow-hidden rounded-full bg-[#f2f1ed]">
-              <span className="block h-full rounded-full bg-[#8b6ed4]" style={{ width: `${Math.min(100, (seats.used / Math.max(1, seats.limit ?? 1)) * 100)}%` }} />
-            </span>
+          <span className="text-[13px] text-[#6e6e6b]">
             {t("freeSeats", { count: freeSeats })}
           </span>
         ) : (
           <span />
         )}
-        <span className="flex gap-2">
+        <span className="flex min-w-0 flex-wrap gap-2">
           <button
             type="button"
             onClick={onCancel}

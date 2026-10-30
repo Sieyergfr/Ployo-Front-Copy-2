@@ -1,7 +1,8 @@
+import { DatePreferencesProvider } from "@/components/DatePreferences";
 import DashboardShell from "@/components/navigation/DashboardShell";
 import type { NavigationTenantItem } from "@/components/navigation/types";
 import { auth } from "@/lib/auth";
-import { getOwnScheduledDeletion } from "@/lib/account-service";
+import { getOwnScheduledDeletion, getOwnPreferences } from "@/lib/account-service";
 import { computePermissionLevels } from "@/lib/tenant-access";
 import { getTenantsForUser } from "@/lib/tenants";
 import { getTranslations } from "next-intl/server";
@@ -125,7 +126,9 @@ export default async function AuthLayout ({
           : undefined,
     }));
 
+    const preferences = await getOwnPreferences();
     return (
+        <DatePreferencesProvider format={preferences.dateFormat}>
         <DashboardShell
             tenants={tenants}
             user={{
@@ -136,5 +139,6 @@ export default async function AuthLayout ({
         >
             {children}
         </DashboardShell>
+        </DatePreferencesProvider>
     )
 }

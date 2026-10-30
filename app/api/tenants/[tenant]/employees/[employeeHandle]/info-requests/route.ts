@@ -31,6 +31,7 @@ export async function POST(
     title?: string;
     message?: string;
     dueAt?: string;
+    dueTime?: string;
     fileRequested?: boolean;
     /** Mehrteilige Anfrage (M7): `[{ kind: "document" | "field", label, required }]`. */
     items?: Array<{ kind?: "document" | "field"; label?: string; required?: boolean }>;
@@ -58,6 +59,7 @@ export async function POST(
       title: body?.title ?? "",
       message: body?.message,
       dueAt: body?.dueAt,
+      dueTime: body?.dueTime,
       fileRequested: Boolean(body?.fileRequested),
       items: Array.isArray(body?.items) ? body.items : undefined,
     });

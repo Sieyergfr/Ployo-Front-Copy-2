@@ -3,7 +3,7 @@ import AuthShell from "@/components/auth/AuthShell";
 import { avatarColor } from "@/components/dashboard/ui";
 import { LocaleSwitcher } from "@/components/LocaleSwitcher";
 import { auth } from "@/lib/auth";
-import { getOwnPreferences, getOwnScheduledDeletion, startPagePath } from "@/lib/account-service";
+import { getOwnScheduledDeletion } from "@/lib/account-service";
 import { declineInvitationAction, remindOwnerAction } from "@/app/actions/self-service-requests";
 import SelfServiceRequestButton from "@/components/SelfServiceRequestButton";
 import { getTenantSelectOverview, type TenantSelectEntry } from "@/lib/tenant-select";
@@ -113,9 +113,8 @@ export default async function TenantSelectPage() {
     redirect("/konto-loeschung");
   }
 
-  const [overview, preference, t, tRole, tFooter] = await Promise.all([
+  const [overview, t, tRole, tFooter] = await Promise.all([
     getTenantSelectOverview({ id: session.user.id, email: session.user.email }),
-    getOwnPreferences(),
     getTranslations("Auth.select"),
     getTranslations("DashboardLayout"),
     getTranslations("Auth.footer"),
@@ -192,7 +191,7 @@ export default async function TenantSelectPage() {
         <section className="au-card overflow-hidden rounded-[16px] p-1.5">
           <ul className="m-0 list-none p-0">
             {overview.tenants.map((tenant) => (
-              <TenantRow key={tenant.id} tenant={tenant} href={startPagePath(tenant.slug, preference.startPage)} t={t} tRole={tRole} />
+              <TenantRow key={tenant.id} tenant={tenant} href={`/u/${tenant.slug}`} t={t} tRole={tRole} />
             ))}
           </ul>
           <Link

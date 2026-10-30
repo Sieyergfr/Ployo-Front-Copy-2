@@ -148,7 +148,7 @@ function CreateTeamModal({
                 }`}
                 style={{ background: paletteHex(entry.className), ["--tw-ring-color" as string]: paletteHex(entry.className) }}
               >
-                <Check size={13} strokeWidth={3} />
+                {color === entry.value && <Check size={13} strokeWidth={3} aria-hidden="true" />}
               </button>
             ))}
           </div>
@@ -202,12 +202,14 @@ function CreateTeamModal({
 
 export default function CreateTeamButton({
   tenant,
+  initialOpen = false,
   employees,
   locations,
   className,
   children,
 }: {
   tenant: string;
+  initialOpen?: boolean;
   employees: DropdownOption[];
   locations: string[];
   className?: string;
@@ -215,7 +217,7 @@ export default function CreateTeamButton({
   children?: React.ReactNode;
 }) {
   const t = useTranslations("CreateTeamButton");
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(initialOpen);
 
   return (
     <>

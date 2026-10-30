@@ -8,6 +8,8 @@ export type EmployeeStatus = "active" | "vacation" | "absent" | "former";
 export const CONTRACT_FILE_NOT_UPLOADED = "noch nicht hochgeladen";
 
 export type EmployeeFileFolder = {
+  accessRoleIds?: string[];
+  pinned?: boolean;
   name: string;
   fileCount: number;
   locked?: boolean;
@@ -17,6 +19,7 @@ export type EmployeeFileFolder = {
 };
 
 export type EmployeeFile = {
+  version?: number;
   name: string;
   folder: string;
   /** Ordnerpfad (TenantFile.folderSlug); leer = Home-Ebene der Akte. */

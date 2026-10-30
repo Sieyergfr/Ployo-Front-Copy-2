@@ -509,7 +509,7 @@ async function main() {
       await tx.tenantSettings.create({
         data: {
           tenantId, companyAddressId: companyAddress.id, taxId: "DE999999999", defaultLocationId: ids.loc.altstadt,
-          workHours: "40 Stunden pro Woche", vacationDays: 30, shiftMinStaffing: 3, shiftBreakRule: "30-6", minRestHours: 11, maxShiftHours: 10,
+          workHours: 40, vacationDays: 30, shiftMinStaffing: 3, shiftBreakRule: "30-6", minRestHours: 11, maxShiftHours: 10,
           shiftPresetsJson: Object.entries(SHIFTS).map(([id, s]) => ({ id, label: s.label, start: s.start, end: s.end, pause: `${s.brk}m` })),
           defaultOpeningHoursJson: LOCATIONS.verwaltung.hours as Prisma.InputJsonValue,
           employeeNumberRequired: true, employeeNumberPrefix: "MA-",

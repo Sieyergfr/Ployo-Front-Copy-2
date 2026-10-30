@@ -213,6 +213,7 @@ export type SelfServiceInfoRequest = {
   id: string;
   title: string;
   message: string;
+  originalMessage?: string;
   requestedBy: string;
   requestedAt: string;
   dueAt: string | null;
@@ -450,6 +451,7 @@ export async function getMySelfServiceOverview(
       title: request.title,
       // TODO(app-multi-item-requests): Elemente als Aufzählung für die alte App.
       message: legacyInfoRequestMessage(request.message, request.items.map(toItemView)),
+      originalMessage: request.message,
       items: request.items.map(toItemView),
       requestedBy: request.requestedBy,
       requestedAt: request.createdAt.toISOString(),
@@ -999,6 +1001,7 @@ function toSelfServiceInfoRequest(
     id: request.id,
     title: request.title,
     message: legacyInfoRequestMessage(request.message, items),
+    originalMessage: request.message,
     requestedBy: request.requestedBy,
     requestedAt: request.createdAt.toISOString(),
     dueAt: request.dueAt ? request.dueAt.toISOString() : null,

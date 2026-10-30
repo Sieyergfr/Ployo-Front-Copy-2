@@ -23,6 +23,8 @@ export type LocationActivity = {
 };
 
 export type LocationFileFolder = {
+  accessRoleIds?: string[];
+  pinned?: boolean;
   name: string;
   fileCount: number;
   locked?: boolean;
@@ -30,6 +32,7 @@ export type LocationFileFolder = {
 };
 
 export type LocationFile = {
+  version?: number;
   name: string;
   folder: string;
   /** Ordnerpfad (TenantFile.folderSlug); leer = Home-Ebene des Standorts. */

@@ -51,6 +51,9 @@ export function OpeningHoursEditor({
 }: OpeningHoursEditorProps) {
   const t = useTranslations("OpeningHoursEditor");
   const [days, setDays] = useState<OpeningHoursDay[]>(() => withDefaults(defaultValue));
+  const [bulkDays, setBulkDays] = useState<OpeningHoursWeekday[]>(["Mo", "Di", "Mi", "Do", "Fr"]);
+  const [bulkMode, setBulkMode] = useState<OpeningHoursMode>("custom");
+  const [bulkRange, setBulkRange] = useState<OpeningHoursRange>({ ...DEFAULT_RANGE });
   const [useCustom, setUseCustom] = useState(!allowInherit || initiallyCustom);
 
   function updateDay(weekday: OpeningHoursWeekday, patch: Partial<OpeningHoursDay>) {
@@ -121,6 +124,27 @@ export function OpeningHoursEditor({
       ) : (
         <>
           <input type="hidden" name={name} value={JSON.stringify(days)} form={formId} />
+          <details className="rounded-xl border border-[#d9d0ee] bg-[#f7f5fb] p-3">
+            <summary className="cursor-pointer text-[13px] font-semibold text-[#6b4fc4]">{t("bulkTitle")}</summary>
+            <div className="mt-3 flex flex-col gap-3">
+              <div className="flex flex-wrap gap-2">
+                {(["weekdays", "weekend", "allDays"] as const).map((group) => <button key={group} type="button" className="rounded-lg border border-border bg-white px-3 py-2 text-[12px]" onClick={() => setBulkDays(group === "weekdays" ? ["Mo", "Di", "Mi", "Do", "Fr"] : group === "weekend" ? ["Sa", "So"] : [...OPENING_HOURS_WEEKDAYS])}>{t(group)}</button>)}
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {OPENING_HOURS_WEEKDAYS.map((day) => <button key={day} type="button" aria-label={WEEKDAY_LABELS[day]} aria-pressed={bulkDays.includes(day)} className={`min-h-10 min-w-10 rounded-lg border px-2 text-[12px] font-semibold ${bulkDays.includes(day) ? "border-[#8b6ed4] bg-[#8b6ed4] text-white" : "border-border bg-white text-ink"}`} onClick={() => setBulkDays((current) => current.includes(day) ? current.filter((item) => item !== day) : [...current, day])}>{day}</button>)}
+              </div>
+              <select aria-label={t("bulkMode")} value={bulkMode} onChange={(event) => setBulkMode(event.target.value as OpeningHoursMode)} className="input bg-white">
+                <option value="custom">{t("modeCustom")}</option><option value="closed">{t("modeClosed")}</option><option value="24h">{t("mode24h")}</option>
+              </select>
+              {bulkMode === "custom" && <div className="grid grid-cols-2 gap-2">
+                <label className="field"><span className="label">{t("bulkStart")}</span><input type="time" value={bulkRange.start} className="input bg-white" onChange={(event) => setBulkRange((range) => ({ ...range, start: event.target.value }))} /></label>
+                <label className="field"><span className="label">{t("bulkEnd")}</span><input type="time" value={bulkRange.end} className="input bg-white" onChange={(event) => setBulkRange((range) => ({ ...range, end: event.target.value }))} /></label>
+                <label className="field col-span-2"><span className="label">{t("bulkBreak")}</span><select className="input bg-white" value={bulkRange.breakMinutes} onChange={(event) => setBulkRange((range) => ({ ...range, breakMinutes: Number(event.target.value) }))}>{[0, 15, 30, 45, 60].map((minutes) => <option key={minutes} value={minutes}>{minutes === 0 ? t("noBreak") : `${minutes} min`}</option>)}</select></label>
+              </div>}
+              <button type="button" disabled={!bulkDays.length || (bulkMode === "custom" && (!bulkRange.start || !bulkRange.end))} className="min-h-10 self-start rounded-lg bg-ink px-4 py-2 text-[13px] font-semibold text-white disabled:opacity-40" onClick={() => setDays((current) => current.map((day) => bulkDays.includes(day.weekday) ? { ...day, mode: bulkMode, ranges: bulkMode === "custom" ? [{ ...bulkRange }] : [] } : day))}>{t("bulkApply", { count: bulkDays.length })}</button>
+              <p className="m-0 text-[12px] text-muted-2">{t("bulkHint")}</p>
+            </div>
+          </details>
           {/* Wochentage nebeneinander statt untereinander: gestapelt war die
               Liste im Bearbeiten-Modus unnötig lang, obwohl die Zeile die volle
               Breite hat. */}

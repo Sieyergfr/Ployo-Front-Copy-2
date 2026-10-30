@@ -5,6 +5,7 @@ import {
   createTenantFileFolder,
   folderScope,
   getTenantFileSignedUrl,
+  getTenantFileDetails,
   listTenantFileDeletions,
   resolveTenantFileFolderPath,
   restoreTenantFileDeletion,
@@ -460,19 +461,24 @@ export async function updateFolderSettingsAction(
     await updateTenantFolderSettings({
       tenantSlug: tenant,
       path,
+      ownerType: formString(formData, "ownerType", "tenant") as FileOwnerType,
+      ownerId: formString(formData, "ownerId") || undefined,
       name: formData.has("name") ? formString(formData, "name") : undefined,
       pinned: pinned === "true" ? true : pinned === "false" ? false : undefined,
       ...(withAccess
         ? {
             accessRoleIds: formStrings(formData, "roleId"),
-            sharedWithEmployees: formData.get("sharedWithEmployees") === "on",
-            visibleTeamIds: formStrings(formData, "teamId"),
-            visibleLocationIds: formStrings(formData, "locationId"),
+            ...(formString(formData, "ownerType", "tenant") === "tenant" ? {
+              sharedWithEmployees: formData.get("sharedWithEmployees") === "on",
+              visibleTeamIds: formStrings(formData, "teamId"),
+              visibleLocationIds: formStrings(formData, "locationId"),
+            } : {}),
           }
         : {}),
     });
 
     revalidatePath(filesPath(tenant), "layout");
+    revalidateFileAreas({ tenant, ownerType: formString(formData, "ownerType", "tenant"), ownerId: formString(formData, "ownerId"), returnPath: formString(formData, "returnPath") || undefined });
 
     return { success: true };
   }, "Ordner-Einstellungen speichern");
@@ -489,6 +495,8 @@ export async function renameFileAction(_prevState: ActionState, formData: FormDa
 
     await renameTenantFile({ tenantSlug: tenant, fileId, name: formString(formData, "name") });
     revalidatePath(filesPath(tenant), "layout");
+    const returnPath = formString(formData, "returnPath");
+    if (returnPath.startsWith(`/u/${tenant}/`)) revalidatePath(returnPath);
 
     return { success: true };
   }, "Datei umbenennen");
@@ -505,7 +513,13 @@ export async function moveFileAction(_prevState: ActionState, formData: FormData
 
     await moveTenantFile({ tenantSlug: tenant, fileId, targetPath: formString(formData, "targetPath") });
     revalidatePath(filesPath(tenant), "layout");
+    const returnPath = formString(formData, "returnPath");
+    if (returnPath.startsWith(`/u/${tenant}/`)) revalidatePath(returnPath);
 
     return { success: true };
   }, "Datei verschieben");
+}
+
+export async function getHrFileDetailsAction(input: { tenant: string; fileId: string }) {
+  return getTenantFileDetails({ tenantSlug: input.tenant, fileId: input.fileId });
 }

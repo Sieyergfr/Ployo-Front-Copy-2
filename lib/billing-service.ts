@@ -44,6 +44,7 @@ export async function createBillingCheckoutSession(input: {
       id: true,
       name: true,
       contactEmail: true,
+      settings: { select: { companyAddress: true } },
       stripeCustomerId: true,
       stripeSubscriptionId: true,
       stripeSubscriptionStatus: true,
@@ -75,6 +76,13 @@ export async function createBillingCheckoutSession(input: {
         {
           name: tenant.name,
           email: tenant.contactEmail ?? undefined,
+          ...(tenant.settings?.companyAddress ? { address: {
+            line1: `${tenant.settings.companyAddress.street} ${tenant.settings.companyAddress.houseNumber}`,
+            line2: tenant.settings.companyAddress.careOf || undefined,
+            postal_code: tenant.settings.companyAddress.postalCode,
+            city: tenant.settings.companyAddress.city,
+            country: tenant.settings.companyAddress.country,
+          } } : {}),
           metadata: { tenantId: tenant.id },
         },
         { idempotencyKey: `stripe-customer-create-${tenant.id}` },

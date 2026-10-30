@@ -1,5 +1,8 @@
 "use client";
 
+import { useDatePreference } from "@/components/DatePreferences";
+import { preferredDateFormatter } from "@/lib/date-picker";
+
 import {
   acceptReminderSuggestionAction,
   completeReminderQuickAction,
@@ -110,6 +113,7 @@ export default function RemindersBoard({
 }) {
   const t = useTranslations("RemindersBoard");
   const locale = useLocale();
+  const datePreference = useDatePreference();
   const router = useRouter();
   const { toast } = useToast();
   const [filter, setFilter] = useState<Filter>("all");
@@ -170,7 +174,7 @@ export default function RemindersBoard({
     });
 
   const formatDate = (iso: string) =>
-    new Date(`${iso}T12:00:00Z`).toLocaleDateString(locale, { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" });
+    preferredDateFormatter(datePreference, locale, { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" }).format(new Date(`${iso}T12:00:00Z`));
   const relativeLabel = (days: number) => (days < 0 ? t("overdueDays", { count: -days }) : days === 0 ? t("today") : t("inDays", { count: days }));
 
   // Fristen-Radar: die nächsten 30 Tage, Überfällige links am Rand.

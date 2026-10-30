@@ -107,7 +107,7 @@ export type NotificationMessage =
       startDate: string;
     }
   | {
-      key: "infoRequest";
+      key: "infoRequest" | "infoRequestReminder";
       tenantName: string;
       title: string;
       dueAt: Date | null;
@@ -391,19 +391,21 @@ export function renderNotification(
       return { subject, text, html };
     }
 
-    case "infoRequest": {
+    case "infoRequest":
+    case "infoRequestReminder": {
+      const reminder = message.key === "infoRequestReminder";
       const dueLine = message.dueAt
         ? isEn
           ? ` Please respond by ${formatNotificationDateTime(message.dueAt, locale)}.`
           : ` Bitte bis ${formatNotificationDateTime(message.dueAt, locale)} Uhr antworten.`
         : "";
-      const subject = isEn
-        ? `New information request: ${message.title}`
-        : `Neue Info-Anfrage: ${message.title}`;
-      const text = isEn
-        ? `${message.tenantName} is asking you for information: "${message.title}".${dueLine}`
-        : `${message.tenantName} bittet Sie um Informationen: "${message.title}".${dueLine}`;
-      const html = isEn
+      const subject = reminder
+        ? isEn ? `Reminder: ${message.title}` : `Erinnerung: ${message.title}`
+        : isEn ? `New information request: ${message.title}` : `Neue Info-Anfrage: ${message.title}`;
+      const text = reminder
+        ? isEn ? `${message.tenantName} is reminding you of the open information request: "${message.title}".${dueLine}` : `${message.tenantName} erinnert Sie an die offene Info-Anfrage: "${message.title}".${dueLine}`
+        : isEn ? `${message.tenantName} is asking you for information: "${message.title}".${dueLine}` : `${message.tenantName} bittet Sie um Informationen: "${message.title}".${dueLine}`;
+      const html = reminder ? paragraph(escapeHtml(text)) : isEn
         ? paragraph(
             `${escapeHtml(message.tenantName)} is asking you for information: <strong>${escapeHtml(message.title)}</strong>.${escapeHtml(dueLine)}`,
           )

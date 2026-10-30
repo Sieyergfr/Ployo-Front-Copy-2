@@ -78,7 +78,8 @@ jobs:
           done
 
       - name: Test
-        run: npm test
+        # DB-Tests und Cleanup-Cron verwenden dieselbe Datenbank.
+        run: npm test -- --no-file-parallelism
 
       - name: Create shadow database for drift check
         run: PGPASSWORD=postgres psql -h localhost -U postgres -c "CREATE DATABASE ployo_ci_shadow;"

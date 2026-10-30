@@ -9,7 +9,10 @@ export type ShiftPreset = {
   start: string;
   end: string;
   pause: string;
+  color: string;
 };
+
+export const DEFAULT_SHIFT_PRESET_COLOR = "#8b6ed4";
 
 const timePattern = /^([01]\d|2[0-3]):[0-5]\d$/;
 
@@ -33,6 +36,9 @@ export function parseShiftPresets(value: unknown): ShiftPreset[] {
       label: typeof item.label === "string" ? item.label.slice(0, 64) : "",
       start: typeof item.start === "string" ? item.start : "",
       end: typeof item.end === "string" ? item.end : "",
+      color: typeof item.color === "string" && /^#[0-9a-f]{6}$/i.test(item.color)
+        ? item.color.toLowerCase()
+        : DEFAULT_SHIFT_PRESET_COLOR,
       pause:
         typeof item.pause === "string" && allowedPauses.has(item.pause)
           ? item.pause

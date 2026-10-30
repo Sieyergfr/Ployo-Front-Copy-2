@@ -32,6 +32,9 @@ vi.mock("@/lib/notifications/dispatch", () => ({
 
 const offers = await import("@/lib/shift-offer-service");
 const shifts = await import("@/lib/shift-service");
+const managerApi = await import("@/app/api/tenants/[tenant]/shifts/[shiftId]/offers/route");
+const myOffersApi = await import("@/app/api/me/shift-offers/route");
+const respondApi = await import("@/app/api/me/shift-offers/[offerId]/route");
 
 const RUN_ID = Math.random().toString(36).slice(2);
 const tenantSlug = `test-offer-${RUN_ID}`;
@@ -127,6 +130,7 @@ beforeEach(async () => {
 });
 
 afterAll(async () => {
+  await prisma.appRateLimit.deleteMany({ where: { OR: [ownerUserId, annaUserId, benUserId].map((id) => ({ key: { endsWith: id } })) } });
   await prisma.tenant.deleteMany({ where: { slug: tenantSlug } });
   await prisma.user.deleteMany({ where: { id: { in: [ownerUserId, annaUserId, benUserId] } } });
   await prisma.$disconnect();
@@ -309,5 +313,63 @@ describe("Zurückziehen mit 'Team benachrichtigen'", () => {
     dispatched.length = 0;
     await shifts.unpublishShiftWeek({ tenantSlug, year: target.year, week: target.week });
     expect(dispatched.filter((item) => item.key === "shiftPlanWithdrawn")).toEqual([]);
+  });
+});
+
+
+describe("App API — Schichtangebote", () => {
+  it("liefert Kandidaten, versendet an mehrere Personen und erlaubt eigene Angebote abzulehnen oder anzunehmen", async () => {
+    const shift = await createShift({ date: wednesday, employeeId: null });
+    const context = { params: Promise.resolve({ tenant: tenantSlug, shiftId: shift.id }) };
+    const url = "http://localhost/api/offers";
+    let response = await managerApi.GET(new Request(url), context);
+    expect(response.status).toBe(200);
+    const candidates = (await response.json()).context;
+    expect(candidates.shift.id).toBe(shift.id);
+    expect(candidates.candidates.some((person: { employeeId: string; hasAccount: boolean }) => person.employeeId === annaId && person.hasAccount)).toBe(true);
+    response = await managerApi.POST(new Request(url, { method: "POST", body: JSON.stringify({ employeeIds: [annaId, benId] }) }), context);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ sent: 2, withoutAccount: 0 });
+    response = await managerApi.GET(new Request(url), context);
+    expect((await response.json()).context.candidates.find((person: { employeeId: string }) => person.employeeId === annaId).offerStatus).toBe("pending");
+
+    currentUserId = annaUserId;
+    response = await myOffersApi.GET(new Request(`http://localhost/api/me/shift-offers?tenant=${tenantSlug}`));
+    expect(response.status).toBe(200);
+    const [mine] = (await response.json()).offers;
+    expect(mine).toMatchObject({ date: wednesday, startTime: "08:00", replacesFirstName: null });
+    const other = await prisma.tenantShiftOffer.findFirstOrThrow({ where: { shiftId: shift.id, employeeId: benId } });
+    response = await respondApi.POST(new Request(url, { method: "POST", body: JSON.stringify({ tenant: tenantSlug, decision: "accept" }) }), { params: Promise.resolve({ offerId: other.id }) });
+    expect(response.status).toBe(404);
+    response = await respondApi.POST(new Request(url, { method: "POST", body: JSON.stringify({ tenant: tenantSlug, decision: "decline" }) }), { params: Promise.resolve({ offerId: mine.id }) });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ status: "declined" });
+    currentUserId = benUserId;
+    response = await respondApi.POST(new Request(url, { method: "POST", body: JSON.stringify({ tenant: tenantSlug, decision: "accept" }) }), { params: Promise.resolve({ offerId: other.id }) });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ status: "accepted" });
+    expect((await prisma.tenantShift.findUniqueOrThrow({ where: { id: shift.id } })).employeeId).toBe(benId);
+  });
+
+  it("schützt Kandidaten und Versand vor Mitarbeitern und fremden Mandanten", async () => {
+    const shift = await createShift({ date: wednesday, employeeId: null });
+    const context = { params: Promise.resolve({ tenant: tenantSlug, shiftId: shift.id }) };
+    const url = "http://localhost/api/offers";
+    currentUserId = annaUserId;
+    expect((await managerApi.GET(new Request(url), context)).status).toBe(403);
+    expect((await managerApi.POST(new Request(url, { method: "POST", body: JSON.stringify({ employeeIds: [benId] }) }), context)).status).toBe(403);
+    currentUserId = ownerUserId;
+    expect((await managerApi.GET(new Request(url), { params: Promise.resolve({ tenant: `foreign-${RUN_ID}`, shiftId: shift.id }) })).status).toBe(403);
+    expect((await managerApi.GET(new Request(url), { params: Promise.resolve({ tenant: tenantSlug, shiftId: "missing" }) })).status).toBe(404);
+    currentUserId = "";
+    expect((await managerApi.GET(new Request(url), context)).status).toBe(401);
+    expect((await managerApi.POST(new Request(url, { method: "POST" }), context)).status).toBe(401);
+  });
+
+  it.each([null, {}, { employeeIds: [] }, { employeeIds: [123] }, { employeeIds: [" "] }, { employeeIds: Array.from({ length: 201 }, () => "id") }])("prüft die Empfängerliste vor dem Versand: %j", async (body) => {
+    const shift = await createShift({ date: wednesday, employeeId: null });
+    const response = await managerApi.POST(new Request("http://localhost/api/offers", { method: "POST", body: JSON.stringify(body) }), { params: Promise.resolve({ tenant: tenantSlug, shiftId: shift.id }) });
+    expect(response.status).toBe(400);
+    expect(await prisma.tenantShiftOffer.count({ where: { tenantId } })).toBe(0);
   });
 });

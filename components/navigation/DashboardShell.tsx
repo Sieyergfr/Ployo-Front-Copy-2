@@ -1,6 +1,7 @@
 "use client";
 
 import { switchLanguageAction } from "@/app/(dashboard)/konto/actions";
+import { useLiveUpdates } from "@/components/navigation/useLiveUpdates";
 import TrialBanner from "@/components/navigation/TrialBanner";
 import { useActionStateWithToast } from "@/components/Toasts";
 import { permissionLevels, type PermissionLevel } from "@/lib/roles";
@@ -30,6 +31,7 @@ import {
   Menu,
   PanelLeftClose,
   PanelLeftOpen,
+  Plus,
   Search,
   Settings,
   Shield,
@@ -590,6 +592,10 @@ export default function DashboardShell({
 
   const routeTenant = Array.isArray(params.tenant) ? params.tenant[0] : params.tenant;
   const tenant = routeTenant ?? tenantSlugFromPathname(pathname);
+  useLiveUpdates(tenant, () => {
+    router.refresh();
+    if (tenant) fetchNavigationNotifications(tenant, (data) => setFetchedData((previous) => previous?.tenant === data.tenant ? data : previous));
+  });
   const baseHref = tenant ? `/u/${tenant}` : "/u";
   const fallbackTenantItem: NavigationTenantItem = {
     name: t("tenant.selectCompany"),
@@ -763,7 +769,10 @@ export default function DashboardShell({
           <div className="db-side-glow" />
         </div>
 
-        <div className="relative flex min-h-16 items-center justify-between gap-2 pt-5 pr-3.5 pb-3 pl-[18px]">
+        <div className={cx(
+          "relative flex min-h-16 items-center gap-2 pt-5 pb-3",
+          isCollapsed ? "justify-center px-3" : "justify-between pr-3.5 pl-[18px]",
+        )}>
           <Link
             href={baseHref}
             aria-label="Ployo"
@@ -843,7 +852,10 @@ export default function DashboardShell({
 
         <nav
           aria-label={t("mainNavLabel")}
-          className="db-nav-scroll relative flex min-h-0 flex-auto flex-col gap-0.5 overflow-y-auto overscroll-contain px-3 pt-0.5 pb-3"
+          className={cx(
+            "db-nav-scroll relative flex min-h-0 flex-auto flex-col gap-0.5 overflow-y-auto overscroll-contain px-3 pt-0.5 pb-3",
+            isCollapsed && "[scrollbar-gutter:stable_both-edges]",
+          )}
           onClick={() => setIsMobileOpen(false)}
         >
           {sections.map((section, sectionIndex) => {
@@ -904,7 +916,7 @@ export default function DashboardShell({
             <button
               type="button"
               title={t("tenant.switchTenant")}
-              aria-haspopup="listbox"
+              aria-haspopup="menu"
               aria-expanded={isTenantMenuOpen}
               className={cx(
                 "db-row db-focus box-border flex min-h-12 w-full cursor-pointer items-center gap-2.5 rounded-[10px] bg-white/[0.04] px-2 py-1.5 text-left shadow-[inset_0_0_0_1px_rgba(255,255,255,0.07)]",
@@ -938,7 +950,7 @@ export default function DashboardShell({
 
             {isTenantMenuOpen && (
               <div
-                role="listbox"
+                role="menu"
                 aria-label={t("tenant.yourCompanies")}
                 className="db-pop absolute bottom-[calc(100%+8px)] left-0 z-20 box-border w-[max(100%,256px)] rounded-[12px] bg-[#1a1a19] p-1.5"
               >
@@ -952,8 +964,8 @@ export default function DashboardShell({
                     <Link
                       key={item.href}
                       href={item.href}
-                      role="option"
-                      aria-selected={isActive}
+                      role="menuitemradio"
+                      aria-checked={isActive}
                       className="db-row db-focus flex min-h-11 w-full items-center gap-2.5 rounded-[9px] px-2.5 py-2 text-left no-underline"
                       onClick={() => {
                         setIsTenantMenuOpen(false);
@@ -976,6 +988,26 @@ export default function DashboardShell({
                     </Link>
                   );
                 })}
+                <div className="mt-1 border-t border-white/10 pt-1">
+                  <Link
+                    href="/select/create"
+                    role="menuitem"
+                    className="db-row db-focus flex min-h-11 items-center gap-2.5 rounded-[9px] px-2.5 py-2 text-[13px] font-medium text-[#c9b8f5] no-underline"
+                    onClick={() => { setIsTenantMenuOpen(false); setIsMobileOpen(false); }}
+                  >
+                    <Plus size={17} className="shrink-0" />
+                    {t("tenant.createCompany")}
+                  </Link>
+                  <Link
+                    href="/select"
+                    role="menuitem"
+                    className="db-row db-focus flex min-h-11 items-center gap-2.5 rounded-[9px] px-2.5 py-2 text-[13px] font-medium text-[#ededea] no-underline"
+                    onClick={() => { setIsTenantMenuOpen(false); setIsMobileOpen(false); }}
+                  >
+                    <LayoutDashboard size={17} className="shrink-0" />
+                    {t("tenant.companyOverview")}
+                  </Link>
+                </div>
               </div>
             )}
           </div>
@@ -1002,8 +1034,8 @@ export default function DashboardShell({
 
           <div
             className={cx(
-              "relative flex items-center gap-2.5 pt-1 pr-0.5 pl-1",
-              isCollapsed ? "flex-col justify-center" : "flex-row justify-start",
+              "relative flex items-center gap-2.5 pt-1",
+              isCollapsed ? "flex-col justify-center" : "flex-row justify-start pr-0.5 pl-1",
             )}
           >
             <span

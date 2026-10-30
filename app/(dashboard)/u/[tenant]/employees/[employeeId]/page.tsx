@@ -1,3 +1,5 @@
+import { getOwnPreferences } from "@/lib/account-service";
+import { preferredDateFormatter } from "@/lib/date-picker";
 import AddressFields from "@/components/AddressFields";
 import AuditLogPanel from "@/components/AuditLogPanel";
 import DatePickerField from "@/components/DatePickerField";
@@ -172,12 +174,14 @@ function InfoRequestsCard({
   tenant,
   employeeHandle,
   canManage,
+  canRemind,
   t,
 }: {
   employee: Employee;
   tenant: string;
   employeeHandle: string;
   canManage: boolean;
+  canRemind: boolean;
   t: T;
 }) {
   return (
@@ -203,7 +207,7 @@ function InfoRequestsCard({
         </p>
       )}
       {employee.infoRequests.map((request) => (
-        <InfoRequestRow key={request.id} request={request} tenant={tenant} />
+        <InfoRequestRow key={request.id} request={request} tenant={tenant} canRemind={canRemind} />
       ))}
     </DetailCard>
   );
@@ -329,6 +333,8 @@ function FilesTab({
   employeeHref,
   uploadOptions,
   canManageFiles,
+  canManageReminders,
+  canManageAccess,
   canDeleteFiles,
   activeFolder,
   t,
@@ -338,6 +344,8 @@ function FilesTab({
   employeeHref: string;
   uploadOptions: FileUploadOptions;
   canManageFiles: boolean;
+  canManageReminders: boolean;
+  canManageAccess: boolean;
   canDeleteFiles: boolean;
   activeFolder?: string;
   t: T;
@@ -360,6 +368,8 @@ function FilesTab({
         files={employee.files}
         uploadOptions={uploadOptions}
         canManageFiles={canManageFiles}
+        canManageReminders={canManageReminders}
+        canManageAccess={canManageAccess}
         canDeleteFiles={canDeleteFiles}
         initialFolderPath={activeFolder ?? ""}
         emptyLabel={t("noFilesInRecord")}
@@ -639,6 +649,7 @@ export default async function EmployeeDetailPage({
   type RecordTab = (typeof recordTabs)[number];
   const locale = await getLocale();
   const intlLocale = locale === "en" ? "en-GB" : "de-DE";
+  const datePreference = (await getOwnPreferences()).dateFormat;
   const tUi = await getTranslations("EmployeeRecord");
   const todayIso = new Date().toISOString().slice(0, 10);
   const weekday = (new Date(`${todayIso}T00:00:00Z`).getUTCDay() + 6) % 7;
@@ -708,7 +719,7 @@ export default async function EmployeeDetailPage({
   const locationOptions = locations.map((location) => location.name);
   const gaps = employeeProfileGaps(employee);
   const years = yearsSince(employee.startDate);
-  const dateFormat = new Intl.DateTimeFormat(intlLocale, { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" });
+  const dateFormat = preferredDateFormatter(datePreference, intlLocale, { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" });
   const formatDate = (value: string | null | undefined) =>
     value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? dateFormat.format(new Date(`${value}T12:00:00Z`)) : (value ?? "");
   const tenure =
@@ -1133,25 +1144,25 @@ export default async function EmployeeDetailPage({
                 </DbCard>
               )}
 
-              <DbCard>
-                <h2 className="m-0 mb-4 font-display text-[19px] font-semibold tracking-[-0.4px]">{tUi("attentionTitle")}</h2>
+              <DbCard className="rounded-[12px] p-3 !shadow-none">
+                <h2 className="m-0 mb-2 font-display text-[14px] font-semibold tracking-[-0.2px]">{tUi("attentionTitle")}</h2>
                 {attentionItems.length === 0 ? (
                   <p className="m-0 text-[13px] text-[#6e6e6b]">{tUi("attention.none")}</p>
                 ) : (
-                  <div className="flex flex-col gap-2.5">
+                  <div className="flex flex-col gap-1.5">
                     {attentionItems.map((item) => (
                       <div
                         key={item.title}
-                        className="flex gap-3 rounded-[12px] border border-[#ecebe7] bg-[#fafaf8] p-3.5"
-                        style={{ boxShadow: `inset 3px 0 0 ${item.tone}` }}
+                        className="relative min-w-0 rounded-[9px] border border-[#f0efec] bg-[#fafaf8] py-2 pr-2.5 pl-4"
                       >
-                        <span className="flex flex-col gap-0.5 pl-1">
-                          <span className="text-[14px] font-semibold">{item.title}</span>
-                          <span className="text-[13px] text-[#6e6e6b]">{item.text}</span>
+                        <span aria-hidden="true" className="absolute inset-y-1.5 left-1.5 w-0.5 rounded-full" style={{ backgroundColor: item.tone }} />
+                        <span className="flex min-w-0 flex-col gap-0.5">
+                          <span className="text-[12px] leading-4 font-semibold">{item.title}</span>
+                          <span className="text-[11px] leading-4 text-[#6e6e6b]">{item.text}</span>
                           {item.href && (
-                            <Link href={item.href} className="mt-0.5 inline-flex w-fit items-center gap-1 text-[13px] font-semibold text-[#6b4fc4] no-underline">
+                            <Link href={item.href} className="inline-flex w-fit items-center gap-1 text-[11px] leading-4 font-medium text-[#6b4fc4] no-underline">
                               {item.link}
-                              <ArrowRight size={13} />
+                              <ArrowRight size={11} />
                             </Link>
                           )}
                         </span>
@@ -1243,6 +1254,8 @@ export default async function EmployeeDetailPage({
             employeeHref={employeeHref}
             uploadOptions={uploadOptions}
             canManageFiles={canManageFiles}
+            canManageReminders={hasPermissionLevel(capabilities.reminders.level, "write")}
+            canManageAccess={capabilities.files.level === "admin"}
             canDeleteFiles={canDeleteFiles}
             activeFolder={activeFolder}
             t={t}
@@ -1349,7 +1362,7 @@ export default async function EmployeeDetailPage({
         )}
 
         {activeTab === "requests" && (
-          <InfoRequestsCard employee={employee} tenant={tenant} employeeHandle={employee.id} canManage={canEditEmployee} t={t} />
+          <InfoRequestsCard employee={employee} tenant={tenant} employeeHandle={employee.id} canManage={canEditEmployee} canRemind={canEditEmployee && capabilities.employees.scope !== "own"} t={t} />
         )}
 
         {activeTab === "log" && (

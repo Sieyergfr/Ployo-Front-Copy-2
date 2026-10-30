@@ -1,6 +1,7 @@
 "use server";
 
 import {
+  getTenantSettings,
   updateTenantDefaults,
   updateTenantNotifications,
   updateTenantProfile,
@@ -9,7 +10,7 @@ import {
   updateTenantShiftSettings,
   updateTenantTimeTracking,
 } from "@/lib/settings-service";
-import { updateAccountName, updateOwnPreferences } from "@/lib/account-service";
+import { getOwnPreferences, updateAccountName, updateOwnPreferences } from "@/lib/account-service";
 import { LOCALE_COOKIE, LOCALE_COOKIE_MAX_AGE_DAYS } from "@/lib/locale-shared";
 import { cookies } from "next/headers";
 import { type ActionState, withActionErrorHandling } from "@/lib/action-state";
@@ -101,7 +102,7 @@ async function saveSettingsPopupCategory(
     await updateTenantProfile({
       tenantSlug: tenant,
       name: formString(formData, "companyName"),
-      slug: formString(formData, "tenantId"),
+      slug: tenant,
       country: formString(formData, "country"),
       timezone: formString(formData, "timezone"),
       size: formString(formData, "size"),
@@ -128,7 +129,7 @@ async function saveSettingsPopupCategory(
       weekStart: formString(formData, "weekStart"),
       workHours: formString(formData, "workHours"),
       vacationDays: formString(formData, "vacationDays"),
-      employeeNumberRequired: formBool(formData, "employeeNumberRequired"),
+      employeeNumberRequired: true,
       employeeNumberPrefix: formString(formData, "employeeNumberPrefix"),
       employeeNumberSuffix: formString(formData, "employeeNumberSuffix"),
       archiveFormerEmployees: formBool(formData, "archiveFormerEmployees"),
@@ -136,11 +137,12 @@ async function saveSettingsPopupCategory(
   }
 
   if (category === "notifications") {
+    const current = await getTenantSettings(tenant);
     await updateTenantNotifications({
       tenantSlug: tenant,
       mailNotifications: formBool(formData, "mailNotifications"),
       inAppNotifications: formBool(formData, "inAppNotifications"),
-      mobilePush: formBool(formData, "mobilePush"),
+      mobilePush: current?.settings.mobilePush ?? false,
       deadlineAlerts: formBool(formData, "deadlineAlerts"),
       absenceAlerts: formBool(formData, "absenceAlerts"),
       shiftAlerts: formBool(formData, "shiftAlerts"),
@@ -149,6 +151,7 @@ async function saveSettingsPopupCategory(
   }
 
   if (category === "timeTracking") {
+    const current = await getTenantSettings(tenant);
     await updateTenantTimeTracking({
       tenantSlug: tenant,
       enabled: formBool(formData, "timeTrackingEnabled"),
@@ -156,7 +159,7 @@ async function saveSettingsPopupCategory(
       autoBreakDeduction: formBool(formData, "timeTrackingAutoBreakDeduction"),
       clockInMode: formString(formData, "timeTrackingClockInMode", "always"),
       clockInLeadMinutes: formString(formData, "timeTrackingClockInLeadMinutes"),
-      reminderPush: formBool(formData, "timeTrackingReminderPush"),
+      reminderPush: current?.settings.timeTrackingReminderPush ?? false,
       autoClockOut: formBool(formData, "timeTrackingAutoClockOut"),
       autoClockOutAfterShiftMinutes: formString(formData, "timeTrackingAutoClockOutAfterShiftMinutes"),
       autoClockOutMaxHours: formString(formData, "timeTrackingAutoClockOutMaxHours"),
@@ -191,7 +194,7 @@ async function saveSettingsPopupCategory(
     await updateTenantProfile({
       tenantSlug: tenant,
       name: formString(formData, "companyName"),
-      slug: formString(formData, "tenantId"),
+      slug: tenant,
       country: formString(formData, "country"),
       timezone: formString(formData, "timezone"),
       size: formString(formData, "size"),
@@ -259,6 +262,7 @@ export async function openBillingPortalAction(
 export type SettingsSectionState = ActionState & { slug?: string };
 
 const SETTINGS_VALIDATION_MESSAGES = new Set([
+  "Wochenstunden müssen eine Zahl zwischen 0 und 168 sein.",
   "Unternehmensname ist erforderlich.",
   "Diese Arbeitsbereich-URL ist nicht erlaubt.",
   "Diese Arbeitsbereich-URL ist bereits vergeben.",
@@ -286,9 +290,7 @@ export async function saveSettingsSectionAction(formData: FormData): Promise<Set
       throw error;
     }
 
-    if (category === "company") {
-      slug = (await getTenantSlugAfterSave(formString(formData, "tenantId"))) || tenant;
-    }
+    if (category === "company") slug = tenant;
 
     revalidatePath(`/u/${slug}`, "layout");
   }, "Einstellungen speichern");
@@ -296,25 +298,19 @@ export async function saveSettingsSectionAction(formData: FormData): Promise<Set
   return slug !== tenant && !state.error ? { ...state, slug } : state;
 }
 
-/** Die URL wird beim Speichern normalisiert (slugify) — dieselbe Regel wie im Service. */
-async function getTenantSlugAfterSave(requested: string) {
-  const { slugify } = await import("@/lib/slug");
-
-  return slugify(requested);
-}
-
 export async function savePreferencesSectionAction(formData: FormData): Promise<ActionState> {
   return withActionErrorHandling(async () => {
+    const current = await getOwnPreferences();
     const language = formString(formData, "language", "de");
 
     await updateOwnPreferences({
       language,
-      timezone: formString(formData, "timezone"),
-      startPage: formString(formData, "startPage"),
+      timezone: current.timezone,
+      startPage: "overview",
       dateFormat: formString(formData, "dateFormat"),
       notifyVacationEvents: formBool(formData, "notifyVacationEvents"),
       notifyShiftEvents: formBool(formData, "notifyShiftEvents"),
-      pushEnabled: formBool(formData, "pushEnabled"),
+      pushEnabled: current.pushEnabled,
     });
 
     // Wie der Sprachumschalter: Sprache auch für Seiten ohne Anmeldung merken.
@@ -357,5 +353,16 @@ export async function saveHolidayRegionAction(input: { tenant: string; locationI
     });
 
     revalidatePath(`/u/${input.tenant}`, "layout");
+  }, "Feiertage speichern");
+}
+
+export async function saveHolidayRegionsSectionAction(formData: FormData): Promise<ActionState> {
+  return withActionErrorHandling(async () => {
+    const tenant = formString(formData, "tenant");
+    const regions = Array.from(formData.entries()).filter(([key]) => key.startsWith("region:"));
+    for (const [key, value] of regions) {
+      await updateLocationHolidayRegion({ tenantSlug: tenant, locationId: key.slice(7), bundesland: String(value) });
+    }
+    revalidatePath(`/u/${tenant}`, "layout");
   }, "Feiertage speichern");
 }

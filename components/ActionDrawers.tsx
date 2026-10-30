@@ -13,7 +13,7 @@ import {
 import { updateShiftSettingsAction } from "@/app/(dashboard)/u/[tenant]/schichtplanung/actions";
 import { OpeningHoursEditor } from "@/components/OpeningHoursEditor";
 import type { OpeningHoursDay } from "@/lib/opening-hours";
-import type { ShiftPreset } from "@/lib/shift-presets";
+import { DEFAULT_SHIFT_PRESET_COLOR, type ShiftPreset } from "@/lib/shift-presets";
 import {
   createReminderAction,
   deleteReminderAction,
@@ -802,19 +802,17 @@ export function SicknessDrawerButton({
                 <input type="hidden" name="reportId" value={item.id} />
                 <div className="grid gap-3 sm:grid-cols-2">
                   <Field label={t("sickSinceLabel")}>
-                    <input
-                      type="date"
+                    <DatePickerField
                       name="startDate"
-                      className="input"
+                      inputClassName="input"
                       defaultValue={item.startDateIso}
                       required
                     />
                   </Field>
                   <Field label={t("expectedUntilLabel")}>
-                    <input
-                      type="date"
+                    <DatePickerField
                       name="endDate"
-                      className="input"
+                      inputClassName="input"
                       defaultValue={item.endDateIso}
                     />
                   </Field>
@@ -1097,6 +1095,7 @@ export function ShiftSettingsDrawerButton({
       {
         id,
         label: t("newShiftLabel"),
+        color: DEFAULT_SHIFT_PRESET_COLOR,
         start: "10:00",
         end: "18:00",
         pause: "30m",
@@ -1256,6 +1255,10 @@ export function ShiftSettingsDrawerButton({
                     >
                       {isEditing ? (
                         <div className="grid gap-2">
+                          <label className="flex w-fit items-center gap-2 text-[12px] text-muted">
+                            <input type="color" value={shift.color} onChange={(event) => updateShiftPreset(shift.id, "color", event.target.value)} aria-label={t("shiftColorAria")} className="size-8 cursor-pointer rounded-md border border-border bg-white p-0.5" />
+                            {t("shiftColorAria")}
+                          </label>
                           <div className="grid gap-2 sm:grid-cols-3">
                             <input
                               className="input bg-bg"
@@ -1318,7 +1321,8 @@ export function ShiftSettingsDrawerButton({
                         </div>
                       ) : (
                         <div>
-                          <div className="text-[13px] font-semibold text-ink">
+                          <div className="flex items-center gap-2 text-[13px] font-semibold text-ink">
+                            <span aria-hidden="true" className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: shift.color }} />
                             {shift.label}
                           </div>
                           <div className="mt-0.5 font-mono text-[10px] text-muted">

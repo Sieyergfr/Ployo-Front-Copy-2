@@ -28,6 +28,9 @@
     },
     "mainNavLabel": "Hauptnavigation",
     "tenant": {
+      "createCompany": "Unternehmen erstellen",
+      "companyOverview": "Zur Unternehmensübersicht",
+
       "switchTenant": "Unternehmen wechseln",
       "unknownCompany": "Unbekanntes Unternehmen",
       "selectCompany": "Unternehmen auswählen",
@@ -332,6 +335,13 @@
     "terminatedOn": "Gekündigt zum {date}"
   },
   "EmployeeInfoRequestButton": {
+    "saveDraft": "Als Entwurf speichern",
+    "draftSaved": "Entwurf gespeichert. Sie können ihn in App und Web weiterbearbeiten.",
+    "draftRestored": "Ihr gespeicherter Entwurf wurde wiederhergestellt.",
+    "draftError": "Entwurf konnte nicht gespeichert werden.",
+    "draftLoadError": "Entwurf konnte nicht geladen werden.",
+    "retryDraft": "Erneut versuchen",
+    "loadingDraft": "Entwurf wird geladen …",
     "requestTo": "Anfrage an <b>{name}</b>. Die Anfrage wird in der Personalakte dokumentiert. Eine automatische Benachrichtigung an den Mitarbeiter erfolgt noch nicht.",
     "titleLabel": "Benötigte Information",
     "titlePlaceholder": "z. B. neue Adresse, Zertifikat, Bankdaten",
@@ -788,6 +798,7 @@
     "metricUploadsCaption": "aus Storage"
   },
   "OwnerFilesTab": {
+    "folderSettings": "Ordner bearbeiten",
     "back": "Zurück",
     "title": "Dateiablage",
     "start": "Start",
@@ -1041,6 +1052,7 @@
     "addShift": "Hinzufügen",
     "noDefaultShifts": "Noch keine Standardschichten hinterlegt.",
     "newShiftLabel": "Neue Schicht",
+    "shiftColorAria": "Schichtfarbe",
     "shiftNameAria": "Schichtname",
     "startTimeAria": "Startzeit",
     "endTimeAria": "Endzeit",
@@ -1199,6 +1211,10 @@
     "retentionDeleteConfirmDescription": "Die ausgewählten Datenkategorien werden unwiderruflich gelöscht. Dieser Vorgang lässt sich nicht rückgängig machen."
   },
   "SelfServiceEmployeeLink": {
+    "searchEmployees": "Mitarbeiter suchen",
+    "searchPlaceholder": "Name, Personalnummer, Team oder Standort …",
+    "noSearchResults": "Keine passenden Mitarbeiter gefunden.",
+    "searchResults": "{count} von {total} Profilen",
     "employeeRecord": "Personalakte",
     "linkDescription": "Ihr Konto wird mit der ausgewählten, noch unverknüpften Personalakte verbunden.",
     "cancel": "Abbrechen",
@@ -1295,6 +1311,11 @@
     }
   },
   "TeamEditControls": {
+    "noTeamsCreated": "Noch keine Teams erstellt.",
+    "noLocationsCreated": "Noch keine Standorte erstellt.",
+    "createNow": "Jetzt erstellen",
+    "opensNewTab": "Öffnet in einem neuen Tab",
+
     "colorMarker": "Farbmarkierung",
     "selectLocations": "Standorte auswählen",
     "locations": "Standorte"
@@ -1577,6 +1598,8 @@
     "declinedToast": "Einladung abgelehnt"
   },
   "CompanyCreateWizard": {
+    "billingAddressLabel": "Rechnungsadresse",
+    "billingAddressRequired": "Bitte die vollständige Rechnungsadresse angeben.",
     "countryGermany": "Deutschland",
     "countryAustria": "Österreich",
     "countrySwitzerland": "Schweiz",
@@ -1669,6 +1692,11 @@
     "editWorkspaceUrl": "Anpassen"
   },
   "DatePickerField": {
+    "openCalendar": "Kalender öffnen",
+    "today": "Heute",
+    "clear": "Leeren",
+    "invalidDate": "Bitte ein gültiges Datum innerhalb des erlaubten Zeitraums eingeben.",
+
     "monthJanuary": "Januar",
     "monthFebruary": "Februar",
     "monthMarch": "März",
@@ -1697,6 +1725,10 @@
     "nextYears": "Nächste Jahre"
   },
   "InfoRequestDetail": {
+    "sendReminder": "An Anfrage erinnern",
+    "reminderSending": "Erinnerung wird gesendet …",
+    "reminderSent": "Erinnerung gesendet",
+    "reminderError": "Erinnerung konnte nicht gesendet werden.",
     "statusOpen": "Offen",
     "statusUploaded": "Upload erhalten",
     "statusReview": "Antwort erhalten – zu prüfen",
@@ -1838,6 +1870,17 @@
     "acceptAll": "Alle akzeptieren"
   },
   "OpeningHoursEditor": {
+    "bulkTitle": "Mehrere Tage gemeinsam bearbeiten",
+    "weekdays": "Mo–Fr",
+    "weekend": "Wochenende",
+    "allDays": "Alle Tage",
+    "bulkMode": "Öffnung für ausgewählte Tage",
+    "bulkStart": "Öffnet um",
+    "bulkEnd": "Schließt um",
+    "bulkBreak": "Pause",
+    "bulkApply": "Für {count} Tage übernehmen",
+    "bulkHint": "Ersetzt die Zeitfenster der ausgewählten Tage. Andere Tage bleiben unverändert.",
+
     "useCustomLabel": "Eigene Öffnungszeiten für diesen Standort festlegen",
     "defaultHoursNote": "Es gelten die Standard-Öffnungszeiten des Unternehmens (Schichtplanung → Einstellungen).",
     "modeClosed": "Geschlossen",
@@ -3059,6 +3102,8 @@
     },
     "profilePercent": "Profil zu {percent} % vollständig",
     "missingCount": "{count, plural, one {# Angabe fehlt} other {# Angaben fehlen}}",
+    "profileRequestTitle": "Personalakte vervollständigen",
+    "profileRequestMessage": "Bitte ergänzen Sie die folgenden fehlenden Angaben für Ihre Personalakte. Vielen Dank!",
     "requestInApp": "In der App anfragen",
     "contact": "Kontakt",
     "organisation": "Organisation",
@@ -3128,10 +3173,16 @@
         "Unbefristet": "Unbefristet",
         "Teilzeit": "Teilzeit",
         "Befristet": "Befristet",
-        "Werkstudentin": "Werkstudent:in"
+        "Werkstudentin": "Werkstudent:in",
+        "Minijob": "Minijob",
+        "Midijob": "Midijob",
+        "Kurzfristig": "Kurzfristige Beschäftigung",
+        "Ausbildung": "Ausbildung",
+        "Praktikum": "Praktikum"
       },
       "startDate": "Eintrittsdatum",
       "employeeNumber": "Personalnummer",
+      "usedSeats": "{used} von {total} Plätzen belegt",
       "freeSeats": "Noch {count} Plätze frei",
       "cancel": "Abbrechen",
       "submit": "Mitarbeiter anlegen",
@@ -3905,6 +3956,11 @@
     "legacySubject": "Bisheriger Freitext: {subject}"
   },
   "SettingsPage": {
+    "saveChanges": "Änderungen speichern",
+    "unsavedChanges": "Ungespeicherte Änderungen",
+    "noChanges": "Keine ungespeicherten Änderungen",
+    "saveFailed": "Speichern fehlgeschlagen. Deine Eingaben bleiben erhalten.",
+
     "title": "Einstellungen",
     "subtitle": "Persönliche und firmenweite Einstellungen an einem Ort",
     "navLabel": "Einstellungsbereiche",
@@ -4009,7 +4065,7 @@
       "timezone": "Zeitzone",
       "timezoneHint": "Für Ihre Anzeige von Uhrzeiten.",
       "dateFormat": "Datumsformat",
-      "dateFormatHint": "Beispiel: {example}",
+      "dateFormatHint": "So erscheinen Datumsangaben in Formularen und Mitarbeiteransichten, zum Beispiel {example}.",
       "startPage": "Startseite",
       "startPageHint": "Diese Seite öffnet sich nach der Anmeldung.",
       "myNotifications": "Meine Benachrichtigungen",
@@ -4026,7 +4082,7 @@
       "name": "Unternehmensname",
       "nameHint": "Erscheint in der Seitenleiste, in E-Mails und auf Exporten.",
       "slug": "Mandanten-ID",
-      "slugHint": "Teil jeder Adresse in Ployo. Eine Änderung ändert alle Links.",
+      "slugHint": "Feste Kennung des Unternehmens. Sie kann nicht geändert werden.",
       "contactEmail": "Kontakt-E-Mail",
       "contactEmailHint": "Allgemeine Adresse für Rückfragen von Mitarbeitern.",
       "industry": "Branche",
@@ -4050,7 +4106,7 @@
       "vacationDaysHint": "Jahresurlaub für Mitarbeiter ohne eigenen Wert im Vertrag.",
       "daysPerYear": "Tage / Jahr",
       "workHours": "Wochenstunden",
-      "workHoursHint": "Vorschlag beim Anlegen neuer Mitarbeiter – änderbar pro Vertrag.",
+      "workHoursHint": "Standard-Wochenstunden als Zahl, zum Beispiel 40 oder 38,5.",
       "employeeNumbers": "Personalnummern",
       "employeeNumberRequired": "Personalnummer beim Anlegen verpflichtend",
       "employeeNumberRequiredHint": "Neue Mitarbeiter können nur mit Personalnummer gespeichert werden.",
@@ -4130,8 +4186,8 @@
       "minStaffing": "Mindestbesetzung",
       "minStaffingHint": "Personen pro Standort und Schicht.",
       "persons": "Personen",
-      "breakRule": "Pausenregel",
-      "breakRuleHint": "Wird beim Anlegen neuer Schichten vorgeschlagen.",
+      "breakRule": "Pausenvorschlag für neue Schichten",
+      "breakRuleHint": "Trägt beim Anlegen einer Schicht anhand ihrer Dauer eine Pause vor. Die Pause kann je Schicht angepasst werden.",
       "breakRuleOption": {
         "none": "Keine automatische Pause",
         "15_4": "15 Minuten ab 4 Std.",
@@ -4168,6 +4224,7 @@
       "presetName": "Name der Schicht",
       "presetStart": "Beginn",
       "presetEnd": "Ende",
+      "presetColor": "Schichtfarbe",
       "presetPause": "Pause",
       "pauseOption": "{minutes, plural, =0 {Keine Pause} other {# Min. Pause}}",
       "net": "{hours} Std. netto",
@@ -4249,7 +4306,7 @@
       "api": "API-Zugang",
       "apiHint": "Daten automatisiert lesen und schreiben.",
       "documents": "Dokumente & Unterschriften",
-      "documentsHint": "Dateien, Personalakte und Verträge sind in Ployo integriert.",
+      "documentsHint": "Digitale Unterschriften sind noch nicht verfügbar.",
       "active": "Aktiv"
     }
   },

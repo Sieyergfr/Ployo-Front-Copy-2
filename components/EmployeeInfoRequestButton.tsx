@@ -1,12 +1,14 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { createEmployeeInfoRequestAction } from "@/app/(dashboard)/u/[tenant]/employees/actions";
 import DatePickerField from "@/components/DatePickerField";
 import FormSubmitButton from "@/components/FormSubmitButton";
 import { FormErrorBanner } from "@/components/FormFeedback";
 import { useCloseOnSuccess, useUniversalPopup } from "@/components/UniversalPopup";
 import type { ActionState } from "@/lib/action-state";
+import { useToast } from "@/components/Toasts";
+import type { InfoRequestDraftContent } from "@/lib/info-request-drafts";
 import { FileText, MessageSquarePlus, PenLine, Plus, Send, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 
@@ -28,9 +30,9 @@ const QUICK_ITEMS: Array<["document" | "field", string]> = [
 let nextItemId = 1;
 
 /** Elemente einer mehrteiligen Anfrage (M7): Dokument oder Angabe, Pflicht oder optional. */
-function InfoRequestItemsEditor() {
+function InfoRequestItemsEditor({ initialItems }: { initialItems?: InfoRequestDraftContent["items"] }) {
   const t = useTranslations("EmployeeInfoRequestButton");
-  const [items, setItems] = useState<ItemDraft[]>([{ id: nextItemId++, kind: "document", label: "", required: true }]);
+  const [items, setItems] = useState<ItemDraft[]>(() => initialItems?.length ? initialItems.map((item) => ({ ...item, id: nextItemId++ })) : [{ id: nextItemId++, kind: "document", label: "", required: true }]);
   const update = (id: number, patch: Partial<ItemDraft>) =>
     setItems((current) => current.map((item) => (item.id === id ? { ...item, ...patch } : item)));
   const add = (kind: "document" | "field" = "document", label = "") =>
@@ -114,13 +116,17 @@ function InfoRequestItemsEditor() {
   );
 }
 
-function InfoRequestForm({
+function InfoRequestFormEditor({
   tenant,
   employeeId,
   employeeHandle,
   employeeName,
   onDone,
+  initialDraft,
+  draftRestored,
 }: {
+  draftRestored: boolean;
+  initialDraft: InfoRequestDraftContent | null;
   tenant: string;
   employeeId: string;
   employeeHandle: string;
@@ -133,18 +139,45 @@ function InfoRequestForm({
     initialState,
   );
   useCloseOnSuccess(state, isPending, onDone);
+  const formRef = useRef<HTMLFormElement>(null);
+  const { toast } = useToast();
+  const [savingDraft, setSavingDraft] = useState(false);
+  const [draftError, setDraftError] = useState("");
+  const saveDraft = async () => {
+    if (!formRef.current) return;
+    const form = new FormData(formRef.current);
+    const kinds = form.getAll("itemKind");
+    const required = form.getAll("itemRequired");
+    const content = {
+      title: form.get("title"), message: form.get("message"), dueAt: form.get("dueAt"), dueTime: form.get("dueTime"), fileRequested: initialDraft?.fileRequested ?? false,
+      items: form.getAll("itemLabel").map((label, index) => ({ label, kind: kinds[index], required: required[index] === "1" })),
+    };
+    setSavingDraft(true);
+    setDraftError("");
+    try {
+      const response = await fetch(`/api/tenants/${encodeURIComponent(tenant)}/employees/${encodeURIComponent(employeeHandle)}/info-requests/draft`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(content),
+      });
+      if (!response.ok) throw new Error((await response.json().catch(() => null))?.error || t("draftError"));
+      toast({ tone: "success", title: t("draftSaved") });
+      onDone();
+    } catch (error) { setDraftError(error instanceof Error ? error.message : t("draftError")); }
+    finally { setSavingDraft(false); }
+  };
 
   return (
-    <form className="flex flex-col gap-4" action={formAction}>
+    <form ref={formRef} className="flex flex-col gap-4" action={formAction}>
       <input type="hidden" name="tenant" value={tenant} />
       <input type="hidden" name="employeeId" value={employeeId} />
       <input type="hidden" name="employeeHandle" value={employeeHandle} />
+      {initialDraft?.fileRequested && <input type="hidden" name="fileRequested" value="on" />}
       <div className="rounded-xl border border-border bg-bg p-3 text-[12.5px] text-muted-2">
         {t.rich("requestTo", {
           name: employeeName,
           b: (chunks) => <span className="font-semibold text-ink">{chunks}</span>,
         })}
       </div>
+      {draftRestored && <p className="m-0 text-[13px] text-muted-2">{t("draftRestored")}</p>}
       <div className="field">
         <label htmlFor="info-request-title" className="label">
           {t("titleLabel")}
@@ -152,17 +185,18 @@ function InfoRequestForm({
         <input
           id="info-request-title"
           name="title"
+          defaultValue={initialDraft?.title}
           className="input"
           placeholder={t("titlePlaceholderOptional")}
         />
       </div>
-      <InfoRequestItemsEditor />
+      <InfoRequestItemsEditor initialItems={initialDraft?.items} />
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="field">
           <label htmlFor="info-request-due" className="label">
             {t("dueDate")}
           </label>
-          <DatePickerField id="info-request-due" name="dueAt" />
+          <DatePickerField id="info-request-due" name="dueAt" defaultValue={initialDraft?.dueAt} />
         </div>
         <div className="field">
           <label htmlFor="info-request-due-time" className="label">
@@ -171,6 +205,7 @@ function InfoRequestForm({
           <input
             id="info-request-due-time"
             name="dueTime"
+            defaultValue={initialDraft?.dueTime}
             type="time"
             className="input"
           />
@@ -183,21 +218,49 @@ function InfoRequestForm({
         <textarea
           id="info-request-message"
           name="message"
+          defaultValue={initialDraft?.message}
           className="input min-h-28 resize-none"
           placeholder={t("messagePlaceholder")}
         />
       </div>
-      <FormErrorBanner message={state.error} />
+      <FormErrorBanner message={state.error || draftError} />
       <div className="mt-1 flex justify-end gap-2.5 border-t border-border-soft pt-4">
         <button type="button" className="btn btn-secondary" onClick={onDone}>
           {t("cancel")}
         </button>
-        <FormSubmitButton Icon={Send} pendingLabel={t("saving")}>
+        <button type="button" className="btn btn-secondary" disabled={savingDraft || isPending} onClick={saveDraft}>
+          {savingDraft ? t("saving") : t("saveDraft")}
+        </button>
+        <FormSubmitButton disabled={savingDraft} Icon={Send} pendingLabel={t("saving")}>
           {t("saveRequest")}
         </FormSubmitButton>
       </div>
     </form>
   );
+}
+
+function InfoRequestForm(props: {
+  tenant: string; employeeId: string; employeeHandle: string; employeeName: string; onDone: () => void;
+  initialValues?: InfoRequestDraftContent;
+}) {
+  const t = useTranslations("EmployeeInfoRequestButton");
+  const [loaded, setLoaded] = useState<{ content: InfoRequestDraftContent } | null | undefined>(undefined);
+  const [error, setError] = useState("");
+  const [retry, setRetry] = useState(0);
+  useEffect(() => {
+    const abort = new AbortController();
+    fetch(`/api/tenants/${encodeURIComponent(props.tenant)}/employees/${encodeURIComponent(props.employeeHandle)}/info-requests/draft`, { signal: abort.signal, cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error();
+        const data = await response.json();
+        setLoaded(data.draft);
+        setError("");
+      }).catch(() => { if (!abort.signal.aborted) setError(t("draftLoadError")); });
+    return () => abort.abort();
+  }, [props.tenant, props.employeeHandle, retry, t]);
+  if (error) return <div role="alert">{error}<button type="button" className="btn btn-secondary" onClick={() => setRetry((value) => value + 1)}>{t("retryDraft")}</button></div>;
+  if (loaded === undefined) return <p role="status">{t("loadingDraft")}</p>;
+  return <InfoRequestFormEditor {...props} initialDraft={loaded?.content ?? props.initialValues ?? null} draftRestored={Boolean(loaded)} />;
 }
 
 export default function EmployeeInfoRequestButton({
@@ -207,6 +270,7 @@ export default function EmployeeInfoRequestButton({
   employeeName,
   className = "btn btn-primary btn-sm",
   label,
+  initialValues,
 }: {
   tenant: string;
   employeeId: string;
@@ -214,6 +278,7 @@ export default function EmployeeInfoRequestButton({
   employeeName: string;
   className?: string;
   label?: string;
+  initialValues?: InfoRequestDraftContent;
 }) {
   const { openPopup, closePopup } = useUniversalPopup();
   const t = useTranslations("EmployeeInfoRequestButton");
@@ -232,6 +297,7 @@ export default function EmployeeInfoRequestButton({
               employeeHandle={employeeHandle}
               employeeName={employeeName}
               onDone={closePopup}
+              initialValues={initialValues}
             />
           ),
         })

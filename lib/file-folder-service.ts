@@ -17,7 +17,7 @@ import {
 } from "@/lib/file-folders";
 import { prisma } from "@/lib/prisma";
 import { createReadSignedUrl } from "@/lib/storage/signed-url";
-import { assertFolderPinAccess } from "@/lib/storage/storage.service";
+import { assertFolderPinAccess, folderScope, requireFileOwnerWriteAccess, type FileOwnerType } from "@/lib/storage/storage.service";
 import { requireTenantAccess, requireTenantMembership, type TenantAccess } from "@/lib/tenant-access";
 
 /**
@@ -35,9 +35,9 @@ function normalizePath(value: string) {
     .join("/");
 }
 
-async function loadTenantFolder(tenantId: string, path: string) {
+async function loadTenantFolder(tenantId: string, path: string, scope = "tenant") {
   const folder = await prisma.tenantFileFolder.findFirst({
-    where: { tenantId, scope: "tenant", status: "active", path },
+    where: { tenantId, scope, status: "active", path },
   });
 
   if (!folder) {
@@ -71,6 +71,8 @@ async function validIds(tenantId: string, kind: "role" | "team" | "location", id
 export async function updateTenantFolderSettings(input: {
   tenantSlug: string;
   path: string;
+  ownerType?: FileOwnerType;
+  ownerId?: string;
   name?: string;
   pinned?: boolean;
   accessRoleIds?: string[];
@@ -80,9 +82,16 @@ export async function updateTenantFolderSettings(input: {
 }) {
   const access = await requireTenantAccess(input.tenantSlug, "files", "write");
   const path = normalizePath(input.path);
-  const folder = await loadTenantFolder(access.tenantId, path);
+  const ownerType = input.ownerType ?? "tenant";
+  const ownerAccess = await requireFileOwnerWriteAccess(input.tenantSlug, ownerType, input.ownerId);
+  const scope = ownerAccess.scope;
+  const folder = await loadTenantFolder(access.tenantId, path, scope);
+  await requireTenantFileAreaAccess(access, folder);
+  if (scope !== "tenant") {
+    await assertFolderPinAccess({ tenantSlug: input.tenantSlug, folderPath: path, scope });
+  }
 
-  if (await isTenantFolderPathDenied(access, path)) {
+  if (await isTenantFolderPathDenied(access, path, scope)) {
     throw new Error("FORBIDDEN");
   }
 
@@ -91,6 +100,8 @@ export async function updateTenantFolderSettings(input: {
     input.sharedWithEmployees !== undefined ||
     input.visibleTeamIds !== undefined ||
     input.visibleLocationIds !== undefined;
+
+  if (scope !== "tenant" && (input.sharedWithEmployees !== undefined || input.visibleTeamIds !== undefined || input.visibleLocationIds !== undefined)) throw new Error("FORBIDDEN");
 
   if (changesAccess && !isFolderManager(access) && access.permissionLevel !== "admin") {
     throw new Error("FORBIDDEN");
@@ -145,7 +156,7 @@ export async function updateTenantFolderSettings(input: {
   if (name && name !== folder.name) {
     // Dateien führen den Ordnernamen als Anzeige-Kopie mit.
     await prisma.tenantFile.updateMany({
-      where: { tenantId: access.tenantId, employeeId: null, locationId: null, teamId: null, folderSlug: path },
+      where: { tenantId: access.tenantId, employeeId: folder.employeeId, locationId: folder.locationId, teamId: folder.teamId, folderSlug: path },
       data: { folderName: updated.name },
     });
   }
@@ -172,15 +183,12 @@ export async function updateTenantFolderSettings(input: {
 }
 
 /** Zentrale Datei laden und dieselben Prüfungen wie beim Abruf anwenden (ACL, Fachbereich, Ordnerrechte, PIN). */
-async function loadWritableCentralFile(access: TenantAccess, tenantSlug: string, fileId: string, pin?: string) {
+async function loadWritableFile(access: TenantAccess, tenantSlug: string, fileId: string, pin?: string) {
   const file = await prisma.tenantFile.findFirst({
     where: {
       id: fileId,
       tenantId: access.tenantId,
       status: "active",
-      employeeId: null,
-      locationId: null,
-      teamId: null,
     },
     include: { parent: { select: { accessRoleIdsJson: true, accessUserIdsJson: true } } },
   });
@@ -191,14 +199,17 @@ async function loadWritableCentralFile(access: TenantAccess, tenantSlug: string,
 
   requireFileAcl(file.parent ?? file, access);
   await requireTenantFileAreaAccess(access, file);
-  await assertFolderPinAccess({ tenantSlug, folderPath: file.folderSlug, pin: pin ?? null });
+  const ownerType = file.employeeId ? "employee" : file.locationId ? "location" : file.teamId ? "team" : "tenant";
+  const ownerId = file.employeeId ?? file.locationId ?? file.teamId ?? undefined;
+  await requireFileOwnerWriteAccess(tenantSlug, ownerType, ownerId);
+  await assertFolderPinAccess({ tenantSlug, folderPath: file.folderSlug, pin: pin ?? null, scope: folderScope(ownerType, ownerId) });
 
   return file;
 }
 
 export async function renameTenantFile(input: { tenantSlug: string; fileId: string; name: string; pin?: string }) {
   const access = await requireTenantAccess(input.tenantSlug, "files", "write");
-  const file = await loadWritableCentralFile(access, input.tenantSlug, input.fileId, input.pin);
+  const file = await loadWritableFile(access, input.tenantSlug, input.fileId, input.pin);
   const name = input.name.trim().replace(/[\\/]+/g, "-").slice(0, 240);
 
   if (!name) {
@@ -232,21 +243,24 @@ export async function moveTenantFile(input: {
   pin?: string;
 }) {
   const access = await requireTenantAccess(input.tenantSlug, "files", "write");
-  const file = await loadWritableCentralFile(access, input.tenantSlug, input.fileId, input.pin);
+  const file = await loadWritableFile(access, input.tenantSlug, input.fileId, input.pin);
   const targetPath = normalizePath(input.targetPath);
 
   if (targetPath === file.folderSlug) {
     throw new Error(FILE_FOLDER_ERRORS.sameFolder);
   }
 
-  const target = targetPath ? await loadTenantFolder(access.tenantId, targetPath) : null;
+  const ownerType = file.employeeId ? "employee" : file.locationId ? "location" : file.teamId ? "team" : "tenant";
+  const scope = folderScope(ownerType, file.employeeId ?? file.locationId ?? file.teamId ?? undefined);
+  const target = targetPath ? await loadTenantFolder(access.tenantId, targetPath, scope) : null;
+  if (target) await requireTenantFileAreaAccess(access, target);
 
-  if (targetPath && (await isTenantFolderPathDenied(access, targetPath))) {
+  if (targetPath && (await isTenantFolderPathDenied(access, targetPath, scope))) {
     throw new Error("FORBIDDEN");
   }
 
   if (targetPath) {
-    await assertFolderPinAccess({ tenantSlug: input.tenantSlug, folderPath: targetPath, pin: null });
+    await assertFolderPinAccess({ tenantSlug: input.tenantSlug, folderPath: targetPath, pin: null, scope });
   }
 
   const rootId = file.parentId ?? file.id;
@@ -254,7 +268,7 @@ export async function moveTenantFile(input: {
 
   await prisma.tenantFile.updateMany({
     where: { tenantId: access.tenantId, OR: [{ id: rootId }, { parentId: rootId }] },
-    data: { folderSlug: targetPath, folderName },
+    data: { folderSlug: targetPath, folderName, ...(target?.hiddenFromEmployee ? { hiddenFromEmployee: true } : {}) },
   });
   await recordTenantAudit({
     tenantId: access.tenantId,

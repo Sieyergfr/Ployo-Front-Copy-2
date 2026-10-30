@@ -3,22 +3,28 @@
 import {
   dropUploadFilesAction,
   unlockOwnerFolderAction,
+  updateFolderSettingsAction,
 } from "@/app/(dashboard)/u/[tenant]/dateien/actions";
 import EmployeeVisibilityToggle from "@/components/EmployeeVisibilityToggle";
 import { CreateFolderButton, UploadFileButton } from "@/components/FileActionButtons";
-import { DeleteFileButton, DeleteFolderButton, RecentlyDeletedPanel } from "@/components/FileTrash";
+import { DeleteFolderButton, RecentlyDeletedPanel } from "@/components/FileTrash";
 import { FormErrorBanner } from "@/components/FormFeedback";
 import FormSubmitButton from "@/components/FormSubmitButton";
+import { OwnerFileMenu } from "@/components/OwnerFileMenu";
+import { DbMenu, dbMenuItemClass } from "@/components/dashboard/DbMenu";
+import { FolderSettingsDrawer, RenameFolderModal } from "@/components/dashboard/files/FileDialogs";
+import { useActionStateWithToast } from "@/components/Toasts";
 import { OwnerFileActions } from "@/components/OwnerFileActions";
 import { useUniversalPopup } from "@/components/UniversalPopup";
 import type { ActionState } from "@/lib/action-state";
-import type { FileFolder, FileUploadOptions } from "@/lib/files";
+import type { FileFolder, FileOwnerContext, FileUploadOptions } from "@/lib/files";
 import {
   ArrowLeft,
   ChevronRight,
   FileText,
   Folder,
   Lock,
+  Pin,
   UploadCloud,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
@@ -44,6 +50,8 @@ type T = ReturnType<typeof useTranslations>;
 
 export type OwnerFilesFolder = {
   name: string;
+  pinned?: boolean;
+  accessRoleIds?: string[];
   fileCount: number;
   locked?: boolean;
   /** Vollständiger Pfad, z. B. "vertraege/2026". Ohne Pfad ist der Ordner nicht navigierbar. */
@@ -53,6 +61,7 @@ export type OwnerFilesFolder = {
 };
 
 export type OwnerFilesFile = {
+  version?: number;
   name: string;
   folder: string;
   folderSlug: string;
@@ -92,6 +101,8 @@ export default function OwnerFilesTab({
   uploadOptions,
   canManageFiles,
   canDeleteFiles = false,
+  canManageReminders = false,
+  canManageAccess = false,
   initialFolderPath = "",
   emptyLabel,
   employeeHandle,
@@ -107,6 +118,8 @@ export default function OwnerFilesTab({
   canManageFiles: boolean;
   /** Löschen von Dateien/Ordnern (mit 24-h-Rückgängig) — "files" + canDelete und Schreibrecht auf die Ablage. */
   canDeleteFiles?: boolean;
+  canManageReminders?: boolean;
+  canManageAccess?: boolean;
   initialFolderPath?: string;
   emptyLabel: string;
   /**
@@ -190,7 +203,7 @@ export default function OwnerFilesTab({
 
         return !folder.path.includes("/");
       })
-      .sort((a, b) => a.name.localeCompare(b.name, "de"));
+      .sort((a, b) => Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) || a.name.localeCompare(b.name, "de"));
   }, [currentPath, navigableFolders]);
 
   const currentFiles = useMemo(
@@ -220,11 +233,11 @@ export default function OwnerFilesTab({
     ? `${basePath}?tab=files&folder=${encodeURIComponent(currentPath)}`
     : `${basePath}?tab=files`;
 
-  const deleteContext = canDeleteFiles ? { tenant, ownerType, ownerId } : undefined;
+  const ownerContext: FileOwnerContext = { ownerType, ownerId, returnPath };
 
   return (
     <>
-      <section className="overflow-hidden rounded-card border border-border bg-white">
+      <section className="rounded-card border border-border bg-white">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-6 pt-5 pb-3.5">
           <div className="flex min-w-0 items-center gap-3">
             {currentPath && (
@@ -253,16 +266,7 @@ export default function OwnerFilesTab({
 
           {(canManageFiles || canDeleteFiles) && !lockedAncestor && (
             <div className="flex flex-wrap gap-2">
-              {currentFolder && canDeleteFiles && (
-                <DeleteFolderButton
-                  tenant={tenant}
-                  ownerType={ownerType}
-                  ownerId={ownerId}
-                  path={currentFolder.path}
-                  name={currentFolder.name}
-                  afterDelete={() => navigate(parentPath)}
-                />
-              )}
+              {currentFolder && <OwnerFolderMenu tenant={tenant} folder={currentFolder} ownerContext={ownerContext} canManage={canManageFiles} canManageAccess={canManageAccess} roles={uploadOptions.roles} canDelete={canDeleteFiles} onOpen={() => navigate(currentFolder.path)} onDeleted={() => navigate(parentPath)} />}
               {canManageFiles && (
                 <>
                   <CreateFolderButton
@@ -322,7 +326,7 @@ export default function OwnerFilesTab({
                         ? { tenant, employeeHandle: employeeHandle!, employeeId: ownerId }
                         : undefined
                     }
-                    deleteContext={deleteContext}
+                    actions={<OwnerFolderMenu tenant={tenant} folder={folder} ownerContext={ownerContext} canManage={canManageFiles} canManageAccess={canManageAccess} roles={uploadOptions.roles} canDelete={canDeleteFiles} onOpen={() => navigate(folder.path)} />}
                     t={t}
                   />
                 ))}
@@ -345,6 +349,10 @@ export default function OwnerFilesTab({
                         : undefined
                     }
                     canDelete={canDeleteFiles}
+                    canManage={canManageFiles}
+                    canManageReminders={canManageReminders}
+                    returnPath={returnPath}
+                    folderOptions={navigableFolders.map(toFileFolderOption)}
                     t={t}
                   />
                 ))
@@ -375,6 +383,8 @@ function toFileFolderOption(folder: OwnerFilesFolder & { path: string }): FileFo
     owner: "HR",
     updatedAt: "",
     locked: folder.locked,
+    pinned: folder.pinned,
+    accessRoleIds: folder.accessRoleIds,
   };
 }
 
@@ -435,17 +445,17 @@ function FolderCard({
   folder,
   onOpen,
   visibility,
-  deleteContext,
+  actions,
   t,
 }: {
   folder: OwnerFilesFolder & { path: string };
   onOpen: () => void;
   visibility?: VisibilityContext;
-  deleteContext?: { tenant: string; ownerType: OwnerFilesOwnerType; ownerId: string };
+  actions?: React.ReactNode;
   t: T;
 }) {
   return (
-    <div className="flex w-full items-center rounded-xl border border-border bg-white pr-[15px] transition-colors hover:bg-bg">
+    <div data-pinned={Boolean(folder.pinned)} className="flex w-full items-center rounded-xl border border-border bg-white pr-[15px] transition-colors hover:bg-bg">
       <button
         type="button"
         onClick={onOpen}
@@ -465,6 +475,7 @@ function FolderCard({
             )}
           </span>
         </span>
+        {folder.pinned && <Pin size={13} className="shrink-0 text-[#8b6ed4]" />}
         {folder.locked && <Lock size={13} className="shrink-0 text-muted" />}
       </button>
       {visibility && (
@@ -476,20 +487,52 @@ function FolderCard({
           name={folder.name}
         />
       )}
-      {deleteContext && (
-        <span className="ml-1.5">
-          <DeleteFolderButton
-            tenant={deleteContext.tenant}
-            ownerType={deleteContext.ownerType}
-            ownerId={deleteContext.ownerId}
-            path={folder.path}
-            name={folder.name}
-            compact
-          />
-        </span>
-      )}
+      {actions}
     </div>
   );
+}
+
+function OwnerFolderMenu({ tenant, folder, ownerContext, canManage, canManageAccess, roles, canDelete, onOpen, onDeleted }: {
+  tenant: string;
+  folder: OwnerFilesFolder & { path: string };
+  ownerContext: FileOwnerContext;
+  canManage: boolean;
+  canManageAccess: boolean;
+  roles: FileUploadOptions["roles"];
+  canDelete: boolean;
+  onOpen: () => void;
+  onDeleted?: () => void;
+}) {
+  const t = useTranslations("FilesUi");
+  const [rename, setRename] = useState(false);
+  const [settings, setSettings] = useState(false);
+  const [, pinAction, pinPending] = useActionStateWithToast(updateFolderSettingsAction);
+  const [, startPinTransition] = useTransition();
+  const mapped = toFileFolderOption(folder);
+  if (!canManage && !canDelete) return null;
+  return <>
+    <DbMenu label={t("folderMenu", { name: folder.name })}>
+      <button type="button" className={dbMenuItemClass} onClick={onOpen}>{t("open")}</button>
+      {canManage && <>
+        <CreateFolderButton tenant={tenant} ownerType={ownerContext.ownerType} ownerId={ownerContext.ownerId} returnPath={ownerContext.returnPath} parentPath={folder.path} className={dbMenuItemClass}>{t("newSubfolder")}</CreateFolderButton>
+        <button type="button" className={dbMenuItemClass} onClick={() => setRename(true)}>{t("rename")}</button>
+        <button type="button" className={dbMenuItemClass} disabled={pinPending} onClick={() => {
+          const data = new FormData();
+          data.set("tenant", tenant);
+          data.set("path", folder.path);
+          data.set("ownerType", ownerContext.ownerType);
+          data.set("ownerId", ownerContext.ownerId);
+          data.set("returnPath", ownerContext.returnPath);
+          data.set("pinned", folder.pinned ? "false" : "true");
+          startPinTransition(() => pinAction(data));
+        }}>{folder.pinned ? t("unpin") : t("pin")}</button>
+        <button type="button" className={dbMenuItemClass} onClick={() => setSettings(true)}>{t("visibility")}</button>
+      </>}
+      {canDelete && <DeleteFolderButton tenant={tenant} ownerType={ownerContext.ownerType} ownerId={ownerContext.ownerId} path={folder.path} name={folder.name} afterDelete={onDeleted} className={`${dbMenuItemClass} text-danger`} label={t("delete")} />}
+    </DbMenu>
+    {rename && <RenameFolderModal tenant={tenant} folder={mapped} ownerContext={ownerContext} onClose={() => setRename(false)} />}
+    {settings && <FolderSettingsDrawer tenant={tenant} folder={mapped} ownerContext={ownerContext} roles={roles} teams={[]} locations={[]} canManageAccess={canManageAccess} onClose={() => setSettings(false)} />}
+  </>;
 }
 
 function FileRow({
@@ -497,12 +540,20 @@ function FileRow({
   tenant,
   visibility,
   canDelete = false,
+  canManage,
+  canManageReminders,
+  returnPath,
+  folderOptions,
   t,
 }: {
   file: OwnerFilesFile;
   tenant: string;
   visibility?: VisibilityContext;
   canDelete?: boolean;
+  canManage: boolean;
+  canManageReminders: boolean;
+  returnPath: string;
+  folderOptions: FileFolder[];
   t: T;
 }) {
   return (
@@ -533,9 +584,7 @@ function FileRow({
           name={file.name}
         />
       )}
-      {canDelete && file.storageFileId && (
-        <DeleteFileButton tenant={tenant} fileId={file.storageFileId} name={file.name} compact />
-      )}
+      {file.storageFileId && <OwnerFileMenu tenant={tenant} file={{ ...file, storageFileId: file.storageFileId }} folders={folderOptions} returnPath={returnPath} canManage={canManage} canDelete={canDelete} canManageReminders={canManageReminders} />}
     </div>
   );
 }

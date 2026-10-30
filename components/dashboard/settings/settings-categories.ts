@@ -2,7 +2,6 @@
 export const SETTINGS_CATEGORIES = [
   "account",
   "company",
-  "roles",
   "security",
   "timeTracking",
   "shifts",

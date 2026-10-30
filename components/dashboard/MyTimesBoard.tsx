@@ -1,5 +1,8 @@
 "use client";
 
+import { useDatePreference } from "@/components/DatePreferences";
+import { preferredDateFormatter } from "@/lib/date-picker";
+
 import { TimeCorrectionForm } from "@/components/dashboard/MyQuickActions";
 import { useToast } from "@/components/Toasts";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -63,6 +66,7 @@ export default function MyTimesBoard({
 }) {
   const t = useTranslations("MyTimes");
   const locale = useLocale();
+  const datePreference = useDatePreference();
   const router = useRouter();
   const { toast } = useToast();
   const pendingDates = new Set(corrections.filter((item) => item.status === "pending").map((item) => item.date));
@@ -75,9 +79,9 @@ export default function MyTimesBoard({
   const maxMinutes = Math.max(8 * 60, ...days.map((day) => Math.max(day.workedMinutes, day.plannedMinutes)));
   const scaleHours = Math.ceil(maxMinutes / 120) * 2;
   const isMonth = days.length > 7;
-  const weekday = new Intl.DateTimeFormat(locale, { weekday: "short", timeZone: "UTC" });
-  const dateLabel = new Intl.DateTimeFormat(locale, { day: "2-digit", month: "2-digit", timeZone: "UTC" });
-  const longDate = new Intl.DateTimeFormat(locale, { weekday: "long", day: "2-digit", month: "2-digit", timeZone: "UTC" });
+  const weekday = preferredDateFormatter(datePreference, locale, { weekday: "short", timeZone: "UTC" });
+  const dateLabel = preferredDateFormatter(datePreference, locale, { day: "2-digit", month: "2-digit", timeZone: "UTC" });
+  const longDate = preferredDateFormatter(datePreference, locale, { weekday: "long", day: "2-digit", month: "2-digit", timeZone: "UTC" });
   const asDate = (iso: string) => new Date(`${iso}T12:00:00Z`);
   const totals = days.reduce(
     (sum, day) => ({

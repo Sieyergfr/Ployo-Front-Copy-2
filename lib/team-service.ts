@@ -1,7 +1,8 @@
+import { parseIdList } from "@/lib/file-folders";
 import { recordTenantAudit } from "@/lib/audit";
 import { getEmployeesForTenant } from "@/lib/employee-service";
 import { type Employee } from "@/lib/employees";
-import { canAccessFileAcl, getOptionalAreaFileAccess } from "@/lib/file-access";
+import { canAccessFileAcl, ownerFolderPathAllowed, getOptionalAreaFileAccess } from "@/lib/file-access";
 import { mapTenantFileToFileItem } from "@/lib/files";
 import { isKnownTeamColor } from "@/lib/org-options";
 import { prisma } from "@/lib/prisma";
@@ -114,6 +115,8 @@ type TenantFileRecord = {
 };
 
 type TenantFileFolderRecord = {
+  pinned?: boolean;
+  accessRoleIdsJson?: unknown;
   id: string;
   name: string;
   path: string;
@@ -243,6 +246,7 @@ function toTeam(record: TeamRecord): Team {
       type: mapped.type,
       locked: true,
       storageFileId: mapped.storageFileId,
+      version: mapped.version,
     };
   });
   const files = storedFiles;
@@ -255,6 +259,8 @@ function toTeam(record: TeamRecord): Team {
       path: folder.path,
       fileCount: 0,
       locked: folder.locked,
+      pinned: folder.pinned,
+      accessRoleIds: parseIdList(folder.accessRoleIdsJson),
     });
   }
 
@@ -370,9 +376,9 @@ export async function getTeamsForTenant(tenantSlug: string) {
     return toTeam({
       ...record,
       storageFiles: filesVisible
-        ? record.files.filter((file) => canAccessFileAcl(file.parent ?? file, fileAccess))
+        ? record.files.filter((file) => canAccessFileAcl(file.parent ?? file, fileAccess) && ownerFolderPathAllowed(fileAccess, record.fileFolders, file.folderSlug))
         : [],
-      storageFileFolders: filesVisible ? record.fileFolders : [],
+      storageFileFolders: filesVisible ? record.fileFolders.filter((folder) => ownerFolderPathAllowed(fileAccess, record.fileFolders, folder.path)) : [],
     });
   });
 }
@@ -413,9 +419,9 @@ export async function getTeamForTenant(tenantSlug: string, teamHandle: string) {
   return toTeam({
     ...record,
     storageFiles: filesVisible
-      ? record.files.filter((file) => canAccessFileAcl(file.parent ?? file, fileAccess))
+      ? record.files.filter((file) => canAccessFileAcl(file.parent ?? file, fileAccess) && ownerFolderPathAllowed(fileAccess, record.fileFolders, file.folderSlug))
       : [],
-    storageFileFolders: filesVisible ? record.fileFolders : [],
+    storageFileFolders: filesVisible ? record.fileFolders.filter((folder) => ownerFolderPathAllowed(fileAccess, record.fileFolders, folder.path)) : [],
   });
 }
 

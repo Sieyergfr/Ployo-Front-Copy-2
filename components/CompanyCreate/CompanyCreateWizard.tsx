@@ -2,6 +2,8 @@
 
 import { Check, Loader2, Pencil, X } from "lucide-react";
 import { useToast } from "@/components/Toasts";
+import AddressFields from "@/components/AddressFields";
+import { assertRequiredAddress, type AddressInput } from "@/lib/address";
 import { slugify } from "@/lib/slug";
 import { tenantIndustries, tenantSizes } from "@/lib/tenant-options";
 import Link from "next/link";
@@ -144,6 +146,7 @@ function cx(...classes: Array<string | false | null | undefined>) {
 
 export default function CompanyCreateWizard() {
   const t = useTranslations("CompanyCreateWizard");
+  const tAddress = useTranslations("AddressFields");
   const countries = getCountries(t);
   const plans = getPlans(t);
   const stepLabels = getStepLabels(t);
@@ -152,6 +155,7 @@ export default function CompanyCreateWizard() {
   const [step, setStep] = useState(1);
   const [name, setName] = useState("");
   const [customSlug, setCustomSlug] = useState("");
+  const [companyAddress, setCompanyAddress] = useState<AddressInput>({ country: "DE" });
   const [country, setCountry] = useState("DE");
   const [timezone, setTimezone] = useState("Europe/Berlin");
   const [size, setSize] = useState("");
@@ -232,6 +236,15 @@ export default function CompanyCreateWizard() {
     }
 
     setCreateError(null);
+    if (step >= 2) {
+      try {
+        assertRequiredAddress(companyAddress);
+      } catch (error) {
+        setCreateError(error instanceof Error ? error.message : t("billingAddressRequired"));
+        setStep(2);
+        return;
+      }
+    }
 
     if (step < LAST_STEP) {
       setStep((current) => current + 1);
@@ -252,6 +265,7 @@ export default function CompanyCreateWizard() {
         size,
         industry,
         contactEmail,
+        companyAddress,
         plan,
         billingCycle,
       }),
@@ -587,6 +601,16 @@ export default function CompanyCreateWizard() {
 
             {step === 2 && (
               <div className="grid gap-4">
+                <fieldset className="min-w-0 border-0 p-0" onChange={(event) => {
+                  const data = new FormData(event.currentTarget.form!);
+                  setCompanyAddress(Object.fromEntries(
+                    ["street", "houseNumber", "postalCode", "city", "careOf", "country"].map((key) =>
+                      [key, String(data.get(`companyAddress${key[0].toUpperCase()}${key.slice(1)}`) ?? "")]),
+                  ));
+                }}>
+                  <legend className="label mb-3">{t("billingAddressLabel")}</legend>
+                  <AddressFields idPrefix="create-company-address" namePrefix="companyAddress" defaults={companyAddress} required t={tAddress} />
+                </fieldset>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="field">
                     <label htmlFor="country" className="label">

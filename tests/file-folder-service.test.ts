@@ -255,3 +255,63 @@ describe("Umbenennen und Verschieben", () => {
     });
   });
 });
+
+
+describe("Owner-Dateiablagen", () => {
+  it.each(["employee", "location", "team"] as const)("hält Umbenennen, Anheften und Verschieben in der %s-Ablage", async (ownerType) => {
+    const key = `owner-${ownerType}-${RUN_ID}`;
+    const owner = ownerType === "employee"
+      ? await prisma.tenantEmployee.create({ data: { tenantId, key, name: "Owner test", employeeNumber: key, initials: "OT" } })
+      : ownerType === "location"
+        ? await prisma.tenantLocation.create({ data: { tenantId, key, name: "Owner test", kind: "Filiale" } })
+        : await prisma.tenantTeam.create({ data: { tenantId, key, name: "Owner test" } });
+    const relation = ownerType === "employee" ? { employeeId: owner.id } : ownerType === "location" ? { locationId: owner.id } : { teamId: owner.id };
+    const scope = `${ownerType}:${owner.id}`;
+    await createFolder("unterlagen", "Zentral");
+    await createFolder("archiv", "Zentrales Archiv");
+    await createFolder("unterlagen", "Unterlagen", { scope, ...relation });
+    await createFolder("archiv", "Eigenes Archiv", { scope, ...relation });
+    const central = await createFile("unterlagen", "central.pdf");
+    const file = await prisma.tenantFile.create({ data: {
+      tenantId, ...relation, folderSlug: "unterlagen", folderName: "Unterlagen", storageKey: `${key}/test.pdf`,
+      originalName: "test.pdf", displayName: "test.pdf", extension: "pdf", mimeType: "application/pdf",
+    } });
+
+    await service.updateTenantFolderSettings({ tenantSlug, ownerType, ownerId: owner.id, path: "unterlagen", name: "Personalunterlagen", pinned: true });
+    expect(await prisma.tenantFileFolder.findFirstOrThrow({ where: { tenantId, scope, path: "unterlagen" } })).toMatchObject({ name: "Personalunterlagen", pinned: true });
+    expect(await prisma.tenantFile.findUniqueOrThrow({ where: { id: central.id } })).toMatchObject({ folderName: "unterlagen" });
+    expect(await prisma.tenantFile.findUniqueOrThrow({ where: { id: file.id } })).toMatchObject({ folderName: "Personalunterlagen" });
+
+    await service.renameTenantFile({ tenantSlug, fileId: file.id, name: "Aktualisiert.pdf" });
+    await service.moveTenantFile({ tenantSlug, fileId: file.id, targetPath: "archiv" });
+    expect(await prisma.tenantFile.findUniqueOrThrow({ where: { id: file.id } })).toMatchObject({ ...relation, displayName: "Aktualisiert.pdf", folderSlug: "archiv", folderName: "Eigenes Archiv" });
+
+    // Ein rein zentraler Zielordner darf keine Datei aus ihrer Akte herausziehen.
+    await createFolder("nur-zentral", "Nur zentral");
+    await expect(service.moveTenantFile({ tenantSlug, fileId: file.id, targetPath: "nur-zentral" })).rejects.toThrow();
+    currentUserId = clerkUserId;
+    await expect(service.renameTenantFile({ tenantSlug, fileId: file.id, name: "Verboten.pdf" })).rejects.toThrow();
+    await expect(service.updateTenantFolderSettings({ tenantSlug, ownerType, ownerId: owner.id, path: "unterlagen", name: "Verboten" })).rejects.toThrow();
+  });
+});
+
+
+it("beachtet Owner-Ordnerrollen auch für Abruf und Mutationen", async () => {
+  const scope = `team:${kitchenTeamId}`;
+  const roleId = (await prisma.tenantMembership.findFirstOrThrow({ where: { tenantId, userId: clerkUserId } })).roleId!;
+  await prisma.tenantRolePermission.create({ data: { roleId, area: "teams", level: "write", scope: "all", canViewFiles: true, canUploadFiles: true } });
+  const folder = await createFolder("rollen", "Rollen", { scope, teamId: kitchenTeamId });
+  const file = await prisma.tenantFile.create({ data: { tenantId, teamId: kitchenTeamId, folderSlug: "rollen", folderName: "Rollen", storageKey: `${RUN_ID}/rollen.pdf`, originalName: "rollen.pdf", displayName: "rollen.pdf", extension: "pdf", mimeType: "application/pdf" } });
+  await service.updateTenantFolderSettings({ tenantSlug, ownerType: "team", ownerId: kitchenTeamId, path: "rollen", accessRoleIds: [accountingRoleId] });
+  currentUserId = clerkUserId;
+  const access = await tenantAccess.requireTenantAccess(tenantSlug, "files", "read");
+  const storedFolder = await prisma.tenantFileFolder.findUniqueOrThrow({ where: { id: folder.id } });
+  expect(fileAccess.ownerFolderPathAllowed(access, [storedFolder], "rollen/unterordner")).toBe(false);
+  await expect(fileAccess.requireTenantFileAreaAccess(access, file)).rejects.toThrow("FORBIDDEN");
+  await expect(service.renameTenantFile({ tenantSlug, fileId: file.id, name: "Verboten.pdf" })).rejects.toThrow("FORBIDDEN");
+  currentUserId = ownerUserId;
+  await service.updateTenantFolderSettings({ tenantSlug, ownerType: "team", ownerId: kitchenTeamId, path: "rollen", accessRoleIds: [] });
+  currentUserId = clerkUserId;
+  await service.renameTenantFile({ tenantSlug, fileId: file.id, name: "Erlaubt.pdf" });
+  expect(await prisma.tenantFile.findUniqueOrThrow({ where: { id: file.id } })).toMatchObject({ displayName: "Erlaubt.pdf" });
+});

@@ -39,7 +39,7 @@ export async function PATCH(
     taxId?: string;
     defaultLocationId?: string;
     weekStart?: string;
-    workHours?: string;
+    workHours?: string | number;
     vacationDays?: string;
     employeeNumberRequired?: boolean;
     employeeNumberPrefix?: string;

@@ -25,6 +25,7 @@
 /tmp/
 # Probe-Build (NEXT_BUILD_DIR) - nur zur Verifikation, wird nie ausgeliefert.
 /.next-check/
+/.next-review-release/
 /out/
 # scripts/deploy.sh sichert den vorherigen Build hierher, scripts/rollback.sh nutzt ihn.
 /.next.backup/

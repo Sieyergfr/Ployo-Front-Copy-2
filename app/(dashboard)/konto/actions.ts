@@ -128,14 +128,18 @@ export async function updatePreferencesAction(
   formData: FormData,
 ): Promise<ActionState> {
   return withActionErrorHandling(async () => {
+    const current = await getOwnPreferences();
     await updateOwnPreferences({
       language: formString(formData, "language"),
-      timezone: formString(formData, "timezone"),
-      startPage: formString(formData, "startPage"),
+      timezone: current.timezone,
+      startPage: "overview",
       dateFormat: formString(formData, "dateFormat"),
+      notifyVacationEvents: current.notifyVacationEvents,
+      notifyShiftEvents: current.notifyShiftEvents,
+      pushEnabled: current.pushEnabled,
     });
 
-    revalidatePath("/konto");
+    revalidatePath("/", "layout");
     redirect("/konto?saved=preferences");
   }, "Einstellungen speichern");
 }

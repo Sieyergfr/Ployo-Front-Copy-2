@@ -1,3 +1,4 @@
+import OverviewClockRefresh from "@/components/dashboard/OverviewClockRefresh";
 import { CalendarDays, Download, Plus, TriangleAlert, ArrowDown, ArrowUp, UserPlus } from "lucide-react";
 import { headers } from "next/headers";
 import Link from "next/link";
@@ -10,6 +11,7 @@ import { auth } from "@/lib/auth";
 import {
   buildAbsenceRadar,
   buildStaffingCurve,
+  staffingWindow,
   findRestViolations,
 } from "@/lib/dashboard-overview";
 import { getEmployeesForTenant } from "@/lib/employee-service";
@@ -231,6 +233,7 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
     weekday: weekdayFromDate(new Date(`${todayIso}T00:00:00Z`)),
   });
   const currentHour = Math.floor(now.minutes / 60);
+  const visibleHours = staffingWindow(curve.hours, currentHour);
   const upcomingGaps = curve.gaps.filter((gap) => gap.toHour > currentHour);
   const assignedToday = todayShifts.filter((shift) => shift.employeeId);
   const openEntries = (timeEntries?.days ?? []).flatMap((day) => day.entries).filter((entry) => entry.isOpen);
@@ -240,7 +243,7 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
   const upcomingCount = assignedToday.filter(
     (shift) => toMinutes(shift.startTime) > now.minutes && !clockedInIds.has(shift.employeeId ?? ""),
   ).length;
-  const chartMax = Math.max(1, ...curve.hours.map((hour) => Math.max(hour.need, hour.have)));
+  const chartMax = Math.max(1, ...visibleHours.map((hour) => Math.max(hour.need, hour.have)));
 
   function gapSentence(gap: (typeof curve.gaps)[number]) {
     const sickAssignee = todayShifts.find(
@@ -584,6 +587,7 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
 
             <div className="relative flex h-full min-w-0 flex-col gap-3">
               <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                <OverviewClockRefresh />
                 <span className="font-display text-[16px] font-semibold text-white">{t("hero.chartTitle")}</span>
                 <span className="flex flex-wrap gap-3.5 text-[12px] text-[#a3a39e]">
                   <span className="inline-flex items-center gap-1.5">
@@ -603,14 +607,14 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
               <div
                 role="img"
                 aria-label={t("hero.chartLabel", {
-                  from: curve.hours[0]?.hour ?? 0,
-                  to: (curve.hours[curve.hours.length - 1]?.hour ?? 0) + 1,
+                  from: visibleHours[0]?.hour ?? 0,
+                  to: (visibleHours[visibleHours.length - 1]?.hour ?? 0) + 1,
                 })}
                 className="relative flex min-h-[170px] flex-auto items-stretch gap-[3px] pt-1.5"
               >
                 <div aria-hidden="true" className="absolute right-0 bottom-[33.3%] left-0 border-t border-white/[0.06]" />
                 <div aria-hidden="true" className="absolute right-0 bottom-[66.6%] left-0 border-t border-white/[0.06]" />
-                {curve.hours.map((hour) => {
+                {visibleHours.map((hour) => {
                   const top = Math.max(hour.need, hour.have);
                   const isNow = hour.hour === currentHour;
                   const barColor = hour.hour < currentHour ? "#4f4470" : isNow ? "#c9b8f5" : "#9b85dc";
@@ -642,10 +646,9 @@ export default async function DashboardHome({ params }: DashboardHomeProps) {
                 })}
               </div>
               <div aria-hidden="true" className="flex gap-[3px] font-mono text-[9.5px] text-[#8f8f8a]">
-                {curve.hours.map((hour, index) => (
-                  <span key={hour.hour} className="min-w-0 flex-1 text-center">
-                    <span className="db-hour-label">{String(hour.hour).padStart(2, "0")}</span>
-                    <span className="db-hour-label-k hidden">{index % 4 === 0 ? hour.hour : ""}</span>
+                {visibleHours.map((hour) => (
+                  <span key={hour.hour} className="min-w-0 flex-1 text-left">
+                    <span className="inline-block -translate-x-1/2">{String(hour.hour).padStart(2, "0")}</span>
                   </span>
                 ))}
               </div>

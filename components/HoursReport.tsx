@@ -1,5 +1,7 @@
 "use client";
 
+import DatePickerField from "@/components/DatePickerField";
+
 import {
   addReportRecipientAction,
   exportHoursReportAction,
@@ -227,33 +229,30 @@ export function ReportFilterBar({
 
           {period === "custom" ? (
             <>
-              <input
-                type="date"
+              <DatePickerField
                 aria-label={t("from")}
-                className={control}
+                inputClassName={control}
                 value={from}
                 max={to || undefined}
-                onChange={(event) => setFrom(event.target.value)}
+                onChange={setFrom}
                 required
               />
               <span className="text-[#9a9a96]">–</span>
-              <input
-                type="date"
+              <DatePickerField
                 aria-label={t("to")}
-                className={control}
+                inputClassName={control}
                 value={to}
                 min={from || undefined}
-                onChange={(event) => setTo(event.target.value)}
+                onChange={setTo}
                 required
               />
             </>
           ) : (
-            <input
-              type="date"
+            <DatePickerField
               aria-label={period === "day" ? t("day") : period === "week" ? t("weekContaining") : t("monthContaining")}
-              className={control}
+              inputClassName={control}
               value={date}
-              onChange={(event) => setDate(event.target.value)}
+              onChange={setDate}
               required
             />
           )}

@@ -679,7 +679,11 @@ describe("App-Vertrag, Schicht 2: Antworten behalten ihre Struktur", () => {
     await step("POST tenants/[tenant]/employees/[employeeHandle]/invite", "owner", "tenants/[tenant]/employees/[employeeHandle]/invite", "POST", { params: { employeeHandle: second.id } });
     await step("POST tenants/[tenant]/employees/[employeeHandle]/offboard", "owner", "tenants/[tenant]/employees/[employeeHandle]/offboard", "POST", { params: { employeeHandle: second.id }, body: { endDate: isoDate(0), reason: "Vertragsende" } });
     await step("POST tenants/[tenant]/employees/[employeeHandle]/reactivate", "owner", "tenants/[tenant]/employees/[employeeHandle]/reactivate", "POST", { params: { employeeHandle: second.id } });
-    await step("POST me/employee-link (fremde Akte)", "owner", "me/employee-link", "POST", { body: { tenant: tenantSlug, mode: "link", employeeId: second.dbId }, expectStatus: 403 });
+    await step("POST me/employee-link (fremde Akte)", "colleague", "me/employee-link", "POST", { body: { tenant: tenantSlug, mode: "link", employeeId: second.dbId }, expectStatus: 403 });
+    await step("POST me/employee-link (Owner wählt bestehende Akte)", "owner", "me/employee-link", "POST", { body: { tenant: tenantSlug, mode: "link", employeeId: second.dbId } });
+    expect((await prisma.tenantEmployee.findUniqueOrThrow({ where: { id: second.dbId } })).userId).toBe(users.owner);
+    const { unlinkOwnTenantEmployee } = await import("@/lib/employee-service");
+    await unlinkOwnTenantEmployee(tenantSlug);
     await step("POST me/employee-link (neu anlegen)", "owner", "me/employee-link", "POST", { body: { tenant: tenantSlug, mode: "create", firstName: "Olivia", lastName: "Owner", email: `owner-${RUN_ID}@ployo.invalid` } });
     await step("DELETE tenants/[tenant]/teams/[teamHandle]", "owner", "tenants/[tenant]/teams/[teamHandle]", "DELETE", { params: { teamHandle: team.id } });
     await step("DELETE tenants/[tenant]/locations/[locationHandle]", "owner", "tenants/[tenant]/locations/[locationHandle]", "DELETE", { params: { locationHandle: location.id } });

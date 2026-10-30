@@ -28,6 +28,9 @@
     },
     "mainNavLabel": "Main navigation",
     "tenant": {
+      "createCompany": "Create company",
+      "companyOverview": "Company overview",
+
       "switchTenant": "Switch company",
       "unknownCompany": "Unknown company",
       "selectCompany": "Select company",
@@ -332,6 +335,13 @@
     "terminatedOn": "Terminated as of {date}"
   },
   "EmployeeInfoRequestButton": {
+    "saveDraft": "Save as draft",
+    "draftSaved": "Draft saved. You can continue in the app or on the web.",
+    "draftRestored": "Your saved draft has been restored.",
+    "draftError": "Could not save draft.",
+    "draftLoadError": "Could not load draft.",
+    "retryDraft": "Try again",
+    "loadingDraft": "Loading draft …",
     "requestTo": "Request to <b>{name}</b>. The request is logged in the HR record. Automatic notification to the employee isn't implemented yet.",
     "titleLabel": "Information needed",
     "titlePlaceholder": "e.g. new address, certificate, bank details",
@@ -788,6 +798,7 @@
     "metricUploadsCaption": "from storage"
   },
   "OwnerFilesTab": {
+    "folderSettings": "Edit folder",
     "back": "Back",
     "title": "File storage",
     "start": "Start",
@@ -1041,6 +1052,7 @@
     "addShift": "Add",
     "noDefaultShifts": "No default shifts set up yet.",
     "newShiftLabel": "New shift",
+    "shiftColorAria": "Shift color",
     "shiftNameAria": "Shift name",
     "startTimeAria": "Start time",
     "endTimeAria": "End time",
@@ -1199,6 +1211,10 @@
     "retentionDeleteConfirmDescription": "The selected data categories will be permanently deleted. This action cannot be undone."
   },
   "SelfServiceEmployeeLink": {
+    "searchEmployees": "Search employees",
+    "searchPlaceholder": "Name, employee number, team or location …",
+    "noSearchResults": "No matching employees found.",
+    "searchResults": "{count} of {total} profiles",
     "employeeRecord": "HR record",
     "linkDescription": "Your account will be linked to the selected, not-yet-linked HR record.",
     "cancel": "Cancel",
@@ -1295,6 +1311,11 @@
     }
   },
   "TeamEditControls": {
+    "noTeamsCreated": "No teams have been created yet.",
+    "noLocationsCreated": "No locations have been created yet.",
+    "createNow": "Create now",
+    "opensNewTab": "Opens in a new tab",
+
     "colorMarker": "Color marker",
     "selectLocations": "Select locations",
     "locations": "Locations"
@@ -1577,6 +1598,8 @@
     "declinedToast": "Invitation declined"
   },
   "CompanyCreateWizard": {
+    "billingAddressLabel": "Billing address",
+    "billingAddressRequired": "Please enter the complete billing address.",
     "countryGermany": "Germany",
     "countryAustria": "Austria",
     "countrySwitzerland": "Switzerland",
@@ -1669,6 +1692,11 @@
     "editWorkspaceUrl": "Edit"
   },
   "DatePickerField": {
+    "openCalendar": "Open calendar",
+    "today": "Today",
+    "clear": "Clear",
+    "invalidDate": "Enter a valid date within the allowed range.",
+
     "monthJanuary": "January",
     "monthFebruary": "February",
     "monthMarch": "March",
@@ -1697,6 +1725,10 @@
     "nextYears": "Next years"
   },
   "InfoRequestDetail": {
+    "sendReminder": "Send reminder",
+    "reminderSending": "Sending reminder …",
+    "reminderSent": "Reminder sent",
+    "reminderError": "Could not send reminder.",
     "statusOpen": "Open",
     "statusUploaded": "Upload received",
     "statusReview": "Response received – to review",
@@ -1838,6 +1870,17 @@
     "acceptAll": "Accept all"
   },
   "OpeningHoursEditor": {
+    "bulkTitle": "Edit multiple days together",
+    "weekdays": "Mon–Fri",
+    "weekend": "Weekend",
+    "allDays": "All days",
+    "bulkMode": "Opening mode for selected days",
+    "bulkStart": "Opens at",
+    "bulkEnd": "Closes at",
+    "bulkBreak": "Break",
+    "bulkApply": "Apply to {count} days",
+    "bulkHint": "Replaces the time ranges of the selected days. Other days are unchanged.",
+
     "useCustomLabel": "Set custom opening hours for this location",
     "defaultHoursNote": "The company's default opening hours apply (Shift planning → Settings).",
     "modeClosed": "Closed",
@@ -3059,6 +3102,8 @@
     },
     "profilePercent": "Profile {percent}% complete",
     "missingCount": "{count, plural, one {# item missing} other {# items missing}}",
+    "profileRequestTitle": "Complete your employee profile",
+    "profileRequestMessage": "Please provide the following missing information for your employee profile. Thank you!",
     "requestInApp": "Request in the app",
     "contact": "Contact",
     "organisation": "Organisation",
@@ -3128,10 +3173,16 @@
         "Unbefristet": "Permanent",
         "Teilzeit": "Part-time",
         "Befristet": "Fixed-term",
-        "Werkstudentin": "Working student"
+        "Werkstudentin": "Working student",
+        "Minijob": "Mini-job",
+        "Midijob": "Midi-job",
+        "Kurzfristig": "Short-term employment",
+        "Ausbildung": "Apprenticeship",
+        "Praktikum": "Internship"
       },
       "startDate": "Start date",
       "employeeNumber": "Employee number",
+      "usedSeats": "{used} of {total} seats used",
       "freeSeats": "{count} seats left",
       "cancel": "Cancel",
       "submit": "Add employee",
@@ -3905,6 +3956,11 @@
     "legacySubject": "Previous free text: {subject}"
   },
   "SettingsPage": {
+    "saveChanges": "Save changes",
+    "unsavedChanges": "Unsaved changes",
+    "noChanges": "No unsaved changes",
+    "saveFailed": "Saving failed. Your changes have been kept.",
+
     "title": "Settings",
     "subtitle": "Personal and company-wide settings in one place",
     "navLabel": "Settings areas",
@@ -4009,7 +4065,7 @@
       "timezone": "Time zone",
       "timezoneHint": "For how times are shown to you.",
       "dateFormat": "Date format",
-      "dateFormatHint": "Example: {example}",
+      "dateFormatHint": "Date display in forms and employee views, for example {example}.",
       "startPage": "Start page",
       "startPageHint": "This page opens after login.",
       "myNotifications": "My notifications",
@@ -4026,7 +4082,7 @@
       "name": "Company name",
       "nameHint": "Shown in the sidebar, emails and exports.",
       "slug": "Tenant ID",
-      "slugHint": "Part of every address in Ployo. Changing it changes all links.",
+      "slugHint": "Fixed company identifier. It cannot be changed.",
       "contactEmail": "Contact email",
       "contactEmailHint": "General address for questions from employees.",
       "industry": "Industry",
@@ -4050,7 +4106,7 @@
       "vacationDaysHint": "Annual leave for employees without their own value in the contract.",
       "daysPerYear": "days / year",
       "workHours": "Weekly hours",
-      "workHoursHint": "Suggestion when creating employees – changeable per contract.",
+      "workHoursHint": "Default weekly hours as a number, for example 40 or 38.5.",
       "employeeNumbers": "Employee numbers",
       "employeeNumberRequired": "Employee number required",
       "employeeNumberRequiredHint": "New employees can only be saved with an employee number.",
@@ -4130,8 +4186,8 @@
       "minStaffing": "Minimum staffing",
       "minStaffingHint": "People per location and shift.",
       "persons": "people",
-      "breakRule": "Break rule",
-      "breakRuleHint": "Suggested when creating new shifts.",
+      "breakRule": "Break suggestion for new shifts",
+      "breakRuleHint": "Prefills a break based on shift duration. It can be adjusted for each shift.",
       "breakRuleOption": {
         "none": "No automatic break",
         "15_4": "15 minutes from 4 h",
@@ -4168,6 +4224,7 @@
       "presetName": "Shift name",
       "presetStart": "Start",
       "presetEnd": "End",
+      "presetColor": "Shift color",
       "presetPause": "Break",
       "pauseOption": "{minutes, plural, =0 {No break} other {# min break}}",
       "net": "{hours} h net",
@@ -4249,7 +4306,7 @@
       "api": "API access",
       "apiHint": "Read and write data automatically.",
       "documents": "Documents & signatures",
-      "documentsHint": "Files, personnel files and contracts are integrated in Ployo.",
+      "documentsHint": "Digital signatures are not available yet.",
       "active": "Active"
     }
   },

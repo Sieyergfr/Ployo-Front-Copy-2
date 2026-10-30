@@ -20,8 +20,10 @@ export const metadata = {
 
 export default async function TeamsPage({
   params,
+  searchParams,
 }: PageProps<"/u/[tenant]/teams">) {
   const { tenant } = await params;
+  const initialOpen = (await searchParams).create === "1";
   const teams = await withAccessRedirect(tenant, () => getTeamsForTenant(tenant));
 
   if (!teams) {
@@ -66,6 +68,7 @@ export default async function TeamsPage({
         actions={
           canCreateTeam ? (
             <CreateTeamButton
+              initialOpen={initialOpen}
               tenant={tenant}
               employees={employeeOptions}
               locations={locationNames}

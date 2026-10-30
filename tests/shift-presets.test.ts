@@ -8,7 +8,7 @@ describe("parseShiftPresets", () => {
     ]);
 
     expect(presets).toEqual([
-      { id: "early", label: "Früh", start: "06:00", end: "14:00", pause: "30m" },
+      { id: "early", label: "Früh", start: "06:00", end: "14:00", pause: "30m", color: "#8b6ed4" },
     ]);
   });
 
@@ -55,4 +55,12 @@ describe("parseShiftPresets", () => {
 
     expect(parseShiftPresets(many)).toHaveLength(20);
   });
+});
+
+it("normalizes valid preset colors and replaces invalid colors safely", () => {
+  const base = { label: "Tag", start: "09:00", end: "17:00" };
+  expect(parseShiftPresets([{ ...base, color: "#12AB34" }])[0].color).toBe("#12ab34");
+  for (const color of [undefined, "red", "#123", "url(example)"]) {
+    expect(parseShiftPresets([{ ...base, color }])[0].color).toBe("#8b6ed4");
+  }
 });

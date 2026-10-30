@@ -96,7 +96,7 @@ export function DbModal({
   return createPortal(
     <>
       <div className="db-modal-scrim" aria-hidden="true" onClick={onClose} />
-      <div role="dialog" aria-modal="true" aria-labelledby={titleId} className="db-modal">
+      <div role="dialog" aria-modal="true" aria-labelledby={titleId} className="db-modal popup-scroll-inset">
         <div className="mb-4 flex items-start justify-between gap-3">
           <div className="flex flex-col gap-1">
             <h2 id={titleId} className="m-0 font-display text-[20px] font-semibold tracking-[-0.4px]">
@@ -126,7 +126,7 @@ export function DbField({
   children: ReactNode;
 }) {
   return (
-    <label className="flex flex-col gap-1.5">
+    <label className="flex min-w-0 flex-col gap-1.5">
       <span className="font-mono text-[10px] tracking-[0.08em] text-[#6e6e6b] uppercase">{label}</span>
       {children}
       {hint && <span className="text-[12px] text-[#6e6e6b]">{hint}</span>}

@@ -63,14 +63,14 @@ export type TenantFileAreaRecord = {
  * Ordner-Rollen-Einschränkung der zentralen Ablage (M1): gilt für den Ordner,
  * seine Unterordner und alle Dateien darin. Inhaber/Admin/HR nie gesperrt.
  */
-export async function isTenantFolderPathDenied(access: TenantAccess, path: string | null | undefined) {
+export async function isTenantFolderPathDenied(access: TenantAccess, path: string | null | undefined, scope = "tenant") {
   if (!path || isFolderManager(access)) {
     return false;
   }
 
   const { prisma } = await import("@/lib/prisma");
   const folders = await prisma.tenantFileFolder.findMany({
-    where: { tenantId: access.tenantId, scope: "tenant", status: "active", path: { in: folderPathChain(path) } },
+    where: { tenantId: access.tenantId, scope, status: "active", path: { in: folderPathChain(path) } },
     select: { path: true, accessRoleIdsJson: true },
   });
 
@@ -118,6 +118,12 @@ export async function requireTenantFileAreaAccess(
   if (["OWNER", "ADMIN", "HR"].includes(fileAccess.membershipRole)) return;
 
   const { prisma } = await import("@/lib/prisma");
+
+  const ownerScope = file.employeeId ? `employee:${file.employeeId}` : file.locationId ? `location:${file.locationId}` : file.teamId ? `team:${file.teamId}` : null;
+  if (ownerScope) {
+    const ownerPath = file.path ?? file.folderSlug ?? (await prisma.tenantFile.findFirst({ where: { id: file.id, tenantId: fileAccess.tenantId }, select: { folderSlug: true } }))?.folderSlug;
+    if (await isTenantFolderPathDenied(fileAccess, ownerPath, ownerScope)) throw new Error("FORBIDDEN");
+  }
 
   if (file.employeeId) {
     // Die Vertrags-/Abrechnungs-/Krankheits-FK zeigt immer nur auf EINE
@@ -268,4 +274,9 @@ export async function getOptionalAreaFileAccess(
     if (error instanceof Error && error.message === "FORBIDDEN") return null;
     throw error;
   }
+}
+
+/** Synchrone Listenprüfung: vorhandene Owner-Ordner samt Elternrollen beachten. */
+export function ownerFolderPathAllowed(access: TenantAccess, folders: Array<{ path: string; accessRoleIdsJson: unknown }>, path: string) {
+  return !isFolderPathDenied(folders, path, access);
 }

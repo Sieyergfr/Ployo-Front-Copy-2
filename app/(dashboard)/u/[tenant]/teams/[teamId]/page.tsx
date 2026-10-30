@@ -106,6 +106,8 @@ function TeamFilesSection({
   teamHref,
   uploadOptions,
   canManageFiles,
+  canManageReminders,
+  canManageAccess,
   canDeleteFiles,
   activeFolder,
   t,
@@ -115,6 +117,8 @@ function TeamFilesSection({
   teamHref: string;
   uploadOptions: FileUploadOptions;
   canManageFiles: boolean;
+  canManageReminders: boolean;
+  canManageAccess: boolean;
   canDeleteFiles: boolean;
   activeFolder?: string;
   t: T;
@@ -130,6 +134,8 @@ function TeamFilesSection({
         files={team.files}
         uploadOptions={uploadOptions}
         canManageFiles={canManageFiles}
+        canManageReminders={canManageReminders}
+        canManageAccess={canManageAccess}
         canDeleteFiles={canDeleteFiles}
         initialFolderPath={activeFolder ?? ""}
         emptyLabel={t("noFilesForTeam")}
@@ -309,6 +315,8 @@ export default async function TeamDetailPage({
           teamHref={teamHref}
           uploadOptions={uploadOptions}
           canManageFiles={canManageFiles}
+            canManageReminders={hasPermissionLevel(capabilities.reminders.level, "write")}
+            canManageAccess={capabilities.files.level === "admin"}
           canDeleteFiles={canDeleteFiles}
           activeFolder={activeFolder}
           t={t}

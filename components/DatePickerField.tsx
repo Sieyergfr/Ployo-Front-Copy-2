@@ -1,12 +1,11 @@
 "use client";
 
+import { useDatePreference } from "@/components/DatePreferences";
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-
-/** Popover-Breite — muss mit der `w-[…]`-Klasse am Panel weiter unten übereinstimmen. */
-const PANEL_WIDTH = 280;
+import { dateToInputValue, dateToDisplayValue, parseDateValue, isSameDate, isBeforeDay } from "@/lib/date-picker";
 
 type T = ReturnType<typeof useTranslations>;
 
@@ -44,69 +43,16 @@ function getWeekdayLabels(t: T) {
   ];
 }
 
-function dateToInputValue(date: Date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(
-    2,
-    "0",
-  )}-${String(date.getDate()).padStart(2, "0")}`;
-}
-
-function dateToDisplayValue(date: Date) {
-  return `${String(date.getDate()).padStart(2, "0")}.${String(
-    date.getMonth() + 1,
-  ).padStart(2, "0")}.${date.getFullYear()}`;
-}
-
-function parseDateValue(value?: string) {
-  if (!value) {
-    return null;
-  }
-
-  const isoMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-
-  if (isoMatch) {
-    const [, year, month, day] = isoMatch;
-
-    return new Date(Number(year), Number(month) - 1, Number(day));
-  }
-
-  const germanMatch = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec(value);
-
-  if (germanMatch) {
-    const [, day, month, year] = germanMatch;
-
-    return new Date(Number(year), Number(month) - 1, Number(day));
-  }
-
-  return null;
-}
-
-function isSameDate(a: Date, b: Date) {
-  return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
-  );
-}
-
-function isBeforeDay(date: Date, minDate?: Date | null) {
-  if (!minDate) {
-    return false;
-  }
-
-  const current = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  const minimum = new Date(
-    minDate.getFullYear(),
-    minDate.getMonth(),
-    minDate.getDate(),
-  );
-
-  return current < minimum;
-}
-
 type DatePickerFieldProps = {
   id?: string;
-  name: string;
+  name?: string;
+  value?: string;
+  max?: string;
+  required?: boolean;
+  disabled?: boolean;
+  form?: string;
+  inputClassName?: string;
+  "aria-label"?: string;
   defaultValue?: string;
   min?: string;
   placeholder?: string;
@@ -120,18 +66,33 @@ export default function DatePickerField({
   name,
   defaultValue,
   min,
+  max,
+  value,
+  required = false,
+  disabled = false,
+  form,
+  inputClassName = "",
+  "aria-label": ariaLabel,
   placeholder,
   className = "",
   onChange,
 }: DatePickerFieldProps) {
   const t = useTranslations("DatePickerField");
+  const datePreference = useDatePreference();
+  const generatedId = useId();
+  const inputId = id ?? generatedId;
+  const panelId = `${inputId}-calendar`;
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [draft, setDraft] = useState<string | null>(null);
   const monthLabels = getMonthLabels(t);
   const weekdayLabels = getWeekdayLabels(t);
   const effectivePlaceholder = placeholder ?? t("selectDate");
   const today = useMemo(() => new Date(), []);
   const initialDate = useMemo(() => parseDateValue(defaultValue), [defaultValue]);
   const minDate = useMemo(() => parseDateValue(min), [min]);
-  const [selectedDate, setSelectedDate] = useState<Date | null>(initialDate);
+  const [internalDate, setSelectedDate] = useState<Date | null>(initialDate);
+  const selectedDate = value !== undefined ? parseDateValue(value) : internalDate;
+  const maxDate = useMemo(() => parseDateValue(max), [max]);
   const [visibleMonth, setVisibleMonth] = useState(() => {
     const base = initialDate ?? minDate ?? today;
 
@@ -152,7 +113,7 @@ export default function DatePickerField({
     setMounted(true);
   }, []);
   const selectedValue = selectedDate ? dateToInputValue(selectedDate) : "";
-  const selectedLabel = selectedDate ? dateToDisplayValue(selectedDate) : effectivePlaceholder;
+  const selectedLabel = selectedDate ? dateToDisplayValue(selectedDate, datePreference) : "";
   const calendarDays = useMemo(() => {
     const monthStart = new Date(
       visibleMonth.getFullYear(),
@@ -204,20 +165,29 @@ export default function DatePickerField({
       return;
     }
 
-    const containerRect = containerRef.current.getBoundingClientRect();
-    const panelHeight = panelRef.current.offsetHeight;
-    const spaceBelow = window.innerHeight - containerRect.bottom;
-    const spaceAbove = containerRect.top;
-    const shouldOpenUpward = spaceBelow < panelHeight + 8 && spaceAbove > spaceBelow;
-
-    const margin = 8;
-    const maxLeft = window.innerWidth - PANEL_WIDTH - margin;
-    const left = Math.min(Math.max(containerRect.left, margin), Math.max(maxLeft, margin));
-    const top = shouldOpenUpward
-      ? containerRect.top - panelHeight - margin
-      : containerRect.bottom + margin;
-
-    setPanelPosition({ top, left });
+    function updatePosition() {
+      if (!containerRef.current || !panelRef.current) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      const panelHeight = panelRef.current.offsetHeight;
+      const panelWidth = panelRef.current.offsetWidth;
+      const margin = 8;
+      const below = window.innerHeight - rect.bottom;
+      const above = rect.top;
+      const openUp = below < panelHeight + margin && above > below;
+      const top = Math.max(margin, Math.min(
+        openUp ? rect.top - panelHeight - margin : rect.bottom + margin,
+        window.innerHeight - panelHeight - margin,
+      ));
+      const left = Math.max(margin, Math.min(rect.left, window.innerWidth - panelWidth - margin));
+      setPanelPosition({ top, left });
+    }
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
   }, [isOpen, mode]);
 
   useEffect(() => {
@@ -225,7 +195,7 @@ export default function DatePickerField({
       return;
     }
 
-    function handlePointerDown(event: MouseEvent) {
+    function handlePointerDown(event: PointerEvent) {
       const target = event.target as Node;
 
       // Das Panel hängt per Portal an `document.body`, liegt also nicht im
@@ -238,12 +208,62 @@ export default function DatePickerField({
       }
     }
 
-    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("pointerdown", handlePointerDown);
 
     return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("pointerdown", handlePointerDown);
     };
   }, [isOpen]);
+
+  function isUnavailable(date: Date) {
+    return isBeforeDay(date, minDate) || Boolean(maxDate && dateToInputValue(date) > dateToInputValue(maxDate));
+  }
+
+  function chooseDate(date: Date | null) {
+    setSelectedDate(date);
+    setDraft(null);
+    onChange?.(date ? dateToInputValue(date) : "");
+    setIsOpen(false);
+    inputRef.current?.focus();
+  }
+
+  useEffect(() => {
+    const parsed = parseDateValue(draft ?? selectedValue);
+    const hasText = Boolean(draft ?? selectedValue);
+    const invalid = hasText && (!parsed || isBeforeDay(parsed, minDate) || Boolean(maxDate && dateToInputValue(parsed) > dateToInputValue(maxDate)));
+    inputRef.current?.setCustomValidity(invalid ? t("invalidDate") : "");
+  }, [draft, selectedValue, minDate, maxDate, t]);
+
+  function openCalendar(focusCalendar = false) {
+    if (disabled) return;
+    let base = selectedDate ?? today;
+    if (minDate && isBeforeDay(base, minDate)) base = minDate;
+    if (maxDate && dateToInputValue(base) > dateToInputValue(maxDate)) base = maxDate;
+    setVisibleMonth(new Date(base.getFullYear(), base.getMonth(), 1));
+    setMode("days");
+    setIsOpen(true);
+    if (focusCalendar) {
+      requestAnimationFrame(() => {
+        const panel = panelRef.current;
+        const target = panel?.querySelector<HTMLButtonElement>("[data-selected='true']:not(:disabled)")
+          ?? panel?.querySelector<HTMLButtonElement>(`[data-date="${dateToInputValue(base)}"]:not(:disabled)`)
+          ?? panel?.querySelector<HTMLButtonElement>("[data-date]:not(:disabled)");
+        target?.focus();
+      });
+    }
+  }
+
+  useEffect(() => {
+    const ownerForm = inputRef.current?.form;
+    if (!ownerForm) return;
+    const reset = () => {
+      if (value === undefined) setSelectedDate(initialDate);
+      setDraft(null);
+      setIsOpen(false);
+    };
+    ownerForm.addEventListener("reset", reset);
+    return () => ownerForm.removeEventListener("reset", reset);
+  }, [initialDate, value]);
 
   const prevAriaLabel =
     mode === "days"
@@ -259,35 +279,91 @@ export default function DatePickerField({
         : t("nextYears");
 
   return (
-    <div ref={containerRef} className={`relative ${className}`}>
-      <input type="hidden" id={id} name={name} value={selectedValue} />
-      <button
-        type="button"
-        className={`input flex cursor-pointer items-center justify-between gap-3 text-left ${
-          isOpen ? "border-ink bg-white" : "bg-bg"
-        }`}
-        aria-expanded={isOpen}
-        onClick={() => {
-          setIsOpen((current) => !current);
-          setMode("days");
-        }}
-      >
-        <span
-          className={`font-mono text-[13px] font-semibold ${
-            selectedDate ? "text-ink" : "text-muted"
-          }`}
+    <div ref={containerRef} className={`relative min-w-0 max-w-full ${className}`}>
+      <input type="hidden" name={name} form={form} value={selectedValue} disabled={disabled} />
+      <div className="relative min-w-0">
+        <input
+          ref={inputRef}
+          id={inputId}
+          type="text"
+          role="combobox"
+          aria-autocomplete="none"
+          form={form}
+          value={draft ?? selectedLabel}
+          required={required}
+          disabled={disabled}
+          aria-label={ariaLabel}
+          aria-haspopup="dialog"
+          aria-expanded={isOpen}
+          aria-controls={isOpen ? panelId : undefined}
+          placeholder={effectivePlaceholder}
+          autoComplete="off"
+          className={`input box-border min-w-0 w-full !pr-11 text-left font-mono text-[13px] disabled:opacity-50 ${inputClassName}`}
+          onClick={() => openCalendar()}
+          onChange={(event) => {
+            const text = event.target.value;
+            setDraft(text);
+            const parsed = parseDateValue(text);
+            setSelectedDate(parsed);
+            onChange?.(parsed ? dateToInputValue(parsed) : "");
+          }}
+          onBlur={() => {
+            if (!draft || parseDateValue(draft)) setDraft(null);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "ArrowDown") {
+              event.preventDefault();
+              openCalendar(true);
+            }
+            if (event.key === "Escape" && isOpen) {
+              event.stopPropagation();
+              setIsOpen(false);
+            }
+          }}
+        />
+        <button
+          type="button"
+          disabled={disabled}
+          className="absolute inset-y-0 right-1 my-auto flex size-9 cursor-pointer items-center justify-center rounded-lg text-muted-2 hover:bg-[#f0edf7] hover:text-[#7a5ac4] focus-visible:outline-2 focus-visible:outline-[#8b6ed4] disabled:cursor-not-allowed"
+          aria-label={t("openCalendar")}
+          aria-haspopup="dialog"
+          aria-expanded={isOpen}
+          aria-controls={isOpen ? panelId : undefined}
+          onClick={() => isOpen ? setIsOpen(false) : openCalendar(true)}
         >
-          {selectedLabel}
-        </span>
-        <CalendarDays size={16} className="shrink-0 text-muted" />
-      </button>
+          <CalendarDays size={17} />
+        </button>
+      </div>
 
       {isOpen &&
         mounted &&
         createPortal(
         <div
           ref={panelRef}
-          className="fixed z-[1200] w-[280px] rounded-xl border border-border bg-white p-3 shadow-[0_14px_40px_rgba(0,0,0,0.14)]"
+          id={panelId}
+          role="dialog"
+          aria-label={ariaLabel ?? t("selectDate")}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.preventDefault();
+              event.stopPropagation();
+              setIsOpen(false);
+              inputRef.current?.focus();
+            }
+            const target = event.target as HTMLElement;
+            const current = parseDateValue(target.dataset.date);
+            if (!current) return;
+            const offset = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 }[event.key as "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown"];
+            if (offset !== undefined) {
+              event.preventDefault();
+              const next = new Date(current);
+              next.setDate(next.getDate() + offset);
+              if (isUnavailable(next)) return;
+              setVisibleMonth(new Date(next.getFullYear(), next.getMonth(), 1));
+              requestAnimationFrame(() => panelRef.current?.querySelector<HTMLButtonElement>(`[data-date="${dateToInputValue(next)}"]`)?.focus());
+            }
+          }}
+          className="fixed z-[1200] w-[280px] max-w-[calc(100vw-16px)] max-h-[calc(100svh-16px)] overflow-y-auto overscroll-contain rounded-2xl border border-border bg-white p-3 shadow-[0_14px_40px_rgba(0,0,0,0.14)]"
           style={
             panelPosition
               ? { top: panelPosition.top, left: panelPosition.left }
@@ -356,30 +432,28 @@ export default function DatePickerField({
                       ? isSameDate(date, selectedDate)
                       : false;
                     const isToday = isSameDate(date, today);
-                    const isDisabled = isBeforeDay(date, minDate);
+                    const isDisabled = isUnavailable(date);
 
                     return (
                       <button
                         key={dateToInputValue(date)}
                         type="button"
                         disabled={isDisabled}
+                        data-date={dateToInputValue(date)}
+                        data-selected={isSelected}
+                        aria-label={dateToDisplayValue(date, datePreference)}
+                        aria-pressed={isSelected}
+                        aria-current={isToday ? "date" : undefined}
                         className={`flex aspect-square cursor-pointer items-center justify-center rounded-lg text-[12px] font-semibold transition-colors disabled:cursor-not-allowed disabled:text-[#D7D4CE] ${
                           isSelected
-                            ? "bg-ink text-white"
+                            ? "bg-[#7a5ac4] text-white shadow-sm"
                             : isToday
-                              ? "bg-warning/10 text-warning hover:bg-warning/15"
+                              ? "bg-[#f0edf7] text-[#7a5ac4] ring-1 ring-inset ring-[#c9b8f5] hover:bg-[#e6def5]"
                               : isCurrentMonth
                                 ? "text-ink hover:bg-bg"
                                 : "text-[#C0BFBA] hover:bg-bg"
                         }`}
-                        onClick={() => {
-                          setSelectedDate(date);
-                          setVisibleMonth(
-                            new Date(date.getFullYear(), date.getMonth(), 1),
-                          );
-                          setIsOpen(false);
-                          onChange?.(dateToInputValue(date));
-                        }}
+                        onClick={() => chooseDate(date)}
                       >
                         {date.getDate()}
                       </button>
@@ -444,6 +518,10 @@ export default function DatePickerField({
                 })}
               </div>
             )}
+          </div>
+          <div className="mt-3 flex items-center justify-between border-t border-border pt-2">
+            <button type="button" disabled={isUnavailable(today)} className="rounded-lg px-3 py-2 text-[13px] font-semibold text-[#7a5ac4] hover:bg-[#f0edf7] disabled:opacity-40" onClick={() => chooseDate(today)}>{t("today")}</button>
+            {!required && <button type="button" className="rounded-lg px-3 py-2 text-[13px] text-muted-2 hover:bg-bg" onClick={() => chooseDate(null)}>{t("clear")}</button>}
           </div>
         </div>,
         document.body,

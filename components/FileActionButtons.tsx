@@ -737,7 +737,7 @@ function UploadVersionForm({
   onDone,
   t,
 }: {
-  file: FileItem;
+  file: Pick<FileItem, "name" | "slug" | "version" | "storageFileId">;
   tenant: string;
   returnPath: string;
   onDone: () => void;
@@ -1048,7 +1048,7 @@ export function VersionUploadButton({
   className,
   label,
 }: {
-  file: FileItem;
+  file: Pick<FileItem, "name" | "slug" | "version" | "storageFileId">;
   tenant?: string;
   returnPath?: string;
   compact?: boolean;

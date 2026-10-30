@@ -3,97 +3,57 @@
 import { DbSwitch } from "@/components/dashboard/ui";
 import { useToast } from "@/components/Toasts";
 import type { ActionState } from "@/lib/action-state";
-import { Check, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { createContext, useContext, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useState, type ReactNode } from "react";
 
-/**
- * Bausteine der Einstellungsseite: Karten, Zeilen und Formulare, die
- * Änderungen automatisch speichern (Schalter sofort, Texte nach kurzer Pause).
- */
+/** Gemeinsame Einstellungsformulare: Änderungen werden erst ausdrücklich gespeichert. */
+type SettingsFormApi = { markDirty: () => void };
+const SettingsFormContext = createContext<SettingsFormApi>({ markDirty: () => {} });
+export function useSettingsForm() { return useContext(SettingsFormContext); }
 
-type AutoSaveApi = { schedule: (delay?: number) => void };
-
-const AutoSaveContext = createContext<AutoSaveApi>({ schedule: () => {} });
-
-export function useAutoSave() {
-  return useContext(AutoSaveContext);
-}
-
-export function AutoSaveForm<T extends ActionState>({
-  action,
-  children,
-  hidden,
-  onSaved,
-  className = "flex flex-col gap-4",
-}: {
+export function SettingsForm<T extends ActionState>({ action, children, hidden, onSaved, className = "flex flex-col gap-4" }: {
   action: (formData: FormData) => Promise<T>;
   children: ReactNode;
-  /** Feste Felder (z. B. tenant, category). */
   hidden?: Record<string, string>;
   onSaved?: (result: T) => void;
   className?: string;
 }) {
   const t = useTranslations("SettingsPage");
   const { toast } = useToast();
-  const ref = useRef<HTMLFormElement>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [status, setStatus] = useState<"idle" | "saving" | "saved">("idle");
-
-  function save() {
-    if (!ref.current || !ref.current.reportValidity()) return;
-
-    const formData = new FormData(ref.current);
-
-    setStatus("saving");
-    action(formData).then((result) => {
-      if (result.error) {
-        setStatus("idle");
-        toast({ tone: "error", title: result.error });
-        return;
-      }
-
-      setStatus("saved");
-      onSaved?.(result);
-      setTimeout(() => setStatus((current) => (current === "saved" ? "idle" : current)), 2000);
-    });
-  }
-
-  function schedule(delay = 150) {
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(save, delay);
-  }
-
-  return (
-    <AutoSaveContext.Provider value={{ schedule }}>
-      <form
-        ref={ref}
-        className={className}
-        onSubmit={(event) => {
-          event.preventDefault();
-          schedule(0);
-        }}
-        onChange={(event) => {
-          const target = event.target as unknown as HTMLInputElement;
-
-          schedule(["text", "email", "number", "textarea", "time"].includes(target.type) ? 900 : 150);
-        }}
-      >
-        {Object.entries(hidden ?? {}).map(([name, value]) => (
-          <input key={name} type="hidden" name={name} value={value} />
-        ))}
+  const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const router = useRouter();
+  return <SettingsFormContext.Provider value={{ markDirty: () => setDirty(true) }}>
+    <form className={className} onChange={() => setDirty(true)} onSubmit={async (event) => {
+      event.preventDefault();
+      if (saving || !event.currentTarget.reportValidity()) return;
+      const payload = new FormData(event.currentTarget);
+      setSaving(true);
+      try {
+        const result = await action(payload);
+        if (result.error) { toast({ tone: "error", title: result.error }); return; }
+        setDirty(false);
+        toast({ tone: "success", title: t("saved") });
+        onSaved?.(result);
+        router.refresh();
+      } catch {
+        toast({ tone: "error", title: t("saveFailed") });
+      } finally { setSaving(false); }
+    }}>
+      <fieldset disabled={saving} className="contents">
+        {Object.entries(hidden ?? {}).map(([name, value]) => <input key={name} type="hidden" name={name} value={value} />)}
         {children}
-        <div aria-live="polite" className="pointer-events-none fixed right-6 bottom-6 z-30">
-          {status !== "idle" && (
-            <span className="flex items-center gap-1.5 rounded-full bg-ink px-3 py-1.5 text-[12.5px] font-semibold text-white shadow-[0_8px_24px_rgba(0,0,0,0.2)]">
-              {status === "saving" ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} strokeWidth={3} />}
-              {status === "saving" ? t("saving") : t("saved")}
-            </span>
-          )}
-        </div>
-      </form>
-    </AutoSaveContext.Provider>
-  );
+      </fieldset>
+      <div className="sticky bottom-3 z-20 mt-1 flex items-center justify-between gap-3 rounded-xl border border-border bg-white/95 px-4 py-3 shadow-sm backdrop-blur-sm">
+        <span aria-live="polite" className="text-[12px] text-muted-2">{dirty ? t("unsavedChanges") : t("noChanges")}</span>
+        <button type="submit" disabled={saving || !dirty} className="db-focus inline-flex min-h-11 items-center justify-center gap-2 rounded-[10px] bg-ink px-5 text-[14px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40">
+          {saving && <Loader2 size={15} className="animate-spin" />}{saving ? t("saving") : t("saveChanges")}
+        </button>
+      </div>
+    </form>
+  </SettingsFormContext.Provider>;
 }
 
 export function SettingsCard({ title, subtitle, children }: { title: ReactNode; subtitle?: ReactNode; children: ReactNode }) {
@@ -139,10 +99,10 @@ export function SettingsRow({
   );
 }
 
-/** Schalter mit verstecktem Formularfeld ("on" bzw. leer) — speichert sofort. */
+/** Schalter mit verstecktem Formularfeld ("on" bzw. leer) — wird mit dem Formular gespeichert. */
 export function SettingSwitch({ name, defaultChecked, label, disabled }: { name: string; defaultChecked: boolean; label: string; disabled?: boolean }) {
   const [checked, setChecked] = useState(defaultChecked);
-  const { schedule } = useAutoSave();
+  const { markDirty } = useSettingsForm();
 
   return (
     <span className="flex justify-end">
@@ -153,7 +113,7 @@ export function SettingSwitch({ name, defaultChecked, label, disabled }: { name:
         disabled={disabled}
         onClick={() => {
           setChecked((value) => !value);
-          schedule();
+          markDirty();
         }}
       />
     </span>
@@ -175,7 +135,7 @@ export function SettingSegments({
   onChange?: (value: string) => void;
 }) {
   const [value, setValue] = useState(defaultValue);
-  const { schedule } = useAutoSave();
+  const { markDirty } = useSettingsForm();
 
   return (
     <span className="flex md:justify-end">
@@ -190,7 +150,7 @@ export function SettingSegments({
             onClick={() => {
               setValue(option.value);
               onChange?.(option.value);
-              schedule();
+              markDirty();
             }}
             className={`db-focus min-h-9 cursor-pointer rounded-[8px] border-0 px-3 text-[13px] whitespace-nowrap ${
               value === option.value ? "bg-white font-semibold text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]" : "bg-transparent font-medium text-[#6e6e6b]"

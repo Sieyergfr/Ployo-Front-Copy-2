@@ -1,5 +1,10 @@
 "use client";
 
+import { useDatePreference } from "@/components/DatePreferences";
+import { preferredDateFormatter } from "@/lib/date-picker";
+
+import DatePickerField from "@/components/DatePickerField";
+
 import {
   completeReminderQuickAction,
   createReminderAction,
@@ -87,6 +92,7 @@ export default function ReminderDrawer({
 }) {
   const t = useTranslations("ReminderDrawer");
   const locale = useLocale();
+  const datePreference = useDatePreference();
   const router = useRouter();
   const { toast } = useToast();
   const isEdit = Boolean(reminder);
@@ -117,13 +123,13 @@ export default function ReminderDrawer({
   const nextDue = nextReminderDueDate(dueDate, recurrence);
   const doneCount = checklist.filter((item) => item.done).length;
   const formatDate = (iso: string, withWeekday = false) =>
-    new Date(`${iso}T12:00:00Z`).toLocaleDateString(locale, {
+    preferredDateFormatter(datePreference, locale, {
       ...(withWeekday ? { weekday: "short" as const } : {}),
       day: "2-digit",
       month: "2-digit",
       year: "numeric",
       timeZone: "UTC",
-    });
+    }).format(new Date(`${iso}T12:00:00Z`));
   const filteredSubjects = useMemo(() => {
     const needle = subjectQuery.trim().toLocaleLowerCase(locale);
 
@@ -219,7 +225,7 @@ export default function ReminderDrawer({
         <div className="flex flex-col gap-2">
           <span className={sectionLabel}>{t("dueLabel")}</span>
           <div className="flex flex-wrap items-center gap-3">
-            <input type="date" name="dueDate" value={dueDate} onChange={(event) => setDueDate(event.target.value)} className={`${dbInputClass} !w-auto`} required aria-label={t("dueLabel")} />
+            <DatePickerField name="dueDate" value={dueDate} onChange={setDueDate} inputClassName={`${dbInputClass} !w-auto`} required aria-label={t("dueLabel")} />
             {dueDate && (
               <span className={`text-[13px] ${relative < 0 || relative <= 7 ? "text-[#b4332a]" : "text-[#6e6e6b]"}`}>
                 {relative < 0 ? t("overdue", { count: -relative }) : relative === 0 ? t("today") : t("inDays", { count: relative })}

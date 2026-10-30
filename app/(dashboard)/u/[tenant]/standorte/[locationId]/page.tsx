@@ -333,6 +333,8 @@ function FilesTab({
   locationHref,
   uploadOptions,
   canManageFiles,
+  canManageReminders,
+  canManageAccess,
   canDeleteFiles,
   activeFolder,
   t,
@@ -342,6 +344,8 @@ function FilesTab({
   locationHref: string;
   uploadOptions: FileUploadOptions;
   canManageFiles: boolean;
+  canManageReminders: boolean;
+  canManageAccess: boolean;
   canDeleteFiles: boolean;
   activeFolder?: string;
   t: T;
@@ -356,6 +360,8 @@ function FilesTab({
       files={location.files}
       uploadOptions={uploadOptions}
       canManageFiles={canManageFiles}
+        canManageReminders={canManageReminders}
+        canManageAccess={canManageAccess}
       canDeleteFiles={canDeleteFiles}
       initialFolderPath={activeFolder ?? ""}
       emptyLabel={t("noFilesForLocation")}
@@ -584,6 +590,8 @@ export default async function LocationDetailPage({
           locationHref={locationHref}
           uploadOptions={uploadOptions}
           canManageFiles={canManageFiles}
+            canManageReminders={hasPermissionLevel(capabilities.reminders.level, "write")}
+            canManageAccess={capabilities.files.level === "admin"}
           canDeleteFiles={canDeleteFiles}
           activeFolder={activeFolder}
           t={t}

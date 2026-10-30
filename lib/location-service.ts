@@ -1,3 +1,4 @@
+import { parseIdList } from "@/lib/file-folders";
 import { auth } from "@/lib/auth";
 import {
   addressDefaults,
@@ -53,7 +54,7 @@ import {
   resolveScopeFilter,
   type TenantAccess,
 } from "@/lib/tenant-access";
-import { canAccessFileAcl, getOptionalAreaFileAccess } from "@/lib/file-access";
+import { canAccessFileAcl, ownerFolderPathAllowed, getOptionalAreaFileAccess } from "@/lib/file-access";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -130,6 +131,8 @@ type TenantFileRecord = {
 };
 
 type TenantFileFolderRecord = {
+  pinned?: boolean;
+  accessRoleIdsJson?: unknown;
   id: string;
   name: string;
   path: string;
@@ -283,6 +286,7 @@ function toLocation(
       type: mapped.type,
       locked: true,
       storageFileId: mapped.storageFileId,
+      version: mapped.version,
     };
   });
   const files = storedFiles;
@@ -297,6 +301,8 @@ function toLocation(
       path: folder.path,
       fileCount: 0,
       locked: folder.locked,
+      pinned: folder.pinned,
+      accessRoleIds: parseIdList(folder.accessRoleIdsJson),
     });
   }
 
@@ -454,8 +460,9 @@ export async function getLocationsForTenant(tenantSlug: string) {
   return records.map((record) => toLocation({
     ...record,
     storageFiles: fileAccess
-      ? record.storageFiles.filter((file) => canAccessFileAcl(file.parent ?? file, fileAccess))
+      ? record.storageFiles.filter((file) => canAccessFileAcl(file.parent ?? file, fileAccess) && ownerFolderPathAllowed(fileAccess, record.storageFileFolders, file.folderSlug))
       : [],
+    storageFileFolders: fileAccess ? record.storageFileFolders.filter((folder) => ownerFolderPathAllowed(fileAccess, record.storageFileFolders, folder.path)) : [],
   }, tenantDefaultOpeningHours, tenantMinStaffing));
 }
 
@@ -504,8 +511,9 @@ export async function getLocationForTenant(tenantSlug: string, locationHandle: s
   return record ? toLocation({
     ...record,
     storageFiles: fileAccess
-      ? record.storageFiles.filter((file) => canAccessFileAcl(file.parent ?? file, fileAccess))
+      ? record.storageFiles.filter((file) => canAccessFileAcl(file.parent ?? file, fileAccess) && ownerFolderPathAllowed(fileAccess, record.storageFileFolders, file.folderSlug))
       : [],
+    storageFileFolders: fileAccess ? record.storageFileFolders.filter((folder) => ownerFolderPathAllowed(fileAccess, record.storageFileFolders, folder.path)) : [],
   }, tenantDefaultOpeningHours, tenantMinStaffing) : null;
 }
 

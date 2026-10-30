@@ -21,8 +21,10 @@ export const metadata = {
 
 export default async function LocationsPage({
   params,
+  searchParams,
 }: PageProps<"/u/[tenant]/standorte">) {
   const { tenant } = await params;
+  const initialOpen = (await searchParams).create === "1";
   const locations = await withAccessRedirect(tenant, () =>
     getLocationsForTenant(tenant),
   );
@@ -64,6 +66,7 @@ export default async function LocationsPage({
         actions={
           canCreateLocation ? (
             <CreateLocationButton
+              initialOpen={initialOpen}
               tenant={tenant}
               employees={employeeOptions}
               className="db-cta db-focus relative inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 overflow-hidden rounded-[10px] border border-[rgba(167,142,232,0.45)] bg-ink px-[18px] py-2.5 text-[14px] font-semibold text-white"

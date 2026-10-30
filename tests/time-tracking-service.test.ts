@@ -302,6 +302,39 @@ describe("Stempeln per Standort-QR-Code", () => {
     await setSettings({ timeTrackingQrRequired: true, timeTrackingQrRequiredClockOut: false });
   });
 
+  it("zeigt erfolgreiche Stempel- und Pausenaktionen am gescannten Standort", async () => {
+    const before = await prisma.tenantLocationActivity.count({ where: { tenantId, locationId: filialeId, actor: "Erika Muster" } });
+    await service.performMyClockAction({ tenantSlug, action: "clockIn", source: "app", qrCode: filialeQr });
+    await expect(service.performMyClockAction({ tenantSlug, action: "clockIn", source: "app", qrCode: filialeQr }))
+      .rejects.toThrow(TIME_TRACKING_ERRORS.alreadyClockedIn);
+    await service.performMyClockAction({ tenantSlug, action: "breakStart", source: "app" });
+    await service.performMyClockAction({ tenantSlug, action: "breakEnd", source: "app" });
+    await service.performMyClockAction({ tenantSlug, action: "clockOut", source: "app", qrCode: lagerQr });
+    const events = await prisma.tenantLocationActivity.findMany({ where: { tenantId, actor: "Erika Muster" }, orderBy: { createdAt: "desc" }, take: 4 });
+    expect(events.map(({ locationId, text }) => ({ locationId, text }))).toEqual(expect.arrayContaining([
+      { locationId: filialeId, text: "hat sich eingestempelt" },
+      { locationId: filialeId, text: "hat eine Pause begonnen" },
+      { locationId: filialeId, text: "hat die Pause beendet" },
+      { locationId: lagerId, text: "hat sich ausgestempelt" },
+    ]));
+    expect(await prisma.tenantLocationActivity.count({ where: { tenantId, locationId: filialeId, actor: "Erika Muster" } })).toBe(before + 3);
+    currentUserId = ownerUserId;
+    const location = await locationService.getLocationForTenant(tenantSlug, `filiale-${RUN_ID}`);
+    expect(location?.activity).toContainEqual(expect.objectContaining({ actor: "Erika Muster", text: "hat sich eingestempelt" }));
+  });
+
+  it("ordnet Stempeln ohne QR dem eindeutigen Mitarbeiter-Standort zu", async () => {
+    await prisma.tenantEmployee.update({ where: { id: employeeId }, data: { location: "Filiale Mitte" } });
+    const before = await prisma.tenantLocationActivity.count({ where: { tenantId, locationId: filialeId, actor: "Erika Muster" } });
+    try {
+      await service.performMyClockAction({ tenantSlug, action: "clockIn", source: "web" });
+      await service.performMyClockAction({ tenantSlug, action: "clockOut", source: "web" });
+      expect(await prisma.tenantLocationActivity.count({ where: { tenantId, locationId: filialeId, actor: "Erika Muster" } })).toBe(before + 2);
+    } finally {
+      await prisma.tenantEmployee.update({ where: { id: employeeId }, data: { location: "" } });
+    }
+  });
+
   it("App: Einstempeln ohne Scan verweigert, Pausen und Ausstempeln ohne Scan erlaubt, Web unverändert", async () => {
     let status = await service.getMyClockStatus(tenantSlug);
     expect(status.settings.qrRequired).toBe(true);

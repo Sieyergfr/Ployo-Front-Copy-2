@@ -89,23 +89,10 @@ export function buildStaffingCurve(input: {
     return { ...location, intervals };
   });
 
-  // Sichtbarer Bereich: von der frühesten Öffnung/Schicht bis zur spätesten,
-  // ohne Daten ein üblicher Arbeitstag.
-  const starts = [
-    ...openLocations.flatMap((location) => location.intervals.map((item) => item.start)),
-    ...assigned.map((shift) => shift.interval.start),
-  ];
-  const ends = [
-    ...openLocations.flatMap((location) => location.intervals.map((item) => item.end)),
-    ...assigned.map((shift) => shift.interval.end),
-  ];
-  const firstHour = starts.length ? Math.floor(Math.min(...starts) / 60) : 6;
-  const lastHour = ends.length ? Math.min(24, Math.ceil(Math.max(...ends) / 60)) : 22;
-
   const hours: StaffingHour[] = [];
   const gapsByLocation = new Map<string, Array<{ hour: number; missing: number }>>();
 
-  for (let hour = firstHour; hour < Math.max(lastHour, firstHour + 1); hour += 1) {
+  for (let hour = 0; hour < 24; hour += 1) {
     const midpoint = hour * 60 + 30;
     let need = 0;
 
@@ -304,4 +291,10 @@ export function findRestViolations(shifts: RestShift[], minRestHours: number): R
   }
 
   return violations.sort((a, b) => a.fromDate.localeCompare(b.fromDate));
+}
+
+/** Sieben Stunden um die aktuelle Stunde, begrenzt auf den ausgewählten Tag. */
+export function staffingWindow(hours: StaffingHour[], currentHour: number) {
+  const start = Math.max(0, Math.min(17, currentHour - 3));
+  return hours.filter((hour) => hour.hour >= start && hour.hour < start + 7);
 }

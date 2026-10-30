@@ -110,7 +110,7 @@ export function UniversalPopupProvider({ children }: { children: ReactNode }) {
               aria-modal="true"
               aria-labelledby={popup.title ? "universal-popup-title" : undefined}
               className={[
-                "relative max-h-[calc(100svh-48px)] w-full overflow-y-auto rounded-card border border-border bg-white p-6 shadow-[0_24px_80px_rgba(0,0,0,0.22)]",
+                "popup-scroll-inset relative max-h-[calc(100svh-48px)] w-full overflow-y-auto rounded-card border border-border bg-white p-6 shadow-[0_24px_80px_rgba(0,0,0,0.22)]",
                 // Als eigener Eintrag statt im Basis-String: eine zweite
                 // max-w-Klasse aus `className` würde sich sonst mit dieser
                 // überlagern, und welche gewinnt, entscheidet die Reihenfolge im

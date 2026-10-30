@@ -40,6 +40,8 @@ vi.mock("@/lib/storage/upload", () => ({
 
 const employees = await import("@/lib/employee-service");
 const selfService = await import("@/lib/self-service");
+const drafts = await import("@/lib/info-request-drafts");
+const draftRoute = await import("@/app/api/tenants/[tenant]/employees/[employeeHandle]/info-requests/draft/route");
 
 const RUN_ID = Math.random().toString(36).slice(2);
 const tenantSlug = `test-info-items-${RUN_ID}`;
@@ -48,6 +50,7 @@ let tenantId: string;
 let ownerUserId: string;
 let employeeUserId: string;
 let employeeId: string;
+let secondOwnerId: string;
 
 function pdf(name: string) {
   return new File([new TextEncoder().encode("%PDF-1.4\n%test\n")], name, { type: "application/pdf" });
@@ -62,12 +65,15 @@ beforeAll(async () => {
       prisma.user.create({ data: { email: `${name}-items-${RUN_ID}@ployo.invalid`, name, emailVerified: true } }),
     ),
   );
+  const secondOwner = await prisma.user.create({ data: { email: `second-owner-items-${RUN_ID}@ployo.invalid`, name: "Other owner", emailVerified: true } });
+  secondOwnerId = secondOwner.id;
   ownerUserId = owner.id;
   employeeUserId = employeeUser.id;
 
   await prisma.tenantMembership.createMany({
     data: [
       { tenantId, userId: ownerUserId, role: "OWNER" },
+      { tenantId, userId: secondOwnerId, role: "OWNER" },
       { tenantId, userId: employeeUserId, role: "EMPLOYEE" },
     ],
   });
@@ -81,11 +87,12 @@ beforeAll(async () => {
 beforeEach(async () => {
   currentUserId = ownerUserId;
   await prisma.tenantEmployeeInfoRequest.deleteMany({ where: { tenantId } });
+  await prisma.tenantInfoRequestDraft.deleteMany({ where: { tenantId } });
 });
 
 afterAll(async () => {
   await prisma.tenant.deleteMany({ where: { slug: tenantSlug } });
-  await prisma.user.deleteMany({ where: { id: { in: [ownerUserId, employeeUserId] } } });
+  await prisma.user.deleteMany({ where: { id: { in: [ownerUserId, employeeUserId, secondOwnerId] } } });
   await prisma.$disconnect();
 });
 
@@ -213,5 +220,81 @@ describe("Mehrteilige Anfrage", () => {
     const result = await selfService.submitInfoRequestResponse({ tenantSlug, requestId: created.id, message: "Ja" });
 
     expect(result).toMatchObject({ message: "Stimmt die Adresse noch?", status: "review", responseMessage: "Ja", items: [] });
+  });
+});
+
+
+describe("Persönliche Info-Anfragen-Entwürfe", () => {
+  const handle = `emp-${RUN_ID}`;
+  const content = {
+    title: "Unterlagen für den Start", message: "Bitte ergänzen.", dueAt: "2027-04-30", dueTime: "14:30",
+    items: [{ kind: "document" as const, label: "Ausweis", required: true }, { kind: "field" as const, label: "IBAN", required: false }],
+  };
+
+  it("speichert und lädt unvollständige Entwürfe ohne Versand und trennt Autoren", async () => {
+    expect(await drafts.getInfoRequestDraft(tenantSlug, handle)).toBeNull();
+    await drafts.saveInfoRequestDraft(tenantSlug, handle, content);
+    expect(await prisma.tenantEmployeeInfoRequest.count({ where: { tenantId } })).toBe(0);
+    expect((await drafts.getInfoRequestDraft(tenantSlug, handle))?.content).toMatchObject(content);
+    currentUserId = secondOwnerId;
+    expect(await drafts.getInfoRequestDraft(tenantSlug, handle)).toBeNull();
+    await drafts.saveInfoRequestDraft(tenantSlug, handle, { title: "Anderer Entwurf" });
+    await drafts.deleteInfoRequestDraft(tenantSlug, handle);
+    currentUserId = ownerUserId;
+    expect((await drafts.getInfoRequestDraft(tenantSlug, handle))?.content.title).toBe(content.title);
+    await drafts.saveInfoRequestDraft(tenantSlug, handle, { message: "Noch ohne Titel und Positionen" });
+    expect((await drafts.getInfoRequestDraft(tenantSlug, handle))?.content.title).toBe("");
+  });
+
+  it("verweigert normalen Mitarbeitern und fremden Mandanten Zugriff", async () => {
+    currentUserId = employeeUserId;
+    await expect(drafts.getInfoRequestDraft(tenantSlug, handle)).rejects.toThrow();
+    await expect(drafts.saveInfoRequestDraft(tenantSlug, handle, content)).rejects.toThrow();
+    await expect(drafts.deleteInfoRequestDraft(tenantSlug, handle)).rejects.toThrow();
+    currentUserId = ownerUserId;
+    await expect(drafts.getInfoRequestDraft(`missing-${RUN_ID}`, handle)).rejects.toThrow();
+    await expect(drafts.saveInfoRequestDraft(tenantSlug, "unknown-employee", content)).rejects.toThrow("Mitarbeiter nicht gefunden.");
+  });
+
+  it("entfernt nach Versand nur den Entwurf des versendenden Autors", async () => {
+    await drafts.saveInfoRequestDraft(tenantSlug, handle, content);
+    currentUserId = secondOwnerId;
+    await drafts.saveInfoRequestDraft(tenantSlug, handle, { title: "Behalten" });
+    currentUserId = ownerUserId;
+    const request = await employees.createEmployeeInfoRequest({ tenantSlug, employeeId, ...content, fileRequested: false });
+    expect(request.title).toBe(content.title);
+    expect(request.dueAt?.getHours()).toBe(14);
+    expect(await drafts.getInfoRequestDraft(tenantSlug, handle)).toBeNull();
+    currentUserId = secondOwnerId;
+    expect((await drafts.getInfoRequestDraft(tenantSlug, handle))?.content.title).toBe("Behalten");
+  });
+
+  it("prüft den API-Vertrag für Laden, Speichern, Löschen und nicht angemeldete Nutzer", async () => {
+    const context = { params: Promise.resolve({ tenant: tenantSlug, employeeHandle: handle }) };
+    const url = "http://localhost/api/draft";
+    let response = await draftRoute.PATCH(new Request(url, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(content) }), context);
+    expect(response.status).toBe(200);
+    expect((await response.json()).draft.content.items).toEqual(content.items);
+    response = await draftRoute.GET(new Request(url), context);
+    expect((await response.json()).draft.content.dueTime).toBe("14:30");
+    response = await draftRoute.DELETE(new Request(url, { method: "DELETE" }), context);
+    expect(response.status).toBe(200);
+    response = await draftRoute.GET(new Request(url), context);
+    expect((await response.json()).draft).toBeNull();
+    response = await draftRoute.PATCH(new Request(url, { method: "PATCH", body: "not-json" }), context);
+    expect(response.status).toBe(400);
+    currentUserId = "";
+    response = await draftRoute.GET(new Request(url), context);
+    expect(response.status).toBe(401);
+  });
+
+  it("begrenzt und normalisiert Inhalte ohne ungültige Eingaben zu übernehmen", () => {
+    const result = drafts.normalizeInfoRequestDraft({ title: "x".repeat(300), message: "x".repeat(11000), dueAt: "bad", dueTime: "99:99", items: [null, { label: 3 }, ...Array.from({ length: 30 }, () => ({ label: " Test ", kind: "field", required: false }))] });
+    expect(result.title).toHaveLength(240);
+    expect(result.message).toHaveLength(10000);
+    expect(result.items).toHaveLength(20);
+    expect(result.items[0]).toEqual({ kind: "field", label: "Test", required: false });
+    expect(result.dueAt).toBe("");
+    expect(result.dueTime).toBe("");
   });
 });

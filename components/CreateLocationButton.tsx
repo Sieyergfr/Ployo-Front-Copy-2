@@ -7,12 +7,13 @@ import { ctaClass, secondaryClass } from "@/components/dashboard/ui";
 import EmployeeSelector, {
   type EmployeeSelectorOption,
 } from "@/components/EmployeeSelector";
+import { FormErrorBanner } from "@/components/FormFeedback";
 import { OpeningHoursEditor } from "@/components/OpeningHoursEditor";
 import { useActionStateWithToast } from "@/components/Toasts";
 import { BUNDESLAENDER } from "@/lib/german-holidays";
 import { locationColorPalette, locationKindLabel, locationKinds, paletteHex } from "@/lib/org-options";
 import { Building2, Check, Plus } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { startTransition, useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 
 function FormSection({ title, children }: { title: string; children: ReactNode }) {
@@ -38,7 +39,7 @@ function CreateLocationDrawer({
 }) {
   const t = useTranslations("CreateLocationButton");
   const tAddress = useTranslations("AddressFields");
-  const [, formAction, isPending] = useActionStateWithToast(createLocationAction);
+  const [state, formAction, isPending] = useActionStateWithToast(createLocationAction);
   const [name, setName] = useState("");
   const [kind, setKind] = useState<string>("Filiale");
   const [status, setStatus] = useState("active");
@@ -83,7 +84,21 @@ function CreateLocationDrawer({
         <span className="font-mono text-[10px] tracking-[0.12em] text-[#6e6e6b] uppercase">{t("preview")}</span>
       </div>
 
-      <form id="create-location-form" action={formAction} className="flex flex-col gap-6">
+      <form
+        id="create-location-form"
+        className="flex flex-col gap-6"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (isPending) return;
+          // Ein form-action-Submit setzt unkontrollierte Felder auch dann zurück,
+          // wenn die Server Action einen Validierungsfehler als State zurückgibt.
+          // Explizites Dispatch behält die Eingaben; native Pflichtfeldprüfung
+          // und der Redirect nach erfolgreichem Erstellen bleiben erhalten.
+          const data = new FormData(event.currentTarget);
+          startTransition(() => formAction(data));
+        }}
+      >
+        <FormErrorBanner message={state.error} />
         <input type="hidden" name="tenant" value={tenant} />
         <input type="hidden" name="kind" value={kind} />
         <input type="hidden" name="status" value={status} />
@@ -164,7 +179,7 @@ function CreateLocationDrawer({
                     }`}
                     style={{ background: paletteHex(entry.className), ["--tw-ring-color" as string]: paletteHex(entry.className) }}
                   >
-                    <Check size={13} strokeWidth={3} />
+                    {color === entry.value && <Check size={13} strokeWidth={3} aria-hidden="true" />}
                   </button>
                 ))}
               </div>
@@ -216,18 +231,20 @@ function CreateLocationDrawer({
 
 export default function CreateLocationButton({
   tenant,
+  initialOpen = false,
   employees,
   className,
   children,
 }: {
   tenant: string;
+  initialOpen?: boolean;
   employees: EmployeeSelectorOption[];
   className?: string;
   /** Eigener Inhalt, z. B. die gestrichelte Kachel im Kartenraster. */
   children?: React.ReactNode;
 }) {
   const t = useTranslations("CreateLocationButton");
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(initialOpen);
 
   return (
     <>

@@ -1,5 +1,7 @@
 "use client";
 
+import { useDatePreference } from "@/components/DatePreferences";
+import { preferredDateFormatter } from "@/lib/date-picker";
 import { InviteToAppButton } from "@/components/dashboard/employees/EmployeeAccessButtons";
 import { DbDrawer } from "@/components/dashboard/DbDrawer";
 import EmployeeInfoRequestButton from "@/components/EmployeeInfoRequestButton";
@@ -109,11 +111,12 @@ function ProfileDrawer({
 }) {
   const t = useTranslations("EmployeesUi");
   const locale = useLocale();
+  const datePreference = useDatePreference();
   const [tab, setTab] = useState<"overview" | "personal" | "contract">("overview");
   const gaps = employeeProfileGaps(employee);
   const years = yearsSince(employee.startDate);
   const href = `/u/${tenant}/employees/${employee.id}`;
-  const dateFormat = new Intl.DateTimeFormat(locale === "en" ? "en-GB" : "de-DE", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" });
+  const dateFormat = preferredDateFormatter(datePreference, locale === "en" ? "en-GB" : "de-DE", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" });
   const formatDate = (value: string) =>
     /^\d{4}-\d{2}-\d{2}$/.test(value) ? dateFormat.format(new Date(`${value}T12:00:00Z`)) : value || "–";
   const rows = (items: Array<[string, string]>) => (
@@ -163,7 +166,7 @@ function ProfileDrawer({
         </div>
       }
     >
-      <div className="-mt-1 flex flex-wrap items-center gap-2">
+      <div className="flex min-w-0 flex-wrap items-center gap-2 py-1">
         <EmployeeStatusChip status={employee.status} label={t(`status.${employee.status}`)} />
         {(employee.locations?.length ? employee.locations : [employee.location]).filter(Boolean).map((location) => (
           <span key={location} className="inline-flex items-center gap-1.5 rounded-[7px] border border-[#ecebe7] bg-white px-2 py-[3px] text-[12px]">
@@ -182,7 +185,7 @@ function ProfileDrawer({
             tenant={tenant}
             employeeHandle={employee.id}
             label={t("inviteToApp")}
-            className="inline-flex cursor-pointer items-center gap-1.5 rounded-[7px] border border-[rgba(139,110,212,0.35)] bg-[rgba(139,110,212,0.08)] px-2 py-[3px] text-[12px] font-medium text-[#6b4fc4]"
+            className="db-focus inline-flex min-h-10 shrink-0 cursor-pointer items-center justify-center gap-2 rounded-[9px] border border-[#6b4fc4] bg-[#6b4fc4] px-3.5 py-2 text-[13px] font-semibold text-white shadow-sm transition-colors hover:border-[#593cae] hover:bg-[#593cae] disabled:cursor-wait disabled:opacity-60"
           />
         )}
       </div>
@@ -228,6 +231,18 @@ function ProfileDrawer({
                     employeeHandle={employee.id}
                     employeeName={employee.name}
                     label={t("requestInApp")}
+                    initialValues={{
+                      title: t("profileRequestTitle"),
+                      message: t("profileRequestMessage"),
+                      dueAt: "",
+                      dueTime: "",
+                      fileRequested: false,
+                      items: gaps.missing.map((field) => ({
+                        kind: "field",
+                        label: t(`fields.${field}`),
+                        required: true,
+                      })),
+                    }}
                     className="inline-flex min-h-9 cursor-pointer items-center gap-2 rounded-[9px] bg-ink px-3 text-[13px] font-semibold text-white"
                   />
                 </div>
@@ -328,6 +343,7 @@ export default function EmployeesTable({
 }) {
   const t = useTranslations("EmployeesUi");
   const locale = useLocale();
+  const datePreference = useDatePreference();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -336,7 +352,7 @@ export default function EmployeesTable({
   const [openId, setOpenId] = useState<string | null>(null);
   const debounce = useRef<number | null>(null);
   const openEmployee = employees.find((employee) => employee.id === openId) ?? null;
-  const dateFormat = new Intl.DateTimeFormat(locale === "en" ? "en-GB" : "de-DE", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" });
+  const dateFormat = preferredDateFormatter(datePreference, locale === "en" ? "en-GB" : "de-DE", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" });
 
   function update(name: string, value: string) {
     const params = new URLSearchParams(searchParams.toString());

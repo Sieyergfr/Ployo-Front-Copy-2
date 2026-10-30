@@ -2,7 +2,9 @@
 
 import { teamColorPalette } from "@/lib/org-options";
 import { Check, ChevronDown } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type CSSProperties } from "react";
+import { createPortal } from "react-dom";
+import { useParams, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 
 const teamColorOptions = teamColorPalette.map((color) => ({
@@ -70,6 +72,10 @@ export function LocationMultiSelectDropdown({
   onChange?: (locations: string[]) => void;
 }) {
   const t = useTranslations("TeamEditControls");
+  const params = useParams<{ tenant?: string }>();
+  const dropdownId = useId();
+  const router = useRouter();
+  const awaitingCreation = useRef(false);
   const [isOpen, setIsOpen] = useState(false);
   const [selectedLocations, setSelectedLocations] = useState(defaultLocations);
   const [dropdownRect, setDropdownRect] = useState<{
@@ -79,7 +85,9 @@ export function LocationMultiSelectDropdown({
   } | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const locationOptions = options ?? ["München", "Berlin", "Hamburg"];
+  const locationOptions = options ?? [];
+  const isTeamSelect = name === "teams";
+  const createHref = params.tenant ? `/u/${encodeURIComponent(params.tenant)}/${isTeamSelect ? "teams" : "standorte"}?create=1` : null;
   const summary = useMemo(() => {
     if (selectedLocations.length === 0) {
       return placeholder ?? t("selectLocations");
@@ -117,6 +125,21 @@ export function LocationMultiSelectDropdown({
     };
   }, [isOpen]);
 
+  useEffect(() => {
+    const refreshAfterCreation = () => {
+      if (document.visibilityState === "visible" && awaitingCreation.current) {
+        awaitingCreation.current = false;
+        router.refresh();
+      }
+    };
+    window.addEventListener("focus", refreshAfterCreation);
+    document.addEventListener("visibilitychange", refreshAfterCreation);
+    return () => {
+      window.removeEventListener("focus", refreshAfterCreation);
+      document.removeEventListener("visibilitychange", refreshAfterCreation);
+    };
+  }, [router]);
+
   function toggleLocation(location: string) {
     const next = selectedLocations.includes(location)
       ? selectedLocations.filter((item) => item !== location)
@@ -126,7 +149,6 @@ export function LocationMultiSelectDropdown({
     onChange?.(next);
   }
 
-  const dropdownId = `${name}-dropdown`;
 
   return (
     <div
@@ -153,7 +175,8 @@ export function LocationMultiSelectDropdown({
         ref={triggerRef}
         type="button"
         className="input flex cursor-pointer items-center justify-between gap-3 bg-white text-left"
-        aria-haspopup="listbox"
+        aria-haspopup={locationOptions.length ? "listbox" : "dialog"}
+        aria-controls={isOpen ? dropdownId : undefined}
         aria-expanded={isOpen}
         onClick={() => setIsOpen((current) => !current)}
       >
@@ -166,11 +189,12 @@ export function LocationMultiSelectDropdown({
         />
       </button>
 
-      {isOpen && dropdownRect && (
+      {isOpen && dropdownRect && createPortal(
         <div
           id={dropdownId}
-          role="listbox"
-          aria-multiselectable="true"
+          role={locationOptions.length ? "listbox" : "dialog"}
+          aria-label={label ?? t("locations")}
+          aria-multiselectable={locationOptions.length ? true : undefined}
           className="fixed top-[var(--pos-top)] left-[var(--pos-left)] w-[var(--pos-width)] z-[1200] flex max-h-60 flex-col gap-1.5 overflow-y-auto rounded-[10px] border border-border bg-white p-1.5 shadow-[0_12px_32px_rgba(0,0,0,0.12)]"
           style={
             {
@@ -180,6 +204,17 @@ export function LocationMultiSelectDropdown({
             } as CSSProperties
           }
         >
+          {locationOptions.length === 0 && (
+            <div className="flex flex-col items-start gap-3 p-3">
+              <p className="m-0 text-[13px] leading-relaxed text-muted-2">{t(isTeamSelect ? "noTeamsCreated" : "noLocationsCreated")}</p>
+              {createHref && (
+                <a href={createHref} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-10 items-center justify-center rounded-lg bg-ink px-3 py-2 text-[13px] font-semibold text-white no-underline hover:bg-ink-hover" onClick={() => { awaitingCreation.current = true; setIsOpen(false); }}>
+                  {t("createNow")}
+                  <span className="sr-only"> — {t("opensNewTab")}</span>
+                </a>
+              )}
+            </div>
+          )}
           {locationOptions.map((location) => {
             const isSelected = selectedLocations.includes(location);
 
@@ -208,7 +243,8 @@ export function LocationMultiSelectDropdown({
               </button>
             );
           })}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

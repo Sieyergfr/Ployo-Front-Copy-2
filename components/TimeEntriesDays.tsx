@@ -1,5 +1,9 @@
 "use client";
 
+import { useDatePreference } from "@/components/DatePreferences";
+import { preferredDateFormatter } from "@/lib/date-picker";
+import DatePickerField from "@/components/DatePickerField";
+
 import {
   correctTimeEntryAction,
   createTimeEntryAction,
@@ -26,13 +30,13 @@ type EditContext = {
   canDelete: boolean;
 };
 
-function formatDay(date: string, locale: string) {
-  return new Date(`${date}T12:00:00Z`).toLocaleDateString(locale, {
+function formatDay(date: string, locale: string, preference: string) {
+  return preferredDateFormatter(preference, locale, {
     weekday: "short",
     day: "2-digit",
     month: "2-digit",
     timeZone: "UTC",
-  });
+  }).format(new Date(`${date}T12:00:00Z`));
 }
 
 function TimeEntryForm({
@@ -66,11 +70,10 @@ function TimeEntryForm({
           <label htmlFor={`${idPrefix}-date`} className="label">
             {t("date")}
           </label>
-          <input
+          <DatePickerField
             id={`${idPrefix}-date`}
             name="date"
-            type="date"
-            className="input"
+            inputClassName="input"
             defaultValue={entry?.date ?? defaultDate}
             required
           />
@@ -311,6 +314,7 @@ export default function TimeEntriesDays({
 }) {
   const t = useTranslations("TimeTracking");
   const locale = useLocale();
+  const datePreference = useDatePreference();
 
   return (
     <section className="overflow-hidden rounded-card border border-border bg-white">
@@ -326,7 +330,7 @@ export default function TimeEntriesDays({
           >
             <div>
               <div className="text-[13.5px] font-semibold text-ink">
-                {formatDay(day.date, locale)}
+                {formatDay(day.date, locale, datePreference)}
                 {day.date === today && (
                   <span className="ml-2 font-mono text-[10px] uppercase text-muted">{t("today")}</span>
                 )}

@@ -2,31 +2,33 @@
 
 import {
   openBillingPortalAction,
-  saveHolidayRegionAction,
+  saveHolidayRegionsSectionAction,
   savePreferencesSectionAction,
   saveSettingsSectionAction,
   saveShiftSettingsSectionAction,
   startBillingCheckoutAction,
 } from "@/app/(dashboard)/u/[tenant]/einstellungen/actions";
+import { useDatePreference } from "@/components/DatePreferences";
+import { preferredDateFormatter } from "@/lib/date-picker";
 import AddressFields from "@/components/AddressFields";
 import { dbInputClass } from "@/components/dashboard/DbDrawer";
 import {
-  AutoSaveForm,
+  SettingsForm,
   InfoNote,
   SettingSegments,
   SettingSwitch,
   SettingsCard,
   SettingsRow,
   SoonBadge,
-  useAutoSave,
+  useSettingsForm,
 } from "@/components/dashboard/settings/SettingsBits";
 import { avatarColor, ctaClass, smallActionClass } from "@/components/dashboard/ui";
 import { OpeningHoursEditor } from "@/components/OpeningHoursEditor";
-import { useActionStateWithToast, useToast } from "@/components/Toasts";
+import { useActionStateWithToast } from "@/components/Toasts";
 import { BUNDESLAENDER } from "@/lib/german-holidays";
 import { SETTINGS_CATEGORIES, type SettingsCategory } from "@/components/dashboard/settings/settings-categories";
 import type { SettingsPageData } from "@/lib/settings-page";
-import type { ShiftPreset } from "@/lib/shift-presets";
+import { DEFAULT_SHIFT_PRESET_COLOR, type ShiftPreset } from "@/lib/shift-presets";
 import { tenantIndustries, tenantSizes } from "@/lib/tenant-options";
 import { hasPermissionLevel, type PermissionLevel } from "@/lib/roles";
 import {
@@ -35,7 +37,6 @@ import {
   CreditCard,
   Download,
   FileText,
-  KeyRound,
   Lock,
   Plug,
   Plus,
@@ -56,7 +57,6 @@ import { useEffect, useMemo, useState } from "react";
 const ICONS: Record<SettingsCategory, LucideIcon> = {
   account: UserRound,
   company: Building2,
-  roles: KeyRound,
   security: ShieldCheck,
   timeTracking: Timer,
   shifts: CalendarDays,
@@ -67,7 +67,7 @@ const ICONS: Record<SettingsCategory, LucideIcon> = {
 
 const GROUPS: Array<{ id: string; items: SettingsCategory[] }> = [
   { id: "personal", items: ["account"] },
-  { id: "company", items: ["company", "roles", "security"] },
+  { id: "company", items: ["company", "security"] },
   { id: "daily", items: ["timeTracking", "shifts", "notifications"] },
   { id: "subscription", items: ["billing", "integrations"] },
 ];
@@ -75,7 +75,6 @@ const GROUPS: Array<{ id: string; items: SettingsCategory[] }> = [
 /** Welche Kategorie welches Recht braucht (wie im bisherigen Dialog). */
 function requiredLevel(category: SettingsCategory): { area: "settings" | "roles"; level: PermissionLevel } | null {
   if (category === "account" || category === "security") return null;
-  if (category === "roles") return { area: "roles", level: "admin" };
   if (category === "integrations") return { area: "settings", level: "admin" };
 
   return { area: "settings", level: "write" };
@@ -123,7 +122,7 @@ export default function SettingsPage({ data, category }: { data: SettingsPageDat
               {items.map((item) => {
                 const ItemIcon = ICONS[item];
                 const isActive = item === active;
-                const href = item === "roles" ? `/u/${data.tenant.slug}/rollen` : `${base}?kat=${item}`;
+                const href = `${base}?kat=${item}`;
 
                 return (
                   <Link
@@ -197,7 +196,7 @@ function AccountPanel({ data }: { data: SettingsPageData }) {
 
   return (
     <>
-      <AutoSaveForm action={saveSettingsSectionAction} hidden={{ tenant: data.tenant.slug, category: "account" }} onSaved={() => router.refresh()}>
+      <SettingsForm action={saveSettingsSectionAction} hidden={{ tenant: data.tenant.slug, category: "account" }} onSaved={() => router.refresh()}>
         <SettingsCard title={t("account.profile")}>
           <div className="flex items-center gap-3 border-b border-[#f0efeb] py-3.5">
             <span className="flex size-12 items-center justify-center rounded-full text-[16px] font-bold text-white" style={{ background: avatarColor(data.user.id) }}>
@@ -218,7 +217,7 @@ function AccountPanel({ data }: { data: SettingsPageData }) {
             </span>
           </SettingsRow>
         </SettingsCard>
-      </AutoSaveForm>
+      </SettingsForm>
 
       <SettingsCard title={t("account.passwordAccount")}>
         <SettingsRow label={t("account.password")} hint={t("account.passwordHint")}>
@@ -233,7 +232,7 @@ function AccountPanel({ data }: { data: SettingsPageData }) {
         </SettingsRow>
       </SettingsCard>
 
-      <AutoSaveForm action={savePreferencesSectionAction} onSaved={() => router.refresh()}>
+      <SettingsForm action={savePreferencesSectionAction} onSaved={() => router.refresh()}>
         <SettingsCard title={t("account.languageDisplay")}>
           <SettingsRow label={t("account.language")} hint={t("account.languageHint")}>
             <SettingSegments
@@ -245,15 +244,6 @@ function AccountPanel({ data }: { data: SettingsPageData }) {
                 { value: "en", label: "English" },
               ]}
             />
-          </SettingsRow>
-          <SettingsRow label={t("account.timezone")} hint={t("account.timezoneHint")}>
-            <select name="timezone" defaultValue={prefs.timezone} className={`${dbInputClass} cursor-pointer`} aria-label={t("account.timezone")}>
-              {TIMEZONES.map((zone) => (
-                <option key={zone} value={zone}>
-                  {t(`timezone.${zone.replace("/", "_")}`)}
-                </option>
-              ))}
-            </select>
           </SettingsRow>
           <SettingsRow label={t("account.dateFormat")} hint={t("account.dateFormatHint", { example: sample(dateFormat) })}>
             <SettingSegments
@@ -268,15 +258,6 @@ function AccountPanel({ data }: { data: SettingsPageData }) {
               ]}
             />
           </SettingsRow>
-          <SettingsRow label={t("account.startPage")} hint={t("account.startPageHint")}>
-            <select name="startPage" defaultValue={prefs.startPage} className={`${dbInputClass} cursor-pointer`} aria-label={t("account.startPage")}>
-              {["overview", "mein-bereich", "employees", "urlaub", "schichtplanung"].map((page) => (
-                <option key={page} value={page}>
-                  {t(`startPage.${page}`)}
-                </option>
-              ))}
-            </select>
-          </SettingsRow>
         </SettingsCard>
 
         <SettingsCard title={t("account.myNotifications")} subtitle={t("account.myNotificationsHint")}>
@@ -286,11 +267,8 @@ function AccountPanel({ data }: { data: SettingsPageData }) {
           <SettingsRow label={t("account.notifyShifts")} hint={t("account.notifyShiftsHint")}>
             <SettingSwitch name="notifyShiftEvents" defaultChecked={prefs.notifyShiftEvents} label={t("account.notifyShifts")} />
           </SettingsRow>
-          <SettingsRow label={t("account.push")} hint={t("account.pushHint")}>
-            <SettingSwitch name="pushEnabled" defaultChecked={prefs.pushEnabled} label={t("account.push")} />
-          </SettingsRow>
         </SettingsCard>
-      </AutoSaveForm>
+      </SettingsForm>
     </>
   );
 }
@@ -317,12 +295,12 @@ function CompanyPanel({ data }: { data: SettingsPageData }) {
   const tAddress = useTranslations("AddressFields");
   const router = useRouter();
   const settings = data.settings;
-  const [slug, setSlug] = useState(data.tenant.slug);
+  const slug = data.tenant.slug;
 
   if (!settings) return null;
 
   return (
-    <AutoSaveForm
+    <SettingsForm
       action={saveSettingsSectionAction}
       hidden={companyHidden(data)}
       onSaved={(result) => {
@@ -350,7 +328,8 @@ function CompanyPanel({ data }: { data: SettingsPageData }) {
             <input
               name="tenantId"
               defaultValue={data.tenant.slug}
-              onChange={(event) => setSlug(event.target.value)}
+              readOnly
+              aria-readonly="true"
               className={`${dbInputClass} rounded-l-none`}
               required
               pattern="[a-z0-9-]{3,48}"
@@ -431,14 +410,11 @@ function CompanyPanel({ data }: { data: SettingsPageData }) {
           </span>
         </SettingsRow>
         <SettingsRow label={t("company.workHours")} hint={t("company.workHoursHint")}>
-          <input name="workHours" defaultValue={settings.workHours} className={dbInputClass} maxLength={64} aria-label={t("company.workHours")} />
+          <input name="workHours" type="number" min={0} max={168} step="any" inputMode="decimal" required defaultValue={settings.workHours} className={dbInputClass} aria-label={t("company.workHours")} />
         </SettingsRow>
       </SettingsCard>
 
       <SettingsCard title={t("company.employeeNumbers")}>
-        <SettingsRow label={t("company.employeeNumberRequired")} hint={t("company.employeeNumberRequiredHint")}>
-          <SettingSwitch name="employeeNumberRequired" defaultChecked={settings.employeeNumberRequired} label={t("company.employeeNumberRequired")} />
-        </SettingsRow>
         <SettingsRow label={t("company.prefixSuffix")} hint={t("company.prefixSuffixHint")}>
           <span className="grid grid-cols-2 gap-2">
             <input name="employeeNumberPrefix" defaultValue={settings.employeeNumberPrefix} className={dbInputClass} placeholder={t("company.prefix")} maxLength={16} aria-label={t("company.prefix")} />
@@ -464,7 +440,7 @@ function CompanyPanel({ data }: { data: SettingsPageData }) {
           </Link>
         </SettingsRow>
       </SettingsCard>
-    </AutoSaveForm>
+    </SettingsForm>
   );
 }
 
@@ -479,7 +455,7 @@ function SecurityPanel({ data }: { data: SettingsPageData }) {
 
   return (
     <>
-      <AutoSaveForm action={saveSettingsSectionAction} hidden={{ tenant: data.tenant.slug, category: "security" }}>
+      <SettingsForm action={saveSettingsSectionAction} hidden={{ tenant: data.tenant.slug, category: "security" }}>
         <SettingsCard title={t("security.login")}>
           <SettingsRow label={t("security.twoFactorRequired")} hint={t("security.twoFactorRequiredHint")}>
             <SettingSwitch name="twoFactorRequired" defaultChecked={settings?.twoFactorRequired ?? false} label={t("security.twoFactorRequired")} disabled={!canManage} />
@@ -507,7 +483,7 @@ function SecurityPanel({ data }: { data: SettingsPageData }) {
             </SettingsRow>
           )}
         </SettingsCard>
-      </AutoSaveForm>
+      </SettingsForm>
     </>
   );
 }
@@ -524,7 +500,7 @@ function TimeTrackingPanel({ data }: { data: SettingsPageData }) {
   if (!s) return null;
 
   return (
-    <AutoSaveForm action={saveSettingsSectionAction} hidden={{ tenant: data.tenant.slug, category: "timeTracking" }}>
+    <SettingsForm action={saveSettingsSectionAction} hidden={{ tenant: data.tenant.slug, category: "timeTracking" }}>
       <SettingsCard title={t("time.clock")}>
         <SettingsRow label={t("time.enabled")} hint={t("time.enabledHint")}>
           <SettingSwitch name="timeTrackingEnabled" defaultChecked={s.timeTrackingEnabled} label={t("time.enabled")} />
@@ -533,7 +509,7 @@ function TimeTrackingPanel({ data }: { data: SettingsPageData }) {
       </SettingsCard>
 
       <SettingsCard title={t("time.clockIn")}>
-        <SettingsRow label={t("time.clockInMode")}>
+        <SettingsRow label={t("time.clockInMode")} stacked>
           <ClockModePicker mode={mode} setMode={setMode} />
         </SettingsRow>
         {mode === "shift" && (
@@ -576,22 +552,16 @@ function TimeTrackingPanel({ data }: { data: SettingsPageData }) {
           <input name="timeTrackingAutoClockOutMaxHours" type="number" min={1} max={24} defaultValue={s.timeTrackingAutoClockOutMaxHours} className={dbInputClass} aria-label={t("time.maxHours")} />
         </SettingsRow>
       </SettingsCard>
-
-      <SettingsCard title={t("time.reminders")}>
-        <SettingsRow label={t("time.reminderPush")} hint={s.mobilePush ? t("time.reminderPushHint") : t("time.reminderPushNeedsPush")}>
-          <SettingSwitch name="timeTrackingReminderPush" defaultChecked={s.timeTrackingReminderPush} label={t("time.reminderPush")} />
-        </SettingsRow>
-      </SettingsCard>
-    </AutoSaveForm>
+    </SettingsForm>
   );
 }
 
 function ClockModePicker({ mode, setMode }: { mode: string; setMode: (mode: string) => void }) {
   const t = useTranslations("SettingsPage");
-  const { schedule } = useAutoSave();
+  const { markDirty } = useSettingsForm();
 
   return (
-    <div role="radiogroup" aria-label={t("time.clockInMode")} className="flex flex-col gap-2">
+    <div role="radiogroup" aria-label={t("time.clockInMode")} className="grid gap-2 sm:grid-cols-2">
       <input type="hidden" name="timeTrackingClockInMode" value={mode} />
       {(["always", "shift"] as const).map((option) => (
         <button
@@ -601,7 +571,7 @@ function ClockModePicker({ mode, setMode }: { mode: string; setMode: (mode: stri
           aria-checked={mode === option}
           onClick={() => {
             setMode(option);
-            schedule();
+            markDirty();
           }}
           className={`flex cursor-pointer items-start gap-2.5 rounded-[12px] border bg-white px-3.5 py-3 text-left ${mode === option ? "border-[#8b6fe0] shadow-[0_0_0_1px_#8b6fe0]" : "border-[#e4e3df]"}`}
         >
@@ -642,7 +612,7 @@ function ShiftsPanel({ data }: { data: SettingsPageData }) {
 
   return (
     <>
-      <AutoSaveForm action={saveShiftSettingsSectionAction} hidden={{ tenant: data.tenant.slug, weekStart: s.weekStart, presets: JSON.stringify(presets) }}>
+      <SettingsForm action={saveShiftSettingsSectionAction} hidden={{ tenant: data.tenant.slug, weekStart: s.weekStart, presets: JSON.stringify(presets) }}>
         <SettingsCard title={t("shifts.defaults")} subtitle={t("shifts.defaultsHint")}>
           <SettingsRow label={t("company.weekStart")} hint={t("shifts.weekStartHint")}>
             <span className={`${dbInputClass} flex items-center justify-between border-dashed`}>
@@ -718,7 +688,7 @@ function ShiftsPanel({ data }: { data: SettingsPageData }) {
         <OpeningHoursCard data={data} />
 
         <PresetsCard presets={presets} setPresets={setPresets} locale={locale} />
-      </AutoSaveForm>
+      </SettingsForm>
 
       <HolidaysCard data={data} />
     </>
@@ -727,11 +697,11 @@ function ShiftsPanel({ data }: { data: SettingsPageData }) {
 
 function OpeningHoursCard({ data }: { data: SettingsPageData }) {
   const t = useTranslations("SettingsPage");
-  const { schedule } = useAutoSave();
+  const { markDirty } = useSettingsForm();
 
   return (
     <SettingsCard title={t("shifts.openingHours")} subtitle={t("shifts.openingHoursHint")}>
-      <div className="py-3.5" onClick={() => schedule(700)}>
+      <div className="py-3.5" onClick={() => markDirty()}>
         <OpeningHoursEditor name="defaultOpeningHours" defaultValue={data.settings?.defaultOpeningHours ?? []} />
       </div>
     </SettingsCard>
@@ -748,10 +718,10 @@ function PresetsCard({
   locale: string;
 }) {
   const t = useTranslations("SettingsPage");
-  const { schedule } = useAutoSave();
+  const { markDirty } = useSettingsForm();
   const update = (id: string, patch: Partial<ShiftPreset>) => {
     setPresets((current) => current.map((preset) => (preset.id === id ? { ...preset, ...patch } : preset)));
-    schedule(900);
+    markDirty();
   };
 
   return (
@@ -760,6 +730,10 @@ function PresetsCard({
         {presets.length === 0 && <p className="m-0 text-[13px] text-[#6e6e6b]">{t("shifts.noPresets")}</p>}
         {presets.map((preset) => (
           <div key={preset.id} className="flex flex-wrap items-center gap-2 rounded-[12px] border border-[#ecebe7] px-3 py-2">
+            <label className="relative flex size-9 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-[9px] border border-[#dedad4]" title={t("shifts.presetColor")}>
+              <span className="pointer-events-none size-5 rounded-full" style={{ backgroundColor: preset.color }} />
+              <input type="color" value={preset.color} onChange={(event) => update(preset.id, { color: event.target.value })} aria-label={t("shifts.presetColor")} className="absolute inset-0 size-full cursor-pointer opacity-0" />
+            </label>
             <input value={preset.label} onChange={(event) => update(preset.id, { label: event.target.value })} className={`${dbInputClass} min-h-9 max-w-[180px] py-1.5`} aria-label={t("shifts.presetName")} maxLength={64} />
             <input type="time" value={preset.start} onChange={(event) => update(preset.id, { start: event.target.value })} className={`${dbInputClass} !w-[124px] min-h-9 py-1.5`} aria-label={t("shifts.presetStart")} />
             <span className="text-[#9a9a96]">–</span>
@@ -779,7 +753,7 @@ function PresetsCard({
               aria-label={t("shifts.removePreset")}
               onClick={() => {
                 setPresets((current) => current.filter((item) => item.id !== preset.id));
-                schedule(300);
+                markDirty();
               }}
               className="ml-auto flex size-8 cursor-pointer items-center justify-center rounded-[8px] border-0 bg-transparent text-[#6e6e6b] hover:bg-[#f2f1ed]"
             >
@@ -789,7 +763,10 @@ function PresetsCard({
         ))}
         <button
           type="button"
-          onClick={() => setPresets((current) => [...current, { id: `preset-${Date.now().toString(36)}`, label: t("shifts.newPreset"), start: "08:00", end: "16:00", pause: "30m" }])}
+          onClick={() => {
+            setPresets((current) => [...current, { id: `preset-${Date.now().toString(36)}`, label: t("shifts.newPreset"), start: "08:00", end: "16:00", pause: "30m", color: DEFAULT_SHIFT_PRESET_COLOR }]);
+            markDirty();
+          }}
           className="inline-flex w-fit cursor-pointer items-center gap-1.5 border-0 bg-transparent p-0 text-[13.5px] font-semibold text-[#6b4fc4]"
         >
           <Plus size={15} />
@@ -802,44 +779,17 @@ function PresetsCard({
 
 function HolidaysCard({ data }: { data: SettingsPageData }) {
   const t = useTranslations("SettingsPage");
-  const { toast } = useToast();
-  const router = useRouter();
-
-  return (
+  return <SettingsForm action={saveHolidayRegionsSectionAction} hidden={{ tenant: data.tenant.slug }}>
     <SettingsCard title={t("shifts.holidays")} subtitle={t("shifts.holidaysHint")}>
-      {data.locations.length === 0 && <p className="m-0 py-3.5 text-[13px] text-[#6e6e6b]">{t("company.noLocations")}</p>}
-      {data.locations.map((location) => (
-        <SettingsRow
-          key={location.id}
-          label={
-            <span className="flex items-center gap-2">
-              <span className="size-2 rounded-[2px]" style={{ background: avatarColor(location.id) }} />
-              {location.name}
-            </span>
-          }
-        >
-          <select
-            defaultValue={location.bundesland ?? ""}
-            aria-label={t("shifts.holidayRegion", { name: location.name })}
-            className={`${dbInputClass} cursor-pointer`}
-            onChange={async (event) => {
-              const result = await saveHolidayRegionAction({ tenant: data.tenant.slug, locationId: location.id, bundesland: event.target.value });
-
-              toast(result.error ? { tone: "error", title: result.error } : { tone: "success", title: t("saved") });
-              router.refresh();
-            }}
-          >
-            <option value="">{t("shifts.nationwide")}</option>
-            {BUNDESLAENDER.map((entry) => (
-              <option key={entry.code} value={entry.code}>
-                {entry.name}
-              </option>
-            ))}
-          </select>
-        </SettingsRow>
-      ))}
+      {data.locations.length === 0 && <p className="py-3 text-[13px] text-muted-2">{t("company.noLocations")}</p>}
+      {data.locations.map((location) => <SettingsRow key={location.id} label={location.name}>
+        <select name={`region:${location.id}`} defaultValue={location.bundesland ?? ""} aria-label={t("shifts.holidayRegion", { name: location.name })} className={`${dbInputClass} cursor-pointer`}>
+          <option value="">{t("shifts.nationwide")}</option>
+          {BUNDESLAENDER.map((entry) => <option key={entry.code} value={entry.code}>{entry.name}</option>)}
+        </select>
+      </SettingsRow>)}
     </SettingsCard>
-  );
+  </SettingsForm>;
 }
 
 // ---------------------------------------------------------------------------
@@ -865,16 +815,13 @@ function NotificationsPanel({ data }: { data: SettingsPageData }) {
   const digest = parseDigest(s.digestTime);
 
   return (
-    <AutoSaveForm action={saveSettingsSectionAction} hidden={{ tenant: data.tenant.slug, category: "notifications" }}>
+    <SettingsForm action={saveSettingsSectionAction} hidden={{ tenant: data.tenant.slug, category: "notifications" }}>
       <SettingsCard title={t("notify.channels")} subtitle={t("notify.channelsHint")}>
         <SettingsRow label={t("notify.mail")} hint={t("notify.mailHint")}>
           <SettingSwitch name="mailNotifications" defaultChecked={s.mailNotifications} label={t("notify.mail")} />
         </SettingsRow>
         <SettingsRow label={t("notify.inApp")} hint={t("notify.inAppHint")}>
           <SettingSwitch name="inAppNotifications" defaultChecked={s.inAppNotifications} label={t("notify.inApp")} />
-        </SettingsRow>
-        <SettingsRow label={t("notify.push")} hint={t("notify.pushHint")}>
-          <SettingSwitch name="mobilePush" defaultChecked={s.mobilePush} label={t("notify.push")} />
         </SettingsRow>
       </SettingsCard>
       <SettingsCard title={t("notify.events")}>
@@ -905,7 +852,7 @@ function NotificationsPanel({ data }: { data: SettingsPageData }) {
           </span>
         </SettingsRow>
       </SettingsCard>
-    </AutoSaveForm>
+    </SettingsForm>
   );
 }
 
@@ -918,6 +865,8 @@ type Invoice = { id: string; number: string | null; createdAt: string; amountDue
 function BillingPanel({ data }: { data: SettingsPageData }) {
   const t = useTranslations("SettingsPage");
   const locale = useLocale();
+  const datePreference = useDatePreference();
+  const dateLabel = preferredDateFormatter(datePreference, locale, { day: "2-digit", month: "2-digit", year: "numeric" });
   const router = useRouter();
   const [, portalAction] = useActionStateWithToast(openBillingPortalAction);
   const [, checkoutAction] = useActionStateWithToast(startBillingCheckoutAction);
@@ -926,7 +875,7 @@ function BillingPanel({ data }: { data: SettingsPageData }) {
   const plan = data.tenant.plan ?? "professional";
   const cycle = data.tenant.billingCycle ?? "monthly";
   const returnPath = `/u/${data.tenant.slug}/einstellungen?kat=billing`;
-  const periodEnd = data.tenant.stripeCurrentPeriodEnd ? new Date(data.tenant.stripeCurrentPeriodEnd).toLocaleDateString(locale) : null;
+  const periodEnd = data.tenant.stripeCurrentPeriodEnd ? dateLabel.format(new Date(data.tenant.stripeCurrentPeriodEnd)) : null;
   const limit = data.usage.employeeLimit;
   const usedPercent = limit ? Math.min(100, (data.usage.activeEmployees / limit) * 100) : 0;
   const money = useMemo(() => (amount: number, currency: string) => new Intl.NumberFormat(locale, { style: "currency", currency: currency.toUpperCase() }).format(amount / 100), [locale]);
@@ -976,6 +925,7 @@ function BillingPanel({ data }: { data: SettingsPageData }) {
               <form action={portalAction} className="flex flex-wrap gap-2">
                 <input type="hidden" name="tenant" value={data.tenant.slug} />
                 <input type="hidden" name="returnPath" value={returnPath} />
+        <input type="hidden" name="paymentInterval" value={cycle} />
                 <button type="submit" name="portalIntent" value="switch-plan" className="cursor-pointer rounded-[9px] border border-white/20 bg-white/10 px-3 py-2 text-[13px] font-semibold text-white">
                   {t("billing.changePlan")}
                 </button>
@@ -988,7 +938,7 @@ function BillingPanel({ data }: { data: SettingsPageData }) {
         </div>
 
         {(!data.stripeConfigured || !healthy) && (
-          <AutoSaveFormOrCheckout data={data} checkoutAction={checkoutAction} returnPath={returnPath} onSaved={() => router.refresh()} />
+          <SettingsPlanForm data={data} checkoutAction={checkoutAction} returnPath={returnPath} onSaved={() => router.refresh()} />
         )}
       </SettingsCard>
 
@@ -1029,7 +979,7 @@ function BillingPanel({ data }: { data: SettingsPageData }) {
                 {invoices.map((invoice) => (
                   <tr key={invoice.id} className="border-t border-[#f0efeb]">
                     <td className="py-2.5 font-mono text-[12.5px]">{invoice.number ?? invoice.id}</td>
-                    <td className="py-2.5 text-[#6e6e6b]">{new Date(invoice.createdAt).toLocaleDateString(locale)}</td>
+                    <td className="py-2.5 text-[#6e6e6b]">{dateLabel.format(new Date(invoice.createdAt))}</td>
                     <td className="py-2.5 text-right font-semibold tabular-nums">{money(invoice.amountDue, invoice.currency)}</td>
                     <td className="py-2.5 pl-3 text-right whitespace-nowrap">
                       {invoice.hostedInvoiceUrl && (
@@ -1055,7 +1005,7 @@ function BillingPanel({ data }: { data: SettingsPageData }) {
 }
 
 /** Ohne Stripe: Plan direkt speichern (wie bisher). Mit Stripe, aber ohne Abo: Checkout starten. */
-function AutoSaveFormOrCheckout({
+function SettingsPlanForm({
   data,
   checkoutAction,
   returnPath,
@@ -1070,25 +1020,17 @@ function AutoSaveFormOrCheckout({
   const plan = data.tenant.plan ?? "professional";
   const cycle = data.tenant.billingCycle ?? "monthly";
   const planOptions = ["starter", "professional", "business"].map((value) => ({ value, label: t(`billing.plan.${value}`) }));
-  const cycleOptions = ["monthly", "yearly"].map((value) => ({ value, label: t(`billing.cycleLabel.${value}`) }));
+
 
   if (data.stripeConfigured) {
     return (
       <form action={checkoutAction} className="flex flex-col">
         <input type="hidden" name="tenant" value={data.tenant.slug} />
         <input type="hidden" name="returnPath" value={returnPath} />
+        <input type="hidden" name="paymentInterval" value={cycle} />
         <SettingsRow label={t("billing.planLabel")}>
           <select name="planSelection" defaultValue={plan} className={`${dbInputClass} cursor-pointer`} aria-label={t("billing.planLabel")}>
             {planOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </SettingsRow>
-        <SettingsRow label={t("billing.interval")}>
-          <select name="paymentInterval" defaultValue={cycle} className={`${dbInputClass} cursor-pointer`} aria-label={t("billing.interval")}>
-            {cycleOptions.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
               </option>
@@ -1105,13 +1047,14 @@ function AutoSaveFormOrCheckout({
   }
 
   return (
-    <AutoSaveForm
+    <SettingsForm
       action={saveSettingsSectionAction}
       onSaved={onSaved}
       className="flex flex-col"
       hidden={{
         tenant: data.tenant.slug,
         category: "billing",
+        paymentInterval: cycle,
         companyName: data.tenant.name,
         tenantId: data.tenant.slug,
         country: data.tenant.country ?? "DE",
@@ -1131,13 +1074,10 @@ function AutoSaveFormOrCheckout({
           ))}
         </select>
       </SettingsRow>
-      <SettingsRow label={t("billing.interval")}>
-        <SettingSegments name="paymentInterval" label={t("billing.interval")} defaultValue={cycle} options={cycleOptions} />
-      </SettingsRow>
       <SettingsRow label={t("billing.receiptEmail")} hint={t("billing.receiptEmailHint")}>
         <input name="receiptEmail" type="email" defaultValue={data.tenant.contactEmail} className={dbInputClass} aria-label={t("billing.receiptEmail")} />
       </SettingsRow>
-    </AutoSaveForm>
+    </SettingsForm>
   );
 }
 
@@ -1151,10 +1091,7 @@ function IntegrationsPanel() {
   return (
     <SettingsCard title={t("integrations.title")} subtitle={t("integrations.hint")}>
       {(["payroll", "calendar", "api", "documents"] as const).map((item) => (
-        <SettingsRow key={item} label={t(`integrations.${item}`)} hint={t(`integrations.${item}Hint`)} badge={item === "documents" ? undefined : <SoonBadge />}>
-          {item === "documents" ? (
-            <span className="flex justify-end text-[13px] font-semibold text-[#2f7a4a]">{t("integrations.active")}</span>
-          ) : null}
+        <SettingsRow key={item} label={t(`integrations.${item}`)} hint={t(`integrations.${item}Hint`)} badge={<SoonBadge />}>
         </SettingsRow>
       ))}
     </SettingsCard>

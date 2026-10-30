@@ -1,3 +1,4 @@
+import { parseIdList } from "@/lib/file-folders";
 import {
   deriveInfoRequestTitle,
   normalizeInfoRequestItems,
@@ -52,7 +53,7 @@ import {
   type TenantAccess,
 } from "@/lib/tenant-access";
 import type { PermissionLevel } from "@/lib/roles";
-import { canAccessFileAcl } from "@/lib/file-access";
+import { canAccessFileAcl, ownerFolderPathAllowed } from "@/lib/file-access";
 import { getISOWeekFromDate, getISOWeekStart } from "@/lib/shift-service";
 import { isStripeConfigured } from "@/lib/stripe/client";
 import { checkEmployeeLimit, planEmployeeLimits } from "@/lib/stripe/plans";
@@ -240,6 +241,8 @@ type TenantFileRecord = {
 };
 
 type TenantFileFolderRecord = {
+  pinned?: boolean;
+  accessRoleIdsJson?: unknown;
   id: string;
   name: string;
   path: string;
@@ -727,6 +730,8 @@ function mergeEmployeeFileFolders(
       path: folder.path,
       fileCount: 0,
       locked: folder.locked,
+      pinned: folder.pinned,
+      accessRoleIds: parseIdList(folder.accessRoleIdsJson),
       hiddenFromEmployee: folder.hiddenFromEmployee,
     });
   }
@@ -838,6 +843,7 @@ function toEmployee(
       updatedAt: mapped.updatedAt,
       locked: true,
       storageFileId: mapped.storageFileId,
+      version: mapped.version,
       hiddenFromEmployee: file.hiddenFromEmployee,
     };
   });
@@ -957,14 +963,6 @@ async function getSessionUserId() {
   return session?.user?.id ?? null;
 }
 
-async function getSessionUserEmail() {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  });
-
-  return session?.user?.email ?? null;
-}
-
 export async function getTenantIdForEmployees(tenantSlug: string) {
   return (await requireTenantAccess(tenantSlug, "employees", "read")).tenantId;
 }
@@ -1003,13 +1001,8 @@ export async function employeeScopeWhere(tenantSlug: string, required: Permissio
 
 /** Steuert, ob beim Anlegen eine Personalnummer eingegeben werden muss. */
 export async function isEmployeeNumberRequired(tenantSlug: string) {
-  const tenantId = await getTenantIdForEmployees(tenantSlug);
-  const settings = await prisma.tenantSettings.findUnique({
-    where: { tenantId },
-    select: { employeeNumberRequired: true },
-  });
-
-  return settings?.employeeNumberRequired ?? false;
+  await getTenantIdForEmployees(tenantSlug);
+  return true;
 }
 
 /** Voraussichtliche nächste Personalnummer für das "Mitarbeiter anlegen"-Formular (unter Prefix/Suffix). */
@@ -1269,8 +1262,9 @@ export async function getEmployeesForTenant(
       {
         ...record,
         storageFiles: fileAccess
-          ? record.storageFiles.filter((file) => canAccessFileAcl(file.parent ?? file, fileAccess))
+          ? record.storageFiles.filter((file) => canAccessFileAcl(file.parent ?? file, fileAccess) && ownerFolderPathAllowed(fileAccess, record.storageFileFolders, file.folderSlug))
           : [],
+        storageFileFolders: fileAccess ? record.storageFileFolders.filter((folder) => ownerFolderPathAllowed(fileAccess, record.storageFileFolders, folder.path)) : [],
       },
       sensitiveDataScope !== null &&
         scopeAllowsTarget(sensitiveDataScope, { id: record.id }),
@@ -1383,8 +1377,9 @@ export async function getEmployeeForTenant(tenantSlug: string, employeeHandle: s
       ...record,
       payrollStatements,
       storageFiles: fileAccess
-        ? record.storageFiles.filter((file) => canAccessFileAcl(file.parent ?? file, fileAccess))
+        ? record.storageFiles.filter((file) => canAccessFileAcl(file.parent ?? file, fileAccess) && ownerFolderPathAllowed(fileAccess, record.storageFileFolders, file.folderSlug))
         : [],
+      storageFileFolders: fileAccess ? record.storageFileFolders.filter((folder) => ownerFolderPathAllowed(fileAccess, record.storageFileFolders, folder.path)) : [],
     },
     canViewSensitiveData,
     canViewContracts,
@@ -1637,8 +1632,6 @@ type CreateEmployeeRecordOptions = {
   linkUserId?: string;
   auditAction?: string;
   auditSource?: string;
-  /** Self-Service-Anlegen erfasst keine Personalnummer manuell — dort greift die Mandantenpflicht nicht. */
-  enforceEmployeeNumberRequired?: boolean;
 };
 
 export async function createTenantEmployeeRecord({
@@ -1649,7 +1642,6 @@ export async function createTenantEmployeeRecord({
   linkUserId,
   auditAction = "Mitarbeiter angelegt",
   auditSource = "Mitarbeiter",
-  enforceEmployeeNumberRequired = true,
 }: CreateEmployeeRecordOptions) {
   const name = buildName(input);
   const initials = initialsForName(name);
@@ -1657,7 +1649,6 @@ export async function createTenantEmployeeRecord({
   const contract = input.contract?.trim() || "Unbefristet";
   const startDate = input.startDate?.trim() || "";
   const role = input.role?.trim() || "Mitarbeiter";
-  const weeklyHours = input.weeklyHours?.trim() || "38 Std/Woche";
   const explicitEmployeeNumber = input.employeeNumber?.trim() || "";
   const locations = input.locations?.length
     ? Array.from(new Set(input.locations.map((value) => value.trim()).filter(Boolean)))
@@ -1690,14 +1681,14 @@ export async function createTenantEmployeeRecord({
       employeeNumberRequired: true,
       employeeNumberPrefix: true,
       employeeNumberSuffix: true,
+      vacationDays: true,
+      workHours: true,
     },
   });
 
-  if (enforceEmployeeNumberRequired && settings?.employeeNumberRequired && !explicitEmployeeNumber) {
-    throw new Error(
-      "Für diesen Mandanten ist eine Personalnummer verpflichtend. Bitte eine Personalnummer angeben.",
-    );
-  }
+  const weeklyHours = input.weeklyHours?.trim() || String(settings?.workHours ?? 40);
+
+  // Eine fehlende Eingabe erhält immer die nächste freie Personalnummer.
 
   const tenantForBilling = await prisma.tenant.findUniqueOrThrow({
     where: { id: tenantId },
@@ -1755,7 +1746,7 @@ export async function createTenantEmployeeRecord({
         create: encryptAddress(normalizeAddressInput(input.address)),
       },
       vacationRemaining: toInt(input.vacationRemaining, 0),
-      vacationTotal: toInt(input.vacationTotal, 30),
+      vacationTotal: toInt(input.vacationTotal, settings?.vacationDays ?? 24),
       vacationTaken: toInt(input.vacationTaken, 0),
       emergencyContactsJson: serializeEmergencyContacts([]),
       timeline: {
@@ -2016,19 +2007,20 @@ export async function createAndLinkOwnTenantEmployee(
     linkUserId: access.userId,
     auditAction: "Konto mit neuer Personalakte verknüpft",
     auditSource: "Mein Bereich",
-    enforceEmployeeNumberRequired: false,
   });
 }
 
 /**
  * Verknüpft das eingeloggte Konto mit einer bestehenden, noch nicht
  * verknüpften Personalakte im selben Mandanten (z. B. eine von HR ohne
- * Konto vorangelegte Akte). Kein `employees:write` nötig — dafür strikt auf
- * unverknüpfte Datensätze beschränkt, damit niemand ein fremdes,
- * bereits genutztes Profil übernehmen kann.
+ * Konto vorangelegte Akte). Nur der Owner darf eine bestehende Akte für
+ * sich auswählen; andere Mitglieder erhalten ihre Akte über die Einladung.
+ * Bereits verknüpfte Akten können auch vom Owner nicht übernommen werden.
  */
 export async function linkOwnTenantEmployee(input: { tenantSlug: string; employeeId: string }) {
   const access = await requireTenantMembership(input.tenantSlug);
+
+  if (access.membershipRole !== "OWNER") throw new Error("FORBIDDEN");
 
   const existing = await prisma.tenantEmployee.findFirst({
     where: { tenantId: access.tenantId, userId: access.userId },
@@ -2041,7 +2033,7 @@ export async function linkOwnTenantEmployee(input: { tenantSlug: string; employe
 
   const target = await prisma.tenantEmployee.findFirst({
     where: { id: input.employeeId, tenantId: access.tenantId },
-    select: { id: true, userId: true, name: true, role: true, email: true },
+    select: { id: true, userId: true, name: true },
   });
 
   if (!target) {
@@ -2050,15 +2042,6 @@ export async function linkOwnTenantEmployee(input: { tenantSlug: string; employe
 
   if (target.userId) {
     throw new Error("Diese Personalakte ist bereits mit einem Konto verknüpft.");
-  }
-
-  // Verhindert, dass sich ein beliebiges Mitglied eine fremde, noch nicht
-  // verknüpfte Personalakte aneignet: die Akte muss nachweislich zur
-  // anfragenden Person gehören, nicht nur zum selben Mandanten.
-  const sessionEmail = await getSessionUserEmail();
-
-  if (!sessionEmail || target.email.trim().toLowerCase() !== sessionEmail.trim().toLowerCase()) {
-    throw new Error("Diese Personalakte gehört nicht zu Ihrem Konto.");
   }
 
   await prisma.tenantEmployee.update({
@@ -2136,26 +2119,15 @@ export async function getMyEmployeeHandle(tenantSlug: string) {
 
 /**
  * Personalakten im Mandanten ohne verknüpftes Konto — Auswahl für "Bestehendes
- * Profil verknüpfen". Nur Akten, deren hinterlegte E-Mail zur anfragenden
- * Person passt: sonst könnte jedes Mitglied die noch offene Akte einer
- * beliebigen anderen (z. B. noch nicht aktivierten) Person sehen und
- * verknüpfen (siehe `linkOwnTenantEmployee`, das denselben Abgleich als
- * eigentliche Sicherheitsgrenze durchsetzt — diese Liste ist nur die
- * Komfort-Vorauswahl dazu).
+ * Profil verknüpfen" für den Owner. Die E-Mail darf vom Konto abweichen.
  */
 export async function getUnlinkedEmployeesForTenant(tenantSlug: string) {
   const access = await requireTenantMembership(tenantSlug);
-  const sessionEmail = await getSessionUserEmail();
-
-  if (!sessionEmail) {
-    return [];
-  }
-
+  if (access.membershipRole !== "OWNER") return [];
   return prisma.tenantEmployee.findMany({
     where: {
       tenantId: access.tenantId,
       userId: null,
-      email: { equals: sessionEmail, mode: "insensitive" },
     },
     orderBy: { name: "asc" },
     select: {
@@ -3103,6 +3075,10 @@ export async function createEmployeeInfoRequest(input: {
         ? { create: items.map((item, position) => ({ ...item, position })) }
         : undefined,
     },
+  });
+
+  await prisma.tenantInfoRequestDraft.deleteMany({
+    where: { tenantId: access.tenantId, employeeId: employee.id, authorId: access.userId },
   });
 
   const tenant = await prisma.tenant.findUnique({

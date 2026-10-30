@@ -127,14 +127,14 @@ async function assertFileFolderPinAccess(
 }
 
 /** Rollen-Einschränkung zentraler Ordner (M1) auch beim Schreiben durchsetzen. */
-async function assertTenantFolderWritable(tenantSlug: string, ownerType: FileOwnerType, path: string) {
-  if (ownerType !== "tenant" || !path) {
+async function assertTenantFolderWritable(tenantSlug: string, ownerType: FileOwnerType, path: string, ownerId?: string) {
+  if (!path) {
     return;
   }
 
   const fileAccess = await requireTenantAccess(tenantSlug, "files", "read");
 
-  if (await isTenantFolderPathDenied(fileAccess, path)) {
+  if (await isTenantFolderPathDenied(fileAccess, path, folderScope(ownerType, ownerId))) {
     throw new Error("FORBIDDEN");
   }
 }
@@ -354,6 +354,17 @@ async function assertOwnerInScope(
   }
 }
 
+/** Dieselben Schreib- und Owner-Scope-Prüfungen wie beim Hochladen. */
+export async function requireFileOwnerWriteAccess(tenantSlug: string, ownerType: FileOwnerType, ownerId?: string) {
+  if (!["tenant", "employee", "location", "team"].includes(ownerType) || (ownerType !== "tenant" && !ownerId)) {
+    throw new Error("FORBIDDEN");
+  }
+  const access = await requireTenantFileAccess(tenantSlug, ownerType);
+  const owner = await validateOwner({ tenantId: access.tenantId, ownerType, ownerId });
+  await assertOwnerInScope(tenantSlug, ownerType, owner.ownerId);
+  return { ...access, scope: folderScope(ownerType, owner.ownerId) };
+}
+
 const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
 
 const allowedUploadExtensions = new Set([
@@ -514,7 +525,7 @@ export async function uploadTenantFile(input: UploadTenantFileInput) {
   const bucketConfig = getStorageBucket(input.bucketId);
   const originalName = formatFileName(input.file.name);
   const requestedFolderSlug = normalizeFolderPath(input.folderSlug ?? "");
-  await assertTenantFolderWritable(input.tenantSlug, ownerType, requestedFolderSlug);
+  await assertTenantFolderWritable(input.tenantSlug, ownerType, requestedFolderSlug, input.ownerId);
   const storedFolder = requestedFolderSlug
     ? await prisma.tenantFileFolder.findFirst({
         where: {
@@ -738,7 +749,7 @@ export async function createTenantFileFolder(input: {
 
   const slug = slugify(name);
   const parentPath = normalizeFolderPath(input.parentPath ?? "");
-  await assertTenantFolderWritable(input.tenantSlug, ownerType, parentPath);
+  await assertTenantFolderWritable(input.tenantSlug, ownerType, parentPath, owner.ownerId);
   const parent = parentPath
     ? await prisma.tenantFileFolder.findFirst({
         where: {
@@ -1584,7 +1595,7 @@ export async function softDeleteTenantFileFolder(input: {
     throw new Error("Ordner nicht gefunden.");
   }
 
-  await assertTenantFolderWritable(input.tenantSlug, ownerType, path);
+  await assertTenantFolderWritable(input.tenantSlug, ownerType, path, input.ownerId);
 
   const inFolder = (field: "path" | "folderSlug") => [
     { [field]: path },
@@ -1881,4 +1892,18 @@ export async function restoreTenantFileDeletion(input: {
   });
 
   return { kind, name, fileCount: files.length, folderCount: folders.length };
+}
+
+/** Metadaten und echte Versionsstände mit identischen Leserechten wie beim Download. */
+export async function getTenantFileDetails(input: { tenantSlug: string; fileId: string }) {
+  const access = await requireTenantAccess(input.tenantSlug, "files", "read");
+  const file = await prisma.tenantFile.findFirst({ where: { id: input.fileId, tenantId: access.tenantId, status: { not: "deleted" } }, include: { parent: { select: { accessRoleIdsJson: true, accessUserIdsJson: true } } } });
+  if (!file) throw new Error("Datei nicht gefunden.");
+  requireFileAcl(file.parent ?? file, access);
+  await requireTenantFileAreaAccess(access, file);
+  await assertFileFolderPinAccess(input.tenantSlug, file);
+  const rootId = file.parentId ?? file.id;
+  const versions = await prisma.tenantFile.findMany({ where: { tenantId: access.tenantId, OR: [{ id: rootId }, { parentId: rootId }], status: { not: "deleted" } }, orderBy: { version: "desc" } });
+  const { mapTenantFileToFileItem } = await import("@/lib/files");
+  return { file: mapTenantFileToFileItem(file), versions: versions.map(mapTenantFileToFileItem) };
 }

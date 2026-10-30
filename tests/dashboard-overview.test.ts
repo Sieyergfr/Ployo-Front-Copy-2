@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildAbsenceRadar,
   buildStaffingCurve,
+  staffingWindow,
   findRestViolations,
 } from "@/lib/dashboard-overview";
 import type { OpeningHoursDay } from "@/lib/opening-hours";
@@ -23,8 +24,9 @@ describe("buildStaffingCurve", () => {
       ],
     });
 
-    expect(hours.map((hour) => hour.hour)).toEqual([10, 11, 12, 13, 14, 15, 16, 17]);
-    expect(hours.every((hour) => hour.need === 2)).toBe(true);
+    expect(hours.map((hour) => hour.hour)).toEqual(Array.from({ length: 24 }, (_, hour) => hour));
+    expect(hours.filter((hour) => hour.hour >= 10 && hour.hour < 18).every((hour) => hour.need === 2)).toBe(true);
+    expect(hours.find((hour) => hour.hour === 0)).toMatchObject({ need: 0, have: 0 });
     expect(hours.find((hour) => hour.hour === 13)).toMatchObject({ have: 2, isGap: false });
     expect(hours.find((hour) => hour.hour === 14)).toMatchObject({ have: 1, isGap: true });
     expect(gaps).toEqual([{ locationName: "Mitte", fromHour: 14, toHour: 18, missing: 1 }]);
@@ -86,5 +88,16 @@ describe("findRestViolations", () => {
     expect(violations).toEqual([
       { employeeId: "a", name: "Jonas", fromDate: "2026-10-26", toDate: "2026-10-27", restHours: 8 },
     ]);
+  });
+});
+
+describe("staffingWindow", () => {
+  const { hours } = buildStaffingCurve({ shifts: [], locations: [], weekday: "Mo" });
+  it.each([
+    [0, [0, 1, 2, 3, 4, 5, 6]],
+    [12, [9, 10, 11, 12, 13, 14, 15]],
+    [23, [17, 18, 19, 20, 21, 22, 23]],
+  ])("zeigt sieben Stunden rund um %i Uhr", (hour, expected) => {
+    expect(staffingWindow(hours, hour).map((item) => item.hour)).toEqual(expected);
   });
 });

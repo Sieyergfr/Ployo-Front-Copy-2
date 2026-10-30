@@ -11,6 +11,8 @@ export type TeamMember = {
 };
 
 export type TeamFileFolder = {
+  accessRoleIds?: string[];
+  pinned?: boolean;
   name: string;
   fileCount: number;
   locked?: boolean;
@@ -18,6 +20,7 @@ export type TeamFileFolder = {
 };
 
 export type TeamFile = {
+  version?: number;
   name: string;
   folder: string;
   /** Ordnerpfad (TenantFile.folderSlug); leer = Home-Ebene des Teams. */

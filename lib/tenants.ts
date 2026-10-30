@@ -1,3 +1,4 @@
+import { assertRequiredAddress, type AddressInput } from "@/lib/address";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { isEmailConfigured, sendInvitationEmail } from "@/lib/email";
@@ -51,6 +52,7 @@ export type CreateTenantInput = {
   size?: string;
   industry?: string;
   contactEmail?: string;
+  companyAddress?: AddressInput;
   logoUrl?: string;
   primaryColor?: string;
   plan?: string;
@@ -311,6 +313,9 @@ export async function createTenantForOwner(input: CreateTenantInput) {
       plan: normalizePlan(input.plan),
       billingCycle: normalizeBillingCycle(input.billingCycle),
       billingRequired: input.billingRequired ?? false,
+      ...(input.companyAddress ? {
+        settings: { create: { companyAddress: { create: assertRequiredAddress(input.companyAddress) } } },
+      } : {}),
       invitations: {
         create: Array.from(invitationsByEmail.values()).map((invitation) => ({
           ...invitation,

@@ -1,3 +1,4 @@
+import { assertRequiredAddress, type AddressInput } from "@/lib/address";
 import { auth } from "@/lib/auth";
 import { createTenantForOwner, getTenantsForUser } from "@/lib/tenants";
 import { checkRateLimit, tooManyRequests } from "@/lib/rate-limit";
@@ -64,6 +65,7 @@ export async function POST(request: Request) {
     size?: string;
     industry?: string;
     contactEmail?: string;
+    companyAddress?: AddressInput;
     logoUrl?: string;
     primaryColor?: string;
     plan?: string;
@@ -82,10 +84,23 @@ export async function POST(request: Request) {
     );
   }
 
+  let companyAddress;
+  try {
+    const address = body?.companyAddress;
+    if (!address || typeof address !== "object" || Array.isArray(address) ||
+        Object.values(address).some((value) => typeof value !== "string")) {
+      throw new Error("Bitte die vollständige Rechnungsadresse angeben.");
+    }
+    companyAddress = assertRequiredAddress(address);
+  } catch (error) {
+    return Response.json({ error: error instanceof Error ? error.message : "Ungültige Rechnungsadresse." }, { status: 400 });
+  }
+
   try {
     const tenant = await createTenantForOwner({
       name,
       userId,
+      companyAddress,
       slug: body?.slug,
       country: body?.country,
       timezone: body?.timezone,

@@ -162,23 +162,6 @@ export default async function AccountPage({
 
           <Card title={t("cardTitle")} icon={SlidersHorizontal}>
             <ActionForm action={updatePreferencesAction} className="flex flex-col gap-3">
-              <div className="field">
-                <label htmlFor="pref-start-page" className="label">
-                  {t("startPageLabel")}
-                </label>
-                <select
-                  id="pref-start-page"
-                  name="startPage"
-                  className="input cursor-pointer bg-white"
-                  defaultValue={preferences.startPage}
-                >
-                  <option value="overview">{t("startPageOverview")}</option>
-                  <option value="mein-bereich">{t("startPageMeinBereich")}</option>
-                  <option value="employees">{t("startPageEmployees")}</option>
-                  <option value="urlaub">{t("startPageUrlaub")}</option>
-                  <option value="schichtplanung">{t("startPageSchichtplanung")}</option>
-                </select>
-              </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="field">
                   <label htmlFor="pref-language" className="label">
@@ -209,22 +192,6 @@ export default async function AccountPage({
                     <option value="mm/dd/yyyy">12/31/2026</option>
                   </select>
                 </div>
-              </div>
-              <div className="field">
-                <label htmlFor="pref-timezone" className="label">
-                  {t("timezoneLabel")}
-                </label>
-                <select
-                  id="pref-timezone"
-                  name="timezone"
-                  className="input cursor-pointer bg-white"
-                  defaultValue={preferences.timezone}
-                >
-                  <option value="Europe/Berlin">Europe/Berlin</option>
-                  <option value="Europe/London">Europe/London</option>
-                  <option value="Europe/Vienna">Europe/Vienna</option>
-                  <option value="Europe/Zurich">Europe/Zurich</option>
-                </select>
               </div>
               <p className="text-[11px] text-muted-2">{t("disclaimer")}</p>
               <div className="flex justify-end border-t border-border-soft pt-4">

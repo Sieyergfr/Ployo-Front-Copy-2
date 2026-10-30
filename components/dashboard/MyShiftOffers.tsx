@@ -1,5 +1,8 @@
 "use client";
 
+import { useDatePreference } from "@/components/DatePreferences";
+import { preferredDateFormatter } from "@/lib/date-picker";
+
 import { respondShiftOfferAction } from "@/app/(dashboard)/u/[tenant]/mein-bereich/actions";
 import { ctaClass, DbCard, DbCardTitle, secondaryClass } from "@/components/dashboard/ui";
 import FormSubmitButton from "@/components/FormSubmitButton";
@@ -11,8 +14,9 @@ import { useTranslations } from "next-intl";
 /** Angebotene Schichten ("Schicht frei") — wer zuerst annimmt, bekommt sie. */
 export default function MyShiftOffers({ tenant, offers, locale }: { tenant: string; offers: MyShiftOffer[]; locale: string }) {
   const t = useTranslations("MyArea");
+  const datePreference = useDatePreference();
   const [, formAction] = useActionStateWithToast(respondShiftOfferAction);
-  const dateFormat = new Intl.DateTimeFormat(locale, { weekday: "short", day: "2-digit", month: "2-digit", timeZone: "UTC" });
+  const dateFormat = preferredDateFormatter(datePreference, locale, { weekday: "short", day: "2-digit", month: "2-digit", timeZone: "UTC" });
 
   if (offers.length === 0) {
     return null;

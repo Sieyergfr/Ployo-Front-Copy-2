@@ -933,6 +933,7 @@ function ShiftDrawer({
                     className="btn btn-secondary btn-sm"
                     onClick={() => applyPreset(preset)}
                   >
+                    <span aria-hidden="true" className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: preset.color }} />
                     {preset.label}
                     <span className="font-mono text-[10px] text-muted">
                       {preset.start}-{preset.end}

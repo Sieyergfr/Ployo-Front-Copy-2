@@ -30,7 +30,7 @@ export type NavigationTenantItem = {
     taxId: string;
     defaultLocationId: string;
     weekStart: string;
-    workHours: string;
+    workHours: number;
     vacationDays: number;
     employeeNumberRequired: boolean;
     employeeNumberPrefix: string;

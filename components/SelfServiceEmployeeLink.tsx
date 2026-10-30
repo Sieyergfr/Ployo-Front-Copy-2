@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import {
   linkOwnEmployeeAction,
   unlinkOwnEmployeeAction,
@@ -10,7 +10,7 @@ import FormSubmitButton from "@/components/FormSubmitButton";
 import { FieldErrors, FormErrorBanner } from "@/components/FormFeedback";
 import { useCloseOnSuccess, useUniversalPopup } from "@/components/UniversalPopup";
 import type { ActionState } from "@/lib/action-state";
-import { Link2, Unlink } from "lucide-react";
+import { Link2, Search, Unlink } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 const initialState: ActionState = {};
@@ -151,6 +151,17 @@ export function LinkProfilePicker({
   const t = useTranslations("SelfServiceEmployeeLink");
   const [state, formAction, isPending] = useActionState(linkOwnEmployeeAction, initialState);
 
+  const [query, setQuery] = useState("");
+  const [selectedId, setSelectedId] = useState("");
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const visibleEmployees = unlinkedEmployees.filter((employee) =>
+    [employee.name, employee.employeeNumber, employee.location, employee.team, employee.role]
+      .join(" ")
+      .toLocaleLowerCase()
+      .includes(normalizedQuery),
+  );
+  const hasVisibleSelection = visibleEmployees.some((employee) => employee.id === selectedId);
+
   if (unlinkedEmployees.length === 0) {
     return <p className="m-0 text-[13px] leading-[1.55] text-[#6e6e6b]">{t("noUnlinkedProfile")}</p>;
   }
@@ -159,11 +170,33 @@ export function LinkProfilePicker({
     <form action={formAction} className="flex flex-col gap-2">
       <input type="hidden" name="tenant" value={tenant} />
       <span className="font-mono text-[10px] tracking-[0.12em] text-[#6e6e6b] uppercase">{t("chooseProfile")}</span>
-      <div className="flex max-h-[360px] flex-col gap-2 overflow-y-auto">
-        {unlinkedEmployees.map((employee, index) => (
+      <label className="relative block">
+        <span className="sr-only">{t("searchEmployees")}</span>
+        <Search size={16} aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#6e6e6b]" />
+        <input
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder={t("searchPlaceholder")}
+          className="db-focus min-h-11 w-full rounded-[10px] border border-[#e4e3df] bg-white py-2 pl-10 pr-3 text-[13px] text-ink"
+        />
+      </label>
+      <p role="status" className="m-0 text-[12px] text-[#6e6e6b]">
+        {visibleEmployees.length === 0
+          ? t("noSearchResults")
+          : t("searchResults", { count: visibleEmployees.length, total: unlinkedEmployees.length })}
+      </p>
+      <div
+        className="flex min-h-0 flex-col gap-2 overflow-y-auto overscroll-contain p-1"
+        style={{ maxHeight: "min(240px, 35dvh)" }}
+        role="group"
+        aria-label={t("chooseProfile")}
+        tabIndex={0}
+      >
+        {visibleEmployees.map((employee, index) => (
           <label
             key={employee.id}
-            className="db-pick flex cursor-pointer items-center gap-3 rounded-[12px] border border-[#e4e3df] bg-[#fafaf8] px-3.5 py-3 has-[:checked]:border-[rgba(139,110,212,0.6)] has-[:checked]:bg-white has-[:checked]:shadow-[0_0_0_3px_rgba(139,110,212,0.12)]"
+            className="db-pick flex shrink-0 cursor-pointer items-center gap-3 rounded-[12px] border border-[#e4e3df] bg-[#fafaf8] px-3.5 py-3 has-[:checked]:border-[rgba(139,110,212,0.6)] has-[:checked]:bg-white has-[:checked]:shadow-[0_0_0_3px_rgba(139,110,212,0.12)]"
           >
             <span
               className="flex size-9 shrink-0 items-center justify-center rounded-full text-[12px] font-bold text-white"
@@ -177,7 +210,7 @@ export function LinkProfilePicker({
                 {[employee.role, employee.location].filter(Boolean).join(" · ")}
               </span>
             </span>
-            <input type="radio" name="employeeId" value={employee.id} required className="size-[18px] accent-[#7a5fd0]" />
+            <input type="radio" name="employeeId" value={employee.id} checked={selectedId === employee.id} onChange={() => setSelectedId(employee.id)} required className="size-[18px] accent-[#7a5fd0]" />
           </label>
         ))}
       </div>
@@ -186,7 +219,7 @@ export function LinkProfilePicker({
       <div className="mt-3">
         <button
           type="submit"
-          disabled={isPending}
+          disabled={isPending || !hasVisibleSelection}
           className="db-cta db-focus relative inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 overflow-hidden rounded-[10px] border border-[rgba(167,142,232,0.45)] bg-ink px-[18px] py-2.5 text-[14px] font-semibold text-white disabled:opacity-60"
         >
           <span>{isPending ? t("linking") : t("linkMe")}</span>

@@ -10,7 +10,7 @@ import { ctaClass, secondaryClass } from "@/components/dashboard/ui";
 import FormSubmitButton from "@/components/FormSubmitButton";
 import { useActionStateWithToast } from "@/components/Toasts";
 import type { ActionState } from "@/lib/action-state";
-import type { FileFolder } from "@/lib/files";
+import type { FileFolder, FileOwnerContext } from "@/lib/files";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 
@@ -38,6 +38,7 @@ function ChipCheckbox({ name, option, defaultChecked }: { name: string; option: 
 export function FolderSettingsDrawer({
   tenant,
   folder,
+  ownerContext,
   roles,
   teams,
   locations,
@@ -46,6 +47,7 @@ export function FolderSettingsDrawer({
 }: {
   tenant: string;
   folder: FileFolder;
+  ownerContext?: FileOwnerContext;
   roles: Option[];
   teams: Option[];
   locations: Option[];
@@ -77,6 +79,11 @@ export function FolderSettingsDrawer({
       <form id="folder-settings-form" action={formAction} className="flex flex-col gap-[18px]">
         <input type="hidden" name="tenant" value={tenant} />
         <input type="hidden" name="path" value={folder.path ?? folder.slug} />
+        {ownerContext && <>
+          <input type="hidden" name="ownerType" value={ownerContext.ownerType} />
+          <input type="hidden" name="ownerId" value={ownerContext.ownerId} />
+          <input type="hidden" name="returnPath" value={ownerContext.returnPath} />
+        </>}
         {canManageAccess && <input type="hidden" name="settings" value="access" />}
         <DbField label={t("folderName")}>
           <input name="name" required defaultValue={folder.name} className={dbInputClass} />
@@ -85,7 +92,7 @@ export function FolderSettingsDrawer({
         {canManageAccess && (
           <>
             <span className="text-[14px] font-semibold">{t("whoMaySee")}</span>
-            {folder.locked ? (
+            {ownerContext ? null : folder.locked ? (
               <p className="m-0 rounded-[12px] border border-[#ecebe7] bg-[#fafaf8] px-3.5 py-3 text-[12.5px] text-[#6e6e6b]">
                 {t("lockedNoShare")}
               </p>
@@ -109,7 +116,7 @@ export function FolderSettingsDrawer({
               </label>
             )}
 
-            {shared ? (
+            {!ownerContext && shared ? (
               <>
                 {teams.length > 0 && (
                   <DbField label={t("limitTeams")} hint={t("limitHint")}>
@@ -155,11 +162,13 @@ export function FolderSettingsDrawer({
 
 export function RenameFileModal({
   tenant,
+  returnPath,
   fileId,
   name,
   onClose,
 }: {
   tenant: string;
+  returnPath?: string;
   fileId: string;
   name: string;
   onClose: () => void;
@@ -174,6 +183,7 @@ export function RenameFileModal({
       <form action={formAction} className="flex flex-col gap-4">
         <input type="hidden" name="tenant" value={tenant} />
         <input type="hidden" name="fileId" value={fileId} />
+        <input type="hidden" name="returnPath" value={returnPath ?? ""} />
         <DbField label={t("fileName")}>
           <input name="name" required defaultValue={name} className={dbInputClass} autoFocus />
         </DbField>
@@ -190,7 +200,7 @@ export function RenameFileModal({
   );
 }
 
-export function RenameFolderModal({ tenant, folder, onClose }: { tenant: string; folder: FileFolder; onClose: () => void }) {
+export function RenameFolderModal({ tenant, folder, ownerContext, onClose }: { tenant: string; folder: FileFolder; ownerContext?: FileOwnerContext; onClose: () => void }) {
   const t = useTranslations("FilesUi");
   const [state, formAction] = useActionStateWithToast(updateFolderSettingsAction);
 
@@ -201,6 +211,11 @@ export function RenameFolderModal({ tenant, folder, onClose }: { tenant: string;
       <form action={formAction} className="flex flex-col gap-4">
         <input type="hidden" name="tenant" value={tenant} />
         <input type="hidden" name="path" value={folder.path ?? folder.slug} />
+        {ownerContext && <>
+          <input type="hidden" name="ownerType" value={ownerContext.ownerType} />
+          <input type="hidden" name="ownerId" value={ownerContext.ownerId} />
+          <input type="hidden" name="returnPath" value={ownerContext.returnPath} />
+        </>}
         <DbField label={t("folderName")}>
           <input name="name" required defaultValue={folder.name} className={dbInputClass} autoFocus />
         </DbField>
@@ -219,6 +234,7 @@ export function RenameFolderModal({ tenant, folder, onClose }: { tenant: string;
 
 export function MoveFileModal({
   tenant,
+  returnPath,
   fileId,
   name,
   currentPath,
@@ -226,6 +242,7 @@ export function MoveFileModal({
   onClose,
 }: {
   tenant: string;
+  returnPath?: string;
   fileId: string;
   name: string;
   currentPath: string;
@@ -244,6 +261,7 @@ export function MoveFileModal({
       <form action={formAction} className="flex flex-col gap-4">
         <input type="hidden" name="tenant" value={tenant} />
         <input type="hidden" name="fileId" value={fileId} />
+        <input type="hidden" name="returnPath" value={returnPath ?? ""} />
         <DbField label={t("targetFolder")}>
           <select name="targetPath" className={dbInputClass} defaultValue={options[0]?.path ?? ""}>
             {options.map((option) => (

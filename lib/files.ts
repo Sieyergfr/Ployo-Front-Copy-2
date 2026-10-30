@@ -1,3 +1,9 @@
+export type FileOwnerContext = {
+  ownerType: "employee" | "location" | "team";
+  ownerId: string;
+  returnPath: string;
+};
+
 export type FileFolder = {
   slug: string;
   path?: string;

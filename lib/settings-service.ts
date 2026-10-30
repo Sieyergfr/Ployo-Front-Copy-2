@@ -13,7 +13,6 @@ import {
   normalizeBillingCycle,
   normalizeLogoUrl,
   normalizePlan,
-  slugify,
 } from "@/lib/tenants";
 import { headers } from "next/headers";
 import { requireTenantAccess, type TenantAccessOptions } from "@/lib/tenant-access";
@@ -350,7 +349,7 @@ export async function updateTenantProfile(input: {
   billingCycle?: string;
 }) {
   const access = await requireSettingsManager(input.tenantSlug);
-  const nextSlug = slugify(input.slug);
+  const nextSlug = access.tenantSlug;
 
   if (!input.name.trim()) {
     throw new Error("Unternehmensname ist erforderlich.");
@@ -401,13 +400,19 @@ export async function updateTenantProfile(input: {
   });
 }
 
+function normalizeWeeklyHours(value?: string | number) {
+  const hours = value === undefined || String(value).trim() === "" ? 40 : Number(String(value).replace(",", "."));
+  if (!Number.isFinite(hours) || hours < 0 || hours > 168) throw new Error("Wochenstunden müssen eine Zahl zwischen 0 und 168 sein.");
+  return hours;
+}
+
 export async function updateTenantDefaults(input: {
   tenantSlug: string;
   companyAddress?: AddressInput;
   taxId?: string;
   defaultLocationId?: string;
   weekStart?: string;
-  workHours?: string;
+  workHours?: string | number;
   vacationDays?: string;
   employeeNumberRequired?: boolean;
   employeeNumberPrefix?: string;
@@ -430,9 +435,9 @@ export async function updateTenantDefaults(input: {
       taxId: optionalString(input.taxId, 64),
       defaultLocationId: optionalString(input.defaultLocationId, 128),
       weekStart: input.weekStart === "sunday" ? "sunday" : "monday",
-      workHours: optionalString(input.workHours, 64) || "40 Stunden pro Woche",
-      vacationDays: normalizeInt(input.vacationDays, 30),
-      employeeNumberRequired: normalizeBool(input.employeeNumberRequired),
+      workHours: normalizeWeeklyHours(input.workHours),
+      vacationDays: normalizeInt(input.vacationDays, 24),
+      employeeNumberRequired: true,
       employeeNumberPrefix: optionalString(input.employeeNumberPrefix, 16) || "MA-",
       employeeNumberSuffix: optionalString(input.employeeNumberSuffix, 16),
       archiveFormerEmployees: normalizeBool(input.archiveFormerEmployees),
